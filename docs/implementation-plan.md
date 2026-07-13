@@ -1,0 +1,963 @@
+# CtrlZebra — VS Code Agent 插件实施规格
+
+> 状态：Draft 1  
+> 日期：2026-07-13  
+> 用途：作为项目从零实现、测试和验收的单一执行路线图。
+
+## 1. 文档目标
+
+本项目要实现名为 **CtrlZebra** 的桌面版 VS Code Agent 插件。插件可以接收用户任务，调用大模型，读取工作区文件，提出文件修改，等待用户审批，应用修改，并保存可恢复的会话。
+
+本文档强调两个原则：
+
+1. **任务最小化**：每个任务只引入一个主要概念，通常应能在一次小型提交中完成。
+2. **可测试化**：业务逻辑优先放入不依赖 VS Code 的纯 TypeScript 模块；每个任务必须带自动化测试或明确的人工烟雾测试。
+
+本文档同时是后续实现的任务清单。除非出现新的产品需求或技术阻塞，否则按任务编号顺序推进。
+
+## 2. 第一阶段产品范围
+
+### 2.1 第一阶段必须实现
+
+- VS Code Activity Bar 中的 Agent 侧边栏。
+- 创建本地会话并发送用户消息。
+- 使用一个模型供应商进行流式文本生成。
+- 取消正在进行的模型请求。
+- `list_files`、`read_file`、`search_files` 三个只读工具。
+- 模型发起 Tool Call 后，插件执行工具并继续模型循环。
+- 提出文本文件修改并显示 Diff。
+- 用户批准后通过 `WorkspaceEdit` 应用修改。
+- 会话消息和状态持久化。
+- VS Code 重启后恢复已完成或中断的会话。
+- API Key 使用 `SecretStorage` 保存。
+- 基础日志、错误处理和 Token 使用量显示。
+
+### 2.2 第一阶段明确不做
+
+- 多 Agent 或子 Agent。
+- MCP。
+- 浏览器自动化。
+- 图片生成或多模态文件解析。
+- 自定义 Modes。
+- Git 自动提交或自动创建 PR。
+- 无审批的终端命令执行。
+- Web 版 VS Code Extension。
+- 云端账户、同步和遥测后端。
+- SQLite、向量数据库或代码语义索引。
+
+这些能力必须在基础 Agent Loop、审批、取消和会话恢复稳定后再评估。
+
+## 3. 技术基线
+
+| 领域 | 选型 |
+|---|---|
+| 语言 | TypeScript，开启 `strict` |
+| 包管理 | pnpm workspace |
+| Extension 构建 | esbuild |
+| Webview | React + Vite |
+| Webview 状态 | Zustand |
+| 样式 | CSS Modules + VS Code CSS Variables |
+| 运行时校验 | Zod |
+| 模型标准化层 | Vercel AI SDK 6，外包一层自有接口 |
+| 单元测试 | Vitest |
+| UI 测试 | Testing Library + jsdom |
+| Extension 集成测试 | `@vscode/test-electron` |
+| 格式化和静态检查 | Biome + TypeScript |
+| 发布 | `@vscode/vsce` |
+
+版本安装时选择相互兼容的稳定版本并提交 lockfile，不使用未固定的 `latest` 作为长期依赖声明。
+
+## 4. 目标项目结构
+
+```text
+vscode-agent/
+├─ apps/
+│  ├─ extension/
+│  │  ├─ src/
+│  │  │  ├─ extension.ts
+│  │  │  ├─ container.ts
+│  │  │  ├─ commands/
+│  │  │  ├─ controllers/
+│  │  │  ├─ views/
+│  │  │  ├─ adapters/
+│  │  │  └─ lifecycle/
+│  │  ├─ package.json
+│  │  └─ tsconfig.json
+│  └─ webview/
+│     ├─ src/
+│     │  ├─ components/
+│     │  ├─ features/
+│     │  ├─ state/
+│     │  ├─ vscode.ts
+│     │  └─ main.tsx
+│     ├─ index.html
+│     ├─ package.json
+│     └─ vite.config.ts
+├─ packages/
+│  ├─ protocol/
+│  ├─ core/
+│  ├─ providers/
+│  ├─ builtin-tools/
+│  └─ testkit/
+├─ scripts/
+├─ package.json
+├─ pnpm-workspace.yaml
+├─ tsconfig.base.json
+└─ biome.json
+```
+
+## 5. 模块边界
+
+### 5.1 `packages/protocol`
+
+负责所有跨边界的数据结构：
+
+- Webview 到 Extension 的命令。
+- Extension 到 Webview 的事件。
+- Session、Message、Tool Call 的可序列化 DTO。
+- Zod Schema 和由 Schema 推导的 TypeScript 类型。
+- 持久化格式版本号。
+
+约束：
+
+- 不能依赖 React、VS Code 或模型 SDK。
+- 所有数据必须可以 JSON 序列化。
+- Webview 输入在 Extension Host 中必须经过运行时校验。
+
+### 5.2 `packages/core`
+
+负责与宿主无关的业务逻辑：
+
+- Agent 状态机和循环。
+- Session 生命周期。
+- Tool Registry 和 Tool Executor。
+- Approval Policy。
+- Context 构造、裁剪和摘要接口。
+- Checkpoint 数据模型。
+- 领域事件和错误分类。
+
+约束：
+
+- 严禁 `import "vscode"`。
+- 严禁直接访问文件系统、终端、Webview 或 SecretStorage。
+- 所有外部能力必须通过构造参数接口注入。
+
+### 5.3 `packages/providers`
+
+负责把第三方模型 SDK 转换为内部统一事件：
+
+- 文本增量。
+- Tool Call。
+- Finish Reason。
+- Token Usage。
+- Provider Error。
+
+对外只实现 `ModelGateway`；Agent Core 不直接依赖 Vercel AI SDK 类型。
+
+### 5.4 `packages/builtin-tools`
+
+负责内置工具定义和宿主无关的参数校验：
+
+- `list_files`
+- `read_file`
+- `search_files`
+- `propose_file_edit`
+
+实际文件操作由 Extension 中的适配器完成。
+
+### 5.5 `apps/extension`
+
+负责 VS Code 集成：
+
+- 注册命令和 `WebviewViewProvider`。
+- 依赖装配。
+- 将 Webview 命令转发给 SessionManager。
+- 实现文件、编辑器、Diff、存储、日志和密钥适配器。
+- 管理 Disposable 和扩展生命周期。
+
+`extension.ts` 只允许做注册和装配，不放业务流程。
+
+### 5.6 `apps/webview`
+
+负责纯展示和用户交互：
+
+- 聊天消息列表。
+- 流式文本渲染。
+- Tool Call 状态卡片。
+- 审批界面。
+- 会话选择和设置。
+
+约束：
+
+- 不持有 API Key。
+- 不直接调用模型、文件系统或 VS Code 命令。
+- 服务端事实状态以 Extension 发来的 snapshot/event 为准。
+
+### 5.7 `packages/testkit`
+
+提供稳定的测试替身：
+
+- `FakeModelGateway`
+- `FakeTool`
+- `InMemorySessionRepository`
+- `FakeApprovalService`
+- `CollectingEventSink`
+- 固定时钟和固定 ID 生成器
+
+测试中禁止依赖真实模型 API。
+
+## 6. 依赖规则
+
+```text
+webview ───────────────→ protocol
+extension ─────────────→ protocol + core + providers + builtin-tools
+providers ─────────────→ core contracts
+builtin-tools ─────────→ core contracts + protocol DTO
+core ──────────────────→ protocol
+testkit ───────────────→ core contracts + protocol
+```
+
+禁止：
+
+```text
+core → vscode
+core → webview
+webview → core implementation
+providers → extension
+builtin-tools → vscode
+```
+
+依赖规则应通过 lint 规则、路径约定或专门的架构测试保护。
+
+## 7. 核心接口草案
+
+### 7.1 模型接口
+
+```ts
+export interface ModelGateway {
+  stream(
+    request: ModelRequest,
+    signal: AbortSignal,
+  ): AsyncIterable<ModelEvent>;
+}
+
+export type ModelEvent =
+  | { type: "text.delta"; text: string }
+  | { type: "tool.call"; call: ToolCall }
+  | { type: "usage"; usage: TokenUsage }
+  | { type: "finish"; reason: FinishReason };
+```
+
+### 7.2 工具接口
+
+```ts
+export interface AgentTool<Input = unknown, Output = unknown> {
+  readonly name: string;
+  readonly risk: "read" | "write" | "execute" | "network";
+  parseInput(value: unknown): Input;
+  execute(
+    input: Input,
+    context: ToolExecutionContext,
+  ): Promise<Output>;
+}
+```
+
+### 7.3 Agent 状态
+
+```ts
+export type AgentStatus =
+  | "idle"
+  | "preparing"
+  | "streaming"
+  | "awaiting_approval"
+  | "executing_tool"
+  | "completed"
+  | "cancelled"
+  | "failed";
+```
+
+### 7.4 会话仓库
+
+```ts
+export interface SessionRepository {
+  create(session: SessionRecord): Promise<void>;
+  get(sessionId: string): Promise<SessionRecord | undefined>;
+  list(): Promise<SessionSummary[]>;
+  appendEvent(sessionId: string, event: PersistedEvent): Promise<void>;
+  updateMetadata(sessionId: string, patch: SessionMetadataPatch): Promise<void>;
+}
+```
+
+### 7.5 审批接口
+
+```ts
+export interface ApprovalService {
+  request(
+    request: ApprovalRequest,
+    signal: AbortSignal,
+  ): Promise<ApprovalDecision>;
+}
+```
+
+## 8. 测试分层
+
+### 8.1 纯单元测试
+
+适用模块：
+
+- Protocol Schema。
+- Agent Loop。
+- Tool Registry。
+- Approval Policy。
+- Context Budget。
+- Session 状态转换。
+- Provider 事件标准化。
+
+要求：
+
+- 不启动 VS Code。
+- 不访问网络。
+- 不依赖系统时间和随机 ID。
+- 单个测试文件应在秒级内完成。
+
+### 8.2 组件测试
+
+适用模块：
+
+- 消息列表。
+- 流式消息。
+- Tool 卡片。
+- 审批按钮。
+- 错误和取消状态。
+
+使用 Testing Library，从用户行为而非组件内部实现进行断言。
+
+### 8.3 Extension 集成测试
+
+只验证 VS Code API 适配器：
+
+- 命令成功注册。
+- Webview View 可以解析。
+- Workspace 文件可读。
+- `WorkspaceEdit` 可以应用。
+- 存储目录可以创建和恢复。
+- SecretStorage 适配器行为正确。
+
+### 8.4 人工烟雾测试
+
+每个阶段结束时执行，不替代自动化测试：
+
+1. 在 Extension Development Host 中打开测试工作区。
+2. 打开 Agent 侧边栏。
+3. 执行该阶段定义的完整用户路径。
+4. 检查 Developer Tools 和 Output Channel 没有未处理错误。
+
+## 9. 完成定义
+
+每个任务只有同时满足以下条件才算完成：
+
+- 代码通过 TypeScript 类型检查。
+- 新逻辑拥有对应自动化测试。
+- 全部已有测试通过。
+- lint 和格式检查通过。
+- 没有在任务范围之外增加功能。
+- 必要的公共接口和设计决策已更新到本文档。
+- 如果涉及 UI 或 VS Code API，人工烟雾测试通过。
+
+## 10. 实施阶段与最小任务
+
+任务编号是稳定标识。后续实现时一次只领取一个任务，完成验证后再进入下一个。
+
+---
+
+## 阶段 0：工程基础
+
+### T0001：初始化 pnpm workspace
+
+**目标**：建立空的多包工作区。
+
+**产物**：
+
+- 根 `package.json`。
+- `pnpm-workspace.yaml`。
+- `tsconfig.base.json`。
+- `apps/` 和 `packages/` 中的空包。
+
+**测试**：
+
+- `pnpm install` 成功。
+- `pnpm -r exec tsc --noEmit` 能运行。
+
+**不包含**：VS Code Extension 代码、React UI、模型 SDK。
+
+### T0002：配置质量工具
+
+**目标**：建立统一的格式、lint 和类型检查命令。
+
+**产物**：Biome 配置和根脚本 `check`、`typecheck`。
+
+**测试**：故意制造格式或类型错误时命令失败，恢复后通过。
+
+### T0003：配置 Vitest
+
+**目标**：让所有纯 TypeScript 包可以运行测试。
+
+**产物**：共享 Vitest 配置和一个最小 smoke test。
+
+**验收**：`pnpm test` 成功，且确实执行了测试文件。
+
+### T0004：建立 CI
+
+**目标**：每次提交自动执行 install、check、typecheck、test 和 build。
+
+**验收**：GitHub Actions 工作流语法有效；本地存在等价命令。
+
+### 阶段 0 门禁
+
+- 空项目可以完整安装、检查、测试和构建。
+- 后续包无需复制 TypeScript 或测试配置。
+
+---
+
+## 阶段 1：Extension 与 Webview 外壳
+
+### T0101：创建最小 VS Code Extension
+
+**目标**：Extension Development Host 能激活插件。
+
+**产物**：`extension.ts`、Extension `package.json`、esbuild 配置。
+
+**测试**：Extension 集成测试验证激活成功。
+
+### T0102：注册 Activity Bar View
+
+**目标**：侧边栏出现 Agent 图标和空 View。
+
+**测试**：验证 View Provider 注册；人工确认 View 可打开。
+
+### T0103：创建 React Webview 构建
+
+**目标**：Vite 生成静态资源，View 显示简单页面。
+
+**测试**：Webview build 成功；HTML 资源 URI 使用 `asWebviewUri`。
+
+### T0104：配置 Webview 安全策略
+
+**目标**：设置 nonce、CSP 和 `localResourceRoots`。
+
+**测试**：生成的 HTML 包含 CSP；禁止任意内联脚本。
+
+### T0105：建立双向消息通道
+
+**目标**：Webview 可发送 ping，Extension 返回 pong。
+
+**测试**：Protocol 单元测试和 Controller 单元测试覆盖往返消息。
+
+### 阶段 1 门禁
+
+- 侧边栏可以打开。
+- Webview 与 Extension 能通过已校验协议双向通信。
+- Webview 不拥有文件或密钥访问能力。
+
+---
+
+## 阶段 2：协议和核心状态
+
+### T0201：定义基础协议 Envelope
+
+**目标**：所有消息都有 `type`、`requestId` 和协议版本。
+
+**测试**：合法消息通过，缺字段或未知版本被拒绝。
+
+### T0202：定义 Session DTO
+
+**目标**：定义 Session ID、状态、创建时间和摘要结构。
+
+**测试**：Schema round-trip 测试。
+
+### T0203：定义 Chat Message DTO
+
+**目标**：支持 user、assistant、tool 三类可持久化消息。
+
+**测试**：每种消息合法样例和非法样例。
+
+### T0204：建立领域事件总线
+
+**目标**：Core 通过 EventSink 发出事件，不依赖 UI。
+
+**测试**：CollectingEventSink 保持事件顺序。
+
+### T0205：实现 Session 状态转换
+
+**目标**：限制合法状态变化。
+
+**测试**：覆盖全部合法和非法状态转换。
+
+### 阶段 2 门禁
+
+- 协议、领域模型和 UI 模型边界明确。
+- 无法通过任意对象绕过消息校验。
+
+---
+
+## 阶段 3：模型流式聊天
+
+### T0301：定义 `ModelGateway`
+
+**目标**：Core 拥有供应商无关的模型接口和事件类型。
+
+**测试**：FakeModelGateway 可以按指定顺序流式产生事件。
+
+### T0302：实现单轮 Agent Runtime
+
+**目标**：输入用户消息，消费文本增量并完成一次运行。
+
+**测试**：文本顺序、完成状态和异常状态。
+
+### T0303：实现取消
+
+**目标**：运行接受 AbortSignal，取消后不再发出文本。
+
+**测试**：流中途取消，状态变为 `cancelled`，无未处理 Promise。
+
+### T0304：实现第一个真实 Provider Adapter
+
+**目标**：通过 Vercel AI SDK 接入一个模型供应商。
+
+**测试**：使用 mock SDK response 测试事件映射；默认测试不访问网络。
+
+### T0305：实现 SecretStorage 适配器
+
+**目标**：保存、读取和删除 API Key。
+
+**测试**：使用内存 SecretStorage fake；人工验证真实 VS Code 保存流程。
+
+### T0306：连接 Webview 流式展示
+
+**目标**：用户提交消息，UI 按增量更新回复并可取消。
+
+**测试**：React 组件测试覆盖提交、流式增量、完成和取消。
+
+### 阶段 3 门禁
+
+- 插件可以完成一次无工具的真实流式对话。
+- API Key 不出现在 Webview 状态、日志或持久化消息中。
+- 请求可以可靠取消。
+
+---
+
+## 阶段 4：只读工具循环
+
+### T0401：定义 Tool Call 和 Tool Result
+
+**目标**：建立模型、Core 和 UI 共用的工具数据模型。
+
+**测试**：Schema、序列化和错误结果测试。
+
+### T0402：实现 Tool Registry
+
+**目标**：按名称注册和查找工具，拒绝重名。
+
+**测试**：注册、查找、重名和未知工具。
+
+### T0403：实现 Tool Input 校验
+
+**目标**：执行前解析模型提供的未知输入。
+
+**测试**：缺参数、错误类型、多余危险字段。
+
+### T0404：扩展 Agent Runtime 支持单个 Tool Call
+
+**目标**：模型请求工具，Core 执行后将 Tool Result 回送模型。
+
+**测试**：FakeModel 两步脚本验证完整循环。
+
+### T0405：支持多个连续 Tool Call
+
+**目标**：循环直到模型正常完成。
+
+**测试**：多步顺序、工具异常、最大步数限制和取消。
+
+### T0406：实现 Workspace Scope 校验
+
+**目标**：工具只能访问已选工作区中的 URI。
+
+**测试**：拒绝 `..`、工作区外 URI 和未选择的多根工作区。
+
+### T0407：实现 `list_files`
+
+**目标**：列出受限数量的工作区文件。
+
+**测试**：Glob、排除目录、最大结果数、多根工作区。
+
+### T0408：实现 `read_file`
+
+**目标**：按行范围读取文本文件并限制输出大小。
+
+**测试**：UTF-8、空文件、范围边界、大文件和二进制文件拒绝。
+
+### T0409：实现 `search_files`
+
+**目标**：在工作区中查找文本并返回带行号的有限结果。
+
+**测试**：无结果、多结果、结果截断、忽略目录和取消。
+
+### T0410：实现 Tool Call UI 卡片
+
+**目标**：展示工具名称、参数、运行状态、结果摘要和错误。
+
+**测试**：组件覆盖 pending、running、success、error。
+
+### 阶段 4 门禁
+
+- 模型可以通过只读工具了解工作区。
+- 任何工作区外读取都被拒绝。
+- 工具输出不会无限进入上下文。
+- 循环具有最大步数和取消机制。
+
+---
+
+## 阶段 5：文件修改和审批
+
+### T0501：定义 Approval 模型
+
+**目标**：定义请求、决定、作用域和过期状态。
+
+**测试**：Schema 和状态转换测试。
+
+### T0502：实现基础 Approval Policy
+
+**目标**：read 自动允许，write 必须询问，execute/network 默认禁止。
+
+**测试**：每个风险等级的决策矩阵。
+
+### T0503：实现可取消 Approval Service
+
+**目标**：Core 可以等待 UI 决定，取消运行时审批 Promise 结束。
+
+**测试**：批准、拒绝、取消和重复响应。
+
+### T0504：定义内部 Text Edit 模型
+
+**目标**：修改计划包含 URI、原始版本/Hash 和文本编辑。
+
+**测试**：编辑范围重叠、非法范围和序列化。
+
+### T0505：实现 `propose_file_edit`
+
+**目标**：工具只生成修改提案，不立即写文件。
+
+**测试**：合法提案、工作区外路径和过期文件版本。
+
+### T0506：实现 Diff Presenter
+
+**目标**：用户可以在 VS Code Diff Editor 中查看修改前后内容。
+
+**测试**：适配器单元测试；人工验证 Diff 打开正确。
+
+### T0507：实现审批 UI
+
+**目标**：展示目标文件、修改摘要、查看 Diff、批准和拒绝。
+
+**测试**：组件覆盖批准、拒绝、取消和已过期。
+
+### T0508：实现 `WorkspaceEdit` 应用器
+
+**目标**：批准后以单个 WorkspaceEdit 应用文本修改。
+
+**测试**：成功修改、版本冲突、applyEdit 返回 false。
+
+### T0509：将修改结果返回 Agent Loop
+
+**目标**：模型得知批准、拒绝或冲突结果并可继续回答。
+
+**测试**：三种决定的完整循环测试。
+
+### 阶段 5 门禁
+
+- 模型不能绕过审批直接修改文件。
+- 用户可以在批准前查看准确 Diff。
+- 审批后文件变化会触发冲突，不会静默覆盖。
+
+---
+
+## 阶段 6：会话持久化与恢复
+
+### T0601：定义持久化目录和版本
+
+**目标**：确定 manifest、messages.jsonl、events.jsonl 结构。
+
+**测试**：路径生成和格式版本测试。
+
+### T0602：实现原子 Manifest Store
+
+**目标**：通过临时文件和重命名避免半写入 manifest。
+
+**测试**：正常写入、替换和模拟失败。
+
+### T0603：实现 JSONL Event Store
+
+**目标**：按顺序追加可恢复事件。
+
+**测试**：追加、读取、空行、尾部损坏记录处理。
+
+### T0604：实现 Session Repository
+
+**目标**：组合 manifest 和 event store，实现 create/get/list/update。
+
+**测试**：InMemory 与文件实现通过同一契约测试。
+
+### T0605：接入 `storageUri`
+
+**目标**：Extension 使用工作区私有存储保存会话。
+
+**测试**：无工作区时给出明确处理；有工作区时可以创建目录。
+
+### T0606：实现会话列表和恢复
+
+**目标**：Webview 可以选择已有会话并恢复消息。
+
+**测试**：排序、空列表、损坏会话隔离和恢复 UI。
+
+### T0607：恢复中断运行
+
+**目标**：重启后将 running/awaiting 状态归一化为 interrupted，不自动继续危险操作。
+
+**测试**：每个非终态的恢复规则。
+
+### 阶段 6 门禁
+
+- VS Code 重启后历史消息存在。
+- 损坏单个会话不会导致整个扩展无法启动。
+- 中断的审批或工具不会在重启后自动执行。
+
+---
+
+## 阶段 7：上下文与可靠性
+
+### T0701：实现 Token Budget 接口
+
+**目标**：根据模型上下文窗口分配 System、History、Files、Tools 预算。
+
+**测试**：边界和预算总和测试。
+
+### T0702：实现工具输出截断
+
+**目标**：所有工具输出具有字符、行数和条目上限，并明确标记截断。
+
+**测试**：每类上限及截断标识。
+
+### T0703：实现历史裁剪
+
+**目标**：保留 System、最近用户意图和完整 Tool Call/Result 配对。
+
+**测试**：不能产生孤立 Tool Result。
+
+### T0704：定义摘要器接口
+
+**目标**：将旧对话转换为可持久化摘要。
+
+**测试**：使用 FakeSummarizer，不访问真实模型。
+
+### T0705：实现上下文超限恢复
+
+**目标**：超限时最多执行有限次数的裁剪/摘要重试。
+
+**测试**：成功恢复和超过最大重试次数。
+
+### T0706：实现 Tool Repetition Detector
+
+**目标**：相同工具和参数连续出现达到阈值时暂停循环。
+
+**测试**：相同、不同参数、交错调用和阈值。
+
+### T0707：实现 Provider 重试策略
+
+**目标**：只重试明确可重试错误，支持退避和取消。
+
+**测试**：限流、服务错误、认证错误、取消。
+
+### 阶段 7 门禁
+
+- 长会话不会无限增长。
+- Tool Call 和 Tool Result 始终成对。
+- 重试、裁剪和重复检测都有硬上限。
+
+---
+
+## 阶段 8：Checkpoint 和撤销
+
+### T0801：定义 Checkpoint 模型
+
+**目标**：记录变更前内容、Hash、变更后 Hash 和所属 Run。
+
+**测试**：序列化和完整性校验。
+
+### T0802：在应用修改前创建 Checkpoint
+
+**目标**：未成功创建 Checkpoint 时不应用修改。
+
+**测试**：创建失败阻止写入。
+
+### T0803：实现安全恢复
+
+**目标**：当前文件仍匹配 afterHash 时才自动恢复。
+
+**测试**：正常恢复、用户后续修改导致冲突。
+
+### T0804：实现 Checkpoint UI
+
+**目标**：用户可以查看并请求恢复某次 Agent 修改。
+
+**测试**：组件状态和 Extension 集成烟雾测试。
+
+### 阶段 8 门禁
+
+- Agent 文件修改可以恢复。
+- 恢复不会覆盖 Agent 修改后用户手动产生的变化。
+
+---
+
+## 阶段 9：命令执行
+
+这一阶段必须在文件审批和取消机制稳定后开始。
+
+### T0901：定义 Command Tool Schema
+
+**目标**：参数明确包含命令、工作目录、超时。
+
+**测试**：拒绝空命令、工作区外 cwd 和非法超时。
+
+### T0902：实现命令审批策略
+
+**目标**：所有命令默认逐次审批，展示完整命令和 cwd。
+
+**测试**：批准、拒绝、取消和过期请求。
+
+### T0903：实现 Spawn Command Runner
+
+**目标**：流式捕获 stdout、stderr、exit code，并支持取消和超时。
+
+**测试**：使用固定测试进程验证所有事件；覆盖 Windows/macOS/Linux 差异。
+
+### T0904：实现输出限制
+
+**目标**：内存和上下文中的命令输出都有硬上限，完整日志可选落盘。
+
+**测试**：大量输出不会造成无限内存增长。
+
+### T0905：实现命令 Tool UI
+
+**目标**：展示审批、运行状态、输出、退出码和终止按钮。
+
+**测试**：组件覆盖完整生命周期。
+
+### T0906：接入 Workspace Trust
+
+**目标**：不受信任工作区禁用命令执行和文件写入。
+
+**测试**：信任状态策略测试；人工验证授权后更新。
+
+### 阶段 9 门禁
+
+- 未批准命令无法执行。
+- 命令可以终止和超时。
+- 输出大小受控。
+- 不受信任工作区禁止执行类能力。
+
+---
+
+## 阶段 10：发布准备
+
+### T1001：实现结构化日志
+
+**目标**：使用 VS Code LogOutputChannel，统一字段并脱敏。
+
+**测试**：API Key、Authorization Header 和用户 Secret 不进入日志。
+
+### T1002：完善错误分类和用户提示
+
+**目标**：认证、网络、限流、上下文、工具和内部错误具有不同提示。
+
+**测试**：错误到 UI DTO 的映射测试。
+
+### T1003：性能基线
+
+**目标**：记录激活时间、Webview 首次显示时间和空闲内存基线。
+
+**验收**：扩展启动时不初始化模型客户端或扫描整个工作区。
+
+### T1004：生成 VSIX
+
+**目标**：使用 `@vscode/vsce` 生成可安装包。
+
+**测试**：在干净 VS Code Profile 中安装并完成 smoke test。
+
+### T1005：发布检查清单
+
+**目标**：完成 README、隐私说明、许可证、配置项说明和已知限制。
+
+### 阶段 10 门禁
+
+- 干净环境可安装和运行。
+- VSIX 不包含源码缓存、测试数据、API Key 或无关依赖。
+- README 中的完整入门路径可复现。
+
+## 11. 后续能力候选顺序
+
+第一版发布后，建议按以下顺序评估：
+
+1. 第二个模型供应商，验证 Provider 边界。
+2. Plan/Act 模式，验证 Tool Policy 可配置性。
+3. 项目级规则文件。
+4. MCP Client。
+5. Git 状态感知和提交辅助。
+6. 代码语义索引。
+7. 多 Agent。
+
+多 Agent 必须建立在可恢复 Session、确定性 Tool 生命周期和资源隔离之上。
+
+## 12. 任务执行模板
+
+后续每次开始一个任务时使用以下模板：
+
+```md
+### 当前任务
+
+- ID：Txxxx
+- 目标：
+- 前置条件：
+- 计划修改的文件：
+- 明确不做：
+
+### 测试计划
+
+- 单元测试：
+- 集成测试：
+- 人工烟雾测试：
+
+### 完成结果
+
+- 实现摘要：
+- 测试结果：
+- 设计偏差：无 / 说明
+- 下一任务：
+```
+
+## 13. 变更控制
+
+如果实施中需要改变模块边界、技术基线或任务顺序：
+
+1. 先说明当前任务遇到的具体证据。
+2. 写出至少一个替代方案和影响。
+3. 更新本文档，再修改代码。
+4. 不以“顺手重构”为理由扩大当前任务范围。
+
+新增需求默认进入后续候选清单，不直接插入正在执行的最小任务。
+
+## 14. 第一个执行点
+
+从 **T0001：初始化 pnpm workspace** 开始。
+
+T0001 完成前不安装 React、模型 SDK、VS Code 测试框架或任何业务依赖。这样可以保证第一个任务只验证 Workspace 结构和 TypeScript 基线。
+
