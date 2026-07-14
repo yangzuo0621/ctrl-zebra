@@ -5,6 +5,7 @@
   "type": "module",
   "packageManager": "pnpm@11.11.0",
   "scripts": {
+    "build": "pnpm --recursive --if-present run build",
     "check": "biome ci .",
     "test": "vitest run",
     "typecheck": "pnpm --recursive exec tsc --noEmit"
