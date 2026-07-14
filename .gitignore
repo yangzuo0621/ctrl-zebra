@@ -1,0 +1,25 @@
+# Dependencies and package-manager state
+node_modules/
+.pnpm-store/
+
+# Build and test output
+build/
+coverage/
+dist/
+out/
+.vite/
+.vscode-test/
+*.tsbuildinfo
+
+# Tool caches and logs
+.cache/
+*.log
+
+# Local environment files
+.env
+.env.*
+!.env.example
+
+# Operating-system files
+.DS_Store
+Thumbs.db
