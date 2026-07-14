@@ -1,46 +1,46 @@
-# 测试规范
+# Testing Guidelines
 
-本文档定义 CtrlZebra 自动化测试的共同约束。测试必须快速、确定、可隔离，并与生产代码遵守相同的模块边界。
+This document defines the shared constraints for CtrlZebra automated tests. Tests must be fast, deterministic, isolated, and follow the same module boundaries as production code.
 
-## 测试分层
+## Test Layers
 
-- **单元测试**验证一个宿主无关模块或小型协作对象，是 `packages/*` 的默认测试层级。Core、Protocol 和策略逻辑不得为测试启动 VS Code。
-- **组件测试**通过用户可见行为验证 Webview 组件。引入 React 测试基础设施后，使用 Testing Library，不断言组件内部实现。
-- **适配器集成测试**验证 Provider、存储或 VS Code API 适配器与内部契约的转换。Provider 测试使用记录的或手写的 SDK 响应，不访问真实模型。
-- **Extension 集成测试**只覆盖 VS Code API 适配器、注册和生命周期，并仅在相应路线图任务引入 Extension Development Host 后运行。
+- **Unit tests** verify one host-independent module or a small group of collaborators. They are the default test layer for `packages/*`. Core, Protocol, and policy tests must not start VS Code.
+- **Component tests** verify Webview components through user-visible behavior. After React test infrastructure is introduced, use Testing Library and avoid assertions against component internals.
+- **Adapter integration tests** verify translations between Provider, storage, or VS Code API adapters and internal contracts. Provider tests use recorded or hand-written SDK responses and never access a real model.
+- **Extension integration tests** cover only VS Code API adapters, registrations, and lifecycle behavior. They run only after the corresponding roadmap task introduces the Extension Development Host.
 
-低层测试能充分证明行为时，不升级到更昂贵的测试层级。人工烟雾测试不能替代适用的自动化测试。
+Do not move to a more expensive test layer when a lower-level test can fully prove the behavior. Manual smoke tests do not replace applicable automated tests.
 
-## 命名和放置
+## Naming and Placement
 
-- 测试文件使用 `*.test.ts` 或 `*.test.tsx`，与被测模块放在同一包的 `src/` 树中。
-- 测试名称描述可观察行为和条件，不复述实现细节。
-- 共享 Vitest 配置发现 `packages/*/src/**/*.test.ts`。应用层测试由引入对应应用测试基础设施的后续任务配置。
-- 禁止永久跳过测试，或提交没有负责人、任务编号和移除条件的临时跳过项。
+- Name test files `*.test.ts` or `*.test.tsx` and place them in the tested package's `src/` tree.
+- Describe observable behavior and conditions in test names instead of restating implementation details.
+- The shared Vitest configuration discovers `packages/*/src/**/*.test.ts`. Later tasks that introduce application test infrastructure own the corresponding application test configuration.
+- Do not permanently skip tests or commit a temporary skip without an owner, task or issue ID, reason, and removal condition.
 
-## Fake 和 Mock 边界
+## Fake and Mock Boundaries
 
-- 对稳定的内部端口优先使用行为明确的 Fake，例如固定时钟、固定 ID 生成器、内存仓库和收集型事件接收器。
-- Mock 只用于必须核对边界交互的宿主或第三方接口，例如模型 SDK、VS Code API 和进程边界。
-- 不 Mock 被测对象的内部实现、私有方法或纯数据转换；应通过公开行为断言结果。
-- 默认测试不得调用网络、真实模型、用户凭据或用户机器状态。第三方响应必须由测试替身提供。
+- Prefer explicit behavioral Fakes for stable internal ports, such as fixed clocks, fixed ID generators, in-memory repositories, and collecting event sinks.
+- Use Mocks only when a test must verify interactions at a host or third-party boundary, such as a model SDK, the VS Code API, or a process boundary.
+- Do not mock the tested object's internal implementation, private methods, or pure data transformations. Assert through public behavior instead.
+- Default tests must not access the network, real models, user credentials, or user machine state. Test doubles must supply third-party responses.
 
-## 确定性和隔离
+## Determinism and Isolation
 
-- 时间、ID、随机值和外部输入必须固定或注入；不得依赖执行顺序、墙上时钟或机器时区。
-- 每个测试拥有并清理自己的可变状态、临时资源和替身记录，不与其他测试共享可变全局状态。
-- 不用任意延迟或提高超时隐藏竞态。异步状态转换必须由明确拥有者控制，并通过可观察信号等待。
-- 断言应验证关键行为和边界，不以快照替代重要的行为断言。
+- Fix or inject time, IDs, random values, and external input. Tests must not depend on execution order, wall-clock time, or the machine time zone.
+- Each test owns and cleans up its mutable state, temporary resources, and test-double records. Do not share mutable global state across tests.
+- Do not hide races with arbitrary delays or increased timeouts. Wait for observable signals from the module that owns each asynchronous state transition.
+- Assertions must verify important behavior and boundaries. Do not replace important behavioral assertions with snapshots.
 
-## 回归测试
+## Regression Tests
 
-- 修复缺陷时先添加能在修复前失败的最小回归测试，再实现修复。
-- 回归测试记录触发条件和预期的外部行为，不绑定偶然的内部结构。
-- 正常路径之外，新逻辑至少覆盖一个重要边界和一个预期失败路径，风险更高的逻辑增加相应覆盖。
+- When fixing a defect, first add the smallest regression test that fails before the fix, then implement the fix.
+- A regression test records the triggering condition and expected external behavior without binding to incidental internal structure.
+- In addition to the normal path, new logic must cover an important boundary and an expected failure path. Add more coverage in proportion to risk.
 
-## 异步工作和清理
+## Asynchronous Work and Cleanup
 
-- 涉及取消的测试必须验证取消结果、资源清理，以及取消后不再产生增量、工具调用或其他副作用。
-- 测试必须等待或显式取消其创建的 Promise、计时器、流、监听器和子进程；禁止未观察的异步工作。
-- 清理应幂等，并在成功、失败、超时和取消路径上执行。失败、超时和取消必须保持可区分。
-- 测试结束后不得遗留开放句柄、临时文件或跨测试可见状态。
+- Tests involving cancellation must verify the cancellation outcome, resource cleanup, and that no further deltas, tool calls, or other side effects occur after cancellation.
+- Tests must await or explicitly cancel every Promise, timer, stream, listener, and child process they create. Unobserved asynchronous work is forbidden.
+- Cleanup must be idempotent and run after success, failure, timeout, and cancellation. Failure, timeout, and cancellation must remain distinguishable outcomes.
+- Tests must not leave open handles, temporary files, or state visible to later tests.
