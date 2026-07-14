@@ -1,4 +1,7 @@
 {
   "extends": "../../tsconfig.base.json",
-  "files": []
+  "compilerOptions": {
+    "types": ["node", "vscode"]
+  },
+  "include": ["src/**/*.ts"]
 }

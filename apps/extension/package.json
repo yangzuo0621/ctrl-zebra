@@ -1,6 +1,29 @@
 {
-  "name": "@ctrl-zebra/extension",
+  "name": "ctrl-zebra",
+  "displayName": "CtrlZebra",
+  "description": "A workspace agent for VS Code.",
   "version": "0.0.0",
+  "publisher": "ctrl-zebra",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "engines": {
+    "vscode": "^1.125.0"
+  },
+  "extensionKind": [
+    "workspace"
+  ],
+  "main": "./dist/extension.cjs",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "scripts": {
+    "build": "node ./esbuild.mjs",
+    "test:integration": "pnpm run build && node ./scripts/run-integration-tests.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "@types/vscode": "1.125.0",
+    "@vscode/test-electron": "3.0.0",
+    "esbuild": "0.28.1"
+  }
 }
