@@ -1,0 +1,10 @@
+{
+  "name": "ctrl-zebra",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.11.0",
+  "devDependencies": {
+    "typescript": "6.0.2"
+  }
+}
