@@ -48,6 +48,14 @@ Rules:
 - Data crossing the Webview/Extension boundary or persistence boundary must be JSON-serializable and runtime-validated at the untrusted boundary.
 - Packages may import other packages only through declared public entry points. Cross-package deep imports are forbidden.
 
+Extension lifecycle red lines:
+
+- Keep activation limited to lightweight registration and composition. Do not scan workspaces, access the network, initialize model clients, restore sessions, or start background work during module import or activation.
+- Give every VS Code registration and long-lived resource exactly one `Disposable` owner. Put extension-lifetime registrations in `ExtensionContext.subscriptions`; track asynchronous cleanup separately because VS Code does not await asynchronous subscription disposal.
+- Use the stable `ctrlZebra.<action>` namespace for command IDs. Treat a command rename as a public-contract change.
+- Preserve `vscode.Uri` values at the host boundary. Convert them only inside an adapter with an explicit operating-system path requirement, and never use string-prefix checks for workspace containment.
+- Keep VS Code types and host-specific lifecycle behavior inside `apps/extension` adapters. Initialize costly services lazily on first use with concurrency-safe failure cleanup.
+
 ## 3. Development Environment and Code Style
 
 ### 3.1 Environment
