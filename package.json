@@ -7,7 +7,9 @@
   "scripts": {
     "build": "pnpm --recursive --if-present run build",
     "check": "biome ci .",
-    "test": "vitest run",
+    "test": "pnpm run test:unit && pnpm run test:integration",
+    "test:integration": "pnpm --filter ./apps/extension run test:integration",
+    "test:unit": "vitest run",
     "typecheck": "pnpm --recursive exec tsc --noEmit"
   },
   "devDependencies": {
