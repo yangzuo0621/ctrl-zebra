@@ -400,18 +400,18 @@ export interface ApprovalService {
 **进度摘要**：
 
 - 总任务：68
-- 已完成：1
-- 进行中：1
+- 已完成：2
+- 进行中：0
 - 受阻：0
 - 待开始：66
-- 当前任务：T0002
+- 当前任务：无
 - 下一任务：T0003
 - 最后更新：2026-07-14
 
 | 阶段 | 任务 | 状态 | 完成 PR | 完成日期 |
 |---|---|---|---|---|
 | 0 | T0001 | 已完成 | [#4](https://github.com/yangzuo0621/ctrl-zebra/pull/4) | 2026-07-14 |
-| 0 | T0002 | 进行中 | — | — |
+| 0 | T0002 | 已完成 | [#6](https://github.com/yangzuo0621/ctrl-zebra/pull/6) | 2026-07-14 |
 | 0 | T0003 | 待开始 | — | — |
 | 0 | T0004 | 待开始 | — | — |
 | 1 | T0101 | 待开始 | — | — |
@@ -1118,4 +1118,3 @@ export interface ApprovalService {
 从 **T0001：初始化 pnpm workspace** 开始。
 
 T0001 完成前不安装 React、模型 SDK、VS Code 测试框架或任何业务依赖。这样可以保证第一个任务只验证 Workspace 结构和 TypeScript 基线。
-
