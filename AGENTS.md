@@ -5,12 +5,22 @@ These rules apply to every developer and coding agent working in this repository
 ## 1. Source of Truth and Task Scope
 
 - `docs/implementation-plan.md` is the single source of truth for implementation order, task scope, acceptance criteria, and phase gates.
-- Implement exactly one task ID at a time. Stop after verification and reporting; do not start the next task automatically.
-- Before implementation, read the task's goal, deliverables, tests, exclusions, and prerequisites.
+- Work on exactly one roadmap task ID or one standalone maintenance change at a time. Stop after verification and reporting; do not start another item automatically.
+- Before roadmap implementation, read the task's goal, deliverables, tests, exclusions, and prerequisites.
 - Do not expand a task through opportunistic refactoring, speculative abstractions, dependency upgrades, or work intended for a later task.
 - If implementation requires changing a module boundary, technical baseline, task order, or acceptance criterion, present the evidence and update the implementation plan before changing code.
 
 Phase 1 is limited to the desktop VS Code extension capabilities listed in the implementation plan. Unless the plan is updated first, it excludes multi-agent or sub-agent features, MCP, browser automation, automatic Git commits or PRs, SQLite, vector databases, semantic code indexes, Web Extensions, and cloud accounts, sync, or telemetry backends.
+
+### 1.1 Standalone Maintenance Changes
+
+- `docs/implementation-plan.md` is a committed execution roadmap, not an inbox for every cleanup idea.
+- A small, local, behavior-preserving maintenance change may use a dedicated branch and PR without becoming a roadmap task when it does not change architecture, public contracts, persisted data, user-facing behavior, or task ordering.
+- If the maintenance is directly required by the current task and concerns code introduced or modified by that task, keep the smallest necessary change in the current task PR.
+- If it concerns pre-existing code unrelated to the current task, use a separate maintenance PR; never mix it into the active task PR.
+- Deferred optional maintenance does not need a roadmap entry. Create a GitHub Issue only when the work is valuable enough to track.
+- A change that affects package public APIs, Webview/Extension protocol, tool names, VS Code command IDs, persisted fields, user configuration, module boundaries, or technical baselines is not minor maintenance. Update the implementation plan and, when appropriate, an ADR before implementation.
+- Standalone maintenance PRs do not alter the implementation-plan task ledger unless they are explicitly accepted as roadmap work.
 
 ## 2. Architecture Boundaries
 
@@ -130,12 +140,12 @@ Rules:
 ### 6.1 Before Implementation
 
 1. Check `git status` and preserve all existing user changes.
-2. Read the current task and its surrounding implementation-plan context.
-3. Confirm prerequisites, intended files, explicit exclusions, and validation commands.
-4. Fetch current documentation through Context7 when the task involves a library, framework, SDK, API, CLI, or cloud service.
+2. For roadmap work, read the current task and its surrounding implementation-plan context. For standalone maintenance, confirm that Section 1.1 applies and that the change does not overlap an active roadmap task.
+3. Confirm prerequisites, intended files, explicit exclusions, public-contract impact, and validation commands.
+4. Fetch current documentation through Context7 when the work involves a library, framework, SDK, API, CLI, or cloud service.
 5. Stop and explain any ambiguity that would materially change the implementation.
 
-Post this summary before implementation:
+Post the following summary before roadmap implementation:
 
 ```md
 ### Current Task
@@ -153,14 +163,28 @@ Post this summary before implementation:
 - Manual smoke test:
 ```
 
+For standalone maintenance, post this summary instead:
+
+```md
+### Maintenance Change
+
+- Goal:
+- Reason:
+- Scope:
+- Planned files:
+- Public-contract impact: None
+- Explicitly excluded:
+- Verification:
+```
+
 ### 6.2 During Implementation
 
-- Change only files required by the current task.
+- Change only files required by the current task or standalone maintenance scope.
 - Do not add dependencies needed only by later tasks.
 - Do not change unrelated code, formatting, or directory structure.
 - Do not introduce abstractions without a current use case.
 - Record and report non-blocking discoveries instead of fixing them opportunistically.
-- Never overwrite, revert, delete, or relocate user changes outside the current task.
+- Never overwrite, revert, delete, or relocate user changes outside the current scope.
 
 ### 6.3 Verification
 
@@ -175,6 +199,8 @@ Run applicable checks from fastest to broadest:
 Never claim that an unexecuted check passed. Report any check that could not run and the reason.
 
 ### 6.4 Completion Report
+
+Use the roadmap completion report below for implementation-plan tasks. For standalone maintenance, replace `Task` with `Maintenance` and omit `Next task`.
 
 ```md
 ### Completion
@@ -192,13 +218,14 @@ Never claim that an unexecuted check passed. Report any check that could not run
 ## 7. Git and Integration Workflow
 
 - `main` is protected. Never create development commits directly on `main` or push changes directly to it.
-- Before every task, fetch and confirm the latest remote `main`, then create a dedicated feature branch from that exact commit. Do not branch from stale `main` or another unmerged feature branch.
+- Before every task or standalone maintenance change, fetch and confirm the latest remote `main`, then create a dedicated branch from that exact commit. Do not branch from stale `main` or another unmerged branch.
 - If local changes exist, identify and preserve their ownership. Never overwrite, clean, or relocate them merely to update `main`.
-- Use branch names such as `codex/t0001-pnpm-workspace`.
-- Include the task ID in commit messages, for example `chore(T0001): initialize pnpm workspace`.
-- Do not mix multiple implementation tasks, unrelated formatting, or unrelated dependency upgrades in one commit or PR.
+- Use branch names such as `codex/t0001-pnpm-workspace` for roadmap work or `codex/rename-session-loader` for standalone maintenance.
+- Include the task ID in roadmap commit messages, for example `chore(T0001): initialize pnpm workspace`.
+- For standalone maintenance, include the GitHub Issue number when one exists. If no Issue is warranted, use a clear conventional title such as `refactor: clarify session loader naming`.
+- Do not mix multiple implementation tasks, unrelated maintenance, unrelated formatting, or unrelated dependency upgrades in one commit or PR.
 - All code reaches `main` through a reviewed Pull Request and squash merge. Do not use merge commits or rebase merge for integration.
-- The squashed commit message must contain the task ID and accurately describe the PR's single task.
+- The squashed commit message must contain the roadmap task ID or maintenance Issue number when applicable, and must accurately describe the PR's single coherent change.
 - Do not commit, push, create a PR, rewrite history, merge, or clean the workspace unless the user explicitly requests that action.
 - Never use `git reset --hard`, force-push, or another command that can destroy user work unless the user explicitly authorizes the exact operation and scope.
 - Never commit secrets, caches, generated output, private editor state, or test temporary data.
