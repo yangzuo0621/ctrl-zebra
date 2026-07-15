@@ -16,6 +16,26 @@
   "activationEvents": [
     "onStartupFinished"
   ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "ctrlZebra",
+          "title": "CtrlZebra",
+          "icon": "media/ctrl-zebra.svg"
+        }
+      ]
+    },
+    "views": {
+      "ctrlZebra": [
+        {
+          "type": "webview",
+          "id": "ctrlZebra.agentView",
+          "name": "Agent"
+        }
+      ]
+    }
+  },
   "scripts": {
     "build": "node ./esbuild.mjs",
     "test:integration": "pnpm run build && node ./scripts/run-integration-tests.mjs"

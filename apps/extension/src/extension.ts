@@ -1,5 +1,11 @@
-import type { ExtensionContext } from "vscode";
+import { type ExtensionContext, window } from "vscode";
 
-export function activate(_context: ExtensionContext): void {}
+import { registerAgentView } from "./agent-view.js";
+
+export function activate(context: ExtensionContext): void {
+  context.subscriptions.push(
+    registerAgentView((viewId, provider) => window.registerWebviewViewProvider(viewId, provider)),
+  );
+}
 
 export function deactivate(): void {}
