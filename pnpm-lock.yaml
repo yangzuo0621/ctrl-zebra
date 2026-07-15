@@ -74,7 +74,11 @@ importers:
 
   packages/providers: {}
 
-  packages/testkit: {}
+  packages/testkit:
+    dependencies:
+      '@ctrl-zebra/core':
+        specifier: workspace:*
+        version: link:../core
 
 packages:
 
