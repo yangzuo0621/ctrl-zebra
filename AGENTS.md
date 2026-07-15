@@ -43,6 +43,12 @@ Rules:
 - Inject model, tool, approval, storage, clock, and ID capabilities into Core through interfaces.
 - `apps/extension` owns VS Code APIs, lifecycle, and dependency composition. Keep `extension.ts` limited to registration and composition, not business workflows.
 - `apps/webview` owns presentation and user interaction only. It must not access models, the filesystem, `SecretStorage`, or VS Code commands directly.
+- Webview application state is owned by explicit feature stores; React components own only ephemeral presentation state and must not duplicate persisted or Extension-owned state.
+- Access to `acquireVsCodeApi()` must be isolated behind one Webview-local adapter. Components and stores must not call it directly.
+- Webview components remain presentation-focused: pages compose features, feature components coordinate user interactions, and reusable components must not acquire host capabilities.
+- Use CSS Modules for component styles and VS Code CSS Variables for colors, typography, spacing cues, focus indicators, and other host-integrated presentation. Do not hard-code theme-dependent colors.
+- Webview interactions must remain keyboard-operable, expose semantic names and status, preserve visible focus, and respect reduced-motion preferences.
+- Streaming UI updates must be batched by the state owner and render incrementally without replacing the full message tree or moving keyboard focus.
 - `packages/providers` adapts third-party model SDKs to the internal `ModelGateway`; SDK types must not leak into Core.
 - `packages/builtin-tools` must not depend on `vscode`; Extension adapters perform workspace operations.
 - Data crossing the Webview/Extension boundary or persistence boundary must be JSON-serializable and runtime-validated at the untrusted boundary.

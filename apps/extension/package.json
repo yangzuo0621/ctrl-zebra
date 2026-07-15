@@ -38,7 +38,7 @@
   },
   "scripts": {
     "build": "node ./esbuild.mjs",
-    "test:integration": "pnpm run build && node ./scripts/run-integration-tests.mjs"
+    "test:integration": "pnpm --dir ../webview run build && pnpm run build && node ./scripts/run-integration-tests.mjs"
   },
   "devDependencies": {
     "@types/node": "24.13.3",
