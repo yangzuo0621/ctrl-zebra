@@ -2,5 +2,11 @@
   "name": "@ctrl-zebra/protocol",
   "version": "0.0.0",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "zod": "4.4.3"
+  }
 }

@@ -43,6 +43,43 @@
   line-height: 1.5;
 }
 
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.button {
+  padding: 4px 10px;
+  border: 1px solid var(--vscode-button-border, transparent);
+  border-radius: 2px;
+  color: var(--vscode-button-foreground);
+  background: var(--vscode-button-background);
+  font: inherit;
+  cursor: pointer;
+}
+
+.button:hover:not(:disabled) {
+  background: var(--vscode-button-hoverBackground);
+}
+
+.button:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 2px;
+}
+
+.button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.status {
+  margin: 0;
+  color: var(--vscode-descriptionForeground);
+  line-height: 1.5;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
