@@ -1,4 +1,18 @@
 export type {
+  AssistantMessage,
+  ChatMessage,
+  MessageId,
+  ToolMessage,
+  UserMessage,
+} from "./chat-message.js";
+export {
+  assistantMessageSchema,
+  chatMessageSchema,
+  messageIdSchema,
+  toolMessageSchema,
+  userMessageSchema,
+} from "./chat-message.js";
+export type {
   ExtensionToWebviewMessage,
   PingMessage,
   PongMessage,
