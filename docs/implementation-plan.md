@@ -246,7 +246,17 @@ export type ModelEvent =
   | { type: "tool.call"; call: ToolCall }
   | { type: "usage"; usage: TokenUsage }
   | { type: "finish"; reason: FinishReason };
+
+export type ModelGatewayErrorCode =
+  | "authentication"
+  | "rate-limit"
+  | "invalid-request"
+  | "unavailable"
+  | "malformed-response"
+  | "unknown";
 ```
+
+`ModelRequest` 只包含 Core 模型消息，不复用持久化 Chat Message DTO。Provider 失败通过带有稳定 `ModelGatewayErrorCode` 的 `ModelGatewayError` 抛出；取消保留调用方的取消原因，不转换为 Provider 失败。
 
 ### 7.2 工具接口
 
