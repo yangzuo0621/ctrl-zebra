@@ -2,10 +2,45 @@ import { describe, expect, it } from "vitest";
 
 import {
   extensionToWebviewMessageSchema,
+  protocolEnvelopeSchema,
   protocolVersion,
   type WebviewToExtensionMessage,
   webviewToExtensionMessageSchema,
 } from "./index.js";
+
+describe("Protocol envelope", () => {
+  const validEnvelope = {
+    protocolVersion,
+    type: "webview/ping",
+    requestId: "request-1",
+  };
+
+  it("round-trips a valid envelope through JSON", () => {
+    expect(
+      protocolEnvelopeSchema.parse(JSON.parse(JSON.stringify(validEnvelope)) as unknown),
+    ).toEqual(validEnvelope);
+  });
+
+  it.each([
+    { type: validEnvelope.type, requestId: validEnvelope.requestId },
+    { protocolVersion, requestId: validEnvelope.requestId },
+    { protocolVersion, type: validEnvelope.type },
+  ])("rejects an envelope missing a required field %#", (envelope) => {
+    expect(protocolEnvelopeSchema.safeParse(envelope).success).toBe(false);
+  });
+
+  it.each([
+    { ...validEnvelope, protocolVersion: 2 },
+    { ...validEnvelope, type: "" },
+    { ...validEnvelope, type: "ping" },
+    { ...validEnvelope, type: "webview/" },
+    { ...validEnvelope, requestId: "" },
+    { ...validEnvelope, requestId: "x".repeat(129) },
+    { ...validEnvelope, unexpected: true },
+  ])("rejects an invalid envelope %#", (envelope) => {
+    expect(protocolEnvelopeSchema.safeParse(envelope).success).toBe(false);
+  });
+});
 
 describe("Webview protocol messages", () => {
   it("round-trips valid ping and pong envelopes through JSON", () => {
