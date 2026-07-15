@@ -64,7 +64,11 @@ importers:
 
   packages/builtin-tools: {}
 
-  packages/core: {}
+  packages/core:
+    dependencies:
+      '@ctrl-zebra/protocol':
+        specifier: workspace:*
+        version: link:../protocol
 
   packages/protocol:
     dependencies:

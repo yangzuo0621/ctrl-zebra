@@ -117,7 +117,15 @@ Extension lifecycle red lines:
 - Cleanup should be idempotent. Timeout, cancellation, and failure must remain distinguishable outcomes.
 - Do not hide races with arbitrary delays or increased timeouts. A clearly owned module must control each state transition.
 
-### 3.7 TODOs and Rule Exceptions
+### 3.7 Session State Transitions
+
+- Session status changes must go through the Core state machine; callers must not mutate or bypass its current status.
+- Legal transitions are `idle → preparing`; `preparing → streaming | cancelled | failed`; `streaming → awaiting_approval | executing_tool | completed | cancelled | failed`; `awaiting_approval → streaming | executing_tool | cancelled | failed`; and `executing_tool → streaming | cancelled | failed`.
+- `completed`, `cancelled`, and `failed` are distinct terminal states with no outgoing transitions. A terminal Session must never be restarted by changing its status.
+- An illegal transition must fail with a domain error without changing state or emitting an event.
+- A legal transition commits the new status before synchronously emitting exactly one status-change event. Event sink failures propagate and do not roll back the committed status.
+
+### 3.8 TODOs and Rule Exceptions
 
 - Do not commit ownerless `TODO` or `FIXME` comments, commented-out code, or permanently skipped tests.
 - A necessary temporary item must include a task or issue ID, its reason, and its removal condition.
