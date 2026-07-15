@@ -13,3 +13,9 @@ export {
   protocolVersion,
   webviewToExtensionMessageSchema,
 } from "./messages.js";
+export type { SessionId, SessionStatus, SessionSummary } from "./session.js";
+export {
+  sessionIdSchema,
+  sessionStatusSchema,
+  sessionSummarySchema,
+} from "./session.js";
