@@ -9,6 +9,8 @@ import {
   type WebviewViewProvider,
 } from "vscode";
 
+import { bindWebviewMessageController } from "./controllers/webview-message-controller.js";
+
 export const agentViewId = "ctrlZebra.agentView";
 
 type WebviewViewRegistrar = (viewId: string, provider: WebviewViewProvider) => Disposable;
@@ -74,6 +76,10 @@ class AgentViewProvider implements WebviewViewProvider {
     webviewView.webview.options = createAgentViewOptions(this.extensionUri);
     const nonce = randomBytes(16).toString("hex");
     webviewView.webview.html = createAgentViewHtml(webviewView.webview, this.extensionUri, nonce);
+
+    bindWebviewMessageController(webviewView.webview, webviewView, () => {
+      console.error("CtrlZebra could not deliver a Webview protocol response.");
+    });
   }
 }
 

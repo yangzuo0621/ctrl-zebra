@@ -4,7 +4,7 @@ export default defineConfig({
   test: {
     environment: "node",
     globals: false,
-    include: ["packages/*/src/**/*.test.ts"],
+    include: ["packages/*/src/**/*.test.ts", "apps/extension/src/controllers/**/*.test.ts"],
     passWithNoTests: false,
   },
 });
