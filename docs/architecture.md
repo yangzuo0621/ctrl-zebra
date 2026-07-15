@@ -46,3 +46,12 @@ This document defines the initial runtime boundaries for the CtrlZebra desktop V
 - Lazy initialization must be concurrency-safe: simultaneous callers share one initialization attempt and receive the same success or failure outcome.
 - Failed initialization must leave no partially registered or unowned resources. A later retry is allowed only when the owning contract defines it.
 - Background work must have an explicit trigger, cancellation path, and lifecycle owner; module import must never start work as a side effect.
+
+## Model Provider Boundary
+
+- `packages/core` owns the host- and vendor-independent `ModelGateway` contract and all values that cross it. Core code depends only on these internal types and never imports a model SDK.
+- `packages/providers` implements `ModelGateway`. A provider adapter is limited to translating Core requests into SDK calls and normalizing the resulting text deltas, tool calls, token usage, finish reasons, and failures into Core values in source order.
+- SDK output and failures are untrusted adapter-boundary input. Adapters narrow or validate them before creating Core values. Unsupported or malformed SDK data becomes a stable Core provider error rather than leaking an SDK object or relying on SDK error-message text.
+- Core defines a closed set of provider error categories suitable for runtime decisions. Adapter diagnostics may retain a redacted cause privately, but SDK error classes, status objects, response bodies, headers, and credentials never cross the `ModelGateway` boundary.
+- The caller owns cancellation and passes an `AbortSignal` to `ModelGateway.stream`. An adapter passes that same signal to the underlying SDK operation, observes cancellation while consuming the stream, emits no later events, and preserves cancellation as distinct from provider failure.
+- Provider adapters do not decide session transitions, retry policy, tool approval or execution, persistence, or presentation. Those decisions remain with the owning Core runtime or host adapter introduced by their roadmap tasks.
