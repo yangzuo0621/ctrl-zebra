@@ -54,6 +54,14 @@ Rules:
 - Data crossing the Webview/Extension boundary or persistence boundary must be JSON-serializable and runtime-validated at the untrusted boundary.
 - Packages may import other packages only through declared public entry points. Cross-package deep imports are forbidden.
 
+Model provider boundary rules:
+
+- Core owns `ModelGateway` and every request, event, usage, finish-reason, tool-call, and error type visible across the provider boundary.
+- Provider adapters only translate SDK requests and normalize SDK streams into Core events. They must preserve event order and must not make Agent Runtime, tool-policy, session-state, persistence, or UI decisions.
+- Provider adapters accept SDK responses and failures as untrusted boundary input. They must narrow or validate them before constructing Core values and must map SDK failures to stable Core error categories without branching on third-party error-message text.
+- Cancellation is a distinct outcome, not a provider failure. Pass the caller's `AbortSignal` through to the SDK operation, stop translating events after cancellation, and do not wrap cancellation in a generic provider error.
+- Third-party SDK types, response objects, errors, finish reasons, usage shapes, and tool-call shapes must remain private to `packages/providers`; they must not appear in Core contracts, public package exports, persisted data, or Webview/Extension protocol DTOs.
+
 Extension lifecycle red lines:
 
 - Keep activation limited to lightweight registration and composition. Do not scan workspaces, access the network, initialize model clients, restore sessions, or start background work during module import or activation.
