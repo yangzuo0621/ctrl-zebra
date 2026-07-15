@@ -246,7 +246,17 @@ export type ModelEvent =
   | { type: "tool.call"; call: ToolCall }
   | { type: "usage"; usage: TokenUsage }
   | { type: "finish"; reason: FinishReason };
+
+export type ModelGatewayErrorCode =
+  | "authentication"
+  | "rate-limit"
+  | "invalid-request"
+  | "unavailable"
+  | "malformed-response"
+  | "unknown";
 ```
+
+`ModelRequest` 只包含 Core 模型消息，不复用持久化 Chat Message DTO。Provider 失败通过带有稳定 `ModelGatewayErrorCode` 的 `ModelGatewayError` 抛出；取消保留调用方的取消原因，不转换为 Provider 失败。
 
 ### 7.2 工具接口
 
@@ -400,11 +410,11 @@ export interface ApprovalService {
 **进度摘要**：
 
 - 总任务：68
-- 已完成：14
-- 进行中：1
+- 已完成：15
+- 进行中：0
 - 受阻：0
 - 待开始：53
-- 当前任务：T0301
+- 当前任务：无
 - 下一任务：T0302
 - 最后更新：2026-07-15
 
@@ -424,7 +434,7 @@ export interface ApprovalService {
 | 2 | T0203 | 已完成 | [#18](https://github.com/yangzuo0621/ctrl-zebra/pull/18) | 2026-07-15 |
 | 2 | T0204 | 已完成 | [#19](https://github.com/yangzuo0621/ctrl-zebra/pull/19) | 2026-07-15 |
 | 2 | T0205 | 已完成 | [#20](https://github.com/yangzuo0621/ctrl-zebra/pull/20) | 2026-07-15 |
-| 3 | T0301 | 进行中 | — | — |
+| 3 | T0301 | 已完成 | [#22](https://github.com/yangzuo0621/ctrl-zebra/pull/22) | 2026-07-15 |
 | 3 | T0302 | 待开始 | — | — |
 | 3 | T0303 | 待开始 | — | — |
 | 3 | T0304 | 待开始 | — | — |
