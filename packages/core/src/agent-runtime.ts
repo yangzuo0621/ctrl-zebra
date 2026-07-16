@@ -21,21 +21,23 @@ export class AgentRuntime {
     this.#eventSink = eventSink;
   }
 
-  async run(userMessage: UserMessage): Promise<void> {
+  async run(userMessage: UserMessage, signal: AbortSignal): Promise<void> {
     const session = new SessionStateMachine(userMessage.sessionId, "idle", this.#eventSink);
 
     try {
       session.transitionTo("preparing");
+      signal.throwIfAborted();
       const stream = this.#modelGateway.stream(
         {
           messages: [{ role: "user", content: userMessage.content }],
         },
-        new AbortController().signal,
+        signal,
       );
       session.transitionTo("streaming");
 
       for await (const event of stream) {
         if (event.type === "text.delta") {
+          signal.throwIfAborted();
           this.#eventSink.emit({
             type: "agent.text-delta",
             sessionId: userMessage.sessionId,
@@ -44,14 +46,26 @@ export class AgentRuntime {
         }
       }
 
+      signal.throwIfAborted();
       session.transitionTo("completed");
     } catch (error) {
+      if (isCancellation(error, signal)) {
+        if (isActiveStatus(session.status)) {
+          session.transitionTo("cancelled");
+        }
+        return;
+      }
+
       if (isActiveStatus(session.status)) {
         session.transitionTo("failed");
       }
       throw error;
     }
   }
+}
+
+function isCancellation(error: unknown, signal: AbortSignal): boolean {
+  return signal.aborted && error === signal.reason;
 }
 
 function isActiveStatus(status: SessionStatus): boolean {
