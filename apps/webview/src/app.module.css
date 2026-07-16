@@ -10,12 +10,23 @@
   font-size: var(--vscode-font-size);
 }
 
+:global(button),
+:global(textarea) {
+  font: inherit;
+}
+
 .shell {
+  display: grid;
+  grid-template-rows: auto minmax(120px, 1fr) auto auto;
+  gap: 16px;
+  min-height: 100vh;
+  padding: 16px;
+}
+
+.header {
   display: flex;
   align-items: center;
   gap: 12px;
-  min-height: 100vh;
-  padding: 20px;
 }
 
 .mark {
@@ -37,46 +48,123 @@
   line-height: 1.4;
 }
 
+.description,
+.empty,
+.status {
+  color: var(--vscode-descriptionForeground);
+}
+
 .description {
   margin: 4px 0 0;
-  color: var(--vscode-descriptionForeground);
   line-height: 1.5;
+}
+
+.transcript {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.empty {
+  margin: auto;
+}
+
+.message {
+  padding: 10px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 6px;
+  background: var(--vscode-editor-background);
+}
+
+.message[data-role="user"] {
+  border-color: var(--vscode-focusBorder);
+}
+
+.messageRole {
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.85em;
+  font-weight: 600;
+}
+
+.message p {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.composer {
+  display: grid;
+  gap: 6px;
+}
+
+.label {
+  font-weight: 600;
+}
+
+.input {
+  width: 100%;
+  resize: vertical;
+  padding: 7px;
+  border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+  border-radius: 2px;
+  color: var(--vscode-input-foreground);
+  background: var(--vscode-input-background);
+}
+
+.input:focus-visible,
+.button:focus-visible,
+.secondaryButton:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 2px;
 }
 
 .actions {
   display: flex;
-  align-items: center;
   gap: 8px;
-  margin-top: 12px;
+}
+
+.button,
+.secondaryButton {
+  padding: 5px 12px;
+  border: 1px solid var(--vscode-button-border, transparent);
+  border-radius: 2px;
+  cursor: pointer;
 }
 
 .button {
-  padding: 4px 10px;
-  border: 1px solid var(--vscode-button-border, transparent);
-  border-radius: 2px;
   color: var(--vscode-button-foreground);
   background: var(--vscode-button-background);
-  font: inherit;
-  cursor: pointer;
 }
 
 .button:hover:not(:disabled) {
   background: var(--vscode-button-hoverBackground);
 }
 
-.button:focus-visible {
-  outline: 1px solid var(--vscode-focusBorder);
-  outline-offset: 2px;
+.secondaryButton {
+  color: var(--vscode-button-secondaryForeground);
+  background: var(--vscode-button-secondaryBackground);
 }
 
-.button:disabled {
+.secondaryButton:hover:not(:disabled) {
+  background: var(--vscode-button-secondaryHoverBackground);
+}
+
+.button:disabled,
+.secondaryButton:disabled,
+.input:disabled {
   cursor: default;
   opacity: 0.6;
 }
 
 .status {
+  min-height: 1.5em;
   margin: 0;
-  color: var(--vscode-descriptionForeground);
   line-height: 1.5;
 }
 

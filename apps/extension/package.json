@@ -47,6 +47,7 @@
     "esbuild": "0.28.1"
   },
   "dependencies": {
+    "@ctrl-zebra/core": "workspace:*",
     "@ctrl-zebra/protocol": "workspace:*"
   }
 }

@@ -14,11 +14,15 @@ export async function verifyAgentViewRegistration(): Promise<void> {
   let registeredProvider: vscode.WebviewViewProvider | undefined;
 
   const extensionUri = vscode.Uri.file("/ctrl-zebra");
-  const registration = registerAgentView(extensionUri, (viewId, provider) => {
-    registeredViewId = viewId;
-    registeredProvider = provider;
-    return disposable;
-  });
+  const registration = registerAgentView(
+    extensionUri,
+    (viewId, provider) => {
+      registeredViewId = viewId;
+      registeredProvider = provider;
+      return disposable;
+    },
+    { async run() {} },
+  );
 
   assert.equal(registeredViewId, agentViewId);
   assert.ok(registeredProvider, "Expected an Agent Webview View Provider to be registered.");

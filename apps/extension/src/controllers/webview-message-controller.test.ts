@@ -1,3 +1,4 @@
+import type { AgentRuntimeEvent } from "@ctrl-zebra/core";
 import { protocolVersion } from "@ctrl-zebra/protocol";
 import { describe, expect, it } from "vitest";
 
@@ -5,6 +6,10 @@ import {
   bindWebviewMessageController,
   handleWebviewMessage,
 } from "./webview-message-controller.js";
+
+const idleChatRunner = {
+  async run() {},
+};
 
 describe("handleWebviewMessage", () => {
   it("returns a correlated pong for a valid ping", () => {
@@ -69,6 +74,7 @@ describe("handleWebviewMessage", () => {
         },
       },
       () => deliveryFailures.push("failed"),
+      idleChatRunner,
     );
 
     emitMessage({ protocolVersion, type: "webview/ping", requestId: "request-1" });
@@ -111,6 +117,7 @@ describe("handleWebviewMessage", () => {
       () => {
         deliveryFailureCount += 1;
       },
+      idleChatRunner,
     );
 
     messageListener?.({ protocolVersion, type: "webview/ping", requestId: "request-1" });
@@ -118,5 +125,153 @@ describe("handleWebviewMessage", () => {
     await Promise.resolve();
 
     expect(deliveryFailureCount).toBe(1);
+  });
+
+  it("forwards ordered runtime deltas and terminal completion", async () => {
+    let messageListener: ((message: unknown) => void) | undefined;
+    const postedMessages: unknown[] = [];
+
+    bindWebviewMessageController(
+      {
+        onDidReceiveMessage(listener) {
+          messageListener = listener;
+          return { dispose() {} };
+        },
+        postMessage(message) {
+          postedMessages.push(message);
+          return Promise.resolve(true);
+        },
+      },
+      {
+        onDidDispose() {
+          return { dispose() {} };
+        },
+      },
+      () => {},
+      {
+        async run(_content, _signal, emit) {
+          emit({
+            type: "session.status-changed",
+            sessionId: "session-1",
+            previousStatus: "preparing",
+            status: "streaming",
+          });
+          emit({ type: "agent.text-delta", sessionId: "session-1", text: "Hel" });
+          emit({ type: "agent.text-delta", sessionId: "session-1", text: "lo" });
+          emit({
+            type: "session.status-changed",
+            sessionId: "session-1",
+            previousStatus: "streaming",
+            status: "completed",
+          });
+        },
+      },
+    );
+
+    messageListener?.({
+      protocolVersion,
+      type: "webview/submit",
+      requestId: "request-1",
+      content: "Say hello.",
+    });
+    await Promise.resolve();
+
+    expect(postedMessages).toEqual([
+      {
+        protocolVersion,
+        type: "extension/run-status",
+        requestId: "request-1",
+        status: "preparing",
+      },
+      {
+        protocolVersion,
+        type: "extension/run-status",
+        requestId: "request-1",
+        status: "streaming",
+      },
+      {
+        protocolVersion,
+        type: "extension/text-delta",
+        requestId: "request-1",
+        text: "Hel",
+      },
+      {
+        protocolVersion,
+        type: "extension/text-delta",
+        requestId: "request-1",
+        text: "lo",
+      },
+      {
+        protocolVersion,
+        type: "extension/run-status",
+        requestId: "request-1",
+        status: "completed",
+      },
+    ]);
+  });
+
+  it("aborts the correlated run and ignores later deltas after cancellation", async () => {
+    let messageListener: ((message: unknown) => void) | undefined;
+    const postedMessages: unknown[] = [];
+    let emitRuntimeEvent: ((event: AgentRuntimeEvent) => void) | undefined;
+    let receivedSignal: AbortSignal | undefined;
+
+    bindWebviewMessageController(
+      {
+        onDidReceiveMessage(listener) {
+          messageListener = listener;
+          return { dispose() {} };
+        },
+        postMessage(message) {
+          postedMessages.push(message);
+          return Promise.resolve(true);
+        },
+      },
+      {
+        onDidDispose() {
+          return { dispose() {} };
+        },
+      },
+      () => {},
+      {
+        run(_content, signal, emit) {
+          receivedSignal = signal;
+          emitRuntimeEvent = emit;
+          return new Promise((_, reject) => {
+            signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+          });
+        },
+      },
+    );
+
+    messageListener?.({
+      protocolVersion,
+      type: "webview/submit",
+      requestId: "request-1",
+      content: "Keep going.",
+    });
+    messageListener?.({
+      protocolVersion,
+      type: "webview/cancel",
+      requestId: "request-1",
+    });
+    emitRuntimeEvent?.({ type: "agent.text-delta", sessionId: "session-1", text: "late" });
+    await Promise.resolve();
+
+    expect(receivedSignal?.aborted).toBe(true);
+    expect(postedMessages).toEqual([
+      {
+        protocolVersion,
+        type: "extension/run-status",
+        requestId: "request-1",
+        status: "preparing",
+      },
+      {
+        protocolVersion,
+        type: "extension/run-status",
+        requestId: "request-1",
+        status: "cancelled",
+      },
+    ]);
   });
 });
