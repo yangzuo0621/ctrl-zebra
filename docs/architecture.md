@@ -55,3 +55,39 @@ This document defines the initial runtime boundaries for the CtrlZebra desktop V
 - Core defines a closed set of provider error categories suitable for runtime decisions. Adapter diagnostics may retain a redacted cause privately, but SDK error classes, status objects, response bodies, headers, and credentials never cross the `ModelGateway` boundary.
 - The caller owns cancellation and passes an `AbortSignal` to `ModelGateway.stream`. An adapter passes that same signal to the underlying SDK operation, observes cancellation while consuming the stream, emits no later events, and preserves cancellation as distinct from provider failure.
 - Provider adapters do not decide session transitions, retry policy, tool approval or execution, persistence, or presentation. Those decisions remain with the owning Core runtime or host adapter introduced by their roadmap tasks.
+
+## Provider Configuration Boundary
+
+- `apps/extension` owns Provider configuration. It accepts VS Code configuration values as
+  `unknown`, validates them at the host boundary, resolves credentials through Extension-owned
+  SecretStorage adapters, and selects a `ModelGateway` through an injected Provider factory.
+  `packages/core` and `apps/webview` never receive Provider identifiers, endpoint URLs, Secret
+  references, SDK options, or other vendor-specific configuration.
+- The supported Provider identifiers are the closed set `openai`, `gemini`, and
+  `openai-compatible`. Unknown identifiers fail before Secret access or model client creation.
+  Provider identifiers are public configuration values; renaming one requires an implementation
+  plan update and an explicit migration.
+- Every normalized Provider configuration has version `1`, a non-empty model ID, an effective
+  endpoint policy, and a declared capability set. Version `1` capabilities are `text-streaming`
+  and `tool-calling`. A caller supplies the capabilities required by the operation, and selection
+  fails before creating a gateway when the declaration does not satisfy them.
+- OpenAI and Gemini use their adapter-owned official HTTPS endpoints by default and declare the
+  capabilities supported by their dedicated adapters. OpenAI-Compatible requires an explicit
+  endpoint and an explicit capability declaration because compatibility servers cannot be assumed
+  to implement every OpenAI feature. Its default capability declaration is `text-streaming` only.
+- The active Provider defaults to `openai`. Model IDs have no implicit default because changing a
+  vendor's recommended model would silently change cost and behavior; a missing model produces an
+  actionable configuration error. OpenAI-Compatible has no endpoint default.
+- Model gateways are initialized lazily on the user operation that needs them. Activation may
+  register configuration and compose factories, but it must not read a Secret, initialize an SDK
+  client, or contact an endpoint. Concurrent lazy callers share an in-flight initialization only
+  when the owner can prove that the effective configuration is identical.
+- Provider factories receive only validated, normalized values and the credential required for
+  that invocation. A factory does not read VS Code configuration or SecretStorage. Gemini and
+  OpenAI-Compatible factory implementations remain owned by their dedicated roadmap tasks; their
+  selection paths may use injected test factories until those adapters exist.
+- Version `1` is the first Provider configuration format, so there is no legacy data to migrate.
+  Future changes to identifiers, setting names, normalized shapes, defaults, or Secret names must
+  define an explicit version transition. Migration reads exact prior keys through VS Code
+  configuration inspection, never guesses from model IDs or endpoints, and never copies a Secret
+  into ordinary settings.
