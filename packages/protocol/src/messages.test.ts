@@ -65,6 +65,37 @@ describe("Webview protocol messages", () => {
     ).toEqual(pong);
   });
 
+  it("round-trips chat submission, cancellation, delta, and status messages", () => {
+    const submit = {
+      protocolVersion,
+      type: "webview/submit",
+      requestId: "request-2",
+      content: "Say hello.",
+    } as const;
+    const cancel = {
+      protocolVersion,
+      type: "webview/cancel",
+      requestId: "request-2",
+    } as const;
+    const delta = {
+      protocolVersion,
+      type: "extension/text-delta",
+      requestId: "request-2",
+      text: "Hel",
+    } as const;
+    const status = {
+      protocolVersion,
+      type: "extension/run-status",
+      requestId: "request-2",
+      status: "completed",
+    } as const;
+
+    expect(webviewToExtensionMessageSchema.parse(submit)).toEqual(submit);
+    expect(webviewToExtensionMessageSchema.parse(cancel)).toEqual(cancel);
+    expect(extensionToWebviewMessageSchema.parse(delta)).toEqual(delta);
+    expect(extensionToWebviewMessageSchema.parse(status)).toEqual(status);
+  });
+
   it.each([
     null,
     {},
@@ -73,6 +104,9 @@ describe("Webview protocol messages", () => {
     { protocolVersion, type: "webview/unknown", requestId: "request-1" },
     { protocolVersion, type: "webview/ping", requestId: "" },
     { protocolVersion, type: "webview/ping", requestId: "request-1", unexpected: true },
+    { protocolVersion, type: "webview/submit", requestId: "request-1", content: "   " },
+    { protocolVersion, type: "webview/submit", requestId: "request-1", content: "x", extra: true },
+    { protocolVersion, type: "webview/cancel", requestId: "request-1", content: "x" },
   ])("rejects invalid Webview input %#", (message) => {
     expect(webviewToExtensionMessageSchema.safeParse(message).success).toBe(false);
   });
@@ -83,6 +117,25 @@ describe("Webview protocol messages", () => {
         protocolVersion,
         type: "extension/pong",
         requestId: "request-1",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects invalid Extension streaming events", () => {
+    expect(
+      extensionToWebviewMessageSchema.safeParse({
+        protocolVersion,
+        type: "extension/text-delta",
+        requestId: "request-1",
+        text: "",
+      }).success,
+    ).toBe(false);
+    expect(
+      extensionToWebviewMessageSchema.safeParse({
+        protocolVersion,
+        type: "extension/run-status",
+        requestId: "request-1",
+        status: "idle",
       }).success,
     ).toBe(false);
   });
