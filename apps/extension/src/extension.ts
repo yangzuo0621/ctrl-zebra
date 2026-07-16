@@ -1,25 +1,11 @@
 import { type ExtensionContext, window } from "vscode";
 
-import { createOpenAIApiKeySecretStorage } from "./adapters/api-key-secret-storage.js";
 import { registerAgentView } from "./agent-view.js";
-import { createChatRunner } from "./controllers/chat-runner.js";
+import { createUnconfiguredChatRunner } from "./controllers/chat-runner.js";
 
 export function activate(context: ExtensionContext): void {
-  const chatRunner = createChatRunner({
-    apiKeyStorage: createOpenAIApiKeySecretStorage(context.secrets),
-    async requestApiKey(signal) {
-      const apiKey = await window.showInputBox({
-        title: "Connect CtrlZebra to OpenAI",
-        prompt: "Enter an OpenAI API key. It will be stored in VS Code SecretStorage.",
-        password: true,
-        ignoreFocusOut: true,
-        validateInput: (value) =>
-          value.trim().length === 0 ? "An API key is required." : undefined,
-      });
-      signal.throwIfAborted();
-      return apiKey;
-    },
-  });
+  // T0307 replaces this unavailable runner after validated Provider configuration exists.
+  const chatRunner = createUnconfiguredChatRunner();
 
   context.subscriptions.push(
     registerAgentView(

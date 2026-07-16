@@ -48,7 +48,6 @@
   },
   "dependencies": {
     "@ctrl-zebra/core": "workspace:*",
-    "@ctrl-zebra/protocol": "workspace:*",
-    "@ctrl-zebra/providers": "workspace:*"
+    "@ctrl-zebra/protocol": "workspace:*"
   }
 }

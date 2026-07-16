@@ -1,104 +1,80 @@
-import type { AgentRuntimeEvent, ModelGateway } from "@ctrl-zebra/core";
+import type { AgentRuntimeEvent, ModelGateway, ModelRequest } from "@ctrl-zebra/core";
 import { describe, expect, it } from "vitest";
 
-import { ApiKeyRequiredError, createChatRunner } from "./chat-runner.js";
-
-function createStorage(initialValue?: string) {
-  let value = initialValue;
-  return {
-    storage: {
-      async read() {
-        return value;
-      },
-      async save(apiKey: string) {
-        value = apiKey;
-      },
-      async delete() {
-        value = undefined;
-      },
-    },
-    readValue: () => value,
-  };
-}
-
-function createGateway(): ModelGateway {
-  return {
-    async *stream() {
-      yield { type: "text.delta", text: "Hello" };
-      yield { type: "finish", reason: "stop" };
-    },
-  };
-}
+import {
+  createChatRunner,
+  createUnconfiguredChatRunner,
+  ModelProviderNotConfiguredError,
+} from "./chat-runner.js";
 
 describe("createChatRunner", () => {
-  it("uses the stored key for one Agent Runtime run without prompting", async () => {
-    const { storage } = createStorage("test-openai-api-key");
-    const prompted: string[] = [];
-    const gatewayKeys: string[] = [];
+  it("runs the injected ModelGateway and emits ordered Agent Runtime events", async () => {
+    let receivedRequest: ModelRequest | undefined;
+    let receivedSignal: AbortSignal | undefined;
+    const modelGateway: ModelGateway = {
+      async *stream(request, signal) {
+        receivedRequest = request;
+        receivedSignal = signal;
+        yield { type: "text.delta", text: "Hello" };
+        yield { type: "finish", reason: "stop" };
+      },
+    };
     const events: AgentRuntimeEvent[] = [];
     const ids = ["session-1", "message-1"];
+    const signal = new AbortController().signal;
     const runner = createChatRunner({
-      apiKeyStorage: storage,
-      async requestApiKey() {
-        prompted.push("prompted");
-        return undefined;
-      },
-      createGateway(apiKey) {
-        gatewayKeys.push(apiKey);
-        return createGateway();
-      },
+      modelGateway,
       createId: () => ids.shift() ?? "unexpected-id",
       now: () => new Date("2026-07-16T00:00:00.000Z"),
     });
 
-    await runner.run("Say hello.", new AbortController().signal, (event) => events.push(event));
+    await runner.run("Say hello.", signal, (event) => events.push(event));
 
-    expect(prompted).toEqual([]);
-    expect(gatewayKeys).toEqual(["test-openai-api-key"]);
+    expect(receivedRequest).toEqual({
+      messages: [{ role: "user", content: "Say hello." }],
+    });
+    expect(receivedSignal).toBe(signal);
     expect(events.map((event) => event.type)).toEqual([
       "session.status-changed",
       "session.status-changed",
       "agent.text-delta",
       "session.status-changed",
     ]);
+    expect(events[0]).toMatchObject({ sessionId: "session-1" });
   });
 
-  it("prompts for and saves a missing key before creating the gateway", async () => {
-    const { storage, readValue } = createStorage();
-    const runner = createChatRunner({
-      apiKeyStorage: storage,
-      async requestApiKey() {
-        return "test-openai-api-key";
+  it("preserves cancellation before creating a session or starting the gateway", async () => {
+    let gatewayStarted = false;
+    let idCreated = false;
+    const modelGateway: ModelGateway = {
+      async *stream() {
+        gatewayStarted = true;
+        yield { type: "finish", reason: "stop" };
       },
-      createGateway: createGateway,
-      createId: (() => {
-        let id = 0;
-        return () => `id-${++id}`;
-      })(),
+    };
+    const cancellation = new Error("cancelled before run");
+    const abortController = new AbortController();
+    abortController.abort(cancellation);
+    const runner = createChatRunner({
+      modelGateway,
+      createId() {
+        idCreated = true;
+        return "unexpected-id";
+      },
     });
 
-    await runner.run("Hello", new AbortController().signal, () => {});
-
-    expect(readValue()).toBe("test-openai-api-key");
+    await expect(runner.run("Hello", abortController.signal, () => {})).rejects.toBe(cancellation);
+    expect(idCreated).toBe(false);
+    expect(gatewayStarted).toBe(false);
   });
+});
 
-  it("fails safely when no key is supplied and never creates a gateway", async () => {
-    const { storage } = createStorage();
-    let gatewayCreated = false;
-    const runner = createChatRunner({
-      apiKeyStorage: storage,
-      async requestApiKey() {
-        return undefined;
-      },
-      createGateway() {
-        gatewayCreated = true;
-        return createGateway();
-      },
-    });
+describe("createUnconfiguredChatRunner", () => {
+  it("fails without selecting a concrete Provider", async () => {
+    const runner = createUnconfiguredChatRunner();
 
     await expect(
       runner.run("Hello", new AbortController().signal, () => {}),
-    ).rejects.toBeInstanceOf(ApiKeyRequiredError);
-    expect(gatewayCreated).toBe(false);
+    ).rejects.toBeInstanceOf(ModelProviderNotConfiguredError);
   });
 });
