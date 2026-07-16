@@ -2,5 +2,16 @@
   "name": "@ctrl-zebra/providers",
   "version": "0.0.0",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "3.0.85",
+    "@ctrl-zebra/core": "workspace:*",
+    "ai": "6.0.226"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3"
+  }
 }

@@ -1,0 +1,215 @@
+import type { ModelEvent, ModelGatewayErrorCode } from "@ctrl-zebra/core";
+import { APICallError, InvalidResponseDataError, LoadAPIKeyError } from "ai";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { createOpenAIModelGateway } from "./openai-model-gateway.js";
+
+const sdkMocks = vi.hoisted(() => ({
+  createOpenAI: vi.fn(),
+  streamText: vi.fn(),
+}));
+
+vi.mock("@ai-sdk/openai", () => ({ createOpenAI: sdkMocks.createOpenAI }));
+vi.mock("ai", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("ai")>();
+  return { ...actual, streamText: sdkMocks.streamText };
+});
+
+const request = {
+  messages: [
+    { role: "system", content: "Be concise." },
+    { role: "user", content: "Say hello." },
+  ],
+} as const;
+
+describe("OpenAI ModelGateway", () => {
+  const model = { modelId: "test-model" };
+  const selectModel = vi.fn(() => model);
+
+  beforeEach(() => {
+    sdkMocks.createOpenAI.mockReset();
+    sdkMocks.streamText.mockReset();
+    selectModel.mockClear();
+    sdkMocks.createOpenAI.mockReturnValue(selectModel);
+  });
+
+  it("maps SDK stream parts to Core events in source order", async () => {
+    setStreamParts([
+      { type: "start" },
+      { type: "text-start", id: "text-1" },
+      { type: "text-delta", id: "text-1", text: "Hel" },
+      { type: "reasoning-delta", id: "reasoning-1", text: "hidden" },
+      {
+        type: "tool-call",
+        toolCallId: "call-1",
+        toolName: "lookup",
+        input: { query: "zebra" },
+      },
+      {
+        type: "finish-step",
+        finishReason: "tool-calls",
+        usage: { inputTokens: 1, outputTokens: 2, totalTokens: 3 },
+      },
+      { type: "text-delta", id: "text-1", text: "lo" },
+      {
+        type: "finish",
+        finishReason: "stop",
+        totalUsage: { inputTokens: 4, outputTokens: 2, totalTokens: 6 },
+      },
+    ]);
+    const signal = new AbortController().signal;
+    const gateway = createOpenAIModelGateway({ apiKey: "test-key", modelId: "gpt-test" });
+
+    await expect(collectEvents(gateway.stream(request, signal))).resolves.toEqual([
+      { type: "text.delta", text: "Hel" },
+      {
+        type: "tool.call",
+        call: { id: "call-1", name: "lookup", input: { query: "zebra" } },
+      },
+      { type: "text.delta", text: "lo" },
+      { type: "usage", usage: { inputTokens: 4, outputTokens: 2, totalTokens: 6 } },
+      { type: "finish", reason: "stop" },
+    ]);
+    expect(sdkMocks.createOpenAI).toHaveBeenCalledWith({ apiKey: "test-key" });
+    expect(selectModel).toHaveBeenCalledWith("gpt-test");
+    expect(sdkMocks.streamText).toHaveBeenCalledWith({
+      abortSignal: signal,
+      maxRetries: 0,
+      messages: request.messages,
+      model,
+    });
+  });
+
+  it("preserves missing token counts and maps the SDK error finish reason", async () => {
+    setStreamParts([
+      {
+        type: "finish",
+        finishReason: "error",
+        totalUsage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
+      },
+    ]);
+    const gateway = createOpenAIModelGateway({ apiKey: "test-key", modelId: "gpt-test" });
+
+    await expect(
+      collectEvents(gateway.stream(request, new AbortController().signal)),
+    ).resolves.toEqual([
+      {
+        type: "usage",
+        usage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
+      },
+      { type: "finish", reason: "other" },
+    ]);
+  });
+
+  it.each([
+    [401, false, "authentication"],
+    [403, false, "authentication"],
+    [429, true, "rate-limit"],
+    [400, false, "invalid-request"],
+    [408, true, "unavailable"],
+    [503, true, "unavailable"],
+    [undefined, false, "unknown"],
+  ] as const)("maps API status %s to %s", async (statusCode, isRetryable, expectedCode) => {
+    sdkMocks.streamText.mockImplementation(() => {
+      throw new APICallError({
+        isRetryable,
+        message: "provider failure",
+        requestBodyValues: {},
+        statusCode,
+        url: "https://example.invalid",
+      });
+    });
+    const gateway = createOpenAIModelGateway({ apiKey: "test-key", modelId: "gpt-test" });
+
+    await expect(
+      collectEvents(gateway.stream(request, new AbortController().signal)),
+    ).rejects.toMatchObject({
+      code: expectedCode,
+    });
+  });
+
+  it.each([
+    [new LoadAPIKeyError({ message: "missing key" }), "authentication"],
+    [new InvalidResponseDataError({ data: null }), "malformed-response"],
+  ] as const)("maps typed SDK failures without inspecting their messages", async (failure, expectedCode) => {
+    setStreamParts([{ type: "error", error: failure }]);
+    const gateway = createOpenAIModelGateway({ apiKey: "test-key", modelId: "gpt-test" });
+
+    await expect(
+      collectEvents(gateway.stream(request, new AbortController().signal)),
+    ).rejects.toMatchObject({
+      code: expectedCode satisfies ModelGatewayErrorCode,
+    });
+  });
+
+  it("rejects malformed SDK parts at the provider boundary", async () => {
+    setStreamParts([
+      {
+        type: "finish",
+        finishReason: "stop",
+        totalUsage: { inputTokens: -1, outputTokens: 2, totalTokens: 1 },
+      },
+    ]);
+    const gateway = createOpenAIModelGateway({ apiKey: "test-key", modelId: "gpt-test" });
+
+    await expect(
+      collectEvents(gateway.stream(request, new AbortController().signal)),
+    ).rejects.toMatchObject({
+      code: "malformed-response",
+    });
+  });
+
+  it("forwards cancellation and emits no later events", async () => {
+    setStreamParts([
+      { type: "text-delta", id: "text-1", text: "before" },
+      { type: "text-delta", id: "text-1", text: "after" },
+    ]);
+    const cancellation = new Error("cancelled by test");
+    const controller = new AbortController();
+    const gateway = createOpenAIModelGateway({ apiKey: "test-key", modelId: "gpt-test" });
+    const events: ModelEvent[] = [];
+
+    const consume = async () => {
+      for await (const event of gateway.stream(request, controller.signal)) {
+        events.push(event);
+        controller.abort(cancellation);
+      }
+    };
+
+    await expect(consume()).rejects.toBe(cancellation);
+    expect(events).toEqual([{ type: "text.delta", text: "before" }]);
+    expect(sdkMocks.streamText).toHaveBeenCalledWith(
+      expect.objectContaining({ abortSignal: controller.signal }),
+    );
+  });
+
+  it("does not start the SDK when already cancelled", async () => {
+    const cancellation = new Error("cancelled before start");
+    const controller = new AbortController();
+    controller.abort(cancellation);
+    const gateway = createOpenAIModelGateway({ apiKey: "test-key", modelId: "gpt-test" });
+
+    await expect(collectEvents(gateway.stream(request, controller.signal))).rejects.toBe(
+      cancellation,
+    );
+    expect(sdkMocks.streamText).not.toHaveBeenCalled();
+  });
+});
+
+function setStreamParts(parts: readonly unknown[]): void {
+  sdkMocks.streamText.mockReturnValue({ fullStream: streamParts(parts) });
+}
+
+async function* streamParts(parts: readonly unknown[]): AsyncIterable<unknown> {
+  yield* parts;
+}
+
+async function collectEvents(events: AsyncIterable<ModelEvent>): Promise<ModelEvent[]> {
+  const collected: ModelEvent[] = [];
+
+  for await (const event of events) {
+    collected.push(event);
+  }
+
+  return collected;
+}
