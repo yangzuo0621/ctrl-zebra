@@ -35,3 +35,27 @@ This document defines the Webview security constraints established before T0104.
 - Render untrusted text through DOM text APIs or React text interpolation. Do not inject it with `innerHTML`, `outerHTML`, `insertAdjacentHTML`, `document.write`, or equivalent sinks.
 - If a future feature must render formatted untrusted markup, it requires a narrowly configured, maintained sanitizer and tests for script elements, event-handler attributes, dangerous URLs, SVG, MathML, and mutation-based bypasses.
 - HTML attributes and CSP metadata assembled by the Extension are escaped before interpolation. Validation and sanitization complement CSP; CSP is not their replacement.
+
+## API Key Secret Storage
+
+- The OpenAI API key is stored under the stable, Extension-owned name
+  `ctrlZebra.provider.openai.apiKey`. Secret names are implementation contracts and must not be
+  derived from Webview input, workspace content, model output, or the secret value itself.
+- Saving stores the supplied value exactly and replaces any value already held under that name.
+  Reading returns `undefined` when no value exists. Deleting is idempotent, including when the
+  value is already absent.
+- The Extension Host is the only owner of SecretStorage access. API keys must not enter Webview
+  state, protocol messages, workspace or global state, persisted sessions, fixtures, snapshots,
+  command arguments, environment variables, or model-visible content.
+- The adapter does not cache API keys. A retrieved string remains in memory only for the lifetime
+  of the operation that needs it; callers must not retain it in long-lived services, module state,
+  closures, or diagnostic objects.
+- Logs and telemetry must never contain an API key, a key prefix or suffix, authorization headers,
+  SecretStorage values, or third-party errors that could embed them. Secret names may be used only
+  when required for internal diagnosis and must not be presented as credential values.
+- Read, save, and delete failures are reported as operation-specific, user-safe errors. User-facing
+  text may explain that the saved API key could not be accessed or changed and suggest retrying, but
+  must not include the submitted value, the stored value, or the original error message.
+- Automated tests use conspicuously fake values such as `test-openai-api-key`, operate only on an
+  in-memory fake, and never read or mutate a developer's real SecretStorage. A manual Extension Host
+  smoke test must also use a fake value and delete it before the test ends.
