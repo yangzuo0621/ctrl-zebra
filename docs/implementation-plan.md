@@ -409,12 +409,12 @@ export interface ApprovalService {
 
 **进度摘要**：
 
-- 总任务：68
+- 总任务：71
 - 已完成：19
-- 进行中：0
+- 进行中：1
 - 受阻：0
-- 待开始：49
-- 当前任务：无
+- 待开始：51
+- 当前任务：T0306
 - 下一任务：T0306
 - 最后更新：2026-07-16
 
@@ -439,7 +439,10 @@ export interface ApprovalService {
 | 3 | T0303 | 已完成 | [#24](https://github.com/yangzuo0621/ctrl-zebra/pull/24) | 2026-07-16 |
 | 3 | T0304 | 已完成 | [#25](https://github.com/yangzuo0621/ctrl-zebra/pull/25) | 2026-07-16 |
 | 3 | T0305 | 已完成 | [#26](https://github.com/yangzuo0621/ctrl-zebra/pull/26) | 2026-07-16 |
-| 3 | T0306 | 待开始 | — | — |
+| 3 | T0306 | 进行中 | — | — |
+| 3 | T0307 | 待开始 | — | — |
+| 3 | T0308 | 待开始 | — | — |
+| 3 | T0309 | 待开始 | — | — |
 | 4 | T0401 | 待开始 | — | — |
 | 4 | T0402 | 待开始 | — | — |
 | 4 | T0403 | 待开始 | — | — |
@@ -659,9 +662,9 @@ export interface ApprovalService {
 
 **测试**：流中途取消，状态变为 `cancelled`，无未处理 Promise。
 
-### T0304：实现第一个真实 Provider Adapter
+### T0304：实现 OpenAI Provider Adapter
 
-**目标**：通过 Vercel AI SDK 接入一个模型供应商。
+**目标**：通过 Vercel AI SDK OpenAI Provider 接入 OpenAI，并实现供应商无关的 `ModelGateway`。
 
 **测试**：使用 mock SDK response 测试事件映射；默认测试不访问网络。
 
@@ -675,13 +678,41 @@ export interface ApprovalService {
 
 ### T0306：连接 Webview 流式展示
 
-**目标**：用户提交消息，UI 按增量更新回复并可取消。
+**目标**：用户提交消息，UI 通过供应商无关的运行接口按增量更新回复并可取消。
 
-**测试**：React 组件测试覆盖提交、流式增量、完成和取消。
+**测试**：使用确定性的模型替身，React 组件测试覆盖提交、流式增量、完成和取消；Extension Controller 测试验证运行接口装配，不依赖真实 API Key 或网络。
+
+**不包含**：具体 Provider 的选择、模型配置、API Key 提示或真实端点烟雾测试。
+
+### T0307：定义 Provider 配置与能力契约
+
+**目标**：定义并实现 OpenAI、Gemini 和 OpenAI-Compatible 的供应商、模型、端点与能力配置契约，由 Extension 校验配置并选择对应的 `ModelGateway`，Core 和 Webview 不感知第三方配置格式。
+
+**开始前约束门禁**：更新架构与安全规范，至少定义 Provider 标识、模型 ID、端点校验、Secret 引用、能力声明、缺失配置提示、默认值和配置迁移边界；远程端点默认使用 HTTPS，仅对显式本地回环地址允许 HTTP。
+
+**测试**：覆盖 OpenAI、Gemini 和 OpenAI-Compatible 的有效配置与 Provider 选择，以及未知 Provider、缺失模型、非法端点、缺失 Secret 和能力不匹配；默认测试不访问网络。
+
+### T0308：实现 Gemini Provider Adapter
+
+**目标**：使用 Gemini 专用 Provider 接入 Google Gemini，并将 SDK 流标准化为现有 `ModelGateway` 事件。
+
+**测试**：使用 mock SDK response 覆盖文本增量、Usage、Finish、稳定错误映射和取消；人工使用 SecretStorage 中的 Gemini API Key 完成一次无工具流式对话。
+
+**不包含**：通过 OpenAI 兼容端点调用 Gemini。
+
+### T0309：实现 OpenAI-Compatible Provider Adapter
+
+**目标**：接入可配置的 OpenAI 兼容端点，支持 Ollama 本地模型和用户明确配置的远程兼容服务。
+
+**测试**：使用 mock SDK response 覆盖文本增量、Usage、Finish、稳定错误映射和取消；覆盖自定义 Base URL、模型 ID、本地 Ollama 无真实 Secret 和远程端点 Secret 读取；人工使用 Ollama 或另一个兼容端点完成一次无工具流式对话。
+
+**不包含**：针对每个兼容服务实现供应商专用能力或保证其未声明能力与 OpenAI 完全一致。
 
 ### 阶段 3 门禁
 
-- 插件可以完成一次无工具的真实流式对话。
+- 插件可以选择已有的 OpenAI Provider、新增的 Gemini 专用 Provider 或 OpenAI 兼容端点，缺失配置时给出明确提示。
+- 使用当前可用凭据和端点，Gemini 与 OpenAI-Compatible 分别完成一次无工具的真实流式对话；OpenAI 的真实烟雾测试在提供有效 OpenAI API Key 时执行。
+- 未声明或不受支持的 Provider 能力在发起请求前被明确拒绝。
 - API Key 不出现在 Webview 状态、日志或持久化消息中。
 - 请求可以可靠取消。
 
@@ -1066,7 +1097,7 @@ export interface ApprovalService {
 
 第一版发布后，建议按以下顺序评估：
 
-1. 第二个模型供应商，验证 Provider 边界。
+1. 更多专用模型供应商，继续验证 Provider 边界。
 2. Plan/Act 模式，验证 Tool Policy 可配置性。
 3. 项目级规则文件。
 4. MCP Client。
