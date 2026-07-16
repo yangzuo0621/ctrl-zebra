@@ -59,3 +59,31 @@ This document defines the Webview security constraints established before T0104.
 - Automated tests use conspicuously fake values such as `test-openai-api-key`, operate only on an
   in-memory fake, and never read or mutate a developer's real SecretStorage. A manual Extension Host
   smoke test must also use a fake value and delete it before the test ends.
+
+## Provider Endpoints and Credentials
+
+- Provider settings contain only Provider identifiers, model IDs, endpoint URLs, and capability
+  declarations. Raw API keys, bearer tokens, authorization headers, and arbitrary SecretStorage
+  names are invalid configuration values and must never be accepted from workspace settings.
+- The Extension owns the stable Secret names `ctrlZebra.provider.openai.apiKey`,
+  `ctrlZebra.provider.gemini.apiKey`, and `ctrlZebra.provider.openaiCompatible.apiKey`. The active
+  Provider identifier selects the corresponding name; users and model output cannot supply or
+  derive a Secret name.
+- OpenAI and Gemini require their corresponding API key. A remote OpenAI-Compatible endpoint also
+  requires its API key. An OpenAI-Compatible endpoint whose URL contains an explicit loopback host
+  may omit a key so that a local service such as Ollama can be used. Missing required credentials
+  fail before model client creation with a user-safe message that names the Provider but not the
+  Secret name or value.
+- Explicit endpoint URLs are parsed as URLs and must not contain user information, query strings,
+  or fragments. Remote endpoints require `https:`. Plain `http:` is allowed only when the parsed
+  hostname is explicitly `localhost`, an IPv4 address in `127.0.0.0/8`, or the IPv6 loopback
+  address `::1`; lookalike names and DNS names that might resolve to loopback do not qualify.
+- Endpoint validation is structural and does not perform DNS resolution, probing, redirects, or
+  other network access. Provider adapters must not follow a redirect that weakens the validated
+  transport policy or sends credentials to a different origin.
+- Capability declarations are untrusted configuration. Only known capability identifiers are
+  retained, duplicates are rejected, and an undeclared capability is treated as unsupported.
+  Capability checks occur before Secret access and network activity.
+- Configuration errors and Provider selection errors may identify the invalid setting and explain
+  how to correct it, but must not include credential values, authorization material, third-party
+  response bodies, or unredacted SDK errors.
