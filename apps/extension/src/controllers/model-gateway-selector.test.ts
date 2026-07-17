@@ -132,7 +132,7 @@ describe("ModelGateway selector", () => {
     expect(factory).not.toHaveBeenCalled();
   });
 
-  it("reports a Provider whose adapter belongs to a later task", async () => {
+  it("reports a Provider whose adapter factory is unavailable", async () => {
     const secrets: ProviderApiKeySecretReader = { read: vi.fn() };
 
     await expect(
