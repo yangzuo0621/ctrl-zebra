@@ -83,9 +83,10 @@ This document defines the initial runtime boundaries for the CtrlZebra desktop V
   client, or contact an endpoint. Concurrent lazy callers share an in-flight initialization only
   when the owner can prove that the effective configuration is identical.
 - Provider factories receive only validated, normalized values and the credential required for
-  that invocation. A factory does not read VS Code configuration or SecretStorage. Gemini and
-  OpenAI-Compatible factory implementations remain owned by their dedicated roadmap tasks; their
-  selection paths may use injected test factories until those adapters exist.
+  that invocation. A factory does not read VS Code configuration or SecretStorage. Dedicated
+  OpenAI, Gemini, and OpenAI-Compatible adapters are composed by the Extension and remain isolated
+  from Core and Webview code; selection tests may use injected factories without initializing an
+  SDK client.
 - Provider credential entry is an Extension-owned host workflow. User-facing credential commands
   collect values through password-masked VS Code input, write only through an injected
   SecretStorage adapter, and expose no credential through Core, Protocol, Webview state, settings,

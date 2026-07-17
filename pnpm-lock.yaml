@@ -105,6 +105,9 @@ importers:
       '@ai-sdk/openai':
         specifier: 3.0.85
         version: 3.0.85(zod@4.4.3)
+      '@ai-sdk/openai-compatible':
+        specifier: 2.0.61
+        version: 2.0.61(zod@4.4.3)
       '@ctrl-zebra/core':
         specifier: workspace:*
         version: link:../core
@@ -135,6 +138,12 @@ packages:
 
   '@ai-sdk/google@3.0.94':
     resolution: {integrity: sha512-s9vWtsReWMElsmL0R/JfLuBPvgS64pwS4D/8AOGu8fvqBhRkGegsG4q1aNZn30SEox2yfQi76aAFLB5J542Rmg==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
+  '@ai-sdk/openai-compatible@2.0.61':
+    resolution: {integrity: sha512-yApG1m3VKLpEX6InmKyKvINLWEy8YzXJr0N5DuQMv/ctU2Kqu/971oWD27TVU+aXlczFxyA0HQHjaeamAu/O0A==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -1314,6 +1323,12 @@ snapshots:
       zod: 4.4.3
 
   '@ai-sdk/google@3.0.94(zod@4.4.3)':
+    dependencies:
+      '@ai-sdk/provider': 3.0.14
+      '@ai-sdk/provider-utils': 4.0.39(zod@4.4.3)
+      zod: 4.4.3
+
+  '@ai-sdk/openai-compatible@2.0.61(zod@4.4.3)':
     dependencies:
       '@ai-sdk/provider': 3.0.14
       '@ai-sdk/provider-utils': 4.0.39(zod@4.4.3)

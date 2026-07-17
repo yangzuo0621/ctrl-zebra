@@ -1,4 +1,8 @@
-import { createGeminiModelGateway, createOpenAIModelGateway } from "@ctrl-zebra/providers";
+import {
+  createGeminiModelGateway,
+  createOpenAICompatibleModelGateway,
+  createOpenAIModelGateway,
+} from "@ctrl-zebra/providers";
 import { commands, type ExtensionContext, window, workspace } from "vscode";
 
 import {
@@ -38,6 +42,17 @@ export function activate(context: ExtensionContext): void {
                 apiKey,
                 modelId: geminiConfiguration.modelId,
                 baseURL: geminiConfiguration.endpoint,
+              });
+            },
+            "openai-compatible": ({ configuration: openAICompatibleConfiguration, apiKey }) => {
+              if (openAICompatibleConfiguration.provider !== "openai-compatible") {
+                throw new Error("Invalid internal OpenAI-Compatible Provider factory input.");
+              }
+
+              return createOpenAICompatibleModelGateway({
+                apiKey,
+                baseURL: openAICompatibleConfiguration.endpoint,
+                modelId: openAICompatibleConfiguration.modelId,
               });
             },
             openai: ({ configuration: openAIConfiguration, apiKey }) => {
