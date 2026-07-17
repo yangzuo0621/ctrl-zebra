@@ -1,3 +1,7 @@
+import type { ToolCall } from "@ctrl-zebra/protocol";
+
+export type { ToolCall } from "@ctrl-zebra/protocol";
+
 export type ModelMessageRole = "system" | "user" | "assistant";
 
 export interface ModelMessage {
@@ -7,12 +11,6 @@ export interface ModelMessage {
 
 export interface ModelRequest {
   readonly messages: readonly ModelMessage[];
-}
-
-export interface ToolCall {
-  readonly id: string;
-  readonly name: string;
-  readonly input: unknown;
 }
 
 export interface TokenUsage {

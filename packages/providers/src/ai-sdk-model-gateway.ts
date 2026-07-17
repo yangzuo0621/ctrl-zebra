@@ -7,6 +7,7 @@ import {
   type ModelMessage,
   type ModelRequest,
   type TokenUsage,
+  toolCallSchema,
 } from "@ctrl-zebra/core";
 import {
   APICallError,
@@ -78,11 +79,11 @@ function mapStreamPart(value: unknown, signal: AbortSignal): readonly ModelEvent
       return [
         {
           type: "tool.call",
-          call: {
+          call: parseToolCall({
             id: readString(part, "toolCallId"),
             name: readString(part, "toolName"),
             input: part.input,
-          },
+          }),
         },
       ];
     case "finish": {
@@ -120,6 +121,16 @@ function mapStreamPart(value: unknown, signal: AbortSignal): readonly ModelEvent
     default:
       throw new ModelGatewayError("malformed-response");
   }
+}
+
+function parseToolCall(value: unknown) {
+  const result = toolCallSchema.safeParse(value);
+
+  if (!result.success) {
+    throw new ModelGatewayError("malformed-response");
+  }
+
+  return result.data;
 }
 
 function readUsage(value: unknown): TokenUsage {
