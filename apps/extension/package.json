@@ -17,6 +17,13 @@
     "onStartupFinished"
   ],
   "contributes": {
+    "commands": [
+      {
+        "command": "ctrlZebra.saveGeminiApiKey",
+        "title": "Save Gemini API Key",
+        "category": "CtrlZebra"
+      }
+    ],
     "configuration": {
       "title": "CtrlZebra",
       "properties": {

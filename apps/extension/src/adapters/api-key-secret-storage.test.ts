@@ -4,8 +4,10 @@ import {
   ApiKeySecretStorageError,
   type ApiKeySecretStorageOperation,
   apiKeySecretNames,
+  createGeminiApiKeySecretStorage,
   createOpenAIApiKeySecretStorage,
   createProviderApiKeySecretReader,
+  geminiApiKeySecretName,
   openAIApiKeySecretName,
 } from "./api-key-secret-storage.js";
 
@@ -86,6 +88,33 @@ describe("OpenAI API key SecretStorage adapter", () => {
     expect(error).toBeInstanceOf(ApiKeySecretStorageError);
     expect(error).toMatchObject({ operation });
     expect(String(error)).not.toContain("test-openai-api-key");
+  });
+});
+
+describe("Gemini API key SecretStorage adapter", () => {
+  it("stores the exact value under the stable Gemini secret name and replaces it", async () => {
+    const backend = new InMemorySecretStorage();
+    const storage = createGeminiApiKeySecretStorage(backend);
+
+    await storage.save(" test-gemini-api-key ");
+    expect(await storage.read()).toBe(" test-gemini-api-key ");
+    expect(backend.values).toEqual(new Map([[geminiApiKeySecretName, " test-gemini-api-key "]]));
+
+    await storage.save("test-gemini-api-key-replacement");
+    expect(await storage.read()).toBe("test-gemini-api-key-replacement");
+    expect(backend.values).toHaveLength(1);
+  });
+
+  it("maps a save failure without exposing the submitted value", async () => {
+    const backend = new InMemorySecretStorage();
+    backend.failure = "save";
+    const storage = createGeminiApiKeySecretStorage(backend);
+
+    const error = await storage.save("test-gemini-api-key").catch((failure: unknown) => failure);
+
+    expect(error).toBeInstanceOf(ApiKeySecretStorageError);
+    expect(error).toMatchObject({ operation: "save" });
+    expect(String(error)).not.toContain("test-gemini-api-key");
   });
 });
 

@@ -45,24 +45,37 @@ const errorMessageByOperation = {
 export function createOpenAIApiKeySecretStorage(
   secretStorage: SecretStorageBackend,
 ): ApiKeySecretStorage {
+  return createApiKeySecretStorage(secretStorage, openAIApiKeySecretName);
+}
+
+export function createGeminiApiKeySecretStorage(
+  secretStorage: SecretStorageBackend,
+): ApiKeySecretStorage {
+  return createApiKeySecretStorage(secretStorage, geminiApiKeySecretName);
+}
+
+function createApiKeySecretStorage(
+  secretStorage: SecretStorageBackend,
+  secretName: string,
+): ApiKeySecretStorage {
   return {
     async read() {
       try {
-        return await secretStorage.get(openAIApiKeySecretName);
+        return await secretStorage.get(secretName);
       } catch {
         throw new ApiKeySecretStorageError("read");
       }
     },
     async save(apiKey) {
       try {
-        await secretStorage.store(openAIApiKeySecretName, apiKey);
+        await secretStorage.store(secretName, apiKey);
       } catch {
         throw new ApiKeySecretStorageError("save");
       }
     },
     async delete() {
       try {
-        await secretStorage.delete(openAIApiKeySecretName);
+        await secretStorage.delete(secretName);
       } catch {
         throw new ApiKeySecretStorageError("delete");
       }

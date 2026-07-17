@@ -1,10 +1,14 @@
-import { createOpenAIModelGateway } from "@ctrl-zebra/providers";
-import { type ExtensionContext, window, workspace } from "vscode";
+import { createGeminiModelGateway, createOpenAIModelGateway } from "@ctrl-zebra/providers";
+import { commands, type ExtensionContext, window, workspace } from "vscode";
 
-import { createProviderApiKeySecretReader } from "./adapters/api-key-secret-storage.js";
+import {
+  createGeminiApiKeySecretStorage,
+  createProviderApiKeySecretReader,
+} from "./adapters/api-key-secret-storage.js";
 import { readProviderConfiguration } from "./adapters/provider-configuration.js";
 import { registerAgentView } from "./agent-view.js";
 import { createSelectingChatRunner } from "./controllers/chat-runner.js";
+import { registerGeminiApiKeyCommand } from "./controllers/gemini-api-key-command.js";
 import {
   getProviderSetupErrorMessage,
   selectModelGateway,
@@ -25,6 +29,17 @@ export function activate(context: ExtensionContext): void {
           requiredCapabilities: ["text-streaming"],
           secrets,
           factories: {
+            gemini: ({ configuration: geminiConfiguration, apiKey }) => {
+              if (geminiConfiguration.provider !== "gemini" || apiKey === undefined) {
+                throw new Error("Invalid internal Gemini Provider factory input.");
+              }
+
+              return createGeminiModelGateway({
+                apiKey,
+                modelId: geminiConfiguration.modelId,
+                baseURL: geminiConfiguration.endpoint,
+              });
+            },
             openai: ({ configuration: openAIConfiguration, apiKey }) => {
               if (openAIConfiguration.provider !== "openai" || apiKey === undefined) {
                 throw new Error("Invalid internal OpenAI Provider factory input.");
@@ -49,6 +64,13 @@ export function activate(context: ExtensionContext): void {
   });
 
   context.subscriptions.push(
+    registerGeminiApiKeyCommand({
+      storage: createGeminiApiKeySecretStorage(context.secrets),
+      registerCommand: (commandId, handler) => commands.registerCommand(commandId, handler),
+      showInputBox: (options) => window.showInputBox(options),
+      showInformationMessage: (message) => window.showInformationMessage(message),
+      showErrorMessage: (message) => window.showErrorMessage(message),
+    }),
     registerAgentView(
       context.extensionUri,
       (viewId, provider) => window.registerWebviewViewProvider(viewId, provider),

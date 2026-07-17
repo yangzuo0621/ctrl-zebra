@@ -7,6 +7,7 @@ import {
   createAgentViewOptions,
   registerAgentView,
 } from "../../agent-view.js";
+import { saveGeminiApiKeyCommandId } from "../../controllers/gemini-api-key-command.js";
 
 export async function verifyAgentViewRegistration(): Promise<void> {
   const disposable = { dispose() {} };
@@ -32,6 +33,10 @@ export async function verifyAgentViewRegistration(): Promise<void> {
   const focusCommand = `${agentViewId}.focus`;
 
   assert.ok(commands.includes(focusCommand), `Expected ${focusCommand} to be contributed.`);
+  assert.ok(
+    commands.includes(saveGeminiApiKeyCommandId),
+    `Expected ${saveGeminiApiKeyCommandId} to be contributed and registered.`,
+  );
   await vscode.commands.executeCommand(focusCommand);
 
   const resolvedResources: vscode.Uri[] = [];
