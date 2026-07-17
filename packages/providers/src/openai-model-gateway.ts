@@ -48,7 +48,7 @@ export function createOpenAIModelGateway(options: OpenAIModelGatewayOptions): Mo
           model,
         });
 
-        for await (const value of result.fullStream) {
+        for await (const value of result.stream) {
           signal.throwIfAborted();
 
           for (const event of mapStreamPart(value, signal)) {

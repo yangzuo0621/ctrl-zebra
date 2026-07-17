@@ -241,7 +241,7 @@ describe("OpenAI ModelGateway", () => {
 });
 
 function setStreamParts(parts: readonly unknown[]): void {
-  sdkMocks.streamText.mockReturnValue({ fullStream: streamParts(parts) });
+  sdkMocks.streamText.mockReturnValue({ stream: streamParts(parts) });
 }
 
 async function* streamParts(parts: readonly unknown[]): AsyncIterable<unknown> {
