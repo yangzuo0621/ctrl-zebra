@@ -4,6 +4,7 @@ import {
   extensionToWebviewMessageSchema,
   protocolEnvelopeSchema,
   protocolVersion,
+  type ToolStateMessage,
   type WebviewToExtensionMessage,
   webviewToExtensionMessageSchema,
 } from "./index.js";
@@ -97,6 +98,54 @@ describe("Webview protocol messages", () => {
   });
 
   it.each([
+    {
+      protocolVersion,
+      type: "extension/tool-state",
+      requestId: "request-tool",
+      call: { id: "call-1", name: "read_file", input: { path: "README.md" } },
+      status: "pending",
+    },
+    {
+      protocolVersion,
+      type: "extension/tool-state",
+      requestId: "request-tool",
+      call: { id: "call-1", name: "read_file", input: { path: "README.md" } },
+      status: "running",
+    },
+    {
+      protocolVersion,
+      type: "extension/tool-state",
+      requestId: "request-tool",
+      call: { id: "call-1", name: "read_file", input: { path: "README.md" } },
+      status: "success",
+      result: {
+        callId: "call-1",
+        name: "read_file",
+        status: "success",
+        output: { content: "hello" },
+        truncated: false,
+      },
+    },
+    {
+      protocolVersion,
+      type: "extension/tool-state",
+      requestId: "request-tool",
+      call: { id: "call-1", name: "read_file", input: { path: "README.md" } },
+      status: "error",
+      result: {
+        callId: "call-1",
+        name: "read_file",
+        status: "error",
+        error: { code: "failed", message: "Safe failure." },
+      },
+    },
+  ] satisfies readonly ToolStateMessage[])("round-trips the $status Tool Call state", (message) => {
+    expect(
+      extensionToWebviewMessageSchema.parse(JSON.parse(JSON.stringify(message)) as unknown),
+    ).toEqual(message);
+  });
+
+  it.each([
     null,
     {},
     { protocolVersion, type: "webview/ping" },
@@ -136,6 +185,15 @@ describe("Webview protocol messages", () => {
         type: "extension/run-status",
         requestId: "request-1",
         status: "idle",
+      }).success,
+    ).toBe(false);
+    expect(
+      extensionToWebviewMessageSchema.safeParse({
+        protocolVersion,
+        type: "extension/tool-state",
+        requestId: "request-1",
+        call: { id: "call-1", name: "read_file", input: {} },
+        status: "success",
       }).success,
     ).toBe(false);
   });

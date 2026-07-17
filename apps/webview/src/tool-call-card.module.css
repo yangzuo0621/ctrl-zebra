@@ -1,0 +1,83 @@
+.card {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 4px;
+  background: var(--vscode-textCodeBlock-background, var(--vscode-editor-background));
+}
+
+.card[data-status="running"] {
+  border-color: var(--vscode-progressBar-background, var(--vscode-focusBorder));
+}
+
+.card[data-status="error"] {
+  border-color: var(--vscode-inputValidation-errorBorder, var(--vscode-panel-border));
+}
+
+.header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.title {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 0.95rem;
+}
+
+.state,
+.label,
+.note {
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.85em;
+}
+
+.state,
+.label {
+  font-weight: 600;
+}
+
+.field {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.code {
+  max-height: 12rem;
+  margin: 0;
+  padding: 8px;
+  overflow: auto;
+  border-radius: 2px;
+  color: var(--vscode-editor-foreground);
+  background: var(--vscode-editor-background);
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: var(--vscode-editor-font-size, 0.9em);
+  line-height: 1.4;
+  white-space: pre-wrap;
+}
+
+.result {
+  display: grid;
+  gap: 6px;
+}
+
+.note,
+.error {
+  margin: 0;
+}
+
+.error {
+  color: var(--vscode-errorForeground);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card {
+    scroll-behavior: auto;
+  }
+}

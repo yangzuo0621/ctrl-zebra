@@ -1,4 +1,11 @@
-import type { ExtensionToWebviewMessage, RunStatus } from "@ctrl-zebra/protocol";
+import type {
+  ExtensionToWebviewMessage,
+  RunStatus,
+  ToolCall,
+  ToolErrorResult,
+  ToolStateMessage,
+  ToolSuccessResult,
+} from "@ctrl-zebra/protocol";
 import { createStore, type StoreApi } from "zustand/vanilla";
 
 import type { WebviewHost } from "./vscode-api.js";
@@ -7,7 +14,13 @@ export interface DisplayMessage {
   readonly id: string;
   readonly role: "user" | "assistant";
   readonly content: string;
+  readonly toolCalls: readonly DisplayToolCall[];
 }
+
+export type DisplayToolCall =
+  | { readonly call: ToolCall; readonly status: "pending" | "running" }
+  | { readonly call: ToolCall; readonly status: "success"; readonly result: ToolSuccessResult }
+  | { readonly call: ToolCall; readonly status: "error"; readonly result: ToolErrorResult };
 
 interface ChatState {
   readonly messages: readonly DisplayMessage[];
@@ -66,6 +79,30 @@ export function createChatStore({
       cancelScheduledFlush ??= scheduleFlush(() => applyPendingDelta());
     };
 
+    const applyToolState = (message: ToolStateMessage) => {
+      set((state) => ({
+        messages: state.messages.map((displayMessage) => {
+          if (displayMessage.id !== `${state.activeRequestId}:assistant`) {
+            return displayMessage;
+          }
+
+          const toolCall = toDisplayToolCall(message);
+          const existingIndex = displayMessage.toolCalls.findIndex(
+            (existing) => existing.call.id === toolCall.call.id,
+          );
+          return {
+            ...displayMessage,
+            toolCalls:
+              existingIndex < 0
+                ? [...displayMessage.toolCalls, toolCall]
+                : displayMessage.toolCalls.map((existing, index) =>
+                    index === existingIndex ? toolCall : existing,
+                  ),
+          };
+        }),
+      }));
+    };
+
     return {
       messages: [],
       status: "idle",
@@ -78,8 +115,13 @@ export function createChatStore({
         set((state) => ({
           messages: [
             ...state.messages,
-            { id: `${requestId}:user`, role: "user", content },
-            { id: `${requestId}:assistant`, role: "assistant", content: "" },
+            { id: `${requestId}:user`, role: "user", content, toolCalls: [] },
+            {
+              id: `${requestId}:assistant`,
+              role: "assistant",
+              content: "",
+              toolCalls: [],
+            },
           ],
           status: "preparing",
           activeRequestId: requestId,
@@ -106,6 +148,13 @@ export function createChatStore({
           return;
         }
 
+        if (message.type === "extension/tool-state") {
+          if (state.status === "preparing" || state.status === "streaming") {
+            applyToolState(message);
+          }
+          return;
+        }
+
         if (message.type === "extension/run-status") {
           if (
             message.status === "completed" ||
@@ -127,4 +176,16 @@ export function createChatStore({
   });
 
   return store;
+}
+
+function toDisplayToolCall(message: ToolStateMessage): DisplayToolCall {
+  if (message.status === "pending" || message.status === "running") {
+    return { call: message.call, status: message.status };
+  }
+
+  if (message.status === "success") {
+    return { call: message.call, status: message.status, result: message.result };
+  }
+
+  return { call: message.call, status: "error", result: message.result };
 }

@@ -3,6 +3,7 @@ import { useStore } from "zustand";
 
 import styles from "./app.module.css";
 import { createChatStore, type DisplayMessage } from "./chat-store.js";
+import { ToolCallCard } from "./tool-call-card.js";
 import { getWebviewHost, type WebviewHost } from "./vscode-api.js";
 
 interface AppProps {
@@ -82,6 +83,9 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
                 {message.role === "user" ? "You" : "Agent"}
               </span>
               <p>{messageContent(message, status)}</p>
+              {message.toolCalls.map((toolCall) => (
+                <ToolCallCard key={toolCall.call.id} toolCall={toolCall} />
+              ))}
             </li>
           ))
         )}

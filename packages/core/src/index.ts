@@ -27,6 +27,7 @@ export type {
   AgentRuntimeEvent,
   AgentRuntimeOptions,
   AgentTextDeltaEvent,
+  AgentToolStateEvent,
 } from "./agent-runtime.js";
 export {
   AgentRuntime,
