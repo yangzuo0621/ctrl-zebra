@@ -62,6 +62,16 @@ Model provider boundary rules:
 - Cancellation is a distinct outcome, not a provider failure. Pass the caller's `AbortSignal` through to the SDK operation, stop translating events after cancellation, and do not wrap cancellation in a generic provider error.
 - Third-party SDK types, response objects, errors, finish reasons, usage shapes, and tool-call shapes must remain private to `packages/providers`; they must not appear in Core contracts, public package exports, persisted data, or Webview/Extension protocol DTOs.
 
+Tool contract rules:
+
+- `packages/protocol` owns the JSON-serializable Tool Call, Tool Result, risk, and structured-error Schemas. Core may re-export these shared contracts, but must not create competing DTOs.
+- Tool names use stable lower `snake_case` identifiers. Renaming a tool, reusing a name for incompatible behavior, or changing the meaning of its input or result is a public-contract change.
+- Tool Call input is untrusted JSON. A generic Tool Call Schema proves only that the value is JSON-serializable; the selected tool must parse its own input from `unknown` before execution and reject unsupported or extra dangerous fields.
+- Tool Results are strict discriminated success or error values tied to the exact Tool Call ID and name. Errors use stable codes and safe messages rather than thrown `Error` objects, host objects, or third-party failures.
+- A serialized Tool Result must not exceed 1,048,576 UTF-8 bytes. Output producers must apply that limit before constructing the result; a successful result that omits content because of the limit sets its truncation marker. Later context budgeting may apply a smaller limit but must not remove that marker.
+- Cancellation is distinct from a Tool Result error. Tools accept the run's `AbortSignal`, stop producing output and side effects after cancellation, and never encode cancellation as ordinary failure.
+- Tools return data or structured failures only. They must not mutate Session status, emit synthetic Agent lifecycle transitions, continue the model loop, approve themselves, or make UI decisions; the Core runtime owns those actions.
+
 Extension lifecycle red lines:
 
 - Keep activation limited to lightweight registration and composition. Do not scan workspaces, access the network, initialize model clients, restore sessions, or start background work during module import or activation.
