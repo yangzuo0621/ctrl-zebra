@@ -71,6 +71,19 @@ export function bindWebviewMessageController(
     });
   };
 
+  const finishRun = (
+    run: NonNullable<typeof activeRun>,
+    status: "completed" | "cancelled" | "failed",
+  ) => {
+    if (disposed || activeRun !== run || run.terminalSent) {
+      return;
+    }
+
+    run.terminalSent = true;
+    activeRun = undefined;
+    postStatus(run.requestId, status);
+  };
+
   const handleRuntimeEvent = (run: NonNullable<typeof activeRun>, event: AgentRuntimeEvent) => {
     if (disposed || activeRun !== run || run.terminalSent) {
       return;
@@ -90,15 +103,13 @@ export function bindWebviewMessageController(
       return;
     }
 
-    if (
-      event.status === "streaming" ||
-      event.status === "completed" ||
-      event.status === "cancelled" ||
-      event.status === "failed"
-    ) {
+    if (event.status === "streaming") {
       postStatus(run.requestId, event.status);
-      run.terminalSent =
-        event.status === "completed" || event.status === "cancelled" || event.status === "failed";
+      return;
+    }
+
+    if (event.status === "completed" || event.status === "cancelled" || event.status === "failed") {
+      finishRun(run, event.status);
     }
   };
 
@@ -119,18 +130,12 @@ export function bindWebviewMessageController(
       .run(content, run.abortController.signal, (event) => handleRuntimeEvent(run, event))
       .then(
         () => {
-          if (!run.terminalSent) {
-            const status = run.abortController.signal.aborted ? "cancelled" : "completed";
-            postStatus(requestId, status);
-            run.terminalSent = true;
-          }
+          const status = run.abortController.signal.aborted ? "cancelled" : "completed";
+          finishRun(run, status);
         },
         () => {
-          if (!run.terminalSent) {
-            const status = run.abortController.signal.aborted ? "cancelled" : "failed";
-            postStatus(requestId, status);
-            run.terminalSent = true;
-          }
+          const status = run.abortController.signal.aborted ? "cancelled" : "failed";
+          finishRun(run, status);
         },
       )
       .finally(() => {
@@ -160,10 +165,10 @@ export function bindWebviewMessageController(
       return;
     }
 
-    if (activeRun?.requestId === result.data.requestId) {
-      activeRun.abortController.abort(new Error("Chat run cancelled by the user."));
-      postStatus(activeRun.requestId, "cancelled");
-      activeRun.terminalSent = true;
+    const run = activeRun;
+    if (run?.requestId === result.data.requestId) {
+      run.abortController.abort(new Error("Chat run cancelled by the user."));
+      finishRun(run, "cancelled");
     }
   });
   let disposalSubscription: DisposableResource | undefined;
