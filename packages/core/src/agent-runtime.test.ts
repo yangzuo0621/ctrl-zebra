@@ -5,6 +5,7 @@ import {
   AgentRuntime,
   type AgentRuntimeEvent,
   type AgentTool,
+  MaxToolStepsExceededError,
   type ModelEvent,
   type ModelGateway,
   type ModelRequest,
@@ -200,6 +201,221 @@ describe("AgentRuntime", () => {
     });
   });
 
+  it("executes consecutive Tool Calls in strict order until the model completes", async () => {
+    const requests: ModelRequest[] = [];
+    const gateway = createScriptedModelGateway(
+      [
+        [
+          {
+            type: "tool.call",
+            call: { id: "call-1", name: "first_tool", input: { value: 1 } },
+          },
+          { type: "finish", reason: "tool-calls" },
+        ],
+        [
+          {
+            type: "tool.call",
+            call: { id: "call-2", name: "second_tool", input: { value: 2 } },
+          },
+          { type: "finish", reason: "tool-calls" },
+        ],
+        [
+          { type: "text.delta", text: "done" },
+          { type: "finish", reason: "stop" },
+        ],
+      ],
+      requests,
+    );
+    const executionOrder: string[] = [];
+    const registry = new ToolRegistry();
+    registry.register(createNumberTool("first_tool", executionOrder));
+    registry.register(createNumberTool("second_tool", executionOrder));
+    const events: AgentRuntimeEvent[] = [];
+    const runtime = new AgentRuntime(gateway, { emit: (event) => events.push(event) }, registry);
+
+    await runtime.run(userMessage, new AbortController().signal);
+
+    expect(executionOrder).toEqual(["first_tool:1", "second_tool:2"]);
+    expect(requests).toHaveLength(3);
+    expect(requests[1]?.messages.at(-1)).toMatchObject({
+      role: "tool",
+      result: { callId: "call-1", name: "first_tool", status: "success" },
+    });
+    expect(requests[2]?.messages.at(-1)).toMatchObject({
+      role: "tool",
+      result: { callId: "call-2", name: "second_tool", status: "success" },
+    });
+    expect(events.filter((event) => event.type === "session.status-changed")).toEqual([
+      {
+        type: "session.status-changed",
+        sessionId: "session-1",
+        previousStatus: "idle",
+        status: "preparing",
+      },
+      {
+        type: "session.status-changed",
+        sessionId: "session-1",
+        previousStatus: "preparing",
+        status: "streaming",
+      },
+      {
+        type: "session.status-changed",
+        sessionId: "session-1",
+        previousStatus: "streaming",
+        status: "executing_tool",
+      },
+      {
+        type: "session.status-changed",
+        sessionId: "session-1",
+        previousStatus: "executing_tool",
+        status: "streaming",
+      },
+      {
+        type: "session.status-changed",
+        sessionId: "session-1",
+        previousStatus: "streaming",
+        status: "executing_tool",
+      },
+      {
+        type: "session.status-changed",
+        sessionId: "session-1",
+        previousStatus: "executing_tool",
+        status: "streaming",
+      },
+      {
+        type: "session.status-changed",
+        sessionId: "session-1",
+        previousStatus: "streaming",
+        status: "completed",
+      },
+    ]);
+  });
+
+  it("returns a safe failed Tool Result when execution throws and continues the loop", async () => {
+    const requests: ModelRequest[] = [];
+    const gateway = createScriptedModelGateway(
+      [
+        [
+          {
+            type: "tool.call",
+            call: { id: "call-failed", name: "failing_tool", input: null },
+          },
+          { type: "finish", reason: "tool-calls" },
+        ],
+        [{ type: "finish", reason: "stop" }],
+      ],
+      requests,
+    );
+    const registry = new ToolRegistry();
+    registry.register({
+      name: "failing_tool",
+      risk: "read",
+      parseInput: () => null,
+      execute: async () => {
+        throw new Error("private provider detail");
+      },
+    });
+    const runtime = new AgentRuntime(gateway, { emit() {} }, registry);
+
+    await runtime.run(userMessage, new AbortController().signal);
+
+    expect(requests[1]?.messages.at(-1)).toEqual({
+      role: "tool",
+      result: {
+        callId: "call-failed",
+        name: "failing_tool",
+        status: "error",
+        error: {
+          code: "failed",
+          message: 'Tool "failing_tool" failed during execution.',
+        },
+      },
+    });
+    expect(JSON.stringify(requests)).not.toContain("private provider detail");
+  });
+
+  it("fails before executing a Tool Call that exceeds the maximum step count", async () => {
+    const gateway = createScriptedModelGateway(
+      [
+        [
+          { type: "tool.call", call: { id: "call-1", name: "step_tool", input: null } },
+          { type: "finish", reason: "tool-calls" },
+        ],
+        [
+          { type: "tool.call", call: { id: "call-2", name: "step_tool", input: null } },
+          { type: "finish", reason: "tool-calls" },
+        ],
+      ],
+      [],
+    );
+    const execute = vi.fn(async () => null);
+    const registry = new ToolRegistry();
+    registry.register({
+      name: "step_tool",
+      risk: "read",
+      parseInput: () => null,
+      execute,
+    });
+    const events: AgentRuntimeEvent[] = [];
+    const runtime = new AgentRuntime(gateway, { emit: (event) => events.push(event) }, registry, {
+      maxToolSteps: 1,
+    });
+
+    await expect(runtime.run(userMessage, new AbortController().signal)).rejects.toEqual(
+      new MaxToolStepsExceededError(1),
+    );
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(events.at(-1)).toEqual({
+      type: "session.status-changed",
+      sessionId: "session-1",
+      previousStatus: "streaming",
+      status: "failed",
+    });
+  });
+
+  it("cancels during Tool execution without starting another model step", async () => {
+    const controller = new AbortController();
+    const cancellation = new Error("cancel tool execution");
+    const requests: ModelRequest[] = [];
+    const gateway = createScriptedModelGateway(
+      [
+        [
+          { type: "tool.call", call: { id: "call-1", name: "waiting_tool", input: null } },
+          { type: "finish", reason: "tool-calls" },
+        ],
+      ],
+      requests,
+    );
+    const started = Promise.withResolvers<void>();
+    const registry = new ToolRegistry();
+    registry.register({
+      name: "waiting_tool",
+      risk: "read",
+      parseInput: () => null,
+      execute: async (_input, { signal }) => {
+        started.resolve();
+        return new Promise((_resolve, reject) => {
+          signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+        });
+      },
+    });
+    const events: AgentRuntimeEvent[] = [];
+    const runtime = new AgentRuntime(gateway, { emit: (event) => events.push(event) }, registry);
+
+    const run = runtime.run(userMessage, controller.signal);
+    await started.promise;
+    controller.abort(cancellation);
+
+    await expect(run).resolves.toBeUndefined();
+    expect(requests).toHaveLength(1);
+    expect(events.at(-1)).toEqual({
+      type: "session.status-changed",
+      sessionId: "session-1",
+      previousStatus: "executing_tool",
+      status: "cancelled",
+    });
+  });
+
   it("passes the caller's AbortSignal to the model", async () => {
     const controller = new AbortController();
     let receivedSignal: AbortSignal | undefined;
@@ -361,4 +577,27 @@ function createScriptedModelGateway(
       }
     },
   };
+}
+
+function createNumberTool(name: "first_tool" | "second_tool", executionOrder: string[]) {
+  return {
+    name,
+    risk: "read" as const,
+    parseInput(value: unknown) {
+      if (
+        typeof value !== "object" ||
+        value === null ||
+        !("value" in value) ||
+        typeof value.value !== "number"
+      ) {
+        throw new Error("invalid value");
+      }
+
+      return { value: value.value };
+    },
+    async execute(input: { value: number }) {
+      executionOrder.push(`${name}:${input.value}`);
+      return { value: input.value };
+    },
+  } satisfies AgentTool<{ value: number }, { value: number }>;
 }
