@@ -1,5 +1,6 @@
 import {
   type FinishReason,
+  type JsonValue,
   type ModelEvent,
   type ModelGateway,
   ModelGatewayError,
@@ -7,6 +8,7 @@ import {
   type ModelMessage,
   type ModelRequest,
   type TokenUsage,
+  type ToolResult,
   toolCallSchema,
 } from "@ctrl-zebra/core";
 import {
@@ -20,6 +22,7 @@ import {
   LoadAPIKeyError,
   NoSuchModelError,
   streamText,
+  type ToolResultPart,
   TypeValidationError,
 } from "ai";
 
@@ -65,7 +68,81 @@ export function createAISDKModelGateway(model: LanguageModel): ModelGateway {
 }
 
 function toSdkMessages(messages: readonly ModelMessage[]) {
-  return messages.map(({ role, content }) => ({ role, content }));
+  return messages.map((message) => {
+    if ("content" in message) {
+      return { role: message.role, content: message.content };
+    }
+
+    if (message.role === "assistant") {
+      return {
+        role: "assistant" as const,
+        content: [
+          {
+            type: "tool-call" as const,
+            toolCallId: message.toolCall.id,
+            toolName: message.toolCall.name,
+            input: message.toolCall.input,
+          },
+        ],
+      };
+    }
+
+    return {
+      role: "tool" as const,
+      content: [
+        {
+          type: "tool-result" as const,
+          toolCallId: message.result.callId,
+          toolName: message.result.name,
+          output: toSdkToolResultOutput(message.result),
+        },
+      ],
+    };
+  });
+}
+
+function toSdkToolResultOutput(result: ToolResult): ToolResultPart["output"] {
+  if (result.status === "success") {
+    return {
+      type: "json",
+      value: {
+        callId: result.callId,
+        name: result.name,
+        status: result.status,
+        output: toSdkJsonValue(result.output),
+        truncated: result.truncated,
+      },
+    };
+  }
+
+  return {
+    type: "error-json",
+    value: {
+      callId: result.callId,
+      name: result.name,
+      status: result.status,
+      error: {
+        code: result.error.code,
+        message: result.error.message,
+      },
+    },
+  };
+}
+
+type SdkJsonValue = Extract<ToolResultPart["output"], { type: "json" }>["value"];
+
+function toSdkJsonValue(value: JsonValue): SdkJsonValue {
+  if (value === null || typeof value !== "object") {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(toSdkJsonValue);
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, nestedValue]) => [key, toSdkJsonValue(nestedValue)]),
+  );
 }
 
 function mapStreamPart(value: unknown, signal: AbortSignal): readonly ModelEvent[] {

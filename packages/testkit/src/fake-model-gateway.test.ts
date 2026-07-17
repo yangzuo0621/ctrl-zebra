@@ -21,7 +21,7 @@ describe("FakeModelGateway", () => {
       },
       { type: "finish", reason: "tool-calls" },
     ] as const satisfies readonly ModelEvent[];
-    const gateway = new FakeModelGateway(events);
+    const gateway = new FakeModelGateway([events]);
     const received: ModelEvent[] = [];
 
     for await (const event of gateway.stream(request, new AbortController().signal)) {
@@ -32,7 +32,7 @@ describe("FakeModelGateway", () => {
   });
 
   it("completes an empty event sequence", async () => {
-    const gateway = new FakeModelGateway([]);
+    const gateway = new FakeModelGateway([[]]);
 
     const received = await Array.fromAsync(gateway.stream(request, new AbortController().signal));
 
@@ -43,8 +43,10 @@ describe("FakeModelGateway", () => {
     const cancellation = new Error("cancelled by test");
     const controller = new AbortController();
     const gateway = new FakeModelGateway([
-      { type: "text.delta", text: "first" },
-      { type: "text.delta", text: "second" },
+      [
+        { type: "text.delta", text: "first" },
+        { type: "text.delta", text: "second" },
+      ],
     ]);
     const iterator = gateway.stream(request, controller.signal)[Symbol.asyncIterator]();
 
@@ -62,10 +64,44 @@ describe("FakeModelGateway", () => {
     const cancellation = new Error("cancelled before streaming");
     const controller = new AbortController();
     controller.abort(cancellation);
-    const gateway = new FakeModelGateway([]);
+    const gateway = new FakeModelGateway([[]]);
 
     await expect(
       gateway.stream(request, controller.signal)[Symbol.asyncIterator]().next(),
     ).rejects.toBe(cancellation);
+  });
+
+  it("returns scripted responses in request order and records each request", async () => {
+    const secondRequest = {
+      messages: [
+        ...request.messages,
+        {
+          role: "assistant",
+          toolCall: { id: "call-1", name: "list_files", input: { path: "." } },
+        },
+        {
+          role: "tool",
+          result: {
+            callId: "call-1",
+            name: "list_files",
+            status: "success",
+            output: ["README.md"],
+            truncated: false,
+          },
+        },
+      ],
+    } as const satisfies ModelRequest;
+    const gateway = new FakeModelGateway([
+      [{ type: "finish", reason: "tool-calls" }],
+      [{ type: "text.delta", text: "README.md" }],
+    ]);
+
+    await expect(
+      Array.fromAsync(gateway.stream(request, new AbortController().signal)),
+    ).resolves.toEqual([{ type: "finish", reason: "tool-calls" }]);
+    await expect(
+      Array.fromAsync(gateway.stream(secondRequest, new AbortController().signal)),
+    ).resolves.toEqual([{ type: "text.delta", text: "README.md" }]);
+    expect(gateway.requests).toEqual([request, secondRequest]);
   });
 });
