@@ -36,6 +36,33 @@ This document defines the Webview security constraints established before T0104.
 - If a future feature must render formatted untrusted markup, it requires a narrowly configured, maintained sanitizer and tests for script elements, event-handler attributes, dangerous URLs, SVG, MathML, and mutation-based bypasses.
 - HTML attributes and CSP metadata assembled by the Extension are escaped before interpolation. Validation and sanitization complement CSP; CSP is not their replacement.
 
+## Tool Input and Output
+
+- Model-supplied Tool Call IDs, names, and input are untrusted. The generic protocol Schema rejects
+  non-JSON values and malformed envelopes, but execution requires a second, tool-specific parse from
+  `unknown`. A tool must reject missing fields, wrong types, unsupported values, and unreviewed extra
+  fields before any side effect.
+- Risk is assigned by the trusted registered tool definition as one of `read`, `write`, `execute`,
+  or `network`. Model input cannot provide, override, or downgrade risk. Approval and
+  workspace-trust policy introduced by later tasks operate on this trusted definition.
+- Tool output is untrusted even when produced locally. It must be normalized to the shared JSON
+  result contract before persistence, model context insertion, or Webview delivery. Raw `Error`,
+  filesystem, process, SDK, VS Code, stream, or class instances are forbidden.
+- A normalized Tool Result cannot exceed 1,048,576 UTF-8 bytes. Every output-producing layer must
+  enforce that ceiling while collecting data and avoid building an unbounded intermediate value
+  merely to truncate it afterward. Successful truncation is marked in the Tool Result and that
+  marker is preserved downstream. T0702 adds narrower, type-specific context limits; it does not
+  relax this boundary.
+- Structured tool errors expose only a stable code and bounded safe message. Secrets, authorization
+  headers, workspace contents not already approved for return, raw exception messages, stack traces,
+  third-party response bodies, and unrestricted arguments are excluded.
+- The run owns cancellation. A tool receives the same `AbortSignal`, observes it during long work,
+  and performs no later output or side effect after cancellation. Cancellation is never converted to
+  a normal error result, retry hint, approval, or successful partial result.
+- Tools cannot directly mutate Agent or Session status, emit synthetic lifecycle events, continue the
+  model loop, or approve their own operation. Keeping control flow in Core prevents model-selected
+  tool code from bypassing policy and state-machine invariants.
+
 ## API Key Secret Storage
 
 - The OpenAI API key is stored under the stable, Extension-owned name

@@ -37,6 +37,37 @@ This document defines the Webview/Extension message boundary established before 
 - `undefined`, `bigint`, functions, symbols, class instances, errors, DOM objects, VS Code objects, typed arrays, and cyclic structures are forbidden.
 - `vscode.Uri`, dates, binary data, and host-specific values require an explicit serializable DTO in a later task; raw instances never cross the boundary.
 
+## Tool Data Contracts
+
+- Tool names are lower `snake_case`, start with a letter, contain only lowercase ASCII letters,
+  digits, and underscores, and are at most 64 characters. A published name is stable: renaming it,
+  reusing it for incompatible behavior, or changing its input/result meaning requires an explicit
+  public-contract and compatibility decision.
+- Tool Call IDs are opaque, non-empty strings of at most 128 characters. A Tool Result copies both
+  the call ID and tool name exactly so consumers can preserve complete Call/Result pairs without
+  inferring correlation from array position or display text.
+- Generic Tool Call input is a JSON value: string, finite number, boolean, null, array of JSON
+  values, or object with JSON values. It excludes `undefined`, non-finite numbers, `bigint`, sparse
+  arrays, class instances, functions, symbols, cycles, and host objects. Passing this generic Schema
+  does not imply that a specific tool accepts the input.
+- Tool Result is a strict union discriminated by `status`. A `success` result contains JSON output
+  and `truncated`; an `error` result contains one structured error and no success output. Unknown
+  properties are rejected in both variants.
+- Structured tool error codes form a stable closed set: `invalid-input`, `unknown-tool`, `denied`,
+  `failed`, and `invalid-output`. The message is non-empty, at most 1,024 characters, and user-safe.
+  It must not contain raw exception messages, stack traces, credentials, authorization material, or
+  unrestricted host or provider diagnostics.
+- The complete normalized Tool Result, measured as its JSON serialization encoded as UTF-8, is at
+  most 1,048,576 bytes. Output producers enforce the limit while collecting data; the shared Schema
+  repeats the check as defense in depth. A result must not first build an unbounded value merely to
+  discover that serialization rejects it.
+- `truncated: true` means content was intentionally omitted to satisfy a hard output limit. Once
+  true, later serialization, persistence, context construction, and UI mapping must preserve it.
+  T0401 establishes the one-mebibyte serialized ceiling and marker; T0702 implements narrower,
+  type-specific character, line, and entry truncation before context insertion.
+- Cancellation is not a Tool Result status or error code. A cancelled run stops the tool through its
+  `AbortSignal`, emits no later result, and is represented by the owning Agent lifecycle contract.
+
 ## Ownership
 
 - `packages/protocol` owns Schemas, inferred types, protocol constants, and public message names. It has no dependency on React, VS Code, Node.js host APIs, or model SDKs.

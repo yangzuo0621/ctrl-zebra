@@ -78,6 +78,7 @@ This document defines the initial runtime boundaries for the CtrlZebra desktop V
 - The active Provider defaults to `openai`. Model IDs have no implicit default because changing a
   vendor's recommended model would silently change cost and behavior; a missing model produces an
   actionable configuration error. OpenAI-Compatible has no endpoint default.
+
 - Model gateways are initialized lazily on the user operation that needs them. Activation may
   register configuration and compose factories, but it must not read a Secret, initialize an SDK
   client, or contact an endpoint. Concurrent lazy callers share an in-flight initialization only
@@ -97,3 +98,30 @@ This document defines the initial runtime boundaries for the CtrlZebra desktop V
   define an explicit version transition. Migration reads exact prior keys through VS Code
   configuration inspection, never guesses from model IDs or endpoints, and never copies a Secret
   into ordinary settings.
+
+## Tool Contract Boundary
+
+- `packages/protocol` owns the strict, JSON-serializable Schemas and inferred types for Tool Call,
+  Tool Result, tool risk, and structured tool errors. `packages/core` consumes and may re-export
+  those contracts for the Provider boundary; it must not define a second Tool Call shape.
+- A Tool Call contains an opaque call ID, a stable lower `snake_case` tool name, and generic JSON
+  input. Provider adapters validate that generic envelope before emitting it. This validation does
+  not authorize execution or replace the selected tool's input Schema, which parses from `unknown`
+  immediately before execution in T0403.
+- The risk set is the closed union `read`, `write`, `execute`, and `network`. Risk belongs to the
+  registered tool definition and policy, not to model-supplied Tool Call input; model output cannot
+  lower or choose a tool's risk.
+- A Tool Result is a strict discriminated union tied to the exact call ID and tool name. Success
+  carries JSON output and an explicit truncation flag. Failure carries a stable error code and a
+  user-safe message; raw exceptions, SDK failures, host values, and arbitrary diagnostic objects do
+  not cross this boundary.
+- The normalized result has a 1,048,576-byte UTF-8 serialized ceiling. Producers apply the limit
+  before constructing the result so the boundary never needs to retain an unbounded value merely to
+  reject it; the shared Schema enforces the ceiling as defense in depth.
+- The executor converts expected tool failures into structured error results. Cancellation remains
+  a separate run outcome, propagates through the run-owned `AbortSignal`, and produces no ordinary
+  Tool Result after cancellation.
+- Tools do not own Agent control flow. A tool can return data or a structured failure, but cannot
+  mutate Session status, emit lifecycle transitions, continue the model loop, approve an operation,
+  or choose presentation state. Those responsibilities remain in the Core runtime and its injected
+  services.
