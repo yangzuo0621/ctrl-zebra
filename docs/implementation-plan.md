@@ -536,7 +536,7 @@ export interface ApprovalService {
 
 ### T0004：建立 CI
 
-**目标**：每次提交自动执行 install、check、typecheck、test 和 build。
+**目标**：对 `main` 的 push 以及以 `main` 为目标分支的 pull request 自动执行 install、check、typecheck、test 和 build。
 
 **开始前约束门禁**：明确 CI 的 pnpm 版本、frozen lockfile、最小权限、任务超时、缓存范围、第三方 Action 固定方式和 Secret 禁用规则。
 
