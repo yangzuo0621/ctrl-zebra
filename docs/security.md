@@ -87,3 +87,22 @@ This document defines the Webview security constraints established before T0104.
 - Configuration errors and Provider selection errors may identify the invalid setting and explain
   how to correct it, but must not include credential values, authorization material, third-party
   response bodies, or unredacted SDK errors.
+
+## Gemini API Key Entry
+
+- The stable command `ctrlZebra.saveGeminiApiKey` is the only T0308 user-facing entry point for a
+  Gemini credential. Renaming it is a public-contract change. The command is contributed to the
+  Command Palette and its registration is owned by `ExtensionContext.subscriptions`.
+- The command collects the value with VS Code's password-masked input. It does not prefill an
+  existing credential, does not reveal whether a prior value exists, and keeps the prompt open on
+  focus loss so the value is not accidentally submitted to another UI surface.
+- Canceling the prompt performs no SecretStorage write and shows no success message. An empty value
+  is rejected before storage. A non-empty value is stored exactly as entered under
+  `ctrlZebra.provider.gemini.apiKey`, replacing any prior value according to the existing
+  SecretStorage contract.
+- The submitted value remains local to the command invocation and SecretStorage adapter. It must
+  not enter configuration, command arguments, Webview messages or state, persistence, logs,
+  diagnostics, snapshots, fixtures, or error text.
+- Save success uses a credential-free confirmation. Input and storage failures use fixed,
+  user-safe text and never include the submitted value, stored value, Secret name, or original
+  backend error. The command does not initialize a Gemini client or make a network request.

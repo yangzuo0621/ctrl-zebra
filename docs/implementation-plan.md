@@ -410,12 +410,12 @@ export interface ApprovalService {
 **进度摘要**：
 
 - 总任务：71
-- 已完成：21
+- 已完成：22
 - 进行中：0
 - 受阻：0
-- 待开始：50
+- 待开始：49
 - 当前任务：无
-- 下一任务：T0308
+- 下一任务：T0309
 - 最后更新：2026-07-17
 
 | 阶段 | 任务 | 状态 | 完成 PR | 完成日期 |
@@ -441,7 +441,7 @@ export interface ApprovalService {
 | 3 | T0305 | 已完成 | [#26](https://github.com/yangzuo0621/ctrl-zebra/pull/26) | 2026-07-16 |
 | 3 | T0306 | 已完成 | [#28](https://github.com/yangzuo0621/ctrl-zebra/pull/28) | 2026-07-16 |
 | 3 | T0307 | 已完成 | [#30](https://github.com/yangzuo0621/ctrl-zebra/pull/30) | 2026-07-17 |
-| 3 | T0308 | 待开始 | — | — |
+| 3 | T0308 | 已完成 | [#31](https://github.com/yangzuo0621/ctrl-zebra/pull/31) | 2026-07-17 |
 | 3 | T0309 | 待开始 | — | — |
 | 4 | T0401 | 待开始 | — | — |
 | 4 | T0402 | 待开始 | — | — |
@@ -694,11 +694,11 @@ export interface ApprovalService {
 
 ### T0308：实现 Gemini Provider Adapter
 
-**目标**：使用 Gemini 专用 Provider 接入 Google Gemini，并将 SDK 流标准化为现有 `ModelGateway` 事件。
+**目标**：使用 Gemini 专用 Provider 接入 Google Gemini，将 SDK 流标准化为现有 `ModelGateway` 事件，并提供一个 Extension-owned 的安全命令将 Gemini API Key 保存到稳定的 SecretStorage 名称。
 
-**测试**：使用 mock SDK response 覆盖文本增量、Usage、Finish、稳定错误映射和取消；人工使用 SecretStorage 中的 Gemini API Key 完成一次无工具流式对话。
+**测试**：使用 mock SDK response 覆盖文本增量、Usage、Finish、稳定错误映射和取消；命令测试覆盖密码输入、取消、空值校验、精确保存和安全错误提示；人工通过该命令将 Gemini API Key 保存到 SecretStorage，并完成一次无工具流式对话。
 
-**不包含**：通过 OpenAI 兼容端点调用 Gemini。
+**不包含**：通过 OpenAI 兼容端点调用 Gemini；OpenAI 或 OpenAI-Compatible 凭据管理入口；API Key 删除或轮换 UI。
 
 ### T0309：实现 OpenAI-Compatible Provider Adapter
 

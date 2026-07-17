@@ -86,6 +86,11 @@ This document defines the initial runtime boundaries for the CtrlZebra desktop V
   that invocation. A factory does not read VS Code configuration or SecretStorage. Gemini and
   OpenAI-Compatible factory implementations remain owned by their dedicated roadmap tasks; their
   selection paths may use injected test factories until those adapters exist.
+- Provider credential entry is an Extension-owned host workflow. User-facing credential commands
+  collect values through password-masked VS Code input, write only through an injected
+  SecretStorage adapter, and expose no credential through Core, Protocol, Webview state, settings,
+  command arguments, logs, or diagnostics. Command handlers remain thin composition points and do
+  not initialize a model client or contact a Provider endpoint.
 - Version `1` is the first Provider configuration format, so there is no legacy data to migrate.
   Future changes to identifiers, setting names, normalized shapes, defaults, or Secret names must
   define an explicit version transition. Migration reads exact prior keys through VS Code

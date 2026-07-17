@@ -137,7 +137,7 @@ describe("ModelGateway selector", () => {
 
     await expect(
       selectModelGateway({
-        configuration: configuration("gemini"),
+        configuration: configuration("openai-compatible"),
         requiredCapabilities: ["text-streaming"],
         secrets,
         factories: {} satisfies ProviderGatewayFactories,
