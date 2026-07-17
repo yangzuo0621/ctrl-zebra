@@ -274,4 +274,87 @@ describe("handleWebviewMessage", () => {
       },
     ]);
   });
+
+  it("accepts a new run immediately after cancelling the active run", async () => {
+    let messageListener: ((message: unknown) => void) | undefined;
+    const postedMessages: unknown[] = [];
+    const receivedContents: string[] = [];
+    const resolveRuns: Array<() => void> = [];
+
+    bindWebviewMessageController(
+      {
+        onDidReceiveMessage(listener) {
+          messageListener = listener;
+          return { dispose() {} };
+        },
+        postMessage(message) {
+          postedMessages.push(message);
+          return Promise.resolve(true);
+        },
+      },
+      {
+        onDidDispose() {
+          return { dispose() {} };
+        },
+      },
+      () => {},
+      {
+        run(content) {
+          receivedContents.push(content);
+          return new Promise((resolve) => resolveRuns.push(resolve));
+        },
+      },
+    );
+
+    messageListener?.({
+      protocolVersion,
+      type: "webview/submit",
+      requestId: "request-1",
+      content: "First request.",
+    });
+    messageListener?.({
+      protocolVersion,
+      type: "webview/cancel",
+      requestId: "request-1",
+    });
+    messageListener?.({
+      protocolVersion,
+      type: "webview/submit",
+      requestId: "request-2",
+      content: "Second request.",
+    });
+
+    expect(receivedContents).toEqual(["First request.", "Second request."]);
+    expect(postedMessages).toEqual([
+      {
+        protocolVersion,
+        type: "extension/run-status",
+        requestId: "request-1",
+        status: "preparing",
+      },
+      {
+        protocolVersion,
+        type: "extension/run-status",
+        requestId: "request-1",
+        status: "cancelled",
+      },
+      {
+        protocolVersion,
+        type: "extension/run-status",
+        requestId: "request-2",
+        status: "preparing",
+      },
+    ]);
+
+    resolveRuns[0]?.();
+    resolveRuns[1]?.();
+    await Promise.resolve();
+
+    expect(postedMessages.at(-1)).toEqual({
+      protocolVersion,
+      type: "extension/run-status",
+      requestId: "request-2",
+      status: "completed",
+    });
+  });
 });
