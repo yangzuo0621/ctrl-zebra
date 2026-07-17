@@ -12,7 +12,10 @@ function createTool(name: string): AgentTool<string, { readonly value: string }>
 
       return value;
     },
-    execute: vi.fn(async (input: string) => ({ value: input })),
+    execute: vi.fn(async (input: string) => ({
+      output: { value: input },
+      truncated: false,
+    })),
   };
 }
 

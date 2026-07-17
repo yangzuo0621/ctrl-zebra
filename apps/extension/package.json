@@ -103,6 +103,7 @@
     "esbuild": "0.28.1"
   },
   "dependencies": {
+    "@ctrl-zebra/builtin-tools": "workspace:*",
     "@ctrl-zebra/core": "workspace:*",
     "@ctrl-zebra/protocol": "workspace:*",
     "@ctrl-zebra/providers": "workspace:*"
