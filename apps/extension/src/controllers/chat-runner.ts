@@ -17,11 +17,10 @@ interface ChatRunnerDependencies {
   readonly now?: () => Date;
 }
 
-export class ModelProviderNotConfiguredError extends Error {
-  constructor() {
-    super("A model provider must be configured before starting a chat.");
-    this.name = "ModelProviderNotConfiguredError";
-  }
+interface SelectingChatRunnerDependencies {
+  readonly selectModelGateway: () => Promise<ModelGateway>;
+  readonly createId?: () => string;
+  readonly now?: () => Date;
 }
 
 export function createChatRunner({
@@ -47,11 +46,18 @@ export function createChatRunner({
   };
 }
 
-export function createUnconfiguredChatRunner(): ChatRunner {
+export function createSelectingChatRunner({
+  selectModelGateway,
+  createId,
+  now,
+}: SelectingChatRunnerDependencies): ChatRunner {
   return {
-    async run(_content, signal) {
+    async run(content, signal, emit) {
       signal.throwIfAborted();
-      throw new ModelProviderNotConfiguredError();
+      const modelGateway = await selectModelGateway();
+      signal.throwIfAborted();
+
+      await createChatRunner({ modelGateway, createId, now }).run(content, signal, emit);
     },
   };
 }

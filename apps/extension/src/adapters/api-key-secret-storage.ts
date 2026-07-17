@@ -1,6 +1,16 @@
 import type { SecretStorage } from "vscode";
 
+import type { ProviderId } from "./provider-configuration.js";
+
 export const openAIApiKeySecretName = "ctrlZebra.provider.openai.apiKey";
+export const geminiApiKeySecretName = "ctrlZebra.provider.gemini.apiKey";
+export const openAICompatibleApiKeySecretName = "ctrlZebra.provider.openaiCompatible.apiKey";
+
+export const apiKeySecretNames = {
+  openai: openAIApiKeySecretName,
+  gemini: geminiApiKeySecretName,
+  "openai-compatible": openAICompatibleApiKeySecretName,
+} as const satisfies Record<ProviderId, string>;
 
 export type ApiKeySecretStorageOperation = "read" | "save" | "delete";
 
@@ -8,6 +18,10 @@ export interface ApiKeySecretStorage {
   read(): Promise<string | undefined>;
   save(apiKey: string): Promise<void>;
   delete(): Promise<void>;
+}
+
+export interface ProviderApiKeySecretReader {
+  read(provider: ProviderId): Promise<string | undefined>;
 }
 
 type SecretStorageBackend = Pick<SecretStorage, "get" | "store" | "delete">;
@@ -51,6 +65,20 @@ export function createOpenAIApiKeySecretStorage(
         await secretStorage.delete(openAIApiKeySecretName);
       } catch {
         throw new ApiKeySecretStorageError("delete");
+      }
+    },
+  };
+}
+
+export function createProviderApiKeySecretReader(
+  secretStorage: Pick<SecretStorageBackend, "get">,
+): ProviderApiKeySecretReader {
+  return {
+    async read(provider) {
+      try {
+        return await secretStorage.get(apiKeySecretNames[provider]);
+      } catch {
+        throw new ApiKeySecretStorageError("read");
       }
     },
   };

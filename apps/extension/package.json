@@ -17,6 +17,55 @@
     "onStartupFinished"
   ],
   "contributes": {
+    "configuration": {
+      "title": "CtrlZebra",
+      "properties": {
+        "ctrlZebra.provider.id": {
+          "type": "string",
+          "enum": [
+            "openai",
+            "gemini",
+            "openai-compatible"
+          ],
+          "enumDescriptions": [
+            "OpenAI's official API.",
+            "Google Gemini's official API.",
+            "An explicitly configured OpenAI-compatible endpoint."
+          ],
+          "default": "openai",
+          "scope": "machine",
+          "description": "The model provider used by CtrlZebra."
+        },
+        "ctrlZebra.provider.model": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "The exact model ID to use. CtrlZebra does not choose a model implicitly."
+        },
+        "ctrlZebra.provider.endpoint": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "markdownDescription": "An optional custom HTTPS endpoint. OpenAI-Compatible requires one. Plain HTTP is accepted only for an explicit local loopback address."
+        },
+        "ctrlZebra.provider.capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "text-streaming",
+              "tool-calling"
+            ]
+          },
+          "default": [
+            "text-streaming"
+          ],
+          "uniqueItems": true,
+          "scope": "machine",
+          "markdownDescription": "Capabilities explicitly declared by an OpenAI-compatible endpoint. Dedicated providers use their adapter declarations."
+        }
+      }
+    },
     "viewsContainers": {
       "activitybar": [
         {
@@ -48,6 +97,7 @@
   },
   "dependencies": {
     "@ctrl-zebra/core": "workspace:*",
-    "@ctrl-zebra/protocol": "workspace:*"
+    "@ctrl-zebra/protocol": "workspace:*",
+    "@ctrl-zebra/providers": "workspace:*"
   }
 }
