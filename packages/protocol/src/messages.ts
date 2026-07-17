@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { toolCallSchema, toolErrorResultSchema, toolSuccessResultSchema } from "./tool.js";
+
 export const protocolVersion = 1 as const;
 
 const requestIdSchema = z.string().min(1).max(128);
@@ -57,15 +59,51 @@ export const runStatusMessageSchema = z.strictObject({
   status: runStatusSchema,
 });
 
+const toolStateEnvelopeShape = {
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("extension/tool-state"),
+  call: toolCallSchema,
+};
+
+export const pendingToolStateMessageSchema = z.strictObject({
+  ...toolStateEnvelopeShape,
+  status: z.literal("pending"),
+});
+
+export const runningToolStateMessageSchema = z.strictObject({
+  ...toolStateEnvelopeShape,
+  status: z.literal("running"),
+});
+
+export const successToolStateMessageSchema = z.strictObject({
+  ...toolStateEnvelopeShape,
+  status: z.literal("success"),
+  result: toolSuccessResultSchema,
+});
+
+export const errorToolStateMessageSchema = z.strictObject({
+  ...toolStateEnvelopeShape,
+  status: z.literal("error"),
+  result: toolErrorResultSchema,
+});
+
+export const toolStateMessageSchema = z.discriminatedUnion("status", [
+  pendingToolStateMessageSchema,
+  runningToolStateMessageSchema,
+  successToolStateMessageSchema,
+  errorToolStateMessageSchema,
+]);
+
 export const webviewToExtensionMessageSchema = z.discriminatedUnion("type", [
   pingMessageSchema,
   submitMessageSchema,
   cancelMessageSchema,
 ]);
-export const extensionToWebviewMessageSchema = z.discriminatedUnion("type", [
+export const extensionToWebviewMessageSchema = z.union([
   pongMessageSchema,
   textDeltaMessageSchema,
   runStatusMessageSchema,
+  toolStateMessageSchema,
 ]);
 
 export type ProtocolEnvelope = z.infer<typeof protocolEnvelopeSchema>;
@@ -76,5 +114,6 @@ export type CancelMessage = z.infer<typeof cancelMessageSchema>;
 export type TextDeltaMessage = z.infer<typeof textDeltaMessageSchema>;
 export type RunStatus = z.infer<typeof runStatusSchema>;
 export type RunStatusMessage = z.infer<typeof runStatusMessageSchema>;
+export type ToolStateMessage = z.infer<typeof toolStateMessageSchema>;
 export type WebviewToExtensionMessage = z.infer<typeof webviewToExtensionMessageSchema>;
 export type ExtensionToWebviewMessage = z.infer<typeof extensionToWebviewMessageSchema>;

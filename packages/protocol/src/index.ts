@@ -22,19 +22,25 @@ export type {
   RunStatusMessage,
   SubmitMessage,
   TextDeltaMessage,
+  ToolStateMessage,
   WebviewToExtensionMessage,
 } from "./messages.js";
 export {
   cancelMessageSchema,
+  errorToolStateMessageSchema,
   extensionToWebviewMessageSchema,
+  pendingToolStateMessageSchema,
   pingMessageSchema,
   pongMessageSchema,
   protocolEnvelopeSchema,
   protocolVersion,
+  runningToolStateMessageSchema,
   runStatusMessageSchema,
   runStatusSchema,
   submitMessageSchema,
+  successToolStateMessageSchema,
   textDeltaMessageSchema,
+  toolStateMessageSchema,
   webviewToExtensionMessageSchema,
 } from "./messages.js";
 export type { SessionId, SessionStatus, SessionSummary } from "./session.js";

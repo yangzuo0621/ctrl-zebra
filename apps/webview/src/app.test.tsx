@@ -165,4 +165,70 @@ describe("App streaming chat", () => {
     expect(screen.queryByText("Before after")).not.toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("Response cancelled.");
   });
+
+  it("updates one Tool Call card through pending, running, and success", async () => {
+    const host = new FakeWebviewHost();
+    const user = userEvent.setup();
+    render(<App host={host} createRequestId={() => "request-tool"} />);
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "Read the file.");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    const call = {
+      id: "call-1",
+      name: "read_file",
+      input: { path: "README.md" },
+    } as const;
+
+    act(() => {
+      host.emit({
+        protocolVersion,
+        type: "extension/run-status",
+        requestId: "request-tool",
+        status: "streaming",
+      });
+      host.emit({
+        protocolVersion,
+        type: "extension/tool-state",
+        requestId: "request-tool",
+        call,
+        status: "pending",
+      });
+    });
+
+    expect(screen.getAllByRole("article", { name: "read_file" })).toHaveLength(1);
+    expect(screen.getByLabelText("Tool status")).toHaveTextContent("Pending");
+
+    act(() => {
+      host.emit({
+        protocolVersion,
+        type: "extension/tool-state",
+        requestId: "request-tool",
+        call,
+        status: "running",
+      });
+    });
+
+    expect(screen.getAllByRole("article", { name: "read_file" })).toHaveLength(1);
+    expect(screen.getByLabelText("Tool status")).toHaveTextContent("Running");
+
+    act(() => {
+      host.emit({
+        protocolVersion,
+        type: "extension/tool-state",
+        requestId: "request-tool",
+        call,
+        status: "success",
+        result: {
+          callId: "call-1",
+          name: "read_file",
+          status: "success",
+          output: { content: "Hello" },
+          truncated: false,
+        },
+      });
+    });
+
+    expect(screen.getAllByRole("article", { name: "read_file" })).toHaveLength(1);
+    expect(screen.getByLabelText("Tool status")).toHaveTextContent("Success");
+    expect(screen.getByRole("group", { name: "Result" })).toHaveTextContent("Hello");
+  });
 });

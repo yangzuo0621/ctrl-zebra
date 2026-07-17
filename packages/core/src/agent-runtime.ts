@@ -3,7 +3,9 @@ import {
   type SessionStatus,
   type ToolCall,
   type ToolErrorCode,
+  type ToolErrorResult,
   type ToolResult,
+  type ToolSuccessResult,
   toolResultSchema,
   type UserMessage,
 } from "@ctrl-zebra/protocol";
@@ -20,7 +22,27 @@ export interface AgentTextDeltaEvent extends DomainEvent {
   readonly text: string;
 }
 
-export type AgentRuntimeEvent = AgentTextDeltaEvent | SessionStatusChangedEvent;
+interface AgentToolStateEventBase extends DomainEvent {
+  readonly type: "agent.tool-state";
+  readonly sessionId: SessionId;
+  readonly call: ToolCall;
+}
+
+export type AgentToolStateEvent =
+  | (AgentToolStateEventBase & { readonly status: "pending" | "running" })
+  | (AgentToolStateEventBase & {
+      readonly status: "success";
+      readonly result: ToolSuccessResult;
+    })
+  | (AgentToolStateEventBase & {
+      readonly status: "error";
+      readonly result: ToolErrorResult;
+    });
+
+export type AgentRuntimeEvent =
+  | AgentTextDeltaEvent
+  | AgentToolStateEvent
+  | SessionStatusChangedEvent;
 
 export const defaultMaxToolSteps = 8;
 
@@ -78,8 +100,11 @@ export class AgentRuntime {
           throw new MaxToolStepsExceededError(this.#maxToolSteps);
         }
 
+        this.#emitToolState(userMessage.sessionId, toolCall, "pending");
         session.transitionTo("executing_tool");
+        this.#emitToolState(userMessage.sessionId, toolCall, "running");
         const toolResult = await this.#executeTool(toolCall, signal);
+        this.#emitToolResult(userMessage.sessionId, toolCall, toolResult);
         messages.push({ role: "assistant", toolCall }, { role: "tool", result: toolResult });
         toolSteps += 1;
         signal.throwIfAborted();
@@ -180,6 +205,31 @@ export class AgentRuntime {
     }
 
     return result.data;
+  }
+
+  #emitToolState(sessionId: SessionId, call: ToolCall, status: "pending" | "running"): void {
+    this.#eventSink.emit({ type: "agent.tool-state", sessionId, call, status });
+  }
+
+  #emitToolResult(sessionId: SessionId, call: ToolCall, result: ToolResult): void {
+    if (result.status === "success") {
+      this.#eventSink.emit({
+        type: "agent.tool-state",
+        sessionId,
+        call,
+        status: "success",
+        result,
+      });
+      return;
+    }
+
+    this.#eventSink.emit({
+      type: "agent.tool-state",
+      sessionId,
+      call,
+      status: "error",
+      result,
+    });
   }
 }
 

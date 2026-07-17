@@ -156,6 +156,45 @@ describe("AgentRuntime", () => {
       previousStatus: "executing_tool",
       status: "streaming",
     });
+    expect(events.filter((event) => event.type === "agent.tool-state")).toEqual([
+      {
+        type: "agent.tool-state",
+        sessionId: "session-1",
+        call: {
+          id: "call-1",
+          name: "lookup_zebra",
+          input: { query: "stripes" },
+        },
+        status: "pending",
+      },
+      {
+        type: "agent.tool-state",
+        sessionId: "session-1",
+        call: {
+          id: "call-1",
+          name: "lookup_zebra",
+          input: { query: "stripes" },
+        },
+        status: "running",
+      },
+      {
+        type: "agent.tool-state",
+        sessionId: "session-1",
+        call: {
+          id: "call-1",
+          name: "lookup_zebra",
+          input: { query: "stripes" },
+        },
+        status: "success",
+        result: {
+          callId: "call-1",
+          name: "lookup_zebra",
+          status: "success",
+          output: { answer: "matched stripes" },
+          truncated: false,
+        },
+      },
+    ]);
     expect(events.at(-2)).toEqual({
       type: "agent.text-delta",
       sessionId: "session-1",
@@ -221,7 +260,8 @@ describe("AgentRuntime", () => {
       parseInput: () => null,
       execute: async () => ({ output: ["first.txt"], truncated: true }),
     });
-    const runtime = new AgentRuntime(gateway, { emit() {} }, registry);
+    const events: AgentRuntimeEvent[] = [];
+    const runtime = new AgentRuntime(gateway, { emit: (event) => events.push(event) }, registry);
 
     await runtime.run(userMessage, new AbortController().signal);
 
@@ -351,7 +391,8 @@ describe("AgentRuntime", () => {
         throw new Error("private provider detail");
       },
     });
-    const runtime = new AgentRuntime(gateway, { emit() {} }, registry);
+    const events: AgentRuntimeEvent[] = [];
+    const runtime = new AgentRuntime(gateway, { emit: (event) => events.push(event) }, registry);
 
     await runtime.run(userMessage, new AbortController().signal);
 
@@ -368,6 +409,15 @@ describe("AgentRuntime", () => {
       },
     });
     expect(JSON.stringify(requests)).not.toContain("private provider detail");
+    expect(events.filter((event) => event.type === "agent.tool-state")).toEqual([
+      expect.objectContaining({ type: "agent.tool-state", status: "pending" }),
+      expect.objectContaining({ type: "agent.tool-state", status: "running" }),
+      expect.objectContaining({
+        type: "agent.tool-state",
+        status: "error",
+        result: expect.objectContaining({ status: "error" }),
+      }),
+    ]);
   });
 
   it("fails before executing a Tool Call that exceeds the maximum step count", async () => {

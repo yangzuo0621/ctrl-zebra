@@ -157,6 +157,31 @@ describe("handleWebviewMessage", () => {
             status: "streaming",
           });
           emit({ type: "agent.text-delta", sessionId: "session-1", text: "Hel" });
+          emit({
+            type: "agent.tool-state",
+            sessionId: "session-1",
+            call: { id: "call-1", name: "read_file", input: { path: "README.md" } },
+            status: "pending",
+          });
+          emit({
+            type: "agent.tool-state",
+            sessionId: "session-1",
+            call: { id: "call-1", name: "read_file", input: { path: "README.md" } },
+            status: "running",
+          });
+          emit({
+            type: "agent.tool-state",
+            sessionId: "session-1",
+            call: { id: "call-1", name: "read_file", input: { path: "README.md" } },
+            status: "success",
+            result: {
+              callId: "call-1",
+              name: "read_file",
+              status: "success",
+              output: { content: "Hello" },
+              truncated: false,
+            },
+          });
           emit({ type: "agent.text-delta", sessionId: "session-1", text: "lo" });
           emit({
             type: "session.status-changed",
@@ -194,6 +219,34 @@ describe("handleWebviewMessage", () => {
         type: "extension/text-delta",
         requestId: "request-1",
         text: "Hel",
+      },
+      {
+        protocolVersion,
+        type: "extension/tool-state",
+        requestId: "request-1",
+        call: { id: "call-1", name: "read_file", input: { path: "README.md" } },
+        status: "pending",
+      },
+      {
+        protocolVersion,
+        type: "extension/tool-state",
+        requestId: "request-1",
+        call: { id: "call-1", name: "read_file", input: { path: "README.md" } },
+        status: "running",
+      },
+      {
+        protocolVersion,
+        type: "extension/tool-state",
+        requestId: "request-1",
+        call: { id: "call-1", name: "read_file", input: { path: "README.md" } },
+        status: "success",
+        result: {
+          callId: "call-1",
+          name: "read_file",
+          status: "success",
+          output: { content: "Hello" },
+          truncated: false,
+        },
       },
       {
         protocolVersion,

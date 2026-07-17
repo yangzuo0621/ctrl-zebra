@@ -99,6 +99,37 @@ export function bindWebviewMessageController(
       return;
     }
 
+    if (event.type === "agent.tool-state") {
+      if (!("result" in event)) {
+        post({
+          protocolVersion,
+          type: "extension/tool-state",
+          requestId: run.requestId,
+          call: event.call,
+          status: event.status,
+        });
+      } else if (event.status === "success") {
+        post({
+          protocolVersion,
+          type: "extension/tool-state",
+          requestId: run.requestId,
+          call: event.call,
+          status: event.status,
+          result: event.result,
+        });
+      } else {
+        post({
+          protocolVersion,
+          type: "extension/tool-state",
+          requestId: run.requestId,
+          call: event.call,
+          status: "error",
+          result: event.result,
+        });
+      }
+      return;
+    }
+
     if (event.status === "preparing") {
       return;
     }
