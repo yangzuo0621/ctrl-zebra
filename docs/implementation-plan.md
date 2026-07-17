@@ -411,11 +411,11 @@ export interface ApprovalService {
 
 - 总任务：72
 - 已完成：31
-- 进行中：0
+- 进行中：1
 - 受阻：0
-- 待开始：41
-- 当前任务：无（T0407 已完成）
-- 下一任务：T0408
+- 待开始：40
+- 当前任务：T0408
+- 下一任务：T0409
 - 最后更新：2026-07-17
 
 | 阶段 | 任务 | 状态 | 完成 PR | 完成日期 |
@@ -451,7 +451,7 @@ export interface ApprovalService {
 | 4 | T0405 | 已完成 | [#43](https://github.com/yangzuo0621/ctrl-zebra/pull/43) | 2026-07-17 |
 | 4 | T0406 | 已完成 | [#44](https://github.com/yangzuo0621/ctrl-zebra/pull/44) | 2026-07-17 |
 | 4 | T0407 | 已完成 | [#45](https://github.com/yangzuo0621/ctrl-zebra/pull/45) | 2026-07-17 |
-| 4 | T0408 | 待开始 | — | — |
+| 4 | T0408 | 进行中 | — | — |
 | 4 | T0409 | 待开始 | — | — |
 | 4 | T0410 | 待开始 | — | — |
 | 5 | T0501 | 待开始 | — | — |
