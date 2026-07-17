@@ -2,6 +2,7 @@ import {
   type SessionId,
   type SessionStatus,
   type ToolCall,
+  type ToolErrorCode,
   type ToolResult,
   toolResultSchema,
   type UserMessage,
@@ -21,19 +22,40 @@ export interface AgentTextDeltaEvent extends DomainEvent {
 
 export type AgentRuntimeEvent = AgentTextDeltaEvent | SessionStatusChangedEvent;
 
+export const defaultMaxToolSteps = 8;
+
+export interface AgentRuntimeOptions {
+  readonly maxToolSteps?: number;
+}
+
+export class MaxToolStepsExceededError extends Error {
+  constructor(readonly maxToolSteps: number) {
+    super(`Agent Runtime exceeded the maximum of ${maxToolSteps} Tool Call steps.`);
+    this.name = "MaxToolStepsExceededError";
+  }
+}
+
 export class AgentRuntime {
   readonly #modelGateway: ModelGateway;
   readonly #eventSink: EventSink<AgentRuntimeEvent>;
   readonly #toolRegistry: ToolRegistry;
+  readonly #maxToolSteps: number;
 
   constructor(
     modelGateway: ModelGateway,
     eventSink: EventSink<AgentRuntimeEvent>,
     toolRegistry: ToolRegistry = new ToolRegistry(),
+    options: AgentRuntimeOptions = {},
   ) {
+    const maxToolSteps = options.maxToolSteps ?? defaultMaxToolSteps;
+    if (!Number.isSafeInteger(maxToolSteps) || maxToolSteps < 1) {
+      throw new RangeError("maxToolSteps must be a positive safe integer.");
+    }
+
     this.#modelGateway = modelGateway;
     this.#eventSink = eventSink;
     this.#toolRegistry = toolRegistry;
+    this.#maxToolSteps = maxToolSteps;
   }
 
   async run(userMessage: UserMessage, signal: AbortSignal): Promise<void> {
@@ -44,19 +66,24 @@ export class AgentRuntime {
       signal.throwIfAborted();
       const messages: ModelMessage[] = [{ role: "user", content: userMessage.content }];
       session.transitionTo("streaming");
-      const toolCall = await this.#streamModel(messages, userMessage.sessionId, signal);
+      let toolSteps = 0;
 
-      if (toolCall !== undefined) {
+      while (true) {
+        const toolCall = await this.#streamModel(messages, userMessage.sessionId, signal);
+        if (toolCall === undefined) {
+          break;
+        }
+
+        if (toolSteps >= this.#maxToolSteps) {
+          throw new MaxToolStepsExceededError(this.#maxToolSteps);
+        }
+
         session.transitionTo("executing_tool");
         const toolResult = await this.#executeTool(toolCall, signal);
         messages.push({ role: "assistant", toolCall }, { role: "tool", result: toolResult });
+        toolSteps += 1;
         signal.throwIfAborted();
         session.transitionTo("streaming");
-
-        const additionalToolCall = await this.#streamModel(messages, userMessage.sessionId, signal);
-        if (additionalToolCall !== undefined) {
-          throw new Error("AgentRuntime supports only one Tool Call per run.");
-        }
       }
 
       signal.throwIfAborted();
@@ -123,7 +150,18 @@ export class AgentRuntime {
     }
 
     signal.throwIfAborted();
-    const output = await tool.execute(input, { signal });
+    let output: unknown;
+    try {
+      output = await tool.execute(input, { signal });
+    } catch {
+      signal.throwIfAborted();
+      return createToolErrorResult(
+        toolCall,
+        "failed",
+        `Tool "${toolCall.name}" failed during execution.`,
+      );
+    }
+
     signal.throwIfAborted();
     const result = toolResultSchema.safeParse({
       callId: toolCall.id,
@@ -147,7 +185,7 @@ export class AgentRuntime {
 
 function createToolErrorResult(
   toolCall: ToolCall,
-  code: "invalid-input" | "unknown-tool" | "invalid-output",
+  code: ToolErrorCode,
   message: string,
 ): ToolResult {
   return {

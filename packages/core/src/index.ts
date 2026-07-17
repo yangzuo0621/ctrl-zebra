@@ -23,8 +23,16 @@ export {
   toolRiskSchema,
   toolSuccessResultSchema,
 } from "@ctrl-zebra/protocol";
-export type { AgentRuntimeEvent, AgentTextDeltaEvent } from "./agent-runtime.js";
-export { AgentRuntime } from "./agent-runtime.js";
+export type {
+  AgentRuntimeEvent,
+  AgentRuntimeOptions,
+  AgentTextDeltaEvent,
+} from "./agent-runtime.js";
+export {
+  AgentRuntime,
+  defaultMaxToolSteps,
+  MaxToolStepsExceededError,
+} from "./agent-runtime.js";
 export type { DomainEvent, EventSink } from "./events.js";
 export type {
   FinishReason,
