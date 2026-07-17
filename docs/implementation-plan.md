@@ -58,7 +58,7 @@
 | Webview 状态 | Zustand |
 | 样式 | CSS Modules + VS Code CSS Variables |
 | 运行时校验 | Zod |
-| 模型标准化层 | Vercel AI SDK 6，外包一层自有接口 |
+| 模型标准化层 | Vercel AI SDK 7，外包一层自有接口 |
 | 单元测试 | Vitest |
 | UI 测试 | Testing Library + jsdom |
 | Extension 集成测试 | `@vscode/test-electron` |
@@ -409,13 +409,13 @@ export interface ApprovalService {
 
 **进度摘要**：
 
-- 总任务：71
+- 总任务：72
 - 已完成：23
-- 进行中：0
+- 进行中：1
 - 受阻：0
 - 待开始：48
-- 当前任务：无
-- 下一任务：T0401
+- 当前任务：T0310
+- 下一任务：T0401（T0310 完成后）
 - 最后更新：2026-07-17
 
 | 阶段 | 任务 | 状态 | 完成 PR | 完成日期 |
@@ -443,6 +443,7 @@ export interface ApprovalService {
 | 3 | T0307 | 已完成 | [#30](https://github.com/yangzuo0621/ctrl-zebra/pull/30) | 2026-07-17 |
 | 3 | T0308 | 已完成 | [#31](https://github.com/yangzuo0621/ctrl-zebra/pull/31) | 2026-07-17 |
 | 3 | T0309 | 已完成 | [#32](https://github.com/yangzuo0621/ctrl-zebra/pull/32) | 2026-07-17 |
+| 3 | T0310 | 进行中 | — | — |
 | 4 | T0401 | 待开始 | — | — |
 | 4 | T0402 | 待开始 | — | — |
 | 4 | T0403 | 待开始 | — | — |
@@ -708,8 +709,21 @@ export interface ApprovalService {
 
 **不包含**：针对每个兼容服务实现供应商专用能力或保证其未声明能力与 OpenAI 完全一致。
 
+### T0310：升级 Vercel AI SDK 7
+
+**目标**：将模型标准化层从 Vercel AI SDK 6 升级到稳定的 AI SDK 7，并保持 Core 拥有的 `ModelGateway` 公共契约及 Provider 隔离边界不变。
+
+**前置条件**：T0304、T0308 和 T0309 已完成；仓库继续使用 Node.js 24 和 ESM，满足 AI SDK 7 的 Node.js 22 及以上版本和 ESM-only 要求。
+
+**产物**：将 `ai`、`@ai-sdk/openai`、`@ai-sdk/google` 和 `@ai-sdk/openai-compatible` 升级到相互兼容的稳定主版本并提交 pnpm lockfile；按照官方迁移指南将 `fullStream` 迁移为 `stream`，适配 AI SDK 7 的流事件、Usage、Finish Reason、Tool Call 和错误类型，同时确保第三方 SDK 类型不泄漏到 Core、Extension、持久化或 Webview 协议。
+
+**测试**：三个 Provider Adapter 的 mock 测试覆盖文本增量、Usage、Finish、稳定错误映射和取消；覆盖 AI SDK 7 流事件中的正常路径、重要边界和预期失败；运行受影响包及仓库既有的 check、typecheck、test 和 build，默认测试不访问网络。
+
+**不包含**：新增 Provider、改变 Provider 配置或 Secret 契约、实现 T0401 之后的 Tool Registry/Tool Loop、引入 AI SDK UI/Agent 抽象，或让 Core 直接依赖 AI SDK 类型。
+
 ### 阶段 3 门禁
 
+- T0310 完成，三个 Provider Adapter 使用稳定且相互兼容的 AI SDK 7 包，并保持供应商无关的 `ModelGateway` 边界。
 - 插件可以选择已有的 OpenAI Provider、新增的 Gemini 专用 Provider 或 OpenAI 兼容端点，缺失配置时给出明确提示。
 - 使用当前可用凭据和端点，Gemini 与 OpenAI-Compatible 分别完成一次无工具的真实流式对话；OpenAI 的真实烟雾测试在提供有效 OpenAI API Key 时执行。
 - 未声明或不受支持的 Provider 能力在发起请求前被明确拒绝。
@@ -719,6 +733,8 @@ export interface ApprovalService {
 ---
 
 ## 阶段 4：只读工具循环
+
+这一阶段必须在 T0310 完成且 AI SDK 7 Provider 边界通过回归验证后开始。
 
 ### T0401：定义 Tool Call 和 Tool Result
 
