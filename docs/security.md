@@ -63,6 +63,39 @@ This document defines the Webview security constraints established before T0104.
   model loop, or approve their own operation. Keeping control flow in Core prevents model-selected
   tool code from bypassing policy and state-machine invariants.
 
+## Workspace Tool Scope
+
+- A workspace tool operates relative to exactly one Extension-selected workspace folder. In a
+  multi-root window, the other roots are outside that operation's scope until the user explicitly
+  selects one of them. The model, Webview, persisted state, and tool arguments cannot broaden or
+  replace the selected root.
+- The Extension workspace adapter retains `vscode.Uri` values through scope validation. It compares
+  scheme, authority, and decoded URI path segments; it does not compare `fsPath` strings or use
+  string-prefix containment. Query strings and fragments are invalid for filesystem tool targets.
+- Tool-supplied paths are untrusted. After URI parsing and before normalization, the adapter rejects
+  `..` segments, backslashes, non-absolute URI paths, and other ambiguous path forms. Normalization
+  must not silently turn an escaping input into an accepted descendant.
+- Scheme and authority must match the selected root. URI schemes and host authorities are compared
+  case-insensitively. On Windows, drive letters and path segments are compared case-insensitively;
+  a different drive is outside scope. UNC targets must retain the exact selected server authority
+  and share path; another server or share is outside scope.
+- Lexical containment is checked before filesystem canonicalization so an obvious outside target is
+  rejected without probing it. The selected root and candidate are then canonicalized by the
+  host-owned adapter, following symbolic links, junctions, and equivalent aliases, and containment
+  is checked again by URI path segments. A descendant whose canonical target leaves the selected
+  root is rejected. The operation must use the validated canonical target or revalidate immediately
+  before access so a path swap cannot bypass the decision.
+- Filesystem providers that cannot provide a trustworthy canonical identity must reject the access;
+  they must not fall back to lexical-only acceptance. Canonicalization failures use a safe stable
+  error and do not reveal the outside target or host exception.
+- `read_file` and `search_files` accept text only. Binary detection occurs before returning content;
+  a NUL byte, invalid required text decoding, or another positive binary classification is rejected
+  with a structured error. Binary bytes are never lossy-decoded into model context.
+- Directory enumeration, file reads, and search collect into bounded buffers and stop at their
+  tool-specific count or byte limit. The serialized Tool Result remains subject to the global
+  1,048,576-byte UTF-8 ceiling, and successful truncation keeps its marker through later context
+  budgeting. Cancellation stops traversal, reads, canonicalization, and output production.
+
 ## API Key Secret Storage
 
 - The OpenAI API key is stored under the stable, Extension-owned name

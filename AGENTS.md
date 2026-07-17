@@ -154,6 +154,14 @@ Extension lifecycle red lines:
 
 - Treat Webview input, model output, tool arguments, and persisted data as untrusted.
 - Normalize workspace paths and verify that they remain inside the explicitly selected workspace scope.
+- Keep workspace targets as URIs through the Extension adapter. Reject dot-segment and backslash
+  escapes, require matching scheme and authority, compare containment by path segments rather than
+  string prefixes, and treat unselected roots in a multi-root window as outside scope.
+- Canonicalize both the selected root and target through a host-owned, symlink-aware operation and
+  re-check containment before access. If canonical identity cannot be established, reject the
+  operation; never fall back to lexical-only containment.
+- Reject binary content before returning workspace text, and enforce bounded collection plus the
+  global serialized Tool Result limit without first constructing unbounded output.
 - Apply explicit limits to file reads, search results, model context, logs, and command output.
 - File writes and command execution must never bypass approval policy.
 - Bind approval to the exact operation. Invalidate prior approval when the file or operation changes.
