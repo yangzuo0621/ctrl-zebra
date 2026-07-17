@@ -409,13 +409,13 @@ export interface ApprovalService {
 
 **进度摘要**：
 
-- 总任务：72
+- 总任务：73
 - 已完成：34
 - 进行中：0
 - 受阻：0
-- 待开始：38
+- 待开始：39
 - 当前任务：无（T0410 已完成）
-- 下一任务：T0501
+- 下一任务：T0411
 - 最后更新：2026-07-17
 
 | 阶段 | 任务 | 状态 | 完成 PR | 完成日期 |
@@ -454,6 +454,7 @@ export interface ApprovalService {
 | 4 | T0408 | 已完成 | [#46](https://github.com/yangzuo0621/ctrl-zebra/pull/46) | 2026-07-17 |
 | 4 | T0409 | 已完成 | [#47](https://github.com/yangzuo0621/ctrl-zebra/pull/47) | 2026-07-17 |
 | 4 | T0410 | 已完成 | [#48](https://github.com/yangzuo0621/ctrl-zebra/pull/48) | 2026-07-17 |
+| 4 | T0411 | 待开始 | — | — |
 | 5 | T0501 | 待开始 | — | — |
 | 5 | T0502 | 待开始 | — | — |
 | 5 | T0503 | 待开始 | — | — |
@@ -802,8 +803,21 @@ export interface ApprovalService {
 
 **测试**：组件覆盖 pending、running、success、error。
 
+### T0411：打通只读工具的真实模型调用路径
+
+**目标**：在 Extension 组合层注册 `list_files`、`read_file` 和 `search_files`，通过供应商无关的 Core 契约向模型声明可用工具，使真实 Provider 可以发起 Tool Call，并由现有 Runtime 执行工具、回送 Tool Result 后继续模型循环。
+
+**前置条件**：T0404 至 T0410 已完成；现有 Workspace Scope、安全限制、Tool Registry、Tool Result 和 Tool Call UI 契约保持有效。
+
+**产物**：Core 拥有 JSON 可序列化的供应商无关工具声明契约，并从已注册工具为每次相关模型请求提供稳定名称、描述和输入 Schema；Provider Adapter 只负责将声明翻译为 AI SDK 7 的工具配置并继续规范化 Tool Call 事件，不在 Provider 内执行工具或作策略决定；Extension 以惰性、可释放且并发安全的方式组合 Workspace adapters、三个只读工具和 Runtime，不在激活或模块导入期间扫描工作区、访问网络或初始化模型客户端；工具生命周期继续通过既有协议送达 Webview。
+
+**测试**：Core 测试覆盖声明随模型请求进入单步及连续 Tool Call 循环；Provider mock 测试覆盖三个只读工具的声明映射、Tool Call 规范化、无工具请求、错误输入和取消，且默认测试不访问网络；Extension 集成测试验证三个工具均已注册、使用所选工作区适配器、重复初始化不会产生重复注册，并覆盖模型 Tool Call 到 Tool Result 回送及 UI 生命周期转发；在 Extension Development Host 中使用当前可用的已配置 Provider 完成一次只读工具真实调用烟雾测试。
+
+**不包含**：新增写入或命令工具、审批策略、Provider 内工具执行、新 Provider、绕过 Workspace Scope、改变现有工具名称或输入/结果含义、让第三方 SDK 类型泄漏到 Core 或协议，以及 T0501 之后的文件修改能力。
+
 ### 阶段 4 门禁
 
+- T0411 完成，真实 Extension 组合路径向模型声明并注册三个只读工具。
 - 模型可以通过只读工具了解工作区。
 - 任何工作区外读取都被拒绝。
 - 工具输出不会无限进入上下文。
