@@ -7,7 +7,7 @@ This document defines the continuous integration constraints established by T000
 - CI runs on a GitHub-hosted Ubuntu runner.
 - The Node.js major version is pinned to 24.
 - The root `package.json` `packageManager` field is the single source of truth for the pnpm version, currently `pnpm@11.11.0`.
-- The workflow runs for `push` and `pull_request` events.
+- The workflow runs for pushes to `main` and pull requests whose target branch is `main`.
 - Only the latest run for the same workflow and branch or pull request remains active; a newer run cancels an unfinished older run.
 - Each job has a 15-minute `timeout-minutes` limit. A timeout is reported as a failure and must not be hidden by increasing the limit arbitrarily.
 
