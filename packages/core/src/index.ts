@@ -43,3 +43,5 @@ export {
   InvalidSessionStatusTransitionError,
   SessionStateMachine,
 } from "./session-state-machine.js";
+export type { AgentTool, ToolExecutionContext } from "./tool-registry.js";
+export { DuplicateToolRegistrationError, ToolRegistry } from "./tool-registry.js";
