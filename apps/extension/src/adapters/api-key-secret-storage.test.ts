@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   ApiKeySecretStorageError,
   type ApiKeySecretStorageOperation,
+  apiKeySecretNames,
   createOpenAIApiKeySecretStorage,
+  createProviderApiKeySecretReader,
   openAIApiKeySecretName,
 } from "./api-key-secret-storage.js";
 
@@ -83,6 +85,31 @@ describe("OpenAI API key SecretStorage adapter", () => {
 
     expect(error).toBeInstanceOf(ApiKeySecretStorageError);
     expect(error).toMatchObject({ operation });
+    expect(String(error)).not.toContain("test-openai-api-key");
+  });
+});
+
+describe("Provider API key SecretStorage reader", () => {
+  it.each([
+    ["openai", "test-openai-api-key"],
+    ["gemini", "test-gemini-api-key"],
+    ["openai-compatible", "test-compatible-api-key"],
+  ] as const)("reads the %s API key from its Extension-owned name", async (provider, apiKey) => {
+    const backend = new InMemorySecretStorage();
+    backend.values.set(apiKeySecretNames[provider], apiKey);
+
+    await expect(createProviderApiKeySecretReader(backend).read(provider)).resolves.toBe(apiKey);
+  });
+
+  it("maps read failures without exposing the backend error", async () => {
+    const backend = new InMemorySecretStorage();
+    backend.failure = "read";
+
+    const error = await createProviderApiKeySecretReader(backend)
+      .read("gemini")
+      .catch((failure: unknown) => failure);
+
+    expect(error).toBeInstanceOf(ApiKeySecretStorageError);
     expect(String(error)).not.toContain("test-openai-api-key");
   });
 });

@@ -25,10 +25,15 @@ import {
 export interface OpenAIModelGatewayOptions {
   readonly apiKey: string;
   readonly modelId: string;
+  readonly baseURL?: string;
 }
 
 export function createOpenAIModelGateway(options: OpenAIModelGatewayOptions): ModelGateway {
-  const provider = createOpenAI({ apiKey: options.apiKey });
+  const provider = createOpenAI({
+    apiKey: options.apiKey,
+    baseURL: options.baseURL,
+    fetch: noRedirectFetch,
+  });
   const model = provider(options.modelId);
 
   return {
@@ -67,6 +72,8 @@ export function createOpenAIModelGateway(options: OpenAIModelGatewayOptions): Mo
     },
   };
 }
+
+const noRedirectFetch: typeof fetch = (input, init) => fetch(input, { ...init, redirect: "error" });
 
 function toSdkMessages(messages: readonly ModelMessage[]) {
   return messages.map(({ role, content }) => ({ role, content }));

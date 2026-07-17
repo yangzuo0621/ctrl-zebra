@@ -26,6 +26,9 @@ importers:
       '@ctrl-zebra/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
+      '@ctrl-zebra/providers':
+        specifier: workspace:*
+        version: link:../../packages/providers
     devDependencies:
       '@types/node':
         specifier: 24.13.3

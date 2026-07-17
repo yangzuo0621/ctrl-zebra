@@ -1,11 +1,7 @@
 import type { AgentRuntimeEvent, ModelGateway, ModelRequest } from "@ctrl-zebra/core";
 import { describe, expect, it } from "vitest";
 
-import {
-  createChatRunner,
-  createUnconfiguredChatRunner,
-  ModelProviderNotConfiguredError,
-} from "./chat-runner.js";
+import { createChatRunner, createSelectingChatRunner } from "./chat-runner.js";
 
 describe("createChatRunner", () => {
   it("runs the injected ModelGateway and emits ordered Agent Runtime events", async () => {
@@ -69,12 +65,41 @@ describe("createChatRunner", () => {
   });
 });
 
-describe("createUnconfiguredChatRunner", () => {
-  it("fails without selecting a concrete Provider", async () => {
-    const runner = createUnconfiguredChatRunner();
+describe("createSelectingChatRunner", () => {
+  it("selects a ModelGateway lazily for each run", async () => {
+    const gateway: ModelGateway = {
+      async *stream() {
+        yield { type: "finish", reason: "stop" };
+      },
+    };
+    let selections = 0;
+    const runner = createSelectingChatRunner({
+      selectModelGateway: async () => {
+        selections += 1;
+        return gateway;
+      },
+      createId: () => `id-${selections}`,
+    });
 
-    await expect(
-      runner.run("Hello", new AbortController().signal, () => {}),
-    ).rejects.toBeInstanceOf(ModelProviderNotConfiguredError);
+    expect(selections).toBe(0);
+    await runner.run("First", new AbortController().signal, () => {});
+    await runner.run("Second", new AbortController().signal, () => {});
+    expect(selections).toBe(2);
+  });
+
+  it("does not read configuration or Secrets when already cancelled", async () => {
+    let selected = false;
+    const cancellation = new Error("cancelled before Provider selection");
+    const controller = new AbortController();
+    controller.abort(cancellation);
+    const runner = createSelectingChatRunner({
+      selectModelGateway: async () => {
+        selected = true;
+        throw new Error("unexpected selection");
+      },
+    });
+
+    await expect(runner.run("Hello", controller.signal, () => {})).rejects.toBe(cancellation);
+    expect(selected).toBe(false);
   });
 });

@@ -70,7 +70,11 @@ describe("OpenAI ModelGateway", () => {
       { type: "usage", usage: { inputTokens: 4, outputTokens: 2, totalTokens: 6 } },
       { type: "finish", reason: "stop" },
     ]);
-    expect(sdkMocks.createOpenAI).toHaveBeenCalledWith({ apiKey: "test-key" });
+    expect(sdkMocks.createOpenAI).toHaveBeenCalledWith({
+      apiKey: "test-key",
+      baseURL: undefined,
+      fetch: expect.any(Function),
+    });
     expect(selectModel).toHaveBeenCalledWith("gpt-test");
     expect(sdkMocks.streamText).toHaveBeenCalledWith({
       abortSignal: signal,
@@ -78,6 +82,46 @@ describe("OpenAI ModelGateway", () => {
       messages: request.messages,
       model,
     });
+  });
+
+  it("passes a validated custom endpoint to the SDK provider", () => {
+    createOpenAIModelGateway({
+      apiKey: "test-key",
+      modelId: "gpt-test",
+      baseURL: "https://models.example.test/v1",
+    });
+
+    expect(sdkMocks.createOpenAI).toHaveBeenCalledWith({
+      apiKey: "test-key",
+      baseURL: "https://models.example.test/v1",
+      fetch: expect.any(Function),
+    });
+  });
+
+  it("rejects endpoint redirects while preserving request options", async () => {
+    createOpenAIModelGateway({ apiKey: "test-key", modelId: "gpt-test" });
+    const providerOptions = sdkMocks.createOpenAI.mock.calls[0]?.[0];
+    const providerFetch = providerOptions?.fetch;
+    const signal = new AbortController().signal;
+    const response = new Response(null, { status: 204 });
+    const fetchMock = vi.fn(async () => response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    try {
+      await expect(
+        providerFetch?.("https://models.example.test/v1", {
+          headers: { "x-test": "value" },
+          signal,
+        }),
+      ).resolves.toBe(response);
+      expect(fetchMock).toHaveBeenCalledWith("https://models.example.test/v1", {
+        headers: { "x-test": "value" },
+        signal,
+        redirect: "error",
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("preserves missing token counts and maps the SDK error finish reason", async () => {
