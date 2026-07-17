@@ -34,6 +34,9 @@ export type {
   ModelMessage,
   ModelMessageRole,
   ModelRequest,
+  ModelTextMessage,
+  ModelToolCallMessage,
+  ModelToolResultMessage,
   TokenUsage,
   ToolCall,
 } from "./model-gateway.js";

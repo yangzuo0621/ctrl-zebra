@@ -1,13 +1,25 @@
-import type { ToolCall } from "@ctrl-zebra/protocol";
+import type { ToolCall, ToolResult } from "@ctrl-zebra/protocol";
 
 export type { ToolCall } from "@ctrl-zebra/protocol";
 
 export type ModelMessageRole = "system" | "user" | "assistant";
 
-export interface ModelMessage {
+export interface ModelTextMessage {
   readonly role: ModelMessageRole;
   readonly content: string;
 }
+
+export interface ModelToolCallMessage {
+  readonly role: "assistant";
+  readonly toolCall: ToolCall;
+}
+
+export interface ModelToolResultMessage {
+  readonly role: "tool";
+  readonly result: ToolResult;
+}
+
+export type ModelMessage = ModelTextMessage | ModelToolCallMessage | ModelToolResultMessage;
 
 export interface ModelRequest {
   readonly messages: readonly ModelMessage[];

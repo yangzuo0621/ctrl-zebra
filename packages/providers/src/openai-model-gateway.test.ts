@@ -1,4 +1,4 @@
-import type { ModelEvent, ModelGatewayErrorCode } from "@ctrl-zebra/core";
+import type { ModelEvent, ModelGatewayErrorCode, ModelRequest } from "@ctrl-zebra/core";
 import { APICallError, InvalidResponseDataError, LoadAPIKeyError } from "ai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -80,6 +80,73 @@ describe("OpenAI ModelGateway", () => {
       abortSignal: signal,
       maxRetries: 0,
       messages: request.messages,
+      model,
+    });
+  });
+
+  it("maps Core Tool Call and Tool Result messages to AI SDK 7 model messages", async () => {
+    setStreamParts([{ type: "finish", finishReason: "stop", totalUsage: {} }]);
+    const toolRequest = {
+      messages: [
+        { role: "user", content: "List files." },
+        {
+          role: "assistant",
+          toolCall: { id: "call-1", name: "list_files", input: { path: "." } },
+        },
+        {
+          role: "tool",
+          result: {
+            callId: "call-1",
+            name: "list_files",
+            status: "success",
+            output: ["README.md"],
+            truncated: false,
+          },
+        },
+      ],
+    } as const satisfies ModelRequest;
+    const signal = new AbortController().signal;
+    const gateway = createOpenAIModelGateway({ apiKey: "test-key", modelId: "gpt-test" });
+
+    await collectEvents(gateway.stream(toolRequest, signal));
+
+    expect(sdkMocks.streamText).toHaveBeenCalledWith({
+      abortSignal: signal,
+      maxRetries: 0,
+      messages: [
+        { role: "user", content: "List files." },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool-call",
+              toolCallId: "call-1",
+              toolName: "list_files",
+              input: { path: "." },
+            },
+          ],
+        },
+        {
+          role: "tool",
+          content: [
+            {
+              type: "tool-result",
+              toolCallId: "call-1",
+              toolName: "list_files",
+              output: {
+                type: "json",
+                value: {
+                  callId: "call-1",
+                  name: "list_files",
+                  status: "success",
+                  output: ["README.md"],
+                  truncated: false,
+                },
+              },
+            },
+          ],
+        },
+      ],
       model,
     });
   });

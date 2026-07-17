@@ -1,12 +1,14 @@
 import type { UserMessage } from "@ctrl-zebra/protocol";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   AgentRuntime,
   type AgentRuntimeEvent,
+  type AgentTool,
   type ModelEvent,
   type ModelGateway,
   type ModelRequest,
+  ToolRegistry,
 } from "./index.js";
 
 const userMessage = {
@@ -66,6 +68,136 @@ describe("AgentRuntime", () => {
         messages: [{ role: "user", content: "Say hello." }],
       },
     ]);
+  });
+
+  it("executes one Tool Call and returns its structured result to the model", async () => {
+    const requests: ModelRequest[] = [];
+    const gateway = createScriptedModelGateway(
+      [
+        [
+          {
+            type: "tool.call",
+            call: { id: "call-1", name: "lookup_zebra", input: { query: "stripes" } },
+          },
+          { type: "finish", reason: "tool-calls" },
+        ],
+        [
+          { type: "text.delta", text: "Zebras have stripes." },
+          { type: "finish", reason: "stop" },
+        ],
+      ],
+      requests,
+    );
+    const execute = vi.fn(async (input: { query: string }) => ({
+      answer: `matched ${input.query}`,
+    }));
+    const tool = {
+      name: "lookup_zebra",
+      risk: "read",
+      parseInput(value) {
+        if (
+          typeof value !== "object" ||
+          value === null ||
+          !("query" in value) ||
+          typeof value.query !== "string"
+        ) {
+          throw new Error("invalid query");
+        }
+
+        return { query: value.query };
+      },
+      execute,
+    } satisfies AgentTool<{ query: string }, { answer: string }>;
+    const registry = new ToolRegistry();
+    registry.register(tool);
+    const events: AgentRuntimeEvent[] = [];
+    const runtime = new AgentRuntime(gateway, { emit: (event) => events.push(event) }, registry);
+
+    await runtime.run(userMessage, new AbortController().signal);
+
+    expect(execute).toHaveBeenCalledWith({ query: "stripes" }, { signal: expect.any(AbortSignal) });
+    expect(requests).toEqual([
+      { messages: [{ role: "user", content: "Say hello." }] },
+      {
+        messages: [
+          { role: "user", content: "Say hello." },
+          {
+            role: "assistant",
+            toolCall: {
+              id: "call-1",
+              name: "lookup_zebra",
+              input: { query: "stripes" },
+            },
+          },
+          {
+            role: "tool",
+            result: {
+              callId: "call-1",
+              name: "lookup_zebra",
+              status: "success",
+              output: { answer: "matched stripes" },
+              truncated: false,
+            },
+          },
+        ],
+      },
+    ]);
+    expect(events).toContainEqual({
+      type: "session.status-changed",
+      sessionId: "session-1",
+      previousStatus: "streaming",
+      status: "executing_tool",
+    });
+    expect(events).toContainEqual({
+      type: "session.status-changed",
+      sessionId: "session-1",
+      previousStatus: "executing_tool",
+      status: "streaming",
+    });
+    expect(events.at(-2)).toEqual({
+      type: "agent.text-delta",
+      sessionId: "session-1",
+      text: "Zebras have stripes.",
+    });
+    expect(events.at(-1)).toEqual({
+      type: "session.status-changed",
+      sessionId: "session-1",
+      previousStatus: "streaming",
+      status: "completed",
+    });
+  });
+
+  it("returns an unknown-tool result without executing a tool", async () => {
+    const requests: ModelRequest[] = [];
+    const gateway = createScriptedModelGateway(
+      [
+        [
+          {
+            type: "tool.call",
+            call: { id: "call-missing", name: "missing_tool", input: null },
+          },
+          { type: "finish", reason: "tool-calls" },
+        ],
+        [{ type: "finish", reason: "stop" }],
+      ],
+      requests,
+    );
+    const runtime = new AgentRuntime(gateway, { emit() {} });
+
+    await runtime.run(userMessage, new AbortController().signal);
+
+    expect(requests[1]?.messages.at(-1)).toEqual({
+      role: "tool",
+      result: {
+        callId: "call-missing",
+        name: "missing_tool",
+        status: "error",
+        error: {
+          code: "unknown-tool",
+          message: "Unknown tool: missing_tool.",
+        },
+      },
+    });
   });
 
   it("passes the caller's AbortSignal to the model", async () => {
@@ -203,6 +335,30 @@ function createModelGateway(
     async *stream(request, signal) {
       onRequest(request, signal);
       yield* events;
+    },
+  };
+}
+
+function createScriptedModelGateway(
+  steps: readonly (readonly ModelEvent[])[],
+  requests: ModelRequest[],
+): ModelGateway {
+  let nextStep = 0;
+
+  return {
+    async *stream(request, signal) {
+      requests.push(request);
+      const events = steps[nextStep];
+      nextStep += 1;
+
+      if (events === undefined) {
+        throw new Error("FakeModel has no scripted response for this request.");
+      }
+
+      for (const event of events) {
+        signal.throwIfAborted();
+        yield event;
+      }
     },
   };
 }
