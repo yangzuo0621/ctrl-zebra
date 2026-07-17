@@ -20,6 +20,9 @@ importers:
 
   apps/extension:
     dependencies:
+      '@ctrl-zebra/builtin-tools':
+        specifier: workspace:*
+        version: link:../../packages/builtin-tools
       '@ctrl-zebra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -83,7 +86,11 @@ importers:
         specifier: 8.1.4
         version: 8.1.4(@types/node@24.13.3)(esbuild@0.28.1)
 
-  packages/builtin-tools: {}
+  packages/builtin-tools:
+    dependencies:
+      '@ctrl-zebra/core':
+        specifier: workspace:*
+        version: link:../core
 
   packages/core:
     dependencies:

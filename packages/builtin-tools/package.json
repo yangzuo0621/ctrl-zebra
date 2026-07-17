@@ -2,5 +2,11 @@
   "name": "@ctrl-zebra/builtin-tools",
   "version": "0.0.0",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@ctrl-zebra/core": "workspace:*"
+  }
 }

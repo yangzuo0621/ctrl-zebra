@@ -33,7 +33,7 @@ function createReadFileTool(): AgentTool<ReadFileInput, string> {
         ? { path: value.path }
         : { path: value.path, startLine: value.startLine };
     },
-    execute: vi.fn(async ({ path }) => path),
+    execute: vi.fn(async ({ path }) => ({ output: path, truncated: false })),
   };
 }
 

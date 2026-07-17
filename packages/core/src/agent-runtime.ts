@@ -12,7 +12,7 @@ import type { DomainEvent, EventSink } from "./events.js";
 import type { ModelGateway, ModelMessage } from "./model-gateway.js";
 import { SessionStateMachine, type SessionStatusChangedEvent } from "./session-state-machine.js";
 import { InvalidToolInputError, parseToolInput } from "./tool-input-validation.js";
-import { ToolRegistry } from "./tool-registry.js";
+import { type ToolExecutionOutput, ToolRegistry } from "./tool-registry.js";
 
 export interface AgentTextDeltaEvent extends DomainEvent {
   readonly type: "agent.text-delta";
@@ -150,9 +150,9 @@ export class AgentRuntime {
     }
 
     signal.throwIfAborted();
-    let output: unknown;
+    let execution: ToolExecutionOutput<unknown>;
     try {
-      output = await tool.execute(input, { signal });
+      execution = await tool.execute(input, { signal });
     } catch {
       signal.throwIfAborted();
       return createToolErrorResult(
@@ -167,8 +167,8 @@ export class AgentRuntime {
       callId: toolCall.id,
       name: toolCall.name,
       status: "success",
-      output,
-      truncated: false,
+      output: execution.output,
+      truncated: execution.truncated,
     });
 
     if (!result.success) {

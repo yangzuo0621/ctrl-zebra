@@ -4,11 +4,16 @@ export interface ToolExecutionContext {
   readonly signal: AbortSignal;
 }
 
+export interface ToolExecutionOutput<Output> {
+  readonly output: Output;
+  readonly truncated: boolean;
+}
+
 export interface AgentTool<Input = unknown, Output = unknown> {
   readonly name: ToolName;
   readonly risk: ToolRisk;
   parseInput(value: unknown): Input;
-  execute(input: Input, context: ToolExecutionContext): Promise<Output>;
+  execute(input: Input, context: ToolExecutionContext): Promise<ToolExecutionOutput<Output>>;
 }
 
 export class DuplicateToolRegistrationError extends Error {

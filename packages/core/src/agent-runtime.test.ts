@@ -90,7 +90,8 @@ describe("AgentRuntime", () => {
       requests,
     );
     const execute = vi.fn(async (input: { query: string }) => ({
-      answer: `matched ${input.query}`,
+      output: { answer: `matched ${input.query}` },
+      truncated: false,
     }));
     const tool = {
       name: "lookup_zebra",
@@ -197,6 +198,41 @@ describe("AgentRuntime", () => {
           code: "unknown-tool",
           message: "Unknown tool: missing_tool.",
         },
+      },
+    });
+  });
+
+  it("preserves tool-provided truncation metadata in the Tool Result", async () => {
+    const requests: ModelRequest[] = [];
+    const gateway = createScriptedModelGateway(
+      [
+        [
+          { type: "tool.call", call: { id: "call-1", name: "limited_tool", input: null } },
+          { type: "finish", reason: "tool-calls" },
+        ],
+        [{ type: "finish", reason: "stop" }],
+      ],
+      requests,
+    );
+    const registry = new ToolRegistry();
+    registry.register({
+      name: "limited_tool",
+      risk: "read",
+      parseInput: () => null,
+      execute: async () => ({ output: ["first.txt"], truncated: true }),
+    });
+    const runtime = new AgentRuntime(gateway, { emit() {} }, registry);
+
+    await runtime.run(userMessage, new AbortController().signal);
+
+    expect(requests[1]?.messages.at(-1)).toEqual({
+      role: "tool",
+      result: {
+        callId: "call-1",
+        name: "limited_tool",
+        status: "success",
+        output: ["first.txt"],
+        truncated: true,
       },
     });
   });
@@ -348,7 +384,7 @@ describe("AgentRuntime", () => {
       ],
       [],
     );
-    const execute = vi.fn(async () => null);
+    const execute = vi.fn(async () => ({ output: null, truncated: false }));
     const registry = new ToolRegistry();
     registry.register({
       name: "step_tool",
@@ -597,7 +633,7 @@ function createNumberTool(name: "first_tool" | "second_tool", executionOrder: st
     },
     async execute(input: { value: number }) {
       executionOrder.push(`${name}:${input.value}`);
-      return { value: input.value };
+      return { output: { value: input.value }, truncated: false };
     },
   } satisfies AgentTool<{ value: number }, { value: number }>;
 }
