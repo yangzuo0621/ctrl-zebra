@@ -203,6 +203,20 @@ describe("OpenAI ModelGateway", () => {
     });
   });
 
+  it.each([
+    { toolCallId: "call-1", toolName: "ReadFile", input: {} },
+    { toolCallId: "call-1", toolName: "read_file", input: Number.NaN },
+  ])("rejects a malformed SDK Tool Call %#", async (call) => {
+    setStreamParts([{ type: "tool-call", ...call }]);
+    const gateway = createOpenAIModelGateway({ apiKey: "test-key", modelId: "gpt-test" });
+
+    await expect(
+      collectEvents(gateway.stream(request, new AbortController().signal)),
+    ).rejects.toMatchObject({
+      code: "malformed-response",
+    });
+  });
+
   it("forwards cancellation and emits no later events", async () => {
     setStreamParts([
       { type: "text-delta", id: "text-1", text: "before" },

@@ -43,3 +43,29 @@ export {
   sessionStatusSchema,
   sessionSummarySchema,
 } from "./session.js";
+export type {
+  JsonValue,
+  ToolCall,
+  ToolCallId,
+  ToolError,
+  ToolErrorCode,
+  ToolErrorResult,
+  ToolName,
+  ToolResult,
+  ToolRisk,
+  ToolSuccessResult,
+} from "./tool.js";
+export {
+  jsonValueSchema,
+  maxToolErrorMessageCharacters,
+  maxToolResultBytes,
+  toolCallIdSchema,
+  toolCallSchema,
+  toolErrorCodeSchema,
+  toolErrorResultSchema,
+  toolErrorSchema,
+  toolNameSchema,
+  toolResultSchema,
+  toolRiskSchema,
+  toolSuccessResultSchema,
+} from "./tool.js";

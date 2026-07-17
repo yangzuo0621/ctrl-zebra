@@ -1,3 +1,28 @@
+export type {
+  JsonValue,
+  ToolCallId,
+  ToolError,
+  ToolErrorCode,
+  ToolErrorResult,
+  ToolName,
+  ToolResult,
+  ToolRisk,
+  ToolSuccessResult,
+} from "@ctrl-zebra/protocol";
+export {
+  jsonValueSchema,
+  maxToolErrorMessageCharacters,
+  maxToolResultBytes,
+  toolCallIdSchema,
+  toolCallSchema,
+  toolErrorCodeSchema,
+  toolErrorResultSchema,
+  toolErrorSchema,
+  toolNameSchema,
+  toolResultSchema,
+  toolRiskSchema,
+  toolSuccessResultSchema,
+} from "@ctrl-zebra/protocol";
 export type { AgentRuntimeEvent, AgentTextDeltaEvent } from "./agent-runtime.js";
 export { AgentRuntime } from "./agent-runtime.js";
 export type { DomainEvent, EventSink } from "./events.js";
