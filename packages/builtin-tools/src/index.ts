@@ -28,3 +28,19 @@ export {
   readFileToolName,
   readFileUtf8LookaheadBytes,
 } from "./read-file.js";
+export type {
+  SearchFileMatch,
+  SearchFilesInput,
+  SearchFilesOutput,
+  SearchFilesWorkspace,
+} from "./search-files.js";
+export {
+  createSearchFilesTool,
+  defaultSearchFilesLimit,
+  InvalidWorkspaceSearchDataError,
+  maxSearchFileBytes,
+  maxSearchFilesLimit,
+  maxSearchFilesScanned,
+  maxSearchPreviewCharacters,
+  searchFilesToolName,
+} from "./search-files.js";
