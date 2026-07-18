@@ -4,7 +4,7 @@ import * as vscode from "vscode";
 import { createReadonlyToolRegistryProvider } from "../../controllers/readonly-tool-registry.js";
 
 export async function verifyReadonlyToolRegistration(): Promise<void> {
-  const root = vscode.Uri.file("C:\\ctrl-zebra-integration-workspace");
+  const root = vscode.Uri.from({ scheme: "file", path: "/ctrl-zebra-integration-workspace" });
   const target = vscode.Uri.joinPath(root, "README.md");
   let observedBaseUri: vscode.Uri | undefined;
   let workspaceChangeListener: (() => void) | undefined;
