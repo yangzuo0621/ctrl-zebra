@@ -1,6 +1,28 @@
 import type { AgentTool, ToolExecutionOutput } from "@ctrl-zebra/core";
 
 export const listFilesToolName = "list_files" as const;
+export const listFilesToolDescription =
+  "List files in the selected workspace that match a glob pattern.";
+export const listFilesInputSchema = {
+  type: "object",
+  properties: {
+    glob: {
+      type: "string",
+      description: "Workspace-relative glob pattern. Defaults to **/*.",
+      minLength: 1,
+      maxLength: 256,
+      pattern: "^(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$",
+    },
+    maxResults: {
+      type: "integer",
+      description: "Maximum number of files to return. Defaults to 100.",
+      minimum: 1,
+      maximum: 200,
+    },
+  },
+  required: [],
+  additionalProperties: false,
+} as const;
 export const defaultListFilesLimit = 100;
 export const maxListFilesLimit = 200;
 export const listFilesExcludeGlob = "**/{.git,node_modules,dist,build,coverage,.next,out}/**";
@@ -36,6 +58,8 @@ export function createListFilesTool(
 ): AgentTool<ListFilesInput, ListFilesOutput> {
   return {
     name: listFilesToolName,
+    description: listFilesToolDescription,
+    inputSchema: listFilesInputSchema,
     risk: "read",
     parseInput: parseListFilesInput,
     async execute(input, { signal }): Promise<ToolExecutionOutput<ListFilesOutput>> {

@@ -11,6 +11,24 @@ import {
 const encoder = new TextEncoder();
 
 describe("search_files", () => {
+  it("publishes its stable model declaration", () => {
+    const tool = createSearchFilesTool(createWorkspace({}));
+
+    expect({
+      name: tool.name,
+      description: tool.description,
+      inputSchema: tool.inputSchema,
+    }).toEqual({
+      name: "search_files",
+      description: "Search bounded UTF-8 workspace text and return matching file locations.",
+      inputSchema: expect.objectContaining({
+        type: "object",
+        required: ["query"],
+        additionalProperties: false,
+      }),
+    });
+  });
+
   it("returns no matches for text that is absent", async () => {
     const workspace = createWorkspace({ "a.txt": "alpha", "b.txt": "beta" });
     const tool = createSearchFilesTool(workspace);

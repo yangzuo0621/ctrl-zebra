@@ -8,6 +8,9 @@ import {
   type ModelMessage,
   type ModelRequest,
   type TokenUsage,
+  type ToolDeclaration,
+  type ToolInputPropertySchema,
+  type ToolInputSchema,
   type ToolResult,
   toolCallSchema,
 } from "@ctrl-zebra/core";
@@ -18,11 +21,14 @@ import {
   InvalidPromptError,
   InvalidResponseDataError,
   JSONParseError,
+  type JSONSchema7,
+  jsonSchema,
   type LanguageModel,
   LoadAPIKeyError,
   NoSuchModelError,
   streamText,
   type ToolResultPart,
+  type ToolSet,
   TypeValidationError,
 } from "ai";
 
@@ -35,11 +41,13 @@ export function createAISDKModelGateway(model: LanguageModel): ModelGateway {
       signal.throwIfAborted();
 
       try {
+        const tools = toSdkTools(request.tools);
         const result = streamText({
           abortSignal: signal,
           maxRetries: 0,
           messages: toSdkMessages(request.messages),
           model,
+          ...(tools === undefined ? {} : { tools }),
         });
 
         for await (const value of result.stream) {
@@ -64,6 +72,55 @@ export function createAISDKModelGateway(model: LanguageModel): ModelGateway {
         throw new ModelGatewayError(classifyProviderError(error));
       }
     },
+  };
+}
+
+function toSdkTools(declarations: readonly ToolDeclaration[] | undefined): ToolSet | undefined {
+  if (declarations === undefined || declarations.length === 0) {
+    return undefined;
+  }
+
+  return Object.fromEntries(
+    declarations.map((declaration) => [
+      declaration.name,
+      {
+        description: declaration.description,
+        inputSchema: jsonSchema(toSdkInputSchema(declaration.inputSchema)),
+      },
+    ]),
+  );
+}
+
+function toSdkInputSchema(schema: ToolInputSchema): JSONSchema7 {
+  return {
+    type: "object",
+    properties: Object.fromEntries(
+      Object.entries(schema.properties).map(([name, property]) => [
+        name,
+        toSdkInputProperty(property),
+      ]),
+    ),
+    required: [...schema.required],
+    additionalProperties: schema.additionalProperties,
+  };
+}
+
+function toSdkInputProperty(property: ToolInputPropertySchema): JSONSchema7 {
+  if (property.type === "string") {
+    return {
+      type: property.type,
+      description: property.description,
+      ...(property.minLength === undefined ? {} : { minLength: property.minLength }),
+      ...(property.maxLength === undefined ? {} : { maxLength: property.maxLength }),
+      ...(property.pattern === undefined ? {} : { pattern: property.pattern }),
+    };
+  }
+
+  return {
+    type: property.type,
+    description: property.description,
+    ...(property.minimum === undefined ? {} : { minimum: property.minimum }),
+    ...(property.maximum === undefined ? {} : { maximum: property.maximum }),
   };
 }
 

@@ -1,6 +1,32 @@
 import type { AgentTool, ToolExecutionOutput } from "@ctrl-zebra/core";
 
 export const readFileToolName = "read_file" as const;
+export const readFileToolDescription =
+  "Read a bounded UTF-8 text range from a file in the selected workspace.";
+export const readFileInputSchema = {
+  type: "object",
+  properties: {
+    path: {
+      type: "string",
+      description: "Workspace-relative file path using forward slashes.",
+      minLength: 1,
+      maxLength: 4_096,
+      pattern: "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*\\\\).+$",
+    },
+    startLine: {
+      type: "integer",
+      description: "One-based first line to read. Defaults to 1.",
+      minimum: 1,
+    },
+    endLine: {
+      type: "integer",
+      description: "Optional one-based inclusive last line.",
+      minimum: 1,
+    },
+  },
+  required: ["path"],
+  additionalProperties: false,
+} as const;
 export const maxReadFileContentBytes = 65_536;
 export const readFileUtf8LookaheadBytes = 4;
 
@@ -57,6 +83,8 @@ export function createReadFileTool(
 ): AgentTool<ReadFileInput, ReadFileOutput> {
   return {
     name: readFileToolName,
+    description: readFileToolDescription,
+    inputSchema: readFileInputSchema,
     risk: "read",
     parseInput: parseReadFileInput,
     async execute(input, { signal }): Promise<ToolExecutionOutput<ReadFileOutput>> {

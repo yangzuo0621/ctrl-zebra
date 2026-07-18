@@ -1,4 +1,4 @@
-import type { ToolCall, ToolResult } from "@ctrl-zebra/protocol";
+import type { ToolCall, ToolName, ToolResult } from "@ctrl-zebra/protocol";
 
 export type { ToolCall } from "@ctrl-zebra/protocol";
 
@@ -21,8 +21,37 @@ export interface ModelToolResultMessage {
 
 export type ModelMessage = ModelTextMessage | ModelToolCallMessage | ModelToolResultMessage;
 
+export type ToolInputPropertySchema =
+  | {
+      readonly type: "string";
+      readonly description: string;
+      readonly minLength?: number;
+      readonly maxLength?: number;
+      readonly pattern?: string;
+    }
+  | {
+      readonly type: "integer";
+      readonly description: string;
+      readonly minimum?: number;
+      readonly maximum?: number;
+    };
+
+export interface ToolInputSchema {
+  readonly type: "object";
+  readonly properties: Readonly<Record<string, ToolInputPropertySchema>>;
+  readonly required: readonly string[];
+  readonly additionalProperties: false;
+}
+
+export interface ToolDeclaration {
+  readonly name: ToolName;
+  readonly description: string;
+  readonly inputSchema: ToolInputSchema;
+}
+
 export interface ModelRequest {
   readonly messages: readonly ModelMessage[];
+  readonly tools?: readonly ToolDeclaration[];
 }
 
 export interface TokenUsage {

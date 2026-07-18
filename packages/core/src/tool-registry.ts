@@ -1,5 +1,7 @@
 import type { ToolName, ToolRisk } from "@ctrl-zebra/protocol";
 
+import type { ToolDeclaration, ToolInputSchema } from "./model-gateway.js";
+
 export interface ToolExecutionContext {
   readonly signal: AbortSignal;
 }
@@ -11,6 +13,8 @@ export interface ToolExecutionOutput<Output> {
 
 export interface AgentTool<Input = unknown, Output = unknown> {
   readonly name: ToolName;
+  readonly description: string;
+  readonly inputSchema: ToolInputSchema;
   readonly risk: ToolRisk;
   parseInput(value: unknown): Input;
   execute(input: Input, context: ToolExecutionContext): Promise<ToolExecutionOutput<Output>>;
@@ -36,5 +40,11 @@ export class ToolRegistry {
 
   get(name: ToolName): AgentTool | undefined {
     return this.#tools.get(name);
+  }
+
+  declarations(): readonly ToolDeclaration[] {
+    return [...this.#tools.values()]
+      .sort((left, right) => left.name.localeCompare(right.name, "en-US"))
+      .map(({ name, description, inputSchema }) => ({ name, description, inputSchema }));
   }
 }

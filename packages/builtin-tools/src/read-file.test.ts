@@ -14,6 +14,24 @@ import {
 const encoder = new TextEncoder();
 
 describe("read_file", () => {
+  it("publishes its stable model declaration", () => {
+    const tool = createReadFileTool(createWorkspace(bytes("")));
+
+    expect({
+      name: tool.name,
+      description: tool.description,
+      inputSchema: tool.inputSchema,
+    }).toEqual({
+      name: "read_file",
+      description: "Read a bounded UTF-8 text range from a file in the selected workspace.",
+      inputSchema: expect.objectContaining({
+        type: "object",
+        required: ["path"],
+        additionalProperties: false,
+      }),
+    });
+  });
+
   it("decodes UTF-8 and returns the requested inclusive line range", async () => {
     const workspace = createWorkspace(bytes("一\ntwo\n三"));
     const tool = createReadFileTool(workspace);

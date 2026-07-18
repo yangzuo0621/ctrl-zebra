@@ -8,6 +8,34 @@ import {
 import type { ReadFileBytes, ReadFileRequest, ReadFileWorkspace } from "./read-file.js";
 
 export const searchFilesToolName = "search_files" as const;
+export const searchFilesToolDescription =
+  "Search bounded UTF-8 workspace text and return matching file locations.";
+export const searchFilesInputSchema = {
+  type: "object",
+  properties: {
+    query: {
+      type: "string",
+      description: "Exact text to search for.",
+      minLength: 1,
+      maxLength: 256,
+    },
+    glob: {
+      type: "string",
+      description: "Workspace-relative glob pattern. Defaults to **/*.",
+      minLength: 1,
+      maxLength: 256,
+      pattern: "^(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$",
+    },
+    maxResults: {
+      type: "integer",
+      description: "Maximum number of matches to return. Defaults to 100.",
+      minimum: 1,
+      maximum: 200,
+    },
+  },
+  required: ["query"],
+  additionalProperties: false,
+} as const;
 export const defaultSearchFilesLimit = 100;
 export const maxSearchFilesLimit = 200;
 export const maxSearchFilesScanned = 1_000;
@@ -45,6 +73,8 @@ export function createSearchFilesTool(
 ): AgentTool<SearchFilesInput, SearchFilesOutput> {
   return {
     name: searchFilesToolName,
+    description: searchFilesToolDescription,
+    inputSchema: searchFilesInputSchema,
     risk: "read",
     parseInput: parseSearchFilesInput,
     async execute(input, { signal }): Promise<ToolExecutionOutput<SearchFilesOutput>> {
