@@ -1,5 +1,13 @@
 import type { AgentTool, ToolExecutionOutput } from "@ctrl-zebra/core";
 
+import {
+  decodeBoundedUtf8Prefix,
+  hasOnlyKeys,
+  isRecord,
+  isSafeForwardSlashPath,
+  parseBoundedBytes,
+} from "./boundary-validation.js";
+
 export const readFileToolName = "read_file" as const;
 export const readFileToolDescription =
   "Read a bounded UTF-8 text range from a file in the selected workspace.";
@@ -121,8 +129,7 @@ function parseReadFileInput(value: unknown): ReadFileInput {
     throw new TypeError("Expected read_file input to be an object.");
   }
 
-  const allowedKeys = new Set(["path", "startLine", "endLine"]);
-  if (Object.keys(value).some((key) => !allowedKeys.has(key))) {
+  if (!hasOnlyKeys(value, new Set(["path", "startLine", "endLine"]))) {
     throw new TypeError("Unexpected read_file input field.");
   }
 
@@ -130,12 +137,11 @@ function parseReadFileInput(value: unknown): ReadFileInput {
   const startLine = value.startLine ?? 1;
   const endLine = value.endLine;
   if (
-    typeof path !== "string" ||
-    path.length === 0 ||
-    path.length > 4_096 ||
-    path.startsWith("/") ||
-    path.includes("\\") ||
-    /(?:^|\/)\.{1,2}(?:\/|$)/u.test(path)
+    !isSafeForwardSlashPath(path, {
+      maxLength: 4_096,
+      allowLeadingSlash: false,
+      rejectCurrentSegments: true,
+    })
   ) {
     throw new TypeError("Invalid read_file path.");
   }
@@ -152,42 +158,21 @@ function parseReadFileInput(value: unknown): ReadFileInput {
 }
 
 function parseReadFileBytes(value: unknown): ReadFileBytes {
-  if (
-    !isRecord(value) ||
-    !(value.bytes instanceof Uint8Array) ||
-    typeof value.truncated !== "boolean" ||
-    Object.keys(value).some((key) => key !== "bytes" && key !== "truncated")
-  ) {
-    throw new InvalidWorkspaceFileReadError();
-  }
-
-  return { bytes: value.bytes, truncated: value.truncated };
+  return parseBoundedBytes(value, () => new InvalidWorkspaceFileReadError(), {
+    allowAdditionalProperties: false,
+  });
 }
 
 function decodeUtf8Prefix(source: ReadFileBytes): {
   readonly text: string;
   readonly truncated: boolean;
 } {
-  const exceedsContentLimit = source.bytes.byteLength > maxReadFileContentBytes;
-  const candidate = source.bytes.subarray(0, maxReadFileContentBytes);
-  if (candidate.includes(0)) {
+  const decoded = decodeBoundedUtf8Prefix(source, maxReadFileContentBytes);
+  if (decoded === undefined) {
     throw new BinaryFileError();
   }
 
-  const mayEndMidCharacter = source.truncated || exceedsContentLimit;
-  const maxTrim = mayEndMidCharacter ? Math.min(3, candidate.byteLength) : 0;
-  for (let trim = 0; trim <= maxTrim; trim += 1) {
-    try {
-      const text = new TextDecoder("utf-8", { fatal: true }).decode(
-        candidate.subarray(0, candidate.byteLength - trim),
-      );
-      return { text, truncated: mayEndMidCharacter || trim > 0 };
-    } catch {
-      // Only an incomplete UTF-8 suffix may be removed from an already truncated prefix.
-    }
-  }
-
-  throw new BinaryFileError();
+  return decoded;
 }
 
 function selectLineRange(
@@ -223,8 +208,4 @@ function selectLineRange(
 
 function isPositiveLineNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 1;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

@@ -1,6 +1,14 @@
 import type { AgentTool, ToolExecutionOutput } from "@ctrl-zebra/core";
 
 import {
+  decodeBoundedUtf8Prefix,
+  hasOnlyKeys,
+  isRecord,
+  isSafeForwardSlashPath,
+  parseBoundedBytes,
+  parseWorkspaceFilePaths,
+} from "./boundary-validation.js";
+import {
   type ListFilesRequest,
   type ListFilesWorkspace,
   listFilesExcludeGlob,
@@ -116,8 +124,7 @@ function parseSearchFilesInput(value: unknown): SearchFilesInput {
     throw new TypeError("Expected search_files input to be an object.");
   }
 
-  const allowedKeys = new Set(["query", "glob", "maxResults"]);
-  if (Object.keys(value).some((key) => !allowedKeys.has(key))) {
+  if (!hasOnlyKeys(value, new Set(["query", "glob", "maxResults"]))) {
     throw new TypeError("Unexpected search_files input field.");
   }
 
@@ -134,11 +141,11 @@ function parseSearchFilesInput(value: unknown): SearchFilesInput {
   }
 
   if (
-    typeof glob !== "string" ||
-    glob.length === 0 ||
-    glob.length > 256 ||
-    glob.includes("\\") ||
-    /(?:^|\/)\.\.(?:\/|$)/u.test(glob)
+    !isSafeForwardSlashPath(glob, {
+      maxLength: 256,
+      allowLeadingSlash: true,
+      rejectCurrentSegments: false,
+    })
   ) {
     throw new TypeError("Invalid search_files glob.");
   }
@@ -168,65 +175,19 @@ function createReadRequest(path: string): ReadFileRequest {
 }
 
 function parseFilePaths(value: unknown): readonly string[] {
-  if (!Array.isArray(value)) {
-    throw new InvalidWorkspaceSearchDataError();
-  }
-
-  const paths = value.map((path) => {
-    if (
-      typeof path !== "string" ||
-      path.length === 0 ||
-      path.length > 4_096 ||
-      path.startsWith("/") ||
-      path.includes("\\") ||
-      /(?:^|\/)\.{1,2}(?:\/|$)/u.test(path)
-    ) {
-      throw new InvalidWorkspaceSearchDataError();
-    }
-
-    return path;
-  });
-
-  return [...new Set(paths)].sort((left, right) => left.localeCompare(right, "en-US"));
+  return parseWorkspaceFilePaths(value, () => new InvalidWorkspaceSearchDataError());
 }
 
 function parseReadBytes(value: unknown): ReadFileBytes {
-  if (
-    !isRecord(value) ||
-    !(value.bytes instanceof Uint8Array) ||
-    typeof value.truncated !== "boolean"
-  ) {
-    throw new InvalidWorkspaceSearchDataError();
-  }
-
-  return { bytes: value.bytes, truncated: value.truncated };
+  return parseBoundedBytes(value, () => new InvalidWorkspaceSearchDataError(), {
+    allowAdditionalProperties: true,
+  });
 }
 
 function decodeSearchText(
   source: ReadFileBytes,
 ): { readonly text: string; readonly truncated: boolean } | undefined {
-  const exceedsLimit = source.bytes.byteLength > maxSearchFileBytes;
-  const candidate = source.bytes.subarray(0, maxSearchFileBytes);
-  if (candidate.includes(0)) {
-    return undefined;
-  }
-
-  const truncated = source.truncated || exceedsLimit;
-  const maxTrim = truncated ? Math.min(3, candidate.byteLength) : 0;
-  for (let trim = 0; trim <= maxTrim; trim += 1) {
-    try {
-      return {
-        text: new TextDecoder("utf-8", { fatal: true }).decode(
-          candidate.subarray(0, candidate.byteLength - trim),
-        ),
-        truncated: truncated || trim > 0,
-      };
-    } catch {
-      // Binary or invalid UTF-8 files are excluded from workspace text search.
-    }
-  }
-
-  return undefined;
+  return decodeBoundedUtf8Prefix(source, maxSearchFileBytes);
 }
 
 function collectMatches(
@@ -261,8 +222,4 @@ function collectMatches(
 function createPreview(line: string, columnIndex: number): string {
   const start = Math.max(0, columnIndex - Math.floor(maxSearchPreviewCharacters / 3));
   return line.slice(start, start + maxSearchPreviewCharacters);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
