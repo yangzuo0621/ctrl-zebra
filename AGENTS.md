@@ -165,6 +165,14 @@ Extension lifecycle red lines:
 - Apply explicit limits to file reads, search results, model context, logs, and command output.
 - File writes and command execution must never bypass approval policy.
 - Bind approval to the exact operation. Invalidate prior approval when the file or operation changes.
+- Approval requests are host-created from trusted tool definitions and validated input. Model or
+  Webview input cannot assign risk, broaden scope, extend expiration, or replace the bound operation.
+- Approval is single-use. Only an unexpired, unmodified `approved` request may be atomically consumed
+  once for its exact operation; retries require a new request.
+- Denied, cancelled, expired, invalidated, and consumed approvals are terminal. Reject duplicate,
+  late, conflicting, or unknown responses without changing state or producing side effects.
+- The Approval UI must render the same immutable operation that execution consumes, including its
+  material targets, effects, risk, and expiry. Hidden or changed effects invalidate the request.
 - Store API keys only in VS Code `SecretStorage`. They must not enter Webview state, logs, persisted messages, snapshots, fixtures, or commits.
 - Redact logs. Never log authorization headers or user secrets.
 - Disable file writes and command execution in untrusted workspaces.
