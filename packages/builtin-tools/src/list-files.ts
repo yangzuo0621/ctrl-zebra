@@ -1,5 +1,12 @@
 import type { AgentTool, ToolExecutionOutput } from "@ctrl-zebra/core";
 
+import {
+  hasOnlyKeys,
+  isRecord,
+  isSafeForwardSlashPath,
+  parseWorkspaceFilePaths,
+} from "./boundary-validation.js";
+
 export const listFilesToolName = "list_files" as const;
 export const listFilesToolDescription =
   "List files in the selected workspace that match a glob pattern.";
@@ -89,19 +96,18 @@ function parseListFilesInput(value: unknown): ListFilesInput {
     throw new TypeError("Expected list_files input to be an object.");
   }
 
-  const allowedKeys = new Set(["glob", "maxResults"]);
-  if (Object.keys(value).some((key) => !allowedKeys.has(key))) {
+  if (!hasOnlyKeys(value, new Set(["glob", "maxResults"]))) {
     throw new TypeError("Unexpected list_files input field.");
   }
 
   const glob = value.glob ?? "**/*";
   const maxResults = value.maxResults ?? defaultListFilesLimit;
   if (
-    typeof glob !== "string" ||
-    glob.length === 0 ||
-    glob.length > 256 ||
-    glob.includes("\\") ||
-    /(?:^|\/)\.\.(?:\/|$)/u.test(glob)
+    !isSafeForwardSlashPath(glob, {
+      maxLength: 256,
+      allowLeadingSlash: true,
+      rejectCurrentSegments: false,
+    })
   ) {
     throw new TypeError("Invalid list_files glob.");
   }
@@ -119,28 +125,5 @@ function parseListFilesInput(value: unknown): ListFilesInput {
 }
 
 function parseWorkspaceFileList(value: unknown): readonly string[] {
-  if (!Array.isArray(value)) {
-    throw new InvalidWorkspaceFileListError();
-  }
-
-  const files = value.map((path) => {
-    if (
-      typeof path !== "string" ||
-      path.length === 0 ||
-      path.length > 4_096 ||
-      path.startsWith("/") ||
-      path.includes("\\") ||
-      /(?:^|\/)\.{1,2}(?:\/|$)/u.test(path)
-    ) {
-      throw new InvalidWorkspaceFileListError();
-    }
-
-    return path;
-  });
-
-  return [...new Set(files)].sort((left, right) => left.localeCompare(right, "en-US"));
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  return parseWorkspaceFilePaths(value, () => new InvalidWorkspaceFileListError());
 }
