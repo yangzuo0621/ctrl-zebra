@@ -1,4 +1,12 @@
 export type {
+  ApprovalDecision,
+  ApprovalPresentation,
+  ApprovalRequest,
+  ApprovalRequestId,
+  ApprovalResource,
+  ApprovalResourceRevision,
+  ApprovalScope,
+  ApprovalStatus,
   JsonValue,
   ToolCallId,
   ToolError,
@@ -10,7 +18,19 @@ export type {
   ToolSuccessResult,
 } from "@ctrl-zebra/protocol";
 export {
+  approvalDecisionSchema,
+  approvalPresentationSchema,
+  approvalRequestIdSchema,
+  approvalRequestSchema,
+  approvalResourceRevisionSchema,
+  approvalResourceSchema,
+  approvalScopeSchema,
+  approvalStatusSchema,
   jsonValueSchema,
+  maxApprovalPresentationSummaryCharacters,
+  maxApprovalPresentationTitleCharacters,
+  maxApprovalResources,
+  maxApprovalUriCharacters,
   maxToolErrorMessageCharacters,
   maxToolResultBytes,
   toolCallIdSchema,
@@ -34,6 +54,11 @@ export {
   defaultMaxToolSteps,
   MaxToolStepsExceededError,
 } from "./agent-runtime.js";
+export type { ApprovalStatusChangedEvent } from "./approval-state-machine.js";
+export {
+  ApprovalStateMachine,
+  InvalidApprovalStatusTransitionError,
+} from "./approval-state-machine.js";
 export type { DomainEvent, EventSink } from "./events.js";
 export type {
   FinishReason,
