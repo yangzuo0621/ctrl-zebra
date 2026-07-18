@@ -1,4 +1,28 @@
 export type {
+  ApprovalDecision,
+  ApprovalPresentation,
+  ApprovalRequest,
+  ApprovalRequestId,
+  ApprovalResource,
+  ApprovalResourceRevision,
+  ApprovalScope,
+  ApprovalStatus,
+} from "./approval.js";
+export {
+  approvalDecisionSchema,
+  approvalPresentationSchema,
+  approvalRequestIdSchema,
+  approvalRequestSchema,
+  approvalResourceRevisionSchema,
+  approvalResourceSchema,
+  approvalScopeSchema,
+  approvalStatusSchema,
+  maxApprovalPresentationSummaryCharacters,
+  maxApprovalPresentationTitleCharacters,
+  maxApprovalResources,
+  maxApprovalUriCharacters,
+} from "./approval.js";
+export type {
   AssistantMessage,
   ChatMessage,
   MessageId,
