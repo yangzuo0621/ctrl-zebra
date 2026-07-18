@@ -4,6 +4,15 @@ import { type AgentTool, DuplicateToolRegistrationError, ToolRegistry } from "./
 function createTool(name: string): AgentTool<string, { readonly value: string }> {
   return {
     name,
+    description: `Use ${name}.`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        value: { type: "string", description: "Input value." },
+      },
+      required: ["value"],
+      additionalProperties: false,
+    },
     risk: "read",
     parseInput(value: unknown): string {
       if (typeof value !== "string") {
@@ -58,5 +67,34 @@ describe("ToolRegistry", () => {
     const registry = new ToolRegistry();
 
     expect(registry.get("missing_tool")).toBeUndefined();
+  });
+
+  it("returns stable declarations sorted by tool name without execution capabilities", () => {
+    const registry = new ToolRegistry();
+    registry.register(createTool("search_files"));
+    registry.register(createTool("read_file"));
+
+    expect(registry.declarations()).toEqual([
+      {
+        name: "read_file",
+        description: "Use read_file.",
+        inputSchema: {
+          type: "object",
+          properties: { value: { type: "string", description: "Input value." } },
+          required: ["value"],
+          additionalProperties: false,
+        },
+      },
+      {
+        name: "search_files",
+        description: "Use search_files.",
+        inputSchema: {
+          type: "object",
+          properties: { value: { type: "string", description: "Input value." } },
+          required: ["value"],
+          additionalProperties: false,
+        },
+      },
+    ]);
   });
 });

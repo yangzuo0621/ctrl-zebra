@@ -48,6 +48,9 @@ export type {
   ModelToolResultMessage,
   TokenUsage,
   ToolCall,
+  ToolDeclaration,
+  ToolInputPropertySchema,
+  ToolInputSchema,
 } from "./model-gateway.js";
 export { ModelGatewayError } from "./model-gateway.js";
 export type { SessionStatusChangedEvent } from "./session-state-machine.js";

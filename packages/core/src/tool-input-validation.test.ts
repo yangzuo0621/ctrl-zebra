@@ -10,6 +10,13 @@ interface ReadFileInput {
 function createReadFileTool(): AgentTool<ReadFileInput, string> {
   return {
     name: "read_file",
+    description: "Read a file.",
+    inputSchema: {
+      type: "object",
+      properties: { path: { type: "string", description: "File path." } },
+      required: ["path"],
+      additionalProperties: false,
+    },
     risk: "read",
     parseInput(value: unknown): ReadFileInput {
       if (!isPlainObject(value)) {

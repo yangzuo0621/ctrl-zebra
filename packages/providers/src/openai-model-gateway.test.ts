@@ -22,6 +22,8 @@ const request = {
   ],
 } as const;
 
+const readonlyToolsRequest = createReadonlyToolsRequest();
+
 describe("OpenAI ModelGateway", () => {
   const model = { modelId: "test-model" };
   const selectModel = vi.fn(() => model);
@@ -149,6 +151,15 @@ describe("OpenAI ModelGateway", () => {
       ],
       model,
     });
+  });
+
+  it("maps all read-only declarations to non-executable AI SDK tools", async () => {
+    setStreamParts([{ type: "finish", finishReason: "stop", totalUsage: {} }]);
+    const gateway = createOpenAIModelGateway({ apiKey: "test-key", modelId: "gpt-test" });
+
+    await collectEvents(gateway.stream(readonlyToolsRequest, new AbortController().signal));
+
+    await expectMappedReadonlyTools(sdkMocks.streamText.mock.calls[0]?.[0]?.tools);
   });
 
   it("passes a validated custom endpoint to the SDK provider", () => {
@@ -337,4 +348,50 @@ async function collectEvents(events: AsyncIterable<ModelEvent>): Promise<ModelEv
   }
 
   return collected;
+}
+
+function createReadonlyToolsRequest(): ModelRequest {
+  return {
+    messages: request.messages,
+    tools: [
+      createToolDeclaration("list_files", "List workspace files.", "glob", false),
+      createToolDeclaration("read_file", "Read a workspace file.", "path", true),
+      createToolDeclaration("search_files", "Search workspace files.", "query", true),
+    ],
+  };
+}
+
+function createToolDeclaration(
+  name: "list_files" | "read_file" | "search_files",
+  description: string,
+  propertyName: string,
+  required: boolean,
+) {
+  return {
+    name,
+    description,
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        [propertyName]: { type: "string" as const, description: `${propertyName} input.` },
+      },
+      required: required ? [propertyName] : [],
+      additionalProperties: false as const,
+    },
+  };
+}
+
+async function expectMappedReadonlyTools(tools: Record<string, unknown>): Promise<void> {
+  expect(Object.keys(tools)).toEqual(["list_files", "read_file", "search_files"]);
+
+  for (const declaration of readonlyToolsRequest.tools ?? []) {
+    const sdkTool = tools[declaration.name] as {
+      readonly description: string;
+      readonly execute?: unknown;
+      readonly inputSchema: { readonly jsonSchema: unknown };
+    };
+    expect(sdkTool.description).toBe(declaration.description);
+    expect(sdkTool.execute).toBeUndefined();
+    expect(sdkTool.inputSchema.jsonSchema).toEqual(declaration.inputSchema);
+  }
 }

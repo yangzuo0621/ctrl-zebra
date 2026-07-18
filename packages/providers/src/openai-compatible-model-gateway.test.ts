@@ -1,4 +1,4 @@
-import type { ModelEvent, ModelGatewayErrorCode } from "@ctrl-zebra/core";
+import type { ModelEvent, ModelGatewayErrorCode, ModelRequest } from "@ctrl-zebra/core";
 import { APICallError, InvalidResponseDataError, LoadAPIKeyError } from "ai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -23,6 +23,8 @@ const request = {
     { role: "user", content: "Say hello." },
   ],
 } as const;
+
+const readonlyToolsRequest = createReadonlyToolsRequest();
 
 describe("OpenAI-Compatible ModelGateway", () => {
   const model = { modelId: "compatible-test-model" };
@@ -100,6 +102,15 @@ describe("OpenAI-Compatible ModelGateway", () => {
       name: "ctrl-zebra-openai-compatible",
     });
     expect(selectChatModel).toHaveBeenCalledWith("qwen3:0.6b");
+  });
+
+  it("maps all read-only declarations to non-executable AI SDK tools", async () => {
+    setStreamParts([{ type: "finish", finishReason: "stop", totalUsage: {} }]);
+    const gateway = createGateway();
+
+    await collectEvents(gateway.stream(readonlyToolsRequest, new AbortController().signal));
+
+    await expectMappedReadonlyTools(sdkMocks.streamText.mock.calls[0]?.[0]?.tools);
   });
 
   it("rejects endpoint redirects while preserving request options", async () => {
@@ -265,4 +276,50 @@ async function collectEvents(events: AsyncIterable<ModelEvent>): Promise<ModelEv
   }
 
   return collected;
+}
+
+function createReadonlyToolsRequest(): ModelRequest {
+  return {
+    messages: request.messages,
+    tools: [
+      createToolDeclaration("list_files", "List workspace files.", "glob", false),
+      createToolDeclaration("read_file", "Read a workspace file.", "path", true),
+      createToolDeclaration("search_files", "Search workspace files.", "query", true),
+    ],
+  };
+}
+
+function createToolDeclaration(
+  name: "list_files" | "read_file" | "search_files",
+  description: string,
+  propertyName: string,
+  required: boolean,
+) {
+  return {
+    name,
+    description,
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        [propertyName]: { type: "string" as const, description: `${propertyName} input.` },
+      },
+      required: required ? [propertyName] : [],
+      additionalProperties: false as const,
+    },
+  };
+}
+
+async function expectMappedReadonlyTools(tools: Record<string, unknown>): Promise<void> {
+  expect(Object.keys(tools)).toEqual(["list_files", "read_file", "search_files"]);
+
+  for (const declaration of readonlyToolsRequest.tools ?? []) {
+    const sdkTool = tools[declaration.name] as {
+      readonly description: string;
+      readonly execute?: unknown;
+      readonly inputSchema: { readonly jsonSchema: unknown };
+    };
+    expect(sdkTool.description).toBe(declaration.description);
+    expect(sdkTool.execute).toBeUndefined();
+    expect(sdkTool.inputSchema.jsonSchema).toEqual(declaration.inputSchema);
+  }
 }

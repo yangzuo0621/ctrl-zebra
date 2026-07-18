@@ -10,6 +10,24 @@ import {
 } from "./index.js";
 
 describe("list_files", () => {
+  it("publishes its stable model declaration", () => {
+    const tool = createListFilesTool(createWorkspace([]));
+
+    expect({
+      name: tool.name,
+      description: tool.description,
+      inputSchema: tool.inputSchema,
+    }).toEqual({
+      name: "list_files",
+      description: "List files in the selected workspace that match a glob pattern.",
+      inputSchema: expect.objectContaining({
+        type: "object",
+        required: [],
+        additionalProperties: false,
+      }),
+    });
+  });
+
   it("uses the default Glob, fixed exclusions, and bounded host request", async () => {
     const workspace = createWorkspace(["src/z.ts", "README.md", "src/a.ts"]);
     const tool = createListFilesTool(workspace);

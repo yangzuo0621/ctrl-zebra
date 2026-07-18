@@ -1,15 +1,23 @@
+import { realpath } from "node:fs/promises";
+
 import {
   createGeminiModelGateway,
   createOpenAICompatibleModelGateway,
   createOpenAIModelGateway,
 } from "@ctrl-zebra/providers";
-import { commands, type ExtensionContext, window, workspace } from "vscode";
+import { commands, type ExtensionContext, Uri, window, workspace } from "vscode";
 
 import {
   createGeminiApiKeySecretStorage,
   createProviderApiKeySecretReader,
 } from "./adapters/api-key-secret-storage.js";
+import { createLocalWorkspaceUriCanonicalizer } from "./adapters/canonicalize-local-workspace-uri.js";
 import { readProviderConfiguration } from "./adapters/provider-configuration.js";
+import { findWorkspaceFiles } from "./adapters/vscode-workspace-find-files.js";
+import {
+  joinWorkspacePath,
+  readWorkspaceFilePrefix,
+} from "./adapters/vscode-workspace-read-file.js";
 import { registerAgentView } from "./agent-view.js";
 import { createSelectingChatRunner } from "./controllers/chat-runner.js";
 import { registerGeminiApiKeyCommand } from "./controllers/gemini-api-key-command.js";
@@ -17,10 +25,20 @@ import {
   getProviderSetupErrorMessage,
   selectModelGateway,
 } from "./controllers/model-gateway-selector.js";
+import { createReadonlyToolRegistryProvider } from "./controllers/readonly-tool-registry.js";
 
 export function activate(context: ExtensionContext): void {
   const secrets = createProviderApiKeySecretReader(context.secrets);
+  const readonlyTools = createReadonlyToolRegistryProvider({
+    getWorkspaceRoots: () => workspace.workspaceFolders?.map((folder) => folder.uri) ?? [],
+    canonicalize: createLocalWorkspaceUriCanonicalizer(realpath, Uri.file),
+    findFiles: findWorkspaceFiles,
+    joinPath: joinWorkspacePath,
+    readPrefix: readWorkspaceFilePrefix,
+    onDidChangeWorkspaceFolders: (listener) => workspace.onDidChangeWorkspaceFolders(listener),
+  });
   const chatRunner = createSelectingChatRunner({
+    selectToolRegistry: (signal) => readonlyTools.get(signal),
     async selectModelGateway() {
       try {
         const settings = workspace.getConfiguration("ctrlZebra.provider");
@@ -30,7 +48,7 @@ export function activate(context: ExtensionContext): void {
 
         return await selectModelGateway({
           configuration,
-          requiredCapabilities: ["text-streaming"],
+          requiredCapabilities: ["text-streaming", "tool-calling"],
           secrets,
           factories: {
             gemini: ({ configuration: geminiConfiguration, apiKey }) => {
@@ -79,6 +97,7 @@ export function activate(context: ExtensionContext): void {
   });
 
   context.subscriptions.push(
+    readonlyTools,
     registerGeminiApiKeyCommand({
       storage: createGeminiApiKeySecretStorage(context.secrets),
       registerCommand: (commandId, handler) => commands.registerCommand(commandId, handler),

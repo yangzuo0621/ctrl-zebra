@@ -9,6 +9,8 @@ export {
   defaultListFilesLimit,
   InvalidWorkspaceFileListError,
   listFilesExcludeGlob,
+  listFilesInputSchema,
+  listFilesToolDescription,
   listFilesToolName,
   maxListFilesLimit,
 } from "./list-files.js";
@@ -25,6 +27,8 @@ export {
   InvalidWorkspaceFileReadError,
   maxReadFileContentBytes,
   ReadFileRangeError,
+  readFileInputSchema,
+  readFileToolDescription,
   readFileToolName,
   readFileUtf8LookaheadBytes,
 } from "./read-file.js";
@@ -42,5 +46,7 @@ export {
   maxSearchFilesLimit,
   maxSearchFilesScanned,
   maxSearchPreviewCharacters,
+  searchFilesInputSchema,
+  searchFilesToolDescription,
   searchFilesToolName,
 } from "./search-files.js";

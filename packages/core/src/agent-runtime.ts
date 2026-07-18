@@ -134,8 +134,13 @@ export class AgentRuntime {
     signal: AbortSignal,
   ): Promise<ToolCall | undefined> {
     let toolCall: ToolCall | undefined;
+    const toolDeclarations = this.#toolRegistry.declarations();
+    const request =
+      toolDeclarations.length === 0
+        ? { messages: [...messages] }
+        : { messages: [...messages], tools: toolDeclarations };
 
-    for await (const event of this.#modelGateway.stream({ messages: [...messages] }, signal)) {
+    for await (const event of this.#modelGateway.stream(request, signal)) {
       signal.throwIfAborted();
 
       if (event.type === "text.delta") {

@@ -12,6 +12,13 @@ import {
   ToolRegistry,
 } from "./index.js";
 
+const emptyInputSchema = {
+  type: "object",
+  properties: {},
+  required: [],
+  additionalProperties: false,
+} as const;
+
 const userMessage = {
   messageId: "message-1",
   sessionId: "session-1",
@@ -95,6 +102,13 @@ describe("AgentRuntime", () => {
     }));
     const tool = {
       name: "lookup_zebra",
+      description: "Look up zebra facts.",
+      inputSchema: {
+        type: "object",
+        properties: { query: { type: "string", description: "Search query." } },
+        required: ["query"],
+        additionalProperties: false,
+      },
       risk: "read",
       parseInput(value) {
         if (
@@ -119,7 +133,21 @@ describe("AgentRuntime", () => {
 
     expect(execute).toHaveBeenCalledWith({ query: "stripes" }, { signal: expect.any(AbortSignal) });
     expect(requests).toEqual([
-      { messages: [{ role: "user", content: "Say hello." }] },
+      {
+        messages: [{ role: "user", content: "Say hello." }],
+        tools: [
+          {
+            name: "lookup_zebra",
+            description: "Look up zebra facts.",
+            inputSchema: {
+              type: "object",
+              properties: { query: { type: "string", description: "Search query." } },
+              required: ["query"],
+              additionalProperties: false,
+            },
+          },
+        ],
+      },
       {
         messages: [
           { role: "user", content: "Say hello." },
@@ -139,6 +167,18 @@ describe("AgentRuntime", () => {
               status: "success",
               output: { answer: "matched stripes" },
               truncated: false,
+            },
+          },
+        ],
+        tools: [
+          {
+            name: "lookup_zebra",
+            description: "Look up zebra facts.",
+            inputSchema: {
+              type: "object",
+              properties: { query: { type: "string", description: "Search query." } },
+              required: ["query"],
+              additionalProperties: false,
             },
           },
         ],
@@ -256,6 +296,8 @@ describe("AgentRuntime", () => {
     const registry = new ToolRegistry();
     registry.register({
       name: "limited_tool",
+      description: "Return a limited result.",
+      inputSchema: emptyInputSchema,
       risk: "read",
       parseInput: () => null,
       execute: async () => ({ output: ["first.txt"], truncated: true }),
@@ -313,6 +355,7 @@ describe("AgentRuntime", () => {
 
     expect(executionOrder).toEqual(["first_tool:1", "second_tool:2"]);
     expect(requests).toHaveLength(3);
+    expect(requests.every((request) => request.tools?.length === 2)).toBe(true);
     expect(requests[1]?.messages.at(-1)).toMatchObject({
       role: "tool",
       result: { callId: "call-1", name: "first_tool", status: "success" },
@@ -385,6 +428,8 @@ describe("AgentRuntime", () => {
     const registry = new ToolRegistry();
     registry.register({
       name: "failing_tool",
+      description: "Fail during execution.",
+      inputSchema: emptyInputSchema,
       risk: "read",
       parseInput: () => null,
       execute: async () => {
@@ -438,6 +483,8 @@ describe("AgentRuntime", () => {
     const registry = new ToolRegistry();
     registry.register({
       name: "step_tool",
+      description: "Execute a bounded step.",
+      inputSchema: emptyInputSchema,
       risk: "read",
       parseInput: () => null,
       execute,
@@ -476,6 +523,8 @@ describe("AgentRuntime", () => {
     const registry = new ToolRegistry();
     registry.register({
       name: "waiting_tool",
+      description: "Wait until cancelled.",
+      inputSchema: emptyInputSchema,
       risk: "read",
       parseInput: () => null,
       execute: async (_input, { signal }) => {
@@ -668,6 +717,13 @@ function createScriptedModelGateway(
 function createNumberTool(name: "first_tool" | "second_tool", executionOrder: string[]) {
   return {
     name,
+    description: `Execute ${name}.`,
+    inputSchema: {
+      type: "object",
+      properties: { value: { type: "integer", description: "Numeric value." } },
+      required: ["value"],
+      additionalProperties: false,
+    },
     risk: "read" as const,
     parseInput(value: unknown) {
       if (

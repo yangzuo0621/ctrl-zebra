@@ -1,4 +1,9 @@
-import type { AgentRuntimeEvent, ModelGateway, ModelRequest } from "@ctrl-zebra/core";
+import {
+  type AgentRuntimeEvent,
+  type ModelGateway,
+  type ModelRequest,
+  ToolRegistry,
+} from "@ctrl-zebra/core";
 import { describe, expect, it } from "vitest";
 
 import { createChatRunner, createSelectingChatRunner } from "./chat-runner.js";
@@ -62,6 +67,72 @@ describe("createChatRunner", () => {
     await expect(runner.run("Hello", abortController.signal, () => {})).rejects.toBe(cancellation);
     expect(idCreated).toBe(false);
     expect(gatewayStarted).toBe(false);
+  });
+
+  it("forwards a model Tool Call through the registry and returns its result with UI lifecycle events", async () => {
+    const requests: ModelRequest[] = [];
+    let step = 0;
+    const modelGateway: ModelGateway = {
+      async *stream(request) {
+        requests.push(request);
+        if (step === 0) {
+          step += 1;
+          yield {
+            type: "tool.call",
+            call: { id: "call-1", name: "list_files", input: {} },
+          } as const;
+          yield { type: "finish", reason: "tool-calls" } as const;
+          return;
+        }
+
+        yield { type: "text.delta", text: "README.md" } as const;
+        yield { type: "finish", reason: "stop" } as const;
+      },
+    };
+    const registry = new ToolRegistry();
+    registry.register({
+      name: "list_files",
+      description: "List workspace files.",
+      inputSchema: {
+        type: "object",
+        properties: {},
+        required: [],
+        additionalProperties: false,
+      },
+      risk: "read",
+      parseInput: () => null,
+      execute: async () => ({ output: { files: ["README.md"] }, truncated: false }),
+    });
+    const events: AgentRuntimeEvent[] = [];
+    const ids = ["session-1", "message-1"];
+    const runner = createChatRunner({
+      modelGateway,
+      toolRegistry: registry,
+      createId: () => ids.shift() ?? "unexpected-id",
+      now: () => new Date("2026-07-18T00:00:00.000Z"),
+    });
+
+    await runner.run("List files.", new AbortController().signal, (event) => events.push(event));
+
+    expect(requests[0]?.tools?.map(({ name }) => name)).toEqual(["list_files"]);
+    expect(requests[1]?.messages.at(-1)).toEqual({
+      role: "tool",
+      result: {
+        callId: "call-1",
+        name: "list_files",
+        status: "success",
+        output: { files: ["README.md"] },
+        truncated: false,
+      },
+    });
+    expect(
+      events.filter((event) => event.type === "agent.tool-state").map(({ status }) => status),
+    ).toEqual(["pending", "running", "success"]);
+    expect(events).toContainEqual({
+      type: "agent.text-delta",
+      sessionId: "session-1",
+      text: "README.md",
+    });
   });
 });
 
