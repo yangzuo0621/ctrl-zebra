@@ -96,6 +96,67 @@ This document defines the Webview security constraints established before T0104.
   1,048,576-byte UTF-8 ceiling, and successful truncation keeps its marker through later context
   budgeting. Cancellation stops traversal, reads, canonicalization, and output production.
 
+## Approval Boundary
+
+Approval is an authorization for one exact, user-visible operation. It is not a capability token,
+session-wide grant, tool-wide grant, path-wide grant, or reusable confirmation. The trusted host
+constructs the request from the registered tool definition and validated operation; model output
+and Webview input cannot assign risk, broaden scope, extend lifetime, or replace the operation.
+
+### Risk Matrix
+
+| Risk | Meaning | Baseline disposition |
+|---|---|---|
+| `read` | Observes bounded workspace data without changing external state. | May be allowed without prompting by the policy introduced in T0502. |
+| `write` | Creates, changes, renames, or deletes workspace state. | Requires an explicit approval bound to the exact operation. |
+| `execute` | Starts a process, task, command, or other executable behavior. | Denied by default; a later task must define any narrower approved case. |
+| `network` | Sends data or initiates a request outside the local trusted boundary. | Denied by default; a later task must define any narrower approved case. |
+
+Risk comes only from the trusted registered tool definition. If an operation has multiple effects,
+its risk is the most restrictive applicable category. Splitting one semantic operation into lower-
+risk calls to avoid the matrix is forbidden.
+
+### Exact Operation Binding
+
+- An Approval Request has a host-generated identifier and binds the Session, exact Tool Call ID and
+  name, trusted risk, validated JSON input, selected workspace root when applicable, affected
+  resource identities and revisions when known, user-visible presentation, creation time, and
+  expiration time.
+- The bound operation is compared structurally from validated values, not from display text or raw
+  JSON spelling. Any change to the tool name, input, selected root, target URI, resource set,
+  expected version or content hash, effect, or risk creates a different operation and requires a
+  new request.
+- File targets retain URI identity at the Extension boundary. A request for a file mutation binds
+  the canonical target and the exact pre-operation version or content hash. Canonicalization or
+  revision checks are repeated immediately before consumption.
+- The Approval UI is a projection of the same immutable request that execution consumes. It shows
+  the exact tool/effect, target resources, selected workspace, risk, material arguments, expiration,
+  and proposed diff or equivalent effect description. Hidden or changed effects invalidate the
+  request; execution must never rely on information omitted from or inconsistent with the UI.
+- Secrets and unrestricted file contents are excluded from Approval Requests and display text.
+  Presentation contains only the bounded information needed for an informed decision.
+
+### Lifecycle and One-Time Consumption
+
+- A request starts as `pending`. An explicit user response changes it once to `approved` or
+  `denied`. Cancellation changes a pending or approved-but-unconsumed request to `cancelled`.
+- Reaching the expiration time changes a pending or approved-but-unconsumed request to `expired`.
+  Expiration is evaluated by a host-owned clock before accepting a response and again immediately
+  before consumption; client timestamps cannot extend or revive a request.
+- A changed, missing, replaced, or no-longer-canonical target, a changed resource revision, a scope
+  mismatch, or a presentation/operation mismatch changes a pending or approved-but-unconsumed
+  request to `invalidated`.
+- Only `approved` may transition to `consumed`, and the transition is atomic with claiming the
+  authorization for execution. A consumed request can authorize exactly one attempt of the bound
+  operation; retries and modified operations require a new request.
+- `denied`, `cancelled`, `expired`, `invalidated`, and `consumed` are terminal. They cannot return to
+  pending or approved. An approved request is not reusable after cancellation, expiration,
+  invalidation, or consumption.
+- Duplicate, late, conflicting, or unknown responses are rejected without changing state or
+  executing an operation. Concurrent responses and consumers must have one deterministic winner.
+- Cancellation is not a denial, failure, or ordinary Tool Result. Once the owning run is cancelled,
+  no later response, consumption, output, or side effect is accepted.
+
 ## API Key Secret Storage
 
 - The OpenAI API key is stored under the stable, Extension-owned name
