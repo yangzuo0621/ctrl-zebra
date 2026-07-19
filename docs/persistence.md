@@ -22,7 +22,9 @@ segments and never access a filesystem directly.
   `v1` and its manifest value is also `1`.
 - A session ID is encoded as lowercase hexadecimal UTF-8 bytes before it becomes a directory name.
   The encoded value is one portable path segment and cannot contain separators, dot segments,
-  drive prefixes, URI syntax, or platform-specific reserved characters.
+  drive prefixes, URI syntax, or platform-specific reserved characters. Persisted session IDs must
+  be well-formed Unicode and no more than 100 UTF-8 bytes, which bounds the encoded segment to 200
+  characters for portable filesystems.
 - Path helpers return relative path segments. A host adapter joins those segments to its trusted
   storage URI; callers must not interpret them as absolute filesystem paths.
 - File names and directory components are public persisted-format constants. Changing their meaning

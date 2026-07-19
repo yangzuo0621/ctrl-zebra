@@ -75,6 +75,28 @@ export {
   toolStateMessageSchema,
   webviewToExtensionMessageSchema,
 } from "./messages.js";
+export type {
+  PersistedEventPayload,
+  PersistedEventRecord,
+  PersistedMessageRecord,
+  SessionManifest,
+  SessionPersistencePaths,
+} from "./persistence.js";
+export {
+  getSessionPersistencePaths,
+  maxPersistedSessionIdBytes,
+  persistedEventPayloadSchema,
+  persistedEventRecordSchema,
+  persistedMessageRecordSchema,
+  persistedSessionIdSchema,
+  persistenceFormatDirectory,
+  persistenceFormatVersion,
+  persistenceSessionsDirectory,
+  sessionEventsFileName,
+  sessionManifestFileName,
+  sessionManifestSchema,
+  sessionMessagesFileName,
+} from "./persistence.js";
 export type { SessionId, SessionStatus, SessionSummary } from "./session.js";
 export {
   sessionIdSchema,
