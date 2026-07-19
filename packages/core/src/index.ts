@@ -56,6 +56,12 @@ export {
 } from "./agent-runtime.js";
 export type { ApprovalPolicyDisposition } from "./approval-policy.js";
 export { BasicApprovalPolicy } from "./approval-policy.js";
+export type { ApprovalRequestSink, ApprovalService } from "./approval-service.js";
+export {
+  ApprovalRequestAlreadyPendingError,
+  ApprovalRequestNotPendingError,
+  CancellableApprovalService,
+} from "./approval-service.js";
 export type { ApprovalStatusChangedEvent } from "./approval-state-machine.js";
 export {
   ApprovalStateMachine,
