@@ -149,6 +149,13 @@ export type {
   ToolInputStringSchema,
 } from "./model-gateway.js";
 export { ModelGatewayError } from "./model-gateway.js";
+export type { ProviderRetryDelay } from "./provider-retry-policy.js";
+export {
+  defaultProviderRetryDelay,
+  initialProviderRetryDelayMilliseconds,
+  maxProviderRetryAttempts,
+  RetryingModelGateway,
+} from "./provider-retry-policy.js";
 export type {
   SessionCatalog,
   SessionMetadataPatch,
