@@ -144,6 +144,45 @@ describe("App streaming chat", () => {
     expect(screen.getByText("Saved answer")).toBeVisible();
   });
 
+  it("shows an interrupted recovery without starting a run", async () => {
+    const host = new FakeWebviewHost();
+    const ids = ["list-interrupted", "restore-interrupted"];
+    const user = userEvent.setup();
+    render(<App host={host} createRequestId={() => ids.shift() ?? "unexpected"} />);
+    await user.click(screen.getByRole("button", { name: "Refresh" }));
+    act(() =>
+      host.emit({
+        protocolVersion,
+        type: "extension/session-list",
+        requestId: "list-interrupted",
+        sessions: [
+          {
+            sessionId: "session-interrupted",
+            status: "interrupted",
+            createdAt: "2026-07-19T10:00:00.000Z",
+          },
+        ],
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: "Restore" }));
+    act(() =>
+      host.emit({
+        protocolVersion,
+        type: "extension/session-restored",
+        requestId: "restore-interrupted",
+        session: {
+          sessionId: "session-interrupted",
+          status: "interrupted",
+          messages: [],
+          eventLogTailDamaged: false,
+        },
+      }),
+    );
+
+    expect(screen.getByRole("status")).toHaveTextContent("Session was interrupted by a restart.");
+    expect(host.sent.some(({ type }) => type === "webview/submit")).toBe(false);
+  });
+
   it("submits user content and renders a correlated pending response", async () => {
     const host = new FakeWebviewHost();
     const user = userEvent.setup();

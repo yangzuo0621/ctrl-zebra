@@ -25,7 +25,7 @@ export type DisplayToolCall =
 
 interface ChatState {
   readonly messages: readonly DisplayMessage[];
-  readonly status: "idle" | RunStatus;
+  readonly status: "idle" | "interrupted" | RunStatus;
   readonly activeRequestId?: string;
   readonly sessions: readonly SessionSummary[];
   readonly selectedSessionId?: string;
@@ -189,7 +189,8 @@ export function createChatStore({
             status:
               message.session.status === "completed" ||
               message.session.status === "cancelled" ||
-              message.session.status === "failed"
+              message.session.status === "failed" ||
+              message.session.status === "interrupted"
                 ? message.session.status
                 : "idle",
             selectedSessionId: message.session.sessionId,

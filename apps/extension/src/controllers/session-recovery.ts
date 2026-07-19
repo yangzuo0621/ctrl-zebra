@@ -24,25 +24,56 @@ export class SessionRecoveryError extends Error {
 
 export function createSessionRecoveryActions(
   selectRepository: () => Promise<SessionRepository>,
+  now: () => Date = () => new Date(),
 ): SessionRecoveryActions {
   return {
     async list() {
-      const sessions = [...(await (await selectRepository()).list())];
-      return sessions.sort(
+      const repository = await selectRepository();
+      const sessions = await repository.list();
+      const normalized: SessionSummary[] = [];
+      for (const session of sessions) {
+        if (isRecoverableStatus(session.status)) {
+          try {
+            await repository.update(session.sessionId, {
+              status: "interrupted",
+              updatedAt: now().toISOString(),
+            });
+            normalized.push({ ...session, status: "interrupted" });
+          } catch {}
+        } else {
+          normalized.push(session);
+        }
+      }
+      return normalized.sort(
         (left, right) =>
           right.createdAt.localeCompare(left.createdAt) ||
           left.sessionId.localeCompare(right.sessionId),
       );
     },
     async restore(sessionId) {
+      let repository: SessionRepository;
       let record: SessionRecord | undefined;
       try {
-        record = await (await selectRepository()).get(sessionId);
+        repository = await selectRepository();
+        record = await repository.get(sessionId);
       } catch {
         throw new SessionRecoveryError("corrupt");
       }
       if (record === undefined) {
         throw new SessionRecoveryError("not-found");
+      }
+      const status = isRecoverableStatus(record.manifest.status)
+        ? "interrupted"
+        : record.manifest.status;
+      if (status === "interrupted" && record.manifest.status !== "interrupted") {
+        try {
+          await repository.update(sessionId, {
+            status,
+            updatedAt: now().toISOString(),
+          });
+        } catch {
+          throw new SessionRecoveryError("corrupt");
+        }
       }
 
       const messages: RestoredSession["messages"][number][] = [];
@@ -81,12 +112,22 @@ export function createSessionRecoveryActions(
 
       return restoredSessionSchema.parse({
         sessionId,
-        status: record.manifest.status,
+        status,
         messages,
         eventLogTailDamaged: record.eventLogTailDamaged,
       });
     },
   };
+}
+
+function isRecoverableStatus(status: SessionSummary["status"]): boolean {
+  return (
+    status === "idle" ||
+    status === "preparing" ||
+    status === "streaming" ||
+    status === "awaiting_approval" ||
+    status === "executing_tool"
+  );
 }
 
 function isJsonObject(value: JsonValue): value is { readonly [key: string]: JsonValue } {

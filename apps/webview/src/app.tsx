@@ -20,6 +20,7 @@ const statusText = {
   completed: "Response complete.",
   cancelled: "Response cancelled.",
   failed: "Response failed.",
+  interrupted: "Session was interrupted by a restart.",
 } as const;
 
 function messageContent(message: DisplayMessage, status: string): string {

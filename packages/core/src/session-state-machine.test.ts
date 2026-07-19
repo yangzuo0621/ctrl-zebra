@@ -16,6 +16,7 @@ const statuses = [
   "completed",
   "cancelled",
   "failed",
+  "interrupted",
 ] as const satisfies readonly SessionStatus[];
 
 const legalTransitionKeys = new Set([
