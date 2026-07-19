@@ -1,4 +1,5 @@
 import {
+  type ApprovalDecisionIntent,
   type ExtensionToWebviewMessage,
   protocolVersion,
   type WebviewToExtensionMessage,
@@ -20,6 +21,25 @@ class FakeWebviewHost implements WebviewHost {
 
   cancel(requestId: string): void {
     this.sent.push({ protocolVersion, type: "webview/cancel", requestId });
+  }
+
+  showApprovalDiff(requestId: string, approvalId: string): void {
+    this.sent.push({
+      protocolVersion,
+      type: "webview/show-approval-diff",
+      requestId,
+      approvalId,
+    });
+  }
+
+  decideApproval(requestId: string, approvalId: string, decision: ApprovalDecisionIntent): void {
+    this.sent.push({
+      protocolVersion,
+      type: "webview/approval-decision",
+      requestId,
+      approvalId,
+      decision,
+    });
   }
 
   subscribe(listener: (message: ExtensionToWebviewMessage) => void): () => void {
@@ -230,5 +250,53 @@ describe("App streaming chat", () => {
     expect(screen.getAllByRole("article", { name: "read_file" })).toHaveLength(1);
     expect(screen.getByLabelText("Tool status")).toHaveTextContent("Success");
     expect(screen.getByRole("group", { name: "Result" })).toHaveTextContent("Hello");
+  });
+
+  it("renders a pending Approval and sends only its identifier and user intent", async () => {
+    const host = new FakeWebviewHost();
+    const user = userEvent.setup();
+    render(<App host={host} />);
+
+    act(() => {
+      host.emit({
+        protocolVersion,
+        type: "extension/approval-state",
+        requestId: "request-approval",
+        status: "pending",
+        approval: {
+          id: "approval-1",
+          scope: {
+            sessionId: "session-1",
+            call: { id: "call-1", name: "propose_file_edit", input: {} },
+            risk: "write",
+            resources: [{ uri: "file:///workspace/example.ts" }],
+          },
+          presentation: { title: "Update example.ts", summary: "Replace one line." },
+          createdAt: "2026-07-19T00:00:00.000Z",
+          expiresAt: "2026-07-19T00:05:00.000Z",
+        },
+      });
+    });
+
+    await user.click(screen.getByRole("button", { name: "View Diff" }));
+    await user.click(screen.getByRole("button", { name: "Reject" }));
+
+    expect(host.sent).toEqual([
+      {
+        protocolVersion,
+        type: "webview/show-approval-diff",
+        requestId: "request-approval",
+        approvalId: "approval-1",
+      },
+      {
+        protocolVersion,
+        type: "webview/approval-decision",
+        requestId: "request-approval",
+        approvalId: "approval-1",
+        decision: "denied",
+      },
+    ]);
+    expect(screen.getByText("Submitting rejection…")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Approve" })).toBeDisabled();
   });
 });

@@ -37,6 +37,9 @@ export {
   userMessageSchema,
 } from "./chat-message.js";
 export type {
+  ApprovalDecisionIntent,
+  ApprovalDecisionMessage,
+  ApprovalStateMessage,
   CancelMessage,
   ExtensionToWebviewMessage,
   PingMessage,
@@ -44,12 +47,16 @@ export type {
   ProtocolEnvelope,
   RunStatus,
   RunStatusMessage,
+  ShowApprovalDiffMessage,
   SubmitMessage,
   TextDeltaMessage,
   ToolStateMessage,
   WebviewToExtensionMessage,
 } from "./messages.js";
 export {
+  approvalDecisionIntentSchema,
+  approvalDecisionMessageSchema,
+  approvalStateMessageSchema,
   cancelMessageSchema,
   errorToolStateMessageSchema,
   extensionToWebviewMessageSchema,
@@ -61,6 +68,7 @@ export {
   runningToolStateMessageSchema,
   runStatusMessageSchema,
   runStatusSchema,
+  showApprovalDiffMessageSchema,
   submitMessageSchema,
   successToolStateMessageSchema,
   textDeltaMessageSchema,

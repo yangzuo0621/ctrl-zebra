@@ -2,6 +2,8 @@ import { type FormEvent, useEffect, useState } from "react";
 import { useStore } from "zustand";
 
 import styles from "./app.module.css";
+import { ApprovalCard } from "./approval-card.js";
+import { createApprovalStore } from "./approval-store.js";
 import { createChatStore, type DisplayMessage } from "./chat-store.js";
 import { ToolCallCard } from "./tool-call-card.js";
 import { getWebviewHost, type WebviewHost } from "./vscode-api.js";
@@ -39,18 +41,24 @@ function messageContent(message: DisplayMessage, status: string): string {
 export function App({ host: providedHost, createRequestId }: AppProps) {
   const [host] = useState(() => providedHost ?? getWebviewHost());
   const [store] = useState(() => createChatStore({ host, createRequestId }));
+  const [approvalStore] = useState(() => createApprovalStore(host));
   const [draft, setDraft] = useState("");
   const messages = useStore(store, (state) => state.messages);
   const status = useStore(store, (state) => state.status);
   const activeRequestId = useStore(store, (state) => state.activeRequestId);
+  const approval = useStore(approvalStore, (state) => state.current);
+  const pendingDecision = useStore(approvalStore, (state) => state.pendingDecision);
 
   useEffect(() => {
-    const unsubscribe = host.subscribe((message) => store.getState().receive(message));
+    const unsubscribe = host.subscribe((message) => {
+      store.getState().receive(message);
+      approvalStore.getState().receive(message);
+    });
     return () => {
       unsubscribe();
       store.getState().dispose();
     };
-  }, [host, store]);
+  }, [approvalStore, host, store]);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -90,6 +98,16 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
           ))
         )}
       </ol>
+
+      {approval === undefined ? null : (
+        <ApprovalCard
+          item={approval}
+          pendingDecision={pendingDecision}
+          onViewDiff={() => approvalStore.getState().showDiff()}
+          onApprove={() => approvalStore.getState().decide("approved")}
+          onReject={() => approvalStore.getState().decide("denied")}
+        />
+      )}
 
       <form className={styles.composer} onSubmit={handleSubmit}>
         <label className={styles.label} htmlFor="chat-message">

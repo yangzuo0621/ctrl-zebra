@@ -1,4 +1,5 @@
 import {
+  type ApprovalDecisionIntent,
   type ExtensionToWebviewMessage,
   extensionToWebviewMessageSchema,
   protocolVersion,
@@ -16,6 +17,8 @@ let vscodeApi: VsCodeApi | undefined;
 export interface WebviewHost {
   submit(requestId: string, content: string): void;
   cancel(requestId: string): void;
+  showApprovalDiff(requestId: string, approvalId: string): void;
+  decideApproval(requestId: string, approvalId: string, decision: ApprovalDecisionIntent): void;
   subscribe(listener: (message: ExtensionToWebviewMessage) => void): () => void;
 }
 
@@ -54,6 +57,23 @@ const webviewHost: WebviewHost = {
       protocolVersion,
       type: "webview/cancel",
       requestId,
+    });
+  },
+  showApprovalDiff(requestId, approvalId) {
+    getVsCodeApi().postMessage({
+      protocolVersion,
+      type: "webview/show-approval-diff",
+      requestId,
+      approvalId,
+    });
+  },
+  decideApproval(requestId, approvalId, decision) {
+    getVsCodeApi().postMessage({
+      protocolVersion,
+      type: "webview/approval-decision",
+      requestId,
+      approvalId,
+      decision,
     });
   },
   subscribe,
