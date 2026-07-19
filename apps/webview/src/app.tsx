@@ -5,6 +5,8 @@ import styles from "./app.module.css";
 import { ApprovalCard } from "./approval-card.js";
 import { createApprovalStore } from "./approval-store.js";
 import { createChatStore, type DisplayMessage } from "./chat-store.js";
+import { CheckpointPanel } from "./checkpoint-panel.js";
+import { createCheckpointStore } from "./checkpoint-store.js";
 import { ToolCallCard } from "./tool-call-card.js";
 import { getWebviewHost, type WebviewHost } from "./vscode-api.js";
 
@@ -43,6 +45,9 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
   const [host] = useState(() => providedHost ?? getWebviewHost());
   const [store] = useState(() => createChatStore({ host, createRequestId }));
   const [approvalStore] = useState(() => createApprovalStore(host));
+  const [checkpointStore] = useState(() =>
+    createCheckpointStore(host, createRequestId ?? (() => crypto.randomUUID())),
+  );
   const [draft, setDraft] = useState("");
   const messages = useStore(store, (state) => state.messages);
   const status = useStore(store, (state) => state.status);
@@ -57,12 +62,13 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
     const unsubscribe = host.subscribe((message) => {
       store.getState().receive(message);
       approvalStore.getState().receive(message);
+      checkpointStore.getState().receive(message);
     });
     return () => {
       unsubscribe();
       store.getState().dispose();
     };
-  }, [approvalStore, host, store]);
+  }, [approvalStore, checkpointStore, host, store]);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -119,6 +125,8 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
         </div>
         {sessionError === undefined ? null : <p className={styles.sessionError}>{sessionError}</p>}
       </section>
+
+      <CheckpointPanel store={checkpointStore} />
 
       <ol className={styles.transcript} aria-label="Conversation">
         {messages.length === 0 ? (

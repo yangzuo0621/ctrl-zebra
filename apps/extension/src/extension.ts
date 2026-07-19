@@ -13,6 +13,7 @@ import {
   createProviderApiKeySecretReader,
 } from "./adapters/api-key-secret-storage.js";
 import { createLocalWorkspaceUriCanonicalizer } from "./adapters/canonicalize-local-workspace-uri.js";
+import { createVsCodeCheckpointRestorer } from "./adapters/create-vscode-checkpoint-restorer.js";
 import { createVsCodeDiffPresenter } from "./adapters/create-vscode-diff-presenter.js";
 import { createVsCodeWorkspaceEditApplier } from "./adapters/create-vscode-workspace-edit-applier.js";
 import { readProviderConfiguration } from "./adapters/provider-configuration.js";
@@ -28,6 +29,7 @@ import { WorkspaceEditConflictError } from "./adapters/workspace-edit-applier.js
 import { WorkspaceScope, WorkspaceScopeError } from "./adapters/workspace-scope.js";
 import { registerAgentView } from "./agent-view.js";
 import { createSelectingChatRunner } from "./controllers/chat-runner.js";
+import { createCheckpointActions } from "./controllers/checkpoint-actions.js";
 import { FileEditApprovalWorkflow } from "./controllers/file-edit-approval-workflow.js";
 import { registerGeminiApiKeyCommand } from "./controllers/gemini-api-key-command.js";
 import {
@@ -53,6 +55,15 @@ export function activate(context: ExtensionContext): void {
     workspace.fs,
     hashText,
   );
+  const checkpointActions = createCheckpointActions({
+    selectStore: selectCheckpointStore,
+    async restore(store, checkpointId, signal) {
+      await createVsCodeCheckpointRestorer(createCurrentScope(), store).restore(
+        checkpointId,
+        signal,
+      );
+    },
+  });
   const approvalWorkflow = new FileEditApprovalWorkflow({
     createId: randomUUID,
     now: () => new Date(),
@@ -191,6 +202,7 @@ export function activate(context: ExtensionContext): void {
         decide: (_requestId, approvalId, decision) => approvalWorkflow.decide(approvalId, decision),
       },
       createSessionRecoveryActions(selectSessionRepository),
+      checkpointActions,
     ),
   );
 }

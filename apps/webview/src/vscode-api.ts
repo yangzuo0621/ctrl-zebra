@@ -21,6 +21,8 @@ export interface WebviewHost {
   decideApproval(requestId: string, approvalId: string, decision: ApprovalDecisionIntent): void;
   listSessions(requestId: string): void;
   restoreSession(requestId: string, sessionId: string): void;
+  listCheckpoints(requestId: string): void;
+  restoreCheckpoint(requestId: string, checkpointId: string): void;
   subscribe(listener: (message: ExtensionToWebviewMessage) => void): () => void;
 }
 
@@ -87,6 +89,17 @@ const webviewHost: WebviewHost = {
       type: "webview/restore-session",
       requestId,
       sessionId,
+    });
+  },
+  listCheckpoints(requestId) {
+    getVsCodeApi().postMessage({ protocolVersion, type: "webview/list-checkpoints", requestId });
+  },
+  restoreCheckpoint(requestId, checkpointId) {
+    getVsCodeApi().postMessage({
+      protocolVersion,
+      type: "webview/restore-checkpoint",
+      requestId,
+      checkpointId,
     });
   },
   subscribe,

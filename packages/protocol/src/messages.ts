@@ -6,6 +6,7 @@ import {
   approvalStatusSchema,
 } from "./approval.js";
 import { assistantMessageSchema, userMessageSchema } from "./chat-message.js";
+import { checkpointIdSchema, checkpointSummarySchema } from "./checkpoint.js";
 import { sessionIdSchema, sessionStatusSchema, sessionSummarySchema } from "./session.js";
 import { toolCallSchema, toolErrorResultSchema, toolSuccessResultSchema } from "./tool.js";
 
@@ -55,6 +56,17 @@ export const restoreSessionMessageSchema = z.strictObject({
   ...protocolEnvelopeSchema.shape,
   type: z.literal("webview/restore-session"),
   sessionId: sessionIdSchema,
+});
+
+export const listCheckpointsMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("webview/list-checkpoints"),
+});
+
+export const restoreCheckpointMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("webview/restore-checkpoint"),
+  checkpointId: checkpointIdSchema,
 });
 
 export const showApprovalDiffMessageSchema = z.strictObject({
@@ -160,6 +172,25 @@ export const sessionErrorMessageSchema = z.strictObject({
   message: z.string().min(1).max(256),
 });
 
+export const checkpointListMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("extension/checkpoint-list"),
+  checkpoints: z.array(checkpointSummarySchema).max(10_000),
+});
+
+export const checkpointRestoredMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("extension/checkpoint-restored"),
+  checkpointId: checkpointIdSchema,
+});
+
+export const checkpointErrorMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("extension/checkpoint-error"),
+  code: z.enum(["not-found", "conflict", "unavailable"]),
+  message: z.string().min(1).max(256),
+});
+
 export const webviewToExtensionMessageSchema = z.discriminatedUnion("type", [
   pingMessageSchema,
   submitMessageSchema,
@@ -168,6 +199,8 @@ export const webviewToExtensionMessageSchema = z.discriminatedUnion("type", [
   approvalDecisionMessageSchema,
   listSessionsMessageSchema,
   restoreSessionMessageSchema,
+  listCheckpointsMessageSchema,
+  restoreCheckpointMessageSchema,
 ]);
 export const extensionToWebviewMessageSchema = z.union([
   pongMessageSchema,
@@ -178,6 +211,9 @@ export const extensionToWebviewMessageSchema = z.union([
   sessionListMessageSchema,
   sessionRestoredMessageSchema,
   sessionErrorMessageSchema,
+  checkpointListMessageSchema,
+  checkpointRestoredMessageSchema,
+  checkpointErrorMessageSchema,
 ]);
 
 export type ProtocolEnvelope = z.infer<typeof protocolEnvelopeSchema>;
@@ -187,6 +223,8 @@ export type SubmitMessage = z.infer<typeof submitMessageSchema>;
 export type CancelMessage = z.infer<typeof cancelMessageSchema>;
 export type ListSessionsMessage = z.infer<typeof listSessionsMessageSchema>;
 export type RestoreSessionMessage = z.infer<typeof restoreSessionMessageSchema>;
+export type ListCheckpointsMessage = z.infer<typeof listCheckpointsMessageSchema>;
+export type RestoreCheckpointMessage = z.infer<typeof restoreCheckpointMessageSchema>;
 export type ShowApprovalDiffMessage = z.infer<typeof showApprovalDiffMessageSchema>;
 export type ApprovalDecisionIntent = z.infer<typeof approvalDecisionIntentSchema>;
 export type ApprovalDecisionMessage = z.infer<typeof approvalDecisionMessageSchema>;
@@ -199,5 +237,8 @@ export type SessionListMessage = z.infer<typeof sessionListMessageSchema>;
 export type RestoredSession = z.infer<typeof restoredSessionSchema>;
 export type SessionRestoredMessage = z.infer<typeof sessionRestoredMessageSchema>;
 export type SessionErrorMessage = z.infer<typeof sessionErrorMessageSchema>;
+export type CheckpointListMessage = z.infer<typeof checkpointListMessageSchema>;
+export type CheckpointRestoredMessage = z.infer<typeof checkpointRestoredMessageSchema>;
+export type CheckpointErrorMessage = z.infer<typeof checkpointErrorMessageSchema>;
 export type WebviewToExtensionMessage = z.infer<typeof webviewToExtensionMessageSchema>;
 export type ExtensionToWebviewMessage = z.infer<typeof extensionToWebviewMessageSchema>;

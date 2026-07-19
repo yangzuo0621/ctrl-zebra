@@ -50,6 +50,19 @@ class FakeWebviewHost implements WebviewHost {
     this.sent.push({ protocolVersion, type: "webview/restore-session", requestId, sessionId });
   }
 
+  listCheckpoints(requestId: string): void {
+    this.sent.push({ protocolVersion, type: "webview/list-checkpoints", requestId });
+  }
+
+  restoreCheckpoint(requestId: string, checkpointId: string): void {
+    this.sent.push({
+      protocolVersion,
+      type: "webview/restore-checkpoint",
+      requestId,
+      checkpointId,
+    });
+  }
+
   subscribe(listener: (message: ExtensionToWebviewMessage) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
@@ -74,6 +87,61 @@ describe("App streaming chat", () => {
     vi.stubGlobal("cancelAnimationFrame", (frameId: number) => {
       animationFrames[frameId - 1] = undefined;
     });
+  });
+
+  it("lists Agent changes and requests a selected Checkpoint restore", async () => {
+    const host = new FakeWebviewHost();
+    const ids = ["checkpoint-list-1", "checkpoint-restore-1"];
+    const user = userEvent.setup();
+    render(<App host={host} createRequestId={() => ids.shift() ?? "unexpected"} />);
+
+    await user.click(screen.getByRole("button", { name: "Refresh changes" }));
+    expect(host.sent.at(-1)).toEqual({
+      protocolVersion,
+      type: "webview/list-checkpoints",
+      requestId: "checkpoint-list-1",
+    });
+    act(() =>
+      host.emit({
+        protocolVersion,
+        type: "extension/checkpoint-list",
+        requestId: "checkpoint-list-1",
+        checkpoints: [
+          {
+            id: "checkpoint-1",
+            sessionId: "session-1",
+            runId: "run-1",
+            createdAt: "2026-07-19T10:00:00.000Z",
+            files: [
+              {
+                uri: "file:///workspace/example.ts",
+                beforeHash: "a".repeat(64),
+                afterHash: "b".repeat(64),
+              },
+            ],
+          },
+        ],
+      }),
+    );
+
+    expect(screen.getByText("file:///workspace/example.ts")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Restore change" }));
+    expect(host.sent.at(-1)).toEqual({
+      protocolVersion,
+      type: "webview/restore-checkpoint",
+      requestId: "checkpoint-restore-1",
+      checkpointId: "checkpoint-1",
+    });
+    expect(screen.getByText("Restoring Checkpoint…")).toBeVisible();
+    act(() =>
+      host.emit({
+        protocolVersion,
+        type: "extension/checkpoint-restored",
+        requestId: "checkpoint-restore-1",
+        checkpointId: "checkpoint-1",
+      }),
+    );
+    expect(screen.getByText("Checkpoint restored.")).toBeVisible();
   });
 
   it("lists saved sessions and restores their messages", async () => {

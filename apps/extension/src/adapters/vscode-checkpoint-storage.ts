@@ -5,11 +5,11 @@ import {
   type PersistencePath,
 } from "@ctrl-zebra/core";
 import { persistenceCheckpointsDirectory, persistenceFormatDirectory } from "@ctrl-zebra/protocol";
-import { type FileSystem, FileSystemError, Uri } from "vscode";
+import { type FileSystem, FileSystemError, FileType, Uri } from "vscode";
 
 type CheckpointFileSystem = Pick<
   FileSystem,
-  "createDirectory" | "delete" | "rename" | "stat" | "writeFile" | "readFile"
+  "createDirectory" | "delete" | "readDirectory" | "readFile" | "rename" | "stat" | "writeFile"
 >;
 
 export class WorkspaceCheckpointStorageUnavailableError extends Error {
@@ -82,6 +82,20 @@ class VsCodeCheckpointStorage implements CheckpointStorage {
       throw new RangeError(`Persisted Checkpoint exceeds the ${maxBytes}-byte limit.`);
     }
     return new TextDecoder("utf-8", { fatal: true }).decode(content);
+  }
+
+  async listFiles(directory: PersistencePath, maxFiles: number): Promise<readonly string[]> {
+    const entries = await this.#fileSystem.readDirectory(this.#resolve(directory));
+    const files: string[] = [];
+    for (const [name, type] of entries) {
+      if ((type & FileType.File) !== 0) {
+        files.push(name);
+        if (files.length > maxFiles) {
+          throw new RangeError(`Persisted Checkpoint count exceeds the ${maxFiles}-file limit.`);
+        }
+      }
+    }
+    return files;
   }
 
   async writeText(path: PersistencePath, content: string, maxBytes: number): Promise<void> {

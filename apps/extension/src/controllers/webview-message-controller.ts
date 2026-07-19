@@ -8,6 +8,7 @@ import {
 } from "@ctrl-zebra/protocol";
 
 import type { ChatRunner } from "./chat-runner.js";
+import { CheckpointActionError, type CheckpointActions } from "./checkpoint-actions.js";
 import { type SessionRecoveryActions, SessionRecoveryError } from "./session-recovery.js";
 
 interface DisposableResource {
@@ -49,8 +50,10 @@ export function bindWebviewMessageController(
   chatRunner: ChatRunner,
   approvalActions?: ApprovalUiActions,
   sessionActions?: SessionRecoveryActions,
+  checkpointActions?: CheckpointActions,
 ): void {
   let disposed = false;
+  const checkpointRequests = new Set<AbortController>();
   let activeRun:
     | {
         readonly requestId: string;
@@ -263,6 +266,66 @@ export function bindWebviewMessageController(
       return;
     }
 
+    if (result.data.type === "webview/list-checkpoints") {
+      const controller = new AbortController();
+      checkpointRequests.add(controller);
+      void (
+        checkpointActions?.list(controller.signal) ??
+        Promise.reject(new Error("Checkpoint storage unavailable."))
+      )
+        .then(
+          (checkpoints) =>
+            post({
+              protocolVersion,
+              type: "extension/checkpoint-list",
+              requestId: result.data.requestId,
+              checkpoints: [...checkpoints],
+            }),
+          () =>
+            post({
+              protocolVersion,
+              type: "extension/checkpoint-error",
+              requestId: result.data.requestId,
+              code: "unavailable",
+              message: "Checkpoints are unavailable.",
+            }),
+        )
+        .finally(() => checkpointRequests.delete(controller));
+      return;
+    }
+
+    if (result.data.type === "webview/restore-checkpoint") {
+      const { checkpointId, requestId } = result.data;
+      const controller = new AbortController();
+      checkpointRequests.add(controller);
+      void (
+        checkpointActions?.restore(checkpointId, controller.signal) ??
+        Promise.reject(new Error("Checkpoint restore unavailable."))
+      )
+        .then(
+          () =>
+            post({
+              protocolVersion,
+              type: "extension/checkpoint-restored",
+              requestId,
+              checkpointId,
+            }),
+          (error: unknown) =>
+            post({
+              protocolVersion,
+              type: "extension/checkpoint-error",
+              requestId,
+              code: error instanceof CheckpointActionError ? error.code : "unavailable",
+              message:
+                error instanceof CheckpointActionError && error.code === "conflict"
+                  ? "Files changed after the Agent edit. Nothing was restored."
+                  : "The Checkpoint could not be restored.",
+            }),
+        )
+        .finally(() => checkpointRequests.delete(controller));
+      return;
+    }
+
     if (result.data.type === "webview/show-approval-diff") {
       if (activeRun?.requestId === result.data.requestId) {
         approvalActions?.showDiff(result.data.requestId, result.data.approvalId);
@@ -292,6 +355,10 @@ export function bindWebviewMessageController(
     disposed = true;
     activeRun?.abortController.abort(new Error("Webview disposed during chat run."));
     activeRun = undefined;
+    for (const controller of checkpointRequests) {
+      controller.abort(new Error("Webview disposed during Checkpoint operation."));
+    }
+    checkpointRequests.clear();
     messageSubscription.dispose();
     disposalSubscription?.dispose();
     disposalSubscription = undefined;

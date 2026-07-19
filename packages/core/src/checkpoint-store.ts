@@ -8,10 +8,12 @@ import {
 import type { PersistencePath } from "./manifest-store.js";
 
 export const maxCheckpointRecordBytes = 4_194_304;
+export const maxCheckpointRecords = 10_000;
 
 export interface CheckpointStorage {
   exists(path: PersistencePath): Promise<boolean>;
   readText(path: PersistencePath, maxBytes: number): Promise<string | undefined>;
+  listFiles(directory: PersistencePath, maxFiles: number): Promise<readonly string[]>;
   writeText(path: PersistencePath, content: string, maxBytes: number): Promise<void>;
   /** Atomically moves source to a destination that must not already exist. */
   commit(source: PersistencePath, destination: PersistencePath): Promise<void>;
@@ -21,6 +23,7 @@ export interface CheckpointStorage {
 export interface CheckpointStore {
   create(checkpoint: unknown, signal: AbortSignal): Promise<Checkpoint>;
   read(checkpointId: unknown, signal: AbortSignal): Promise<Checkpoint | undefined>;
+  list(signal: AbortSignal): Promise<readonly Checkpoint[]>;
 }
 
 export type InvalidCheckpointReason = "invalid-schema" | "integrity" | "too-large" | "id-mismatch";
@@ -82,17 +85,40 @@ export class AtomicCheckpointStore implements CheckpointStore {
       return undefined;
     }
 
-    let value: unknown;
-    try {
-      value = JSON.parse(content) as unknown;
-    } catch {
-      throw new InvalidCheckpointError("invalid-schema");
-    }
-    const checkpoint = this.#parse(value);
+    const checkpoint = this.#parseJson(content);
     if (checkpoint.id !== checkpointId) {
       throw new InvalidCheckpointError("id-mismatch");
     }
     return checkpoint;
+  }
+
+  async list(signal: AbortSignal): Promise<readonly Checkpoint[]> {
+    signal.throwIfAborted();
+    const directory = getCheckpointPersistencePaths("index").directory;
+    const names = await this.#storage.listFiles(directory, maxCheckpointRecords);
+    const checkpoints: Checkpoint[] = [];
+    for (const name of names) {
+      signal.throwIfAborted();
+      if (!name.endsWith(".json")) {
+        continue;
+      }
+      const content = await this.#storage.readText(
+        [...directory, name] as PersistencePath,
+        maxCheckpointRecordBytes,
+      );
+      if (content === undefined) {
+        continue;
+      }
+      const checkpoint = this.#parseJson(content);
+      if (getCheckpointPersistencePaths(checkpoint.id).checkpoint.at(-1) !== name) {
+        throw new InvalidCheckpointError("id-mismatch");
+      }
+      checkpoints.push(checkpoint);
+    }
+    return checkpoints.sort(
+      (left, right) =>
+        Date.parse(right.createdAt) - Date.parse(left.createdAt) || left.id.localeCompare(right.id),
+    );
   }
 
   #parse(value: unknown): Checkpoint {
@@ -103,6 +129,16 @@ export class AtomicCheckpointStore implements CheckpointStore {
         error instanceof InvalidCheckpointIntegrityError ? "integrity" : "invalid-schema",
       );
     }
+  }
+
+  #parseJson(content: string): Checkpoint {
+    let value: unknown;
+    try {
+      value = JSON.parse(content) as unknown;
+    } catch {
+      throw new InvalidCheckpointError("invalid-schema");
+    }
+    return this.#parse(value);
   }
 
   async #deleteTemporaryFile(path: PersistencePath): Promise<void> {

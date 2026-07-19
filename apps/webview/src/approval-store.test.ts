@@ -41,6 +41,8 @@ class FakeWebviewHost implements WebviewHost {
   cancel(): void {}
   listSessions(): void {}
   restoreSession(): void {}
+  listCheckpoints(): void {}
+  restoreCheckpoint(): void {}
   subscribe(): () => void {
     return () => {};
   }
