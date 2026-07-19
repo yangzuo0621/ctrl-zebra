@@ -68,6 +68,19 @@ export {
   InvalidApprovalStatusTransitionError,
 } from "./approval-state-machine.js";
 export type {
+  ConversationSummarizer,
+  ConversationSummary,
+  ConversationSummaryRange,
+  SummarizeConversationRequest,
+} from "./conversation-summarizer.js";
+export {
+  conversationSummaryKind,
+  conversationSummaryVersion,
+  InvalidConversationSummaryError,
+  maxConversationSummaryCharacters,
+  parseConversationSummary,
+} from "./conversation-summarizer.js";
+export type {
   CorruptEventLogReason,
   EventStorage,
   EventStore,
