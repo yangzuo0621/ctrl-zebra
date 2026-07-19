@@ -411,7 +411,68 @@ describe("handleWebviewMessage", () => {
     });
   });
 
-  it("routes minimal Approval UI actions without treating them as run cancellation", () => {
+  it("projects an Agent approval event onto the current Webview run", async () => {
+    let messageListener: ((message: unknown) => void) | undefined;
+    const postedMessages: unknown[] = [];
+    let finishRun: (() => void) | undefined;
+    bindWebviewMessageController(
+      {
+        onDidReceiveMessage(listener) {
+          messageListener = listener;
+          return { dispose() {} };
+        },
+        postMessage(message) {
+          postedMessages.push(message);
+          return Promise.resolve(true);
+        },
+      },
+      { onDidDispose: () => ({ dispose() {} }) },
+      () => {},
+      {
+        async run(_content, _signal, emit) {
+          emit({
+            type: "agent.approval-state",
+            sessionId: "session-1",
+            approval: {
+              id: "approval-1",
+              scope: {
+                sessionId: "session-1",
+                call: { id: "call-1", name: "propose_file_edit", input: {} },
+                risk: "write",
+                resources: [],
+              },
+              presentation: { title: "Apply edit", summary: "Apply one edit." },
+              createdAt: "2026-07-19T00:00:00.000Z",
+              expiresAt: "2026-07-19T00:05:00.000Z",
+            },
+            status: "pending",
+          });
+          await new Promise<void>((resolve) => {
+            finishRun = resolve;
+          });
+        },
+      },
+    );
+
+    messageListener?.({
+      protocolVersion,
+      type: "webview/submit",
+      requestId: "request-approval",
+      content: "Edit the file.",
+    });
+    await Promise.resolve();
+
+    expect(postedMessages[1]).toMatchObject({
+      protocolVersion,
+      type: "extension/approval-state",
+      requestId: "request-approval",
+      status: "pending",
+      approval: { id: "approval-1" },
+    });
+    finishRun?.();
+  });
+
+  it("routes only current-run Approval UI actions without treating them as cancellation", () => {
     let messageListener: ((message: unknown) => void) | undefined;
     const actions: unknown[] = [];
 
@@ -442,6 +503,19 @@ describe("handleWebviewMessage", () => {
       },
     );
 
+    messageListener?.({
+      protocolVersion,
+      type: "webview/submit",
+      requestId: "request-1",
+      content: "Edit the file.",
+    });
+    messageListener?.({
+      protocolVersion,
+      type: "webview/approval-decision",
+      requestId: "different-run",
+      approvalId: "approval-1",
+      decision: "approved",
+    });
     messageListener?.({
       protocolVersion,
       type: "webview/show-approval-diff",

@@ -1,4 +1,6 @@
 import {
+  type ApprovalRequest,
+  type ApprovalStatus,
   type SessionId,
   type SessionStatus,
   type ToolCall,
@@ -9,10 +11,11 @@ import {
   toolResultSchema,
   type UserMessage,
 } from "@ctrl-zebra/protocol";
-
+import { BasicApprovalPolicy } from "./approval-policy.js";
 import type { DomainEvent, EventSink } from "./events.js";
 import type { ModelGateway, ModelMessage } from "./model-gateway.js";
 import { SessionStateMachine, type SessionStatusChangedEvent } from "./session-state-machine.js";
+import type { ToolApprovalWorkflow } from "./tool-approval.js";
 import { InvalidToolInputError, parseToolInput } from "./tool-input-validation.js";
 import { type ToolExecutionOutput, ToolRegistry } from "./tool-registry.js";
 
@@ -42,12 +45,22 @@ export type AgentToolStateEvent =
 export type AgentRuntimeEvent =
   | AgentTextDeltaEvent
   | AgentToolStateEvent
+  | AgentApprovalStateEvent
   | SessionStatusChangedEvent;
+
+export interface AgentApprovalStateEvent extends DomainEvent {
+  readonly type: "agent.approval-state";
+  readonly sessionId: SessionId;
+  readonly approval: ApprovalRequest;
+  readonly status: ApprovalStatus;
+}
 
 export const defaultMaxToolSteps = 8;
 
 export interface AgentRuntimeOptions {
   readonly maxToolSteps?: number;
+  readonly approvalPolicy?: BasicApprovalPolicy;
+  readonly approvalWorkflow?: ToolApprovalWorkflow;
 }
 
 export class MaxToolStepsExceededError extends Error {
@@ -62,6 +75,8 @@ export class AgentRuntime {
   readonly #eventSink: EventSink<AgentRuntimeEvent>;
   readonly #toolRegistry: ToolRegistry;
   readonly #maxToolSteps: number;
+  readonly #approvalPolicy: BasicApprovalPolicy;
+  readonly #approvalWorkflow: ToolApprovalWorkflow | undefined;
 
   constructor(
     modelGateway: ModelGateway,
@@ -78,6 +93,8 @@ export class AgentRuntime {
     this.#eventSink = eventSink;
     this.#toolRegistry = toolRegistry;
     this.#maxToolSteps = maxToolSteps;
+    this.#approvalPolicy = options.approvalPolicy ?? new BasicApprovalPolicy();
+    this.#approvalWorkflow = options.approvalWorkflow;
   }
 
   async run(userMessage: UserMessage, signal: AbortSignal): Promise<void> {
@@ -101,14 +118,19 @@ export class AgentRuntime {
         }
 
         this.#emitToolState(userMessage.sessionId, toolCall, "pending");
-        session.transitionTo("executing_tool");
-        this.#emitToolState(userMessage.sessionId, toolCall, "running");
-        const toolResult = await this.#executeTool(toolCall, signal);
+        const toolResult = await this.#executeTool(
+          userMessage.sessionId,
+          toolCall,
+          signal,
+          session,
+        );
         this.#emitToolResult(userMessage.sessionId, toolCall, toolResult);
         messages.push({ role: "assistant", toolCall }, { role: "tool", result: toolResult });
         toolSteps += 1;
         signal.throwIfAborted();
-        session.transitionTo("streaming");
+        if (session.status === "executing_tool") {
+          session.transitionTo("streaming");
+        }
       }
 
       signal.throwIfAborted();
@@ -162,7 +184,12 @@ export class AgentRuntime {
     return toolCall;
   }
 
-  async #executeTool(toolCall: ToolCall, signal: AbortSignal): Promise<ToolResult> {
+  async #executeTool(
+    sessionId: SessionId,
+    toolCall: ToolCall,
+    signal: AbortSignal,
+    session: SessionStateMachine,
+  ): Promise<ToolResult> {
     const tool = this.#toolRegistry.get(toolCall.name);
     if (tool === undefined) {
       return createToolErrorResult(toolCall, "unknown-tool", `Unknown tool: ${toolCall.name}.`);
@@ -180,6 +207,21 @@ export class AgentRuntime {
     }
 
     signal.throwIfAborted();
+    session.transitionTo("executing_tool");
+    this.#emitToolState(sessionId, toolCall, "running");
+    const disposition = this.#approvalPolicy.evaluate(tool.risk);
+    if (disposition === "deny") {
+      return createToolErrorResult(
+        toolCall,
+        "denied",
+        `Tool "${toolCall.name}" is denied by policy.`,
+      );
+    }
+
+    if (disposition === "require_approval") {
+      return this.#executeApprovalRequiredTool(sessionId, toolCall, tool, input, signal, session);
+    }
+
     let execution: ToolExecutionOutput<unknown>;
     try {
       execution = await tool.execute(input, { signal });
@@ -212,8 +254,104 @@ export class AgentRuntime {
     return result.data;
   }
 
+  async #executeApprovalRequiredTool(
+    sessionId: SessionId,
+    toolCall: ToolCall,
+    tool: NonNullable<ReturnType<ToolRegistry["get"]>>,
+    input: unknown,
+    signal: AbortSignal,
+    session: SessionStateMachine,
+  ): Promise<ToolResult> {
+    if (tool.prepareApproval === undefined || this.#approvalWorkflow === undefined) {
+      return createToolErrorResult(
+        toolCall,
+        "denied",
+        `Tool "${toolCall.name}" requires an unavailable approval workflow.`,
+      );
+    }
+
+    let prepared: ToolExecutionOutput<unknown>;
+    try {
+      prepared = await tool.prepareApproval(input, { signal });
+    } catch {
+      signal.throwIfAborted();
+      return createToolErrorResult(
+        toolCall,
+        "failed",
+        `Tool "${toolCall.name}" failed while preparing approval.`,
+      );
+    }
+
+    signal.throwIfAborted();
+    const operation = await this.#approvalWorkflow.create(
+      {
+        sessionId,
+        call: toolCall,
+        risk: "write",
+        prepared,
+      },
+      signal,
+    );
+    signal.throwIfAborted();
+    session.transitionTo("streaming");
+    session.transitionTo("awaiting_approval");
+    this.#emitApprovalState(sessionId, operation.request, "pending");
+    const decision = await operation.requestDecision(signal);
+    signal.throwIfAborted();
+
+    if (decision.decision === "expired") {
+      this.#emitApprovalState(sessionId, operation.request, "expired");
+      session.transitionTo("streaming");
+      return createToolErrorResult(
+        toolCall,
+        "failed",
+        `Approval for tool "${toolCall.name}" expired.`,
+      );
+    }
+
+    if (decision.decision === "denied") {
+      this.#emitApprovalState(sessionId, operation.request, "denied");
+      session.transitionTo("streaming");
+      return createToolErrorResult(toolCall, "denied", `The user denied tool "${toolCall.name}".`);
+    }
+
+    this.#emitApprovalState(sessionId, operation.request, "approved");
+    session.transitionTo("executing_tool");
+    const consumption = await operation.consume(signal);
+    signal.throwIfAborted();
+    if (consumption.outcome === "expired") {
+      this.#emitApprovalState(sessionId, operation.request, "expired");
+      return createToolErrorResult(
+        toolCall,
+        "failed",
+        `Approval for tool "${toolCall.name}" expired before use.`,
+      );
+    }
+    if (consumption.outcome === "conflict") {
+      this.#emitApprovalState(sessionId, operation.request, "invalidated");
+      return createToolErrorResult(toolCall, "conflict", consumption.message);
+    }
+
+    this.#emitApprovalState(sessionId, operation.request, "consumed");
+    return {
+      callId: toolCall.id,
+      name: toolCall.name,
+      status: "success",
+      output: { outcome: "approved" },
+      truncated: false,
+    };
+  }
+
   #emitToolState(sessionId: SessionId, call: ToolCall, status: "pending" | "running"): void {
     this.#eventSink.emit({ type: "agent.tool-state", sessionId, call, status });
+  }
+
+  #emitApprovalState(
+    sessionId: SessionId,
+    approval: ApprovalRequest,
+    status: ApprovalStatus,
+  ): void {
+    this.#eventSink.emit({ type: "agent.approval-state", sessionId, approval, status });
   }
 
   #emitToolResult(sessionId: SessionId, call: ToolCall, result: ToolResult): void {
@@ -256,5 +394,10 @@ function isCancellation(error: unknown, signal: AbortSignal): boolean {
 }
 
 function isActiveStatus(status: SessionStatus): boolean {
-  return status === "preparing" || status === "streaming" || status === "executing_tool";
+  return (
+    status === "preparing" ||
+    status === "streaming" ||
+    status === "awaiting_approval" ||
+    status === "executing_tool"
+  );
 }

@@ -10,7 +10,10 @@ import {
 } from "vscode";
 
 import type { ChatRunner } from "./controllers/chat-runner.js";
-import { bindWebviewMessageController } from "./controllers/webview-message-controller.js";
+import {
+  type ApprovalUiActions,
+  bindWebviewMessageController,
+} from "./controllers/webview-message-controller.js";
 
 export const agentViewId = "ctrlZebra.agentView";
 
@@ -74,6 +77,7 @@ class AgentViewProvider implements WebviewViewProvider {
   constructor(
     private readonly extensionUri: Uri,
     private readonly chatRunner: ChatRunner,
+    private readonly approvalActions?: ApprovalUiActions,
   ) {}
 
   resolveWebviewView(webviewView: WebviewView): void {
@@ -88,6 +92,7 @@ class AgentViewProvider implements WebviewViewProvider {
         console.error("CtrlZebra could not deliver a Webview protocol response.");
       },
       this.chatRunner,
+      this.approvalActions,
     );
   }
 }
@@ -96,6 +101,7 @@ export function registerAgentView(
   extensionUri: Uri,
   registrar: WebviewViewRegistrar,
   chatRunner: ChatRunner,
+  approvalActions?: ApprovalUiActions,
 ): Disposable {
-  return registrar(agentViewId, new AgentViewProvider(extensionUri, chatRunner));
+  return registrar(agentViewId, new AgentViewProvider(extensionUri, chatRunner, approvalActions));
 }

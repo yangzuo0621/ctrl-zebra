@@ -27,6 +27,7 @@ interface PendingApproval {
   readonly signal: AbortSignal;
   readonly onAbort: () => void;
   readonly resolve: (decision: ApprovalDecision) => void;
+  readonly reject: (reason: unknown) => void;
 }
 
 export class CancellableApprovalService implements ApprovalService {
@@ -56,6 +57,7 @@ export class CancellableApprovalService implements ApprovalService {
           }
         },
         resolve,
+        reject,
       };
 
       this.#pendingApprovals.set(request.id, pending);
@@ -79,6 +81,16 @@ export class CancellableApprovalService implements ApprovalService {
 
     this.#removePending(pending);
     pending.resolve(decision);
+  }
+
+  cancel(requestId: ApprovalRequestId, reason: unknown): void {
+    const pending = this.#pendingApprovals.get(requestId);
+    if (pending === undefined) {
+      throw new ApprovalRequestNotPendingError(requestId);
+    }
+
+    this.#removePending(pending);
+    pending.reject(reason);
   }
 
   #removePending(pending: PendingApproval): boolean {

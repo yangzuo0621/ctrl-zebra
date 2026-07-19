@@ -137,6 +137,17 @@ export function bindWebviewMessageController(
       return;
     }
 
+    if (event.type === "agent.approval-state") {
+      post({
+        protocolVersion,
+        type: "extension/approval-state",
+        requestId: run.requestId,
+        approval: event.approval,
+        status: event.status,
+      });
+      return;
+    }
+
     if (event.status === "preparing") {
       return;
     }
@@ -204,12 +215,20 @@ export function bindWebviewMessageController(
     }
 
     if (result.data.type === "webview/show-approval-diff") {
-      approvalActions?.showDiff(result.data.requestId, result.data.approvalId);
+      if (activeRun?.requestId === result.data.requestId) {
+        approvalActions?.showDiff(result.data.requestId, result.data.approvalId);
+      }
       return;
     }
 
     if (result.data.type === "webview/approval-decision") {
-      approvalActions?.decide(result.data.requestId, result.data.approvalId, result.data.decision);
+      if (activeRun?.requestId === result.data.requestId) {
+        approvalActions?.decide(
+          result.data.requestId,
+          result.data.approvalId,
+          result.data.decision,
+        );
+      }
       return;
     }
 

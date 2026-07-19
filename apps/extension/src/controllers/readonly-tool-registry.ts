@@ -1,7 +1,9 @@
 import {
   createListFilesTool,
+  createProposeFileEditTool,
   createReadFileTool,
   createSearchFilesTool,
+  type ProposeFileEditWorkspace,
 } from "@ctrl-zebra/builtin-tools";
 import { ToolRegistry } from "@ctrl-zebra/core";
 import type { Disposable, Uri } from "vscode";
@@ -39,6 +41,10 @@ interface ReadonlyToolRegistryDependencies {
   readonly joinPath: JoinWorkspacePath;
   readonly readPrefix: ReadWorkspaceFilePrefix;
   readonly onDidChangeWorkspaceFolders: (listener: () => void) => Disposable;
+  readonly createProposeFileEditWorkspace: (
+    root: Uri,
+    scope: WorkspaceScope,
+  ) => ProposeFileEditWorkspace;
 }
 
 export function createReadonlyToolRegistryProvider({
@@ -48,6 +54,7 @@ export function createReadonlyToolRegistryProvider({
   joinPath,
   readPrefix,
   onDidChangeWorkspaceFolders,
+  createProposeFileEditWorkspace,
 }: ReadonlyToolRegistryDependencies): ReadonlyToolRegistryProvider {
   let initialization: Promise<ToolRegistry> | undefined;
   let disposed = false;
@@ -64,6 +71,9 @@ export function createReadonlyToolRegistryProvider({
     const registry = new ToolRegistry();
 
     registry.register(createListFilesTool(lister));
+    registry.register(
+      createProposeFileEditTool(createProposeFileEditWorkspace(selectedRoot, scope)),
+    );
     registry.register(createReadFileTool(reader));
     registry.register(createSearchFilesTool(new WorkspaceSearchFiles(lister, reader)));
     return registry;
@@ -102,7 +112,7 @@ export function createReadonlyToolRegistryProvider({
   };
 }
 
-function selectWorkspaceRoot(roots: readonly Uri[]): Uri {
+export function selectWorkspaceRoot(roots: readonly Uri[]): Uri {
   if (roots.length === 0) {
     throw new WorkspaceRootSelectionError("missing-workspace");
   }

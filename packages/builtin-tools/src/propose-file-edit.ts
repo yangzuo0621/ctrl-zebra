@@ -14,7 +14,7 @@ import { hasOnlyKeys, isRecord, isSafeForwardSlashPath } from "./boundary-valida
 
 export const proposeFileEditToolName = "propose_file_edit" as const;
 export const proposeFileEditToolDescription =
-  "Propose bounded text edits for one file in the selected workspace without applying them.";
+  "Propose bounded text edits for one selected-workspace file; changes apply only after explicit user approval.";
 export const maxProposedFileEdits = 256;
 export const maxProposedReplacementCharacters = 262_144;
 export const maxTotalProposedReplacementBytes = 786_432;
@@ -127,30 +127,38 @@ export function createProposeFileEditTool(
     inputSchema: proposeFileEditInputSchema,
     risk: "write",
     parseInput: parseProposeFileEditInput,
-    async execute(input, { signal }): Promise<ToolExecutionOutput<TextEditPlan>> {
-      signal.throwIfAborted();
-      const value = await workspace.captureFileRevision({ path: input.path }, signal);
-      signal.throwIfAborted();
-      const snapshot = parseFileEditRevisionSnapshot(value);
-      const current = await workspace.isFileRevisionCurrent(snapshot, signal);
-      signal.throwIfAborted();
+    execute: prepareFileEditApproval(workspace),
+    prepareApproval: prepareFileEditApproval(workspace),
+  };
+}
 
-      if (typeof current !== "boolean") {
-        throw new InvalidWorkspaceFileRevisionError();
-      }
-      if (!current) {
-        throw new StaleFileRevisionError();
-      }
+function prepareFileEditApproval(workspace: ProposeFileEditWorkspace) {
+  return async (
+    input: ProposeFileEditInput,
+    { signal }: { readonly signal: AbortSignal },
+  ): Promise<ToolExecutionOutput<TextEditPlan>> => {
+    signal.throwIfAborted();
+    const value = await workspace.captureFileRevision({ path: input.path }, signal);
+    signal.throwIfAborted();
+    const snapshot = parseFileEditRevisionSnapshot(value);
+    const current = await workspace.isFileRevisionCurrent(snapshot, signal);
+    signal.throwIfAborted();
 
-      return {
-        output: parseTextEditPlan({
-          uri: snapshot.uri,
-          originalRevision: snapshot.revision,
-          edits: input.edits,
-        }),
-        truncated: false,
-      };
-    },
+    if (typeof current !== "boolean") {
+      throw new InvalidWorkspaceFileRevisionError();
+    }
+    if (!current) {
+      throw new StaleFileRevisionError();
+    }
+
+    return {
+      output: parseTextEditPlan({
+        uri: snapshot.uri,
+        originalRevision: snapshot.revision,
+        edits: input.edits,
+      }),
+      truncated: false,
+    };
   };
 }
 

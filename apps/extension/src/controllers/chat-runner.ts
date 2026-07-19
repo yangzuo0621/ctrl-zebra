@@ -4,6 +4,7 @@ import {
   AgentRuntime,
   type AgentRuntimeEvent,
   type ModelGateway,
+  type ToolApprovalWorkflow,
   ToolRegistry,
 } from "@ctrl-zebra/core";
 import type { UserMessage } from "@ctrl-zebra/protocol";
@@ -21,6 +22,7 @@ interface ChatRunnerDependencies {
   readonly toolRegistry?: ToolRegistry;
   readonly createId?: () => string;
   readonly now?: () => Date;
+  readonly approvalWorkflow?: ToolApprovalWorkflow;
 }
 
 interface SelectingChatRunnerDependencies {
@@ -28,6 +30,7 @@ interface SelectingChatRunnerDependencies {
   readonly selectToolRegistry?: (signal: AbortSignal) => Promise<ToolRegistry>;
   readonly createId?: () => string;
   readonly now?: () => Date;
+  readonly approvalWorkflow?: ToolApprovalWorkflow;
 }
 
 export function createChatRunner({
@@ -35,6 +38,7 @@ export function createChatRunner({
   toolRegistry,
   createId = randomUUID,
   now = () => new Date(),
+  approvalWorkflow,
 }: ChatRunnerDependencies): ChatRunner {
   return {
     async run(content, signal, emit) {
@@ -47,7 +51,7 @@ export function createChatRunner({
         role: "user",
         content,
       };
-      const runtime = new AgentRuntime(modelGateway, { emit }, toolRegistry);
+      const runtime = new AgentRuntime(modelGateway, { emit }, toolRegistry, { approvalWorkflow });
 
       await runtime.run(userMessage, signal);
     },
@@ -59,6 +63,7 @@ export function createSelectingChatRunner({
   selectToolRegistry = async () => new ToolRegistry(),
   createId,
   now,
+  approvalWorkflow,
 }: SelectingChatRunnerDependencies): ChatRunner {
   return {
     async run(content, signal, emit) {
@@ -68,7 +73,7 @@ export function createSelectingChatRunner({
       const modelGateway = await selectModelGateway();
       signal.throwIfAborted();
 
-      await createChatRunner({ modelGateway, toolRegistry, createId, now }).run(
+      await createChatRunner({ modelGateway, toolRegistry, createId, now, approvalWorkflow }).run(
         content,
         signal,
         emit,
