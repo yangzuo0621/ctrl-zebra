@@ -68,6 +68,22 @@ export {
   InvalidApprovalStatusTransitionError,
 } from "./approval-state-machine.js";
 export type {
+  ContextOverflowRecoveryDependencies,
+  ContextOverflowRecoveryExhaustedReason,
+  ContextOverflowRecoveryRequest,
+  ContextRecoveryRetry,
+  ContextRecoveryRetryResult,
+  InvalidContextRecoverySummaryReason,
+  RecoveredContext,
+} from "./context-overflow-recovery.js";
+export {
+  ContextOverflowRecoveryExhaustedError,
+  conversationSummaryMessagePrefix,
+  InvalidContextRecoverySummaryError,
+  maxContextOverflowRecoveryAttempts,
+  recoverFromContextOverflow,
+} from "./context-overflow-recovery.js";
+export type {
   ConversationSummarizer,
   ConversationSummary,
   ConversationSummaryRange,
