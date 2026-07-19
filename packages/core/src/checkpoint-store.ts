@@ -11,6 +11,7 @@ export const maxCheckpointRecordBytes = 4_194_304;
 
 export interface CheckpointStorage {
   exists(path: PersistencePath): Promise<boolean>;
+  readText(path: PersistencePath, maxBytes: number): Promise<string | undefined>;
   writeText(path: PersistencePath, content: string, maxBytes: number): Promise<void>;
   /** Atomically moves source to a destination that must not already exist. */
   commit(source: PersistencePath, destination: PersistencePath): Promise<void>;
@@ -19,9 +20,10 @@ export interface CheckpointStorage {
 
 export interface CheckpointStore {
   create(checkpoint: unknown, signal: AbortSignal): Promise<Checkpoint>;
+  read(checkpointId: unknown, signal: AbortSignal): Promise<Checkpoint | undefined>;
 }
 
-export type InvalidCheckpointReason = "invalid-schema" | "integrity" | "too-large";
+export type InvalidCheckpointReason = "invalid-schema" | "integrity" | "too-large" | "id-mismatch";
 
 export class InvalidCheckpointError extends Error {
   constructor(readonly reason: InvalidCheckpointReason) {
@@ -69,6 +71,28 @@ export class AtomicCheckpointStore implements CheckpointStore {
       await this.#deleteTemporaryFile(temporaryPath);
       throw error;
     }
+  }
+
+  async read(checkpointId: unknown, signal: AbortSignal): Promise<Checkpoint | undefined> {
+    signal.throwIfAborted();
+    const paths = getCheckpointPersistencePaths(checkpointId);
+    const content = await this.#storage.readText(paths.checkpoint, maxCheckpointRecordBytes);
+    signal.throwIfAborted();
+    if (content === undefined) {
+      return undefined;
+    }
+
+    let value: unknown;
+    try {
+      value = JSON.parse(content) as unknown;
+    } catch {
+      throw new InvalidCheckpointError("invalid-schema");
+    }
+    const checkpoint = this.#parse(value);
+    if (checkpoint.id !== checkpointId) {
+      throw new InvalidCheckpointError("id-mismatch");
+    }
+    return checkpoint;
   }
 
   #parse(value: unknown): Checkpoint {
