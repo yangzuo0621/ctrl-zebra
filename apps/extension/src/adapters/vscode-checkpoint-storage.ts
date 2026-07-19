@@ -9,7 +9,7 @@ import { type FileSystem, FileSystemError, Uri } from "vscode";
 
 type CheckpointFileSystem = Pick<
   FileSystem,
-  "createDirectory" | "delete" | "rename" | "stat" | "writeFile"
+  "createDirectory" | "delete" | "rename" | "stat" | "writeFile" | "readFile"
 >;
 
 export class WorkspaceCheckpointStorageUnavailableError extends Error {
@@ -66,6 +66,22 @@ class VsCodeCheckpointStorage implements CheckpointStorage {
       }
       throw error;
     }
+  }
+
+  async readText(path: PersistencePath, maxBytes: number): Promise<string | undefined> {
+    let content: Uint8Array;
+    try {
+      content = await this.#fileSystem.readFile(this.#resolve(path));
+    } catch (error) {
+      if (isFileNotFound(error)) {
+        return undefined;
+      }
+      throw error;
+    }
+    if (content.byteLength > maxBytes) {
+      throw new RangeError(`Persisted Checkpoint exceeds the ${maxBytes}-byte limit.`);
+    }
+    return new TextDecoder("utf-8", { fatal: true }).decode(content);
   }
 
   async writeText(path: PersistencePath, content: string, maxBytes: number): Promise<void> {

@@ -43,6 +43,9 @@ describe("AtomicCheckpointStore", () => {
     expect(storage.files.get("checkpoints/v1/636865636b706f696e742d31.json")).toBe(
       `${JSON.stringify(checkpoint)}\n`,
     );
+    await expect(store.read(checkpoint.id, new AbortController().signal)).resolves.toEqual(
+      checkpoint,
+    );
   });
 
   it("rejects an existing Checkpoint ID without writing", async () => {
@@ -109,6 +112,31 @@ describe("AtomicCheckpointStore", () => {
     await expect(store.create(checkpoint, controller.signal)).rejects.toBe(cancellation);
     expect(storage.operations).toEqual([]);
   });
+
+  it("rejects corrupt, mismatched, and integrity-damaged persisted Checkpoints", async () => {
+    const storage = new FakeCheckpointStorage();
+    const store = createStore(storage);
+    const key = "checkpoints/v1/636865636b706f696e742d31.json";
+
+    storage.files.set(key, "not JSON");
+    await expect(store.read(checkpoint.id, new AbortController().signal)).rejects.toMatchObject({
+      reason: "invalid-schema",
+    });
+    storage.files.set(key, JSON.stringify({ ...checkpoint, id: "checkpoint-2" }));
+    await expect(store.read(checkpoint.id, new AbortController().signal)).rejects.toMatchObject({
+      reason: "id-mismatch",
+    });
+    storage.files.set(
+      key,
+      JSON.stringify({
+        ...checkpoint,
+        files: [{ ...checkpoint.files[0], beforeHash: "c".repeat(64) }],
+      }),
+    );
+    await expect(store.read(checkpoint.id, new AbortController().signal)).rejects.toMatchObject({
+      reason: "integrity",
+    });
+  });
 });
 
 function createStore(storage: CheckpointStorage): AtomicCheckpointStore {
@@ -126,6 +154,12 @@ class FakeCheckpointStorage implements CheckpointStorage {
     const key = path.join("/");
     this.operations.push(`exists:${key}`);
     return this.files.has(key);
+  }
+
+  async readText(path: PersistencePath, maxBytes: number): Promise<string | undefined> {
+    const key = path.join("/");
+    this.operations.push(`read:${key}:${maxBytes}`);
+    return this.files.get(key);
   }
 
   async writeText(path: PersistencePath, content: string, maxBytes: number): Promise<void> {
