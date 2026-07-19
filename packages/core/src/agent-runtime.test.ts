@@ -9,6 +9,7 @@ import {
   type ModelEvent,
   type ModelGateway,
   type ModelRequest,
+  maxToolOutputEntries,
   type ToolApprovalWorkflow,
   ToolRegistry,
 } from "./index.js";
@@ -573,6 +574,85 @@ describe("AgentRuntime", () => {
         status: "success",
         output: ["first.txt"],
         truncated: true,
+      },
+    });
+  });
+
+  it("limits tool output before returning it to the model", async () => {
+    const requests: ModelRequest[] = [];
+    const gateway = createScriptedModelGateway(
+      [
+        [
+          { type: "tool.call", call: { id: "call-1", name: "large_tool", input: null } },
+          { type: "finish", reason: "tool-calls" },
+        ],
+        [{ type: "finish", reason: "stop" }],
+      ],
+      requests,
+    );
+    const registry = new ToolRegistry();
+    registry.register({
+      name: "large_tool",
+      description: "Return more entries than the model may receive.",
+      inputSchema: emptyInputSchema,
+      risk: "read",
+      parseInput: () => null,
+      execute: async () => ({
+        output: Array.from({ length: maxToolOutputEntries + 1 }, (_, index) => index),
+        truncated: false,
+      }),
+    });
+    const runtime = new AgentRuntime(gateway, { emit() {} }, registry);
+
+    await runtime.run(userMessage, new AbortController().signal);
+
+    expect(requests[1]?.messages.at(-1)).toEqual({
+      role: "tool",
+      result: {
+        callId: "call-1",
+        name: "large_tool",
+        status: "success",
+        output: Array.from({ length: maxToolOutputEntries }, (_, index) => index),
+        truncated: true,
+      },
+    });
+  });
+
+  it("rejects non-JSON tool output before applying limits", async () => {
+    const requests: ModelRequest[] = [];
+    const gateway = createScriptedModelGateway(
+      [
+        [
+          { type: "tool.call", call: { id: "call-1", name: "invalid_tool", input: null } },
+          { type: "finish", reason: "tool-calls" },
+        ],
+        [{ type: "finish", reason: "stop" }],
+      ],
+      requests,
+    );
+    const registry = new ToolRegistry();
+    registry.register({
+      name: "invalid_tool",
+      description: "Return an invalid value.",
+      inputSchema: emptyInputSchema,
+      risk: "read",
+      parseInput: () => null,
+      execute: async () => ({ output: undefined, truncated: false }),
+    });
+    const runtime = new AgentRuntime(gateway, { emit() {} }, registry);
+
+    await runtime.run(userMessage, new AbortController().signal);
+
+    expect(requests[1]?.messages.at(-1)).toEqual({
+      role: "tool",
+      result: {
+        callId: "call-1",
+        name: "invalid_tool",
+        status: "error",
+        error: {
+          code: "invalid-output",
+          message: 'Tool "invalid_tool" returned invalid output.',
+        },
       },
     });
   });

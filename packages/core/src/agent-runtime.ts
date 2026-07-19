@@ -1,6 +1,7 @@
 import {
   type ApprovalRequest,
   type ApprovalStatus,
+  jsonValueSchema,
   type SessionId,
   type SessionStatus,
   type ToolCall,
@@ -17,6 +18,7 @@ import type { ModelGateway, ModelMessage } from "./model-gateway.js";
 import { SessionStateMachine, type SessionStatusChangedEvent } from "./session-state-machine.js";
 import type { ToolApprovalWorkflow } from "./tool-approval.js";
 import { InvalidToolInputError, parseToolInput } from "./tool-input-validation.js";
+import { limitToolOutput } from "./tool-output-limiter.js";
 import { type ToolExecutionOutput, ToolRegistry } from "./tool-registry.js";
 
 export interface AgentTextDeltaEvent extends DomainEvent {
@@ -235,12 +237,22 @@ export class AgentRuntime {
     }
 
     signal.throwIfAborted();
+    const output = jsonValueSchema.safeParse(execution.output);
+    if (!output.success) {
+      return createToolErrorResult(
+        toolCall,
+        "invalid-output",
+        `Tool "${toolCall.name}" returned invalid output.`,
+      );
+    }
+
+    const limited = limitToolOutput(output.data);
     const result = toolResultSchema.safeParse({
       callId: toolCall.id,
       name: toolCall.name,
       status: "success",
-      output: execution.output,
-      truncated: execution.truncated,
+      output: limited.output,
+      truncated: execution.truncated || limited.truncated,
     });
 
     if (!result.success) {
