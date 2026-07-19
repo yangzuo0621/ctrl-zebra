@@ -1,0 +1,114 @@
+.card {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--vscode-focusBorder);
+  border-radius: 6px;
+  background: var(--vscode-editor-background);
+}
+
+.header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.eyebrow,
+.title,
+.summary,
+.status {
+  margin: 0;
+}
+
+.eyebrow,
+.detailLabel {
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.85em;
+  font-weight: 600;
+}
+
+.title {
+  margin-top: 2px;
+  font-size: 1em;
+  line-height: 1.4;
+}
+
+.risk {
+  padding: 2px 6px;
+  border: 1px solid var(--vscode-inputValidation-warningBorder);
+  border-radius: 999px;
+  color: var(--vscode-inputValidation-warningForeground, var(--vscode-foreground));
+  background: var(--vscode-inputValidation-warningBackground);
+  font-size: 0.8em;
+  text-transform: uppercase;
+}
+
+.summary,
+.status,
+.details {
+  line-height: 1.5;
+}
+
+.details {
+  display: grid;
+  gap: 4px;
+  overflow-wrap: anywhere;
+}
+
+.resources {
+  display: grid;
+  gap: 3px;
+  margin: 0 0 4px;
+  padding-left: 18px;
+}
+
+.status {
+  color: var(--vscode-descriptionForeground);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.primaryButton,
+.secondaryButton {
+  padding: 5px 10px;
+  border: 1px solid var(--vscode-button-border, transparent);
+  border-radius: 2px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.primaryButton {
+  color: var(--vscode-button-foreground);
+  background: var(--vscode-button-background);
+}
+
+.primaryButton:hover:not(:disabled) {
+  background: var(--vscode-button-hoverBackground);
+}
+
+.secondaryButton {
+  color: var(--vscode-button-secondaryForeground);
+  background: var(--vscode-button-secondaryBackground);
+}
+
+.secondaryButton:hover:not(:disabled) {
+  background: var(--vscode-button-secondaryHoverBackground);
+}
+
+.primaryButton:focus-visible,
+.secondaryButton:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 2px;
+}
+
+.primaryButton:disabled,
+.secondaryButton:disabled {
+  cursor: default;
+  opacity: 0.6;
+}

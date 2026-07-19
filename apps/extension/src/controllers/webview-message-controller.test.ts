@@ -410,4 +410,64 @@ describe("handleWebviewMessage", () => {
       status: "completed",
     });
   });
+
+  it("routes minimal Approval UI actions without treating them as run cancellation", () => {
+    let messageListener: ((message: unknown) => void) | undefined;
+    const actions: unknown[] = [];
+
+    bindWebviewMessageController(
+      {
+        onDidReceiveMessage(listener) {
+          messageListener = listener;
+          return { dispose() {} };
+        },
+        postMessage() {
+          return Promise.resolve(true);
+        },
+      },
+      {
+        onDidDispose() {
+          return { dispose() {} };
+        },
+      },
+      () => {},
+      idleChatRunner,
+      {
+        showDiff(requestId, approvalId) {
+          actions.push({ type: "show-diff", requestId, approvalId });
+        },
+        decide(requestId, approvalId, decision) {
+          actions.push({ type: "decision", requestId, approvalId, decision });
+        },
+      },
+    );
+
+    messageListener?.({
+      protocolVersion,
+      type: "webview/show-approval-diff",
+      requestId: "request-1",
+      approvalId: "approval-1",
+    });
+    messageListener?.({
+      protocolVersion,
+      type: "webview/approval-decision",
+      requestId: "request-1",
+      approvalId: "approval-1",
+      decision: "approved",
+    });
+
+    expect(actions).toEqual([
+      {
+        type: "show-diff",
+        requestId: "request-1",
+        approvalId: "approval-1",
+      },
+      {
+        type: "decision",
+        requestId: "request-1",
+        approvalId: "approval-1",
+        decision: "approved",
+      },
+    ]);
+  });
 });

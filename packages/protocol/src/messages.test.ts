@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  type ApprovalRequest,
+  type ApprovalStateMessage,
   extensionToWebviewMessageSchema,
   protocolEnvelopeSchema,
   protocolVersion,
@@ -8,6 +10,32 @@ import {
   type WebviewToExtensionMessage,
   webviewToExtensionMessageSchema,
 } from "./index.js";
+
+const approval = {
+  id: "approval-1",
+  scope: {
+    sessionId: "session-1",
+    call: {
+      id: "call-1",
+      name: "propose_file_edit",
+      input: { path: "src/example.ts", edits: [] },
+    },
+    risk: "write",
+    workspaceRootUri: "file:///workspace",
+    resources: [
+      {
+        uri: "file:///workspace/src/example.ts",
+        revision: { kind: "document_version", value: 7 },
+      },
+    ],
+  },
+  presentation: {
+    title: "Update example.ts",
+    summary: "Replace one line in example.ts.",
+  },
+  createdAt: "2026-07-19T00:00:00.000Z",
+  expiresAt: "2026-07-19T00:05:00.000Z",
+} satisfies ApprovalRequest;
 
 describe("Protocol envelope", () => {
   const validEnvelope = {
@@ -143,6 +171,61 @@ describe("Webview protocol messages", () => {
     expect(
       extensionToWebviewMessageSchema.parse(JSON.parse(JSON.stringify(message)) as unknown),
     ).toEqual(message);
+  });
+
+  it("round-trips Approval state and minimal Webview Approval actions", () => {
+    const state = {
+      protocolVersion,
+      type: "extension/approval-state",
+      requestId: "request-approval",
+      approval,
+      status: "pending",
+    } satisfies ApprovalStateMessage;
+    const showDiff = {
+      protocolVersion,
+      type: "webview/show-approval-diff",
+      requestId: state.requestId,
+      approvalId: approval.id,
+    } as const;
+    const approve = {
+      protocolVersion,
+      type: "webview/approval-decision",
+      requestId: state.requestId,
+      approvalId: approval.id,
+      decision: "approved",
+    } as const;
+
+    expect(
+      extensionToWebviewMessageSchema.parse(JSON.parse(JSON.stringify(state)) as unknown),
+    ).toEqual(state);
+    expect(webviewToExtensionMessageSchema.parse(showDiff)).toEqual(showDiff);
+    expect(webviewToExtensionMessageSchema.parse(approve)).toEqual(approve);
+  });
+
+  it.each([
+    {
+      protocolVersion,
+      type: "webview/approval-decision",
+      requestId: "request-approval",
+      approvalId: approval.id,
+      decision: "cancelled",
+    },
+    {
+      protocolVersion,
+      type: "webview/approval-decision",
+      requestId: "request-approval",
+      approvalId: approval.id,
+      decision: "approved",
+      decidedAt: "2026-07-19T00:01:00.000Z",
+    },
+    {
+      protocolVersion,
+      type: "webview/show-approval-diff",
+      requestId: "request-approval",
+      approvalId: "",
+    },
+  ])("rejects an unsafe Webview Approval action %#", (message) => {
+    expect(webviewToExtensionMessageSchema.safeParse(message).success).toBe(false);
   });
 
   it.each([

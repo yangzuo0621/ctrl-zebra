@@ -1,5 +1,6 @@
 import type { AgentRuntimeEvent } from "@ctrl-zebra/core";
 import {
+  type ApprovalDecisionIntent,
   type ExtensionToWebviewMessage,
   protocolVersion,
   type RunStatus,
@@ -21,6 +22,11 @@ interface WebviewViewLifetime {
   onDidDispose(listener: () => void): DisposableResource;
 }
 
+export interface ApprovalUiActions {
+  showDiff(requestId: string, approvalId: string): void;
+  decide(requestId: string, approvalId: string, decision: ApprovalDecisionIntent): void;
+}
+
 export function handleWebviewMessage(message: unknown): ExtensionToWebviewMessage | undefined {
   const result = webviewToExtensionMessageSchema.safeParse(message);
 
@@ -40,6 +46,7 @@ export function bindWebviewMessageController(
   lifetime: WebviewViewLifetime,
   reportDeliveryFailure: () => void,
   chatRunner: ChatRunner,
+  approvalActions?: ApprovalUiActions,
 ): void {
   let disposed = false;
   let activeRun:
@@ -193,6 +200,16 @@ export function bindWebviewMessageController(
 
     if (result.data.type === "webview/submit") {
       startRun(result.data.requestId, result.data.content);
+      return;
+    }
+
+    if (result.data.type === "webview/show-approval-diff") {
+      approvalActions?.showDiff(result.data.requestId, result.data.approvalId);
+      return;
+    }
+
+    if (result.data.type === "webview/approval-decision") {
+      approvalActions?.decide(result.data.requestId, result.data.approvalId, result.data.decision);
       return;
     }
 
