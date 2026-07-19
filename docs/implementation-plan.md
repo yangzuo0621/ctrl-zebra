@@ -410,11 +410,11 @@ export interface ApprovalService {
 **进度摘要**：
 
 - 总任务：73
-- 已完成：51
-- 进行中：1
+- 已完成：52
+- 进行中：0
 - 受阻：0
 - 待开始：21
-- 当前任务：T0701（约束门禁）
+- 当前任务：无（T0701 已完成）
 - 下一任务：T0702
 - 最后更新：2026-07-19
 
@@ -471,7 +471,7 @@ export interface ApprovalService {
 | 6 | T0605 | 已完成 | [#67](https://github.com/yangzuo0621/ctrl-zebra/pull/67) | 2026-07-19 |
 | 6 | T0606 | 已完成 | [#68](https://github.com/yangzuo0621/ctrl-zebra/pull/68) | 2026-07-19 |
 | 6 | T0607 | 已完成 | [#69](https://github.com/yangzuo0621/ctrl-zebra/pull/69) | 2026-07-19 |
-| 7 | T0701 | 进行中 | — | — |
+| 7 | T0701 | 已完成 | [#71](https://github.com/yangzuo0621/ctrl-zebra/pull/71) | 2026-07-19 |
 | 7 | T0702 | 待开始 | — | — |
 | 7 | T0703 | 待开始 | — | — |
 | 7 | T0704 | 待开始 | — | — |
