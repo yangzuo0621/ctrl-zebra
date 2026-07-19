@@ -17,6 +17,7 @@ import { createVsCodeDiffPresenter } from "./adapters/create-vscode-diff-present
 import { createVsCodeWorkspaceEditApplier } from "./adapters/create-vscode-workspace-edit-applier.js";
 import { readProviderConfiguration } from "./adapters/provider-configuration.js";
 import { VsCodeProposeFileEditWorkspace } from "./adapters/vscode-propose-file-edit-workspace.js";
+import { createWorkspaceSessionRepositoryProvider } from "./adapters/vscode-session-storage.js";
 import { findWorkspaceFiles } from "./adapters/vscode-workspace-find-files.js";
 import {
   joinWorkspacePath,
@@ -89,6 +90,10 @@ export function activate(context: ExtensionContext): void {
       new VsCodeProposeFileEditWorkspace(root, scope, joinWorkspacePath),
   });
   const chatRunner = createSelectingChatRunner({
+    selectSessionRepository: createWorkspaceSessionRepositoryProvider(
+      context.storageUri,
+      workspace.fs,
+    ),
     selectToolRegistry: (signal) => readonlyTools.get(signal),
     approvalWorkflow,
     async selectModelGateway() {
