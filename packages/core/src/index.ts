@@ -113,6 +113,19 @@ export type {
   ToolInputStringSchema,
 } from "./model-gateway.js";
 export { ModelGatewayError } from "./model-gateway.js";
+export type {
+  SessionCatalog,
+  SessionMetadataPatch,
+  SessionRecord,
+  SessionRepository,
+} from "./session-repository.js";
+export {
+  DuplicateSessionError,
+  InconsistentSessionRecordError,
+  InMemorySessionRepository,
+  PersistedSessionRepository,
+  SessionNotFoundError,
+} from "./session-repository.js";
 export type { SessionStatusChangedEvent } from "./session-state-machine.js";
 export {
   InvalidSessionStatusTransitionError,
