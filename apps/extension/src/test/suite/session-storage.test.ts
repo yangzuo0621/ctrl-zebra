@@ -74,6 +74,7 @@ export async function verifySessionStorage(): Promise<void> {
       ],
     } as const;
     await checkpointStore.create(checkpoint, new AbortController().signal);
+    assert.deepEqual(await checkpointStore.list(new AbortController().signal), [checkpoint]);
     const checkpointUri = vscode.Uri.joinPath(
       root,
       "checkpoints",

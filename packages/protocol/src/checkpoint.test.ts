@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   type Checkpoint,
   checkpointSchema,
+  checkpointSummarySchema,
   InvalidCheckpointIntegrityError,
   maxCheckpointFiles,
   parseCheckpoint,
@@ -80,5 +81,27 @@ describe("checkpoint schema", () => {
     expect(() => parseCheckpoint(checkpoint, () => "c".repeat(64))).toThrow(
       InvalidCheckpointIntegrityError,
     );
+  });
+
+  it("projects a strict summary without before-content", () => {
+    const summary = {
+      id: checkpoint.id,
+      sessionId: checkpoint.sessionId,
+      runId: checkpoint.runId,
+      createdAt: checkpoint.createdAt,
+      files: checkpoint.files.map(({ uri, beforeHash, afterHash }) => ({
+        uri,
+        beforeHash,
+        afterHash,
+      })),
+    };
+
+    expect(checkpointSummarySchema.parse(summary)).toEqual(summary);
+    expect(
+      checkpointSummarySchema.safeParse({
+        ...summary,
+        files: [{ ...summary.files[0], beforeContent: "secret" }],
+      }).success,
+    ).toBe(false);
   });
 });

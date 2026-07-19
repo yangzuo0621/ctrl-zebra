@@ -10,6 +10,7 @@ import {
 } from "vscode";
 
 import type { ChatRunner } from "./controllers/chat-runner.js";
+import type { CheckpointActions } from "./controllers/checkpoint-actions.js";
 import type { SessionRecoveryActions } from "./controllers/session-recovery.js";
 import {
   type ApprovalUiActions,
@@ -80,6 +81,7 @@ class AgentViewProvider implements WebviewViewProvider {
     private readonly chatRunner: ChatRunner,
     private readonly approvalActions?: ApprovalUiActions,
     private readonly sessionActions?: SessionRecoveryActions,
+    private readonly checkpointActions?: CheckpointActions,
   ) {}
 
   resolveWebviewView(webviewView: WebviewView): void {
@@ -96,6 +98,7 @@ class AgentViewProvider implements WebviewViewProvider {
       this.chatRunner,
       this.approvalActions,
       this.sessionActions,
+      this.checkpointActions,
     );
   }
 }
@@ -106,9 +109,16 @@ export function registerAgentView(
   chatRunner: ChatRunner,
   approvalActions?: ApprovalUiActions,
   sessionActions?: SessionRecoveryActions,
+  checkpointActions?: CheckpointActions,
 ): Disposable {
   return registrar(
     agentViewId,
-    new AgentViewProvider(extensionUri, chatRunner, approvalActions, sessionActions),
+    new AgentViewProvider(
+      extensionUri,
+      chatRunner,
+      approvalActions,
+      sessionActions,
+      checkpointActions,
+    ),
   );
 }

@@ -137,6 +137,17 @@ describe("AtomicCheckpointStore", () => {
       reason: "integrity",
     });
   });
+
+  it("lists committed Checkpoints newest first and ignores temporary files", async () => {
+    const storage = new FakeCheckpointStorage();
+    const store = createStore(storage);
+    const older = { ...checkpoint, id: "checkpoint-old", createdAt: "2026-07-19T15:00:00+08:00" };
+    await store.create(older, new AbortController().signal);
+    await store.create(checkpoint, new AbortController().signal);
+    storage.files.set("checkpoints/v1/stale.json.tmp", "partial");
+
+    await expect(store.list(new AbortController().signal)).resolves.toEqual([checkpoint, older]);
+  });
 });
 
 function createStore(storage: CheckpointStorage): AtomicCheckpointStore {
@@ -160,6 +171,14 @@ class FakeCheckpointStorage implements CheckpointStorage {
     const key = path.join("/");
     this.operations.push(`read:${key}:${maxBytes}`);
     return this.files.get(key);
+  }
+
+  async listFiles(directory: PersistencePath, maxFiles: number): Promise<readonly string[]> {
+    const prefix = `${directory.join("/")}/`;
+    return [...this.files.keys()]
+      .filter((key) => key.startsWith(prefix))
+      .map((key) => key.slice(prefix.length))
+      .slice(0, maxFiles);
   }
 
   async writeText(path: PersistencePath, content: string, maxBytes: number): Promise<void> {

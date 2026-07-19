@@ -41,11 +41,27 @@ export const checkpointSchema = z
     });
   });
 
+export const checkpointSummaryFileSchema = z.strictObject({
+  uri: z.string().min(1).max(maxApprovalUriCharacters),
+  beforeHash: checkpointHashSchema,
+  afterHash: checkpointHashSchema,
+});
+
+export const checkpointSummarySchema = z.strictObject({
+  id: checkpointIdSchema,
+  sessionId: sessionIdSchema,
+  runId: checkpointRunIdSchema,
+  createdAt: z.iso.datetime({ offset: true }),
+  files: z.array(checkpointSummaryFileSchema).nonempty().max(maxCheckpointFiles),
+});
+
 export type CheckpointId = z.infer<typeof checkpointIdSchema>;
 export type CheckpointRunId = z.infer<typeof checkpointRunIdSchema>;
 export type CheckpointHash = z.infer<typeof checkpointHashSchema>;
 export type CheckpointFile = z.infer<typeof checkpointFileSchema>;
 export type Checkpoint = z.infer<typeof checkpointSchema>;
+export type CheckpointSummaryFile = z.infer<typeof checkpointSummaryFileSchema>;
+export type CheckpointSummary = z.infer<typeof checkpointSummarySchema>;
 
 export type CheckpointTextHasher = (text: string) => string;
 

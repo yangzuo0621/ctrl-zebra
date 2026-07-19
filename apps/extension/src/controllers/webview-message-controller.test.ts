@@ -162,6 +162,75 @@ describe("handleWebviewMessage", () => {
     ]);
   });
 
+  it("routes Checkpoint list and restore requests with correlated results", async () => {
+    let messageListener: ((message: unknown) => void) | undefined;
+    const postedMessages: unknown[] = [];
+    bindWebviewMessageController(
+      {
+        onDidReceiveMessage(listener) {
+          messageListener = listener;
+          return { dispose() {} };
+        },
+        postMessage(message) {
+          postedMessages.push(message);
+          return Promise.resolve(true);
+        },
+      },
+      { onDidDispose: () => ({ dispose() {} }) },
+      () => {},
+      idleChatRunner,
+      undefined,
+      undefined,
+      {
+        async list() {
+          return [
+            {
+              id: "checkpoint-1",
+              sessionId: "session-1",
+              runId: "run-1",
+              createdAt: "2026-07-19T10:00:00.000Z",
+              files: [
+                {
+                  uri: "file:///workspace/file.ts",
+                  beforeHash: "a".repeat(64),
+                  afterHash: "b".repeat(64),
+                },
+              ],
+            },
+          ];
+        },
+        async restore() {},
+      },
+    );
+
+    messageListener?.({
+      protocolVersion,
+      type: "webview/list-checkpoints",
+      requestId: "list-checkpoints-1",
+    });
+    messageListener?.({
+      protocolVersion,
+      type: "webview/restore-checkpoint",
+      requestId: "restore-checkpoint-1",
+      checkpointId: "checkpoint-1",
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(postedMessages).toEqual([
+      expect.objectContaining({
+        type: "extension/checkpoint-list",
+        requestId: "list-checkpoints-1",
+      }),
+      {
+        protocolVersion,
+        type: "extension/checkpoint-restored",
+        requestId: "restore-checkpoint-1",
+        checkpointId: "checkpoint-1",
+      },
+    ]);
+  });
+
   it("observes a rejected response delivery", async () => {
     let messageListener: ((message: unknown) => void) | undefined;
     let deliveryFailureCount = 0;

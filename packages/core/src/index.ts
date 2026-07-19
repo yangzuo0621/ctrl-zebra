@@ -77,6 +77,7 @@ export {
   DuplicateCheckpointError,
   InvalidCheckpointError,
   maxCheckpointRecordBytes,
+  maxCheckpointRecords,
 } from "./checkpoint-store.js";
 export type {
   ContextOverflowRecoveryDependencies,
