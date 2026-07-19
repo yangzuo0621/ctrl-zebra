@@ -84,6 +84,13 @@ export {
   maxEventRecords,
 } from "./event-store.js";
 export type { DomainEvent, EventSink } from "./events.js";
+export type { ModelMessageTokenCounter, PrunedModelHistory } from "./history-pruner.js";
+export {
+  InvalidHistoryBudgetError,
+  InvalidModelHistoryError,
+  InvalidModelMessageTokenCountError,
+  pruneModelHistory,
+} from "./history-pruner.js";
 export type {
   InvalidSessionManifestReason,
   ManifestStorage,
