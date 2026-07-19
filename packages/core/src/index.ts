@@ -67,6 +67,22 @@ export {
   ApprovalStateMachine,
   InvalidApprovalStatusTransitionError,
 } from "./approval-state-machine.js";
+export type {
+  CorruptEventLogReason,
+  EventStorage,
+  EventStore,
+  EventStoreReadResult,
+} from "./event-store.js";
+export {
+  CorruptEventLogError,
+  EventLogLimitExceededError,
+  InvalidEventSequenceError,
+  InvalidPersistedEventError,
+  JsonlEventStore,
+  maxEventLogBytes,
+  maxEventRecordBytes,
+  maxEventRecords,
+} from "./event-store.js";
 export type { DomainEvent, EventSink } from "./events.js";
 export type {
   InvalidSessionManifestReason,
