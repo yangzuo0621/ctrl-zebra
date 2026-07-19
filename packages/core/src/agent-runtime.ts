@@ -305,6 +305,13 @@ export class AgentRuntime {
     signal: AbortSignal,
     session: SessionStateMachine,
   ): Promise<ToolResult> {
+    if (tool.risk !== "write" && tool.risk !== "execute") {
+      return createToolErrorResult(
+        toolCall,
+        "denied",
+        `Tool "${toolCall.name}" cannot use the approval workflow for risk "${tool.risk}".`,
+      );
+    }
     if (tool.prepareApproval === undefined || this.#approvalWorkflow === undefined) {
       return createToolErrorResult(
         toolCall,
@@ -331,7 +338,7 @@ export class AgentRuntime {
         sessionId,
         runId,
         call: toolCall,
-        risk: "write",
+        risk: tool.risk,
         prepared,
       },
       signal,

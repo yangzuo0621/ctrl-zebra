@@ -9,7 +9,7 @@ describe("BasicApprovalPolicy", () => {
   it.each([
     ["read", "allow"],
     ["write", "require_approval"],
-    ["execute", "deny"],
+    ["execute", "require_approval"],
     ["network", "deny"],
   ] as const satisfies readonly (readonly [
     ToolRisk,
