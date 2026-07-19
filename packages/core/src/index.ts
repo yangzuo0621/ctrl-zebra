@@ -69,6 +69,13 @@ export {
 } from "./approval-state-machine.js";
 export type { DomainEvent, EventSink } from "./events.js";
 export type {
+  InvalidSessionManifestReason,
+  ManifestStorage,
+  ManifestStore,
+  PersistencePath,
+} from "./manifest-store.js";
+export { AtomicManifestStore, InvalidSessionManifestError } from "./manifest-store.js";
+export type {
   FinishReason,
   ModelEvent,
   ModelGateway,
