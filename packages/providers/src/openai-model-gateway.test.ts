@@ -23,6 +23,7 @@ const request = {
 } as const;
 
 const readonlyToolsRequest = createReadonlyToolsRequest();
+const nestedToolRequest = createNestedToolRequest();
 
 describe("OpenAI ModelGateway", () => {
   const model = { modelId: "test-model" };
@@ -160,6 +161,17 @@ describe("OpenAI ModelGateway", () => {
     await collectEvents(gateway.stream(readonlyToolsRequest, new AbortController().signal));
 
     await expectMappedReadonlyTools(sdkMocks.streamText.mock.calls[0]?.[0]?.tools);
+  });
+
+  it("maps nested object and array Tool input schemas to AI SDK 7 JSON Schema", async () => {
+    setStreamParts([{ type: "finish", finishReason: "stop", totalUsage: {} }]);
+    const gateway = createOpenAIModelGateway({ apiKey: "test-key", modelId: "gpt-test" });
+
+    await collectEvents(gateway.stream(nestedToolRequest, new AbortController().signal));
+
+    expect(
+      readSdkToolJsonSchema(sdkMocks.streamText.mock.calls[0]?.[0]?.tools, "propose_file_edit"),
+    ).toEqual(nestedToolRequest.tools?.[0]?.inputSchema);
   });
 
   it("passes a validated custom endpoint to the SDK provider", () => {
@@ -361,6 +373,44 @@ function createReadonlyToolsRequest(): ModelRequest {
   };
 }
 
+function createNestedToolRequest(): ModelRequest {
+  return {
+    messages: request.messages,
+    tools: [
+      {
+        name: "propose_file_edit",
+        description: "Propose text edits.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            edits: {
+              type: "array",
+              description: "Text edits.",
+              minItems: 1,
+              maxItems: 256,
+              items: {
+                type: "object",
+                description: "One text edit.",
+                properties: {
+                  newText: {
+                    type: "string",
+                    description: "Replacement text.",
+                    maxLength: 262_144,
+                  },
+                },
+                required: ["newText"],
+                additionalProperties: false,
+              },
+            },
+          },
+          required: ["edits"],
+          additionalProperties: false,
+        },
+      },
+    ],
+  };
+}
+
 function createToolDeclaration(
   name: "list_files" | "read_file" | "search_files",
   description: string,
@@ -394,4 +444,19 @@ async function expectMappedReadonlyTools(tools: Record<string, unknown>): Promis
     expect(sdkTool.execute).toBeUndefined();
     expect(sdkTool.inputSchema.jsonSchema).toEqual(declaration.inputSchema);
   }
+}
+
+function readSdkToolJsonSchema(tools: unknown, name: string): unknown {
+  const toolsRecord = readRecord(tools);
+  const tool = readRecord(toolsRecord[name]);
+  const inputSchema = readRecord(tool.inputSchema);
+  return inputSchema.jsonSchema;
+}
+
+function readRecord(value: unknown): Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new TypeError("Expected an object in the mocked AI SDK call.");
+  }
+
+  return Object.fromEntries(Object.entries(value));
 }

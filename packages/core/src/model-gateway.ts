@@ -21,20 +21,42 @@ export interface ModelToolResultMessage {
 
 export type ModelMessage = ModelTextMessage | ModelToolCallMessage | ModelToolResultMessage;
 
+export interface ToolInputStringSchema {
+  readonly type: "string";
+  readonly description: string;
+  readonly minLength?: number;
+  readonly maxLength?: number;
+  readonly pattern?: string;
+}
+
+export interface ToolInputIntegerSchema {
+  readonly type: "integer";
+  readonly description: string;
+  readonly minimum?: number;
+  readonly maximum?: number;
+}
+
+export interface ToolInputObjectSchema {
+  readonly type: "object";
+  readonly description: string;
+  readonly properties: Readonly<Record<string, ToolInputPropertySchema>>;
+  readonly required: readonly string[];
+  readonly additionalProperties: false;
+}
+
+export interface ToolInputArraySchema {
+  readonly type: "array";
+  readonly description: string;
+  readonly items: ToolInputPropertySchema;
+  readonly minItems?: number;
+  readonly maxItems?: number;
+}
+
 export type ToolInputPropertySchema =
-  | {
-      readonly type: "string";
-      readonly description: string;
-      readonly minLength?: number;
-      readonly maxLength?: number;
-      readonly pattern?: string;
-    }
-  | {
-      readonly type: "integer";
-      readonly description: string;
-      readonly minimum?: number;
-      readonly maximum?: number;
-    };
+  | ToolInputStringSchema
+  | ToolInputIntegerSchema
+  | ToolInputObjectSchema
+  | ToolInputArraySchema;
 
 export interface ToolInputSchema {
   readonly type: "object";

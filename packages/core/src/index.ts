@@ -82,8 +82,12 @@ export type {
   TokenUsage,
   ToolCall,
   ToolDeclaration,
+  ToolInputArraySchema,
+  ToolInputIntegerSchema,
+  ToolInputObjectSchema,
   ToolInputPropertySchema,
   ToolInputSchema,
+  ToolInputStringSchema,
 } from "./model-gateway.js";
 export { ModelGatewayError } from "./model-gateway.js";
 export type { SessionStatusChangedEvent } from "./session-state-machine.js";
@@ -96,6 +100,7 @@ export {
   InvalidTextEditPlanError,
   OverlappingTextEditsError,
   parseTextEditPlan,
+  parseTextEdits,
 } from "./text-edit.js";
 export { InvalidToolInputError, parseToolInput } from "./tool-input-validation.js";
 export type { AgentTool, ToolExecutionContext, ToolExecutionOutput } from "./tool-registry.js";

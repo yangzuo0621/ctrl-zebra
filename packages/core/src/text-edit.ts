@@ -46,8 +46,7 @@ export function parseTextEditPlan(value: unknown): TextEditPlan {
     typeof value.uri !== "string" ||
     value.uri.length === 0 ||
     value.uri.length > maxApprovalUriCharacters ||
-    !Array.isArray(value.edits) ||
-    value.edits.length === 0
+    !Array.isArray(value.edits)
   ) {
     throw new InvalidTextEditPlanError();
   }
@@ -57,7 +56,21 @@ export function parseTextEditPlan(value: unknown): TextEditPlan {
     throw new InvalidTextEditPlanError();
   }
 
-  const edits = value.edits.map(parseTextEdit).sort(compareTextEdits);
+  const edits = parseTextEdits(value.edits);
+
+  return {
+    uri: value.uri,
+    originalRevision: revision.data,
+    edits,
+  };
+}
+
+export function parseTextEdits(value: unknown): readonly TextEdit[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new InvalidTextEditPlanError();
+  }
+
+  const edits = value.map(parseTextEdit).sort(compareTextEdits);
   for (let index = 1; index < edits.length; index += 1) {
     const previous = edits[index - 1];
     const current = edits[index];
@@ -71,11 +84,7 @@ export function parseTextEditPlan(value: unknown): TextEditPlan {
     }
   }
 
-  return {
-    uri: value.uri,
-    originalRevision: revision.data,
-    edits,
-  };
+  return edits;
 }
 
 function parseTextEdit(value: unknown): TextEdit {
