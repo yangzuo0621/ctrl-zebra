@@ -125,3 +125,38 @@ This document defines the initial runtime boundaries for the CtrlZebra desktop V
   mutate Session status, emit lifecycle transitions, continue the model loop, approve an operation,
   or choose presentation state. Those responsibilities remain in the Core runtime and its injected
   services.
+
+## Context Budget and Recovery Boundary
+
+- Core owns context budgeting, history pruning, summarization policy, repetition detection, and
+  Provider retry decisions. Provider adapters report normalized events and stable errors but do not
+  spend budgets, retry themselves, or choose content to discard.
+- A declared model context window must be a positive safe integer no greater than 2,000,000 tokens.
+  The default budget allocator assigns the whole declared window with integer weights of 10% System,
+  50% History, 25% Files, and 15% Tools. Integer division rounds each share down, then assigns the
+  remainder one token at a time in the fixed order System, Tools, History, Files. The calculation is
+  deterministic, uses no floating-point ratios, and the four categories always sum to the declared
+  window without exceeding any category's weighted ceiling by more than one token.
+- Token counts entering a budget decision are conservative estimates supplied through a Core-owned
+  counter contract. A missing, negative, fractional, unsafe, or over-limit count is invalid input;
+  the runtime never treats an unknown count as zero or continues with an unbounded value.
+- Context construction treats a Tool Call and its matching Tool Result as one indivisible history
+  unit. Pruning, summarization, and retry recovery may retain or remove the pair together but must
+  never create an orphan Tool Result or a Tool Call whose completed result was discarded.
+- Every bounded producer records truncation in structured metadata that survives later budgeting.
+  Text-only ellipses are not sufficient. T0702 applies per-value hard limits of 65,536 Unicode code
+  points, 2,000 lines, and 500 collection entries before the existing 1,048,576-byte serialized Tool
+  Result ceiling; reaching any applicable limit sets the truncation marker.
+- The newest user message is the protected recent-intent unit. History pruning and summarization do
+  not remove or rewrite it. If that message alone exceeds its assigned hard budget, context building
+  may include only a bounded prefix with an explicit structured truncation marker and must not spend
+  another category's budget to conceal the overflow.
+- A persisted summary is untrusted derived user content, never a System message or executable Tool
+  Call. It is limited to 32,768 Unicode code points, records the covered message range, preserves
+  unresolved user requests and material decisions, and must not claim facts absent from its source.
+  Summary generation receives complete Tool Call/Result pairs and cannot authorize or replay tools.
+- One model turn may perform at most two context-overflow recovery attempts and at most one summary
+  generation. Each attempt must strictly reduce estimated input tokens; otherwise recovery stops.
+  Provider retry policy may perform at most two retries after the initial attempt, and tool
+  repetition detection must pause at a configured threshold no greater than 10 consecutive matching
+  calls. Cancellation ends every recovery, retry, delay, summary, and tool-loop action immediately.
