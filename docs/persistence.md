@@ -97,6 +97,44 @@ written and how they rebuild repository state.
 - Recovery may read history and update the manifest status only. It never resumes a model request,
   consumes an approval, executes a tool, or repeats any other persisted side effect.
 
+## Checkpoint durability and recovery
+
+A Checkpoint is one immutable record for one Agent file-mutation operation. It has a host-generated
+Checkpoint ID, the owning Session and Run IDs, a creation timestamp, and a non-empty ordered set of
+distinct canonical file targets. Each target records the exact UTF-8 text that existed before the
+operation together with lowercase SHA-256 `beforeHash` and `afterHash` values. The `afterHash` is
+computed from the exact text proposed for the write, even though the proposed text is not duplicated
+in the Checkpoint. IDs, timestamps, targets, content, hashes, and field names are persisted data; a
+change to their meaning requires an explicit format migration.
+
+Checkpoint creation means the complete record has passed schema and integrity validation and has
+been durably committed by the host-owned persistence adapter. The complete multi-file Checkpoint
+must be committed before the first corresponding workspace write begins. A memory-only record,
+partially written record, pending flush, or failed rename is not a created Checkpoint and must block
+the entire mutation. T0802 defines the concrete storage layout and commit mechanism; it must not
+weaken this ordering.
+
+One Checkpoint is the atomic recovery boundary for a multi-file operation:
+
+- The writer does not split one semantic multi-file mutation into independently recoverable
+  Checkpoints. It creates one complete Checkpoint, then submits the workspace changes as one
+  host-atomic operation. A failed or partially applied host operation is not marked as successfully
+  applied and must be surfaced for reconciliation rather than guessed from persisted state.
+- Automatic recovery first reads every target and verifies that its current lowercase SHA-256 hash
+  equals that target's `afterHash`. Missing, unreadable, non-text, non-canonical, out-of-scope, or
+  mismatched targets make the whole Checkpoint conflicted. A conflict changes no file and is shown
+  to the user; recovery never overwrites or silently merges later user changes.
+- Only after every target passes the preflight may recovery restore all recorded before-content in
+  one host-atomic workspace operation. Immediately before applying it, the host revalidates scope,
+  canonical identity, and current hashes so a path or content race cannot bypass the preflight.
+- After restoration, each target must hash to its recorded `beforeHash`. A failed verification is a
+  recovery failure and must not be reported as success.
+
+Checkpoints are local recovery data and may contain workspace source text. They follow the existing
+secret exclusion rules and must not enter model context, Webview state, logs, telemetry, or approval
+presentation. T0801 introduces no retention duration, pruning rule, quota eviction, or automatic
+deletion policy; such a policy requires separately planned work.
+
 ## Secret exclusion
 
 Persistence contains conversation and operational history, never credentials. API keys,
