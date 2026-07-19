@@ -12,6 +12,7 @@ import {
   maxToolOutputEntries,
   type ToolApprovalWorkflow,
   ToolRegistry,
+  ToolRepetitionDetectedError,
 } from "./index.js";
 
 const emptyInputSchema = {
@@ -836,6 +837,50 @@ describe("AgentRuntime", () => {
       new MaxToolStepsExceededError(1),
     );
     expect(execute).toHaveBeenCalledTimes(1);
+    expect(events.at(-1)).toEqual({
+      type: "session.status-changed",
+      sessionId: "session-1",
+      previousStatus: "streaming",
+      status: "failed",
+    });
+  });
+
+  it("stops before executing the Tool Call that reaches the repetition threshold", async () => {
+    const repeatedCalls = Array.from({ length: 3 }, (_, index) => [
+      {
+        type: "tool.call" as const,
+        call: { id: `call-${index + 1}`, name: "step_tool" as const, input: { value: 1 } },
+      },
+      { type: "finish" as const, reason: "tool-calls" as const },
+    ]);
+    const gateway = createScriptedModelGateway(repeatedCalls, []);
+    const execute = vi.fn(async () => ({ output: null, truncated: false }));
+    const registry = new ToolRegistry();
+    registry.register({
+      name: "step_tool",
+      description: "Execute a repeated step.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          value: { type: "integer", description: "Stable repeated value." },
+        },
+        required: ["value"],
+        additionalProperties: false,
+      },
+      risk: "read",
+      parseInput: () => null,
+      execute,
+    });
+    const events: AgentRuntimeEvent[] = [];
+    const runtime = new AgentRuntime(gateway, { emit: (event) => events.push(event) }, registry, {
+      toolRepetitionThreshold: 3,
+    });
+
+    await expect(runtime.run(userMessage, new AbortController().signal)).rejects.toEqual(
+      new ToolRepetitionDetectedError("step_tool", 3, 3),
+    );
+    expect(execute).toHaveBeenCalledTimes(2);
+    expect(events.filter((event) => event.type === "agent.tool-state")).toHaveLength(6);
     expect(events.at(-1)).toEqual({
       type: "session.status-changed",
       sessionId: "session-1",

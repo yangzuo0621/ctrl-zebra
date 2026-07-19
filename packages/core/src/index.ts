@@ -198,3 +198,10 @@ export {
 } from "./tool-output-limiter.js";
 export type { AgentTool, ToolExecutionContext, ToolExecutionOutput } from "./tool-registry.js";
 export { DuplicateToolRegistrationError, ToolRegistry } from "./tool-registry.js";
+export type { ToolRepetitionObservation } from "./tool-repetition-detector.js";
+export {
+  defaultToolRepetitionThreshold,
+  maxToolRepetitionThreshold,
+  ToolRepetitionDetectedError,
+  ToolRepetitionDetector,
+} from "./tool-repetition-detector.js";

@@ -20,6 +20,11 @@ import type { ToolApprovalWorkflow } from "./tool-approval.js";
 import { InvalidToolInputError, parseToolInput } from "./tool-input-validation.js";
 import { limitToolOutput } from "./tool-output-limiter.js";
 import { type ToolExecutionOutput, ToolRegistry } from "./tool-registry.js";
+import {
+  defaultToolRepetitionThreshold,
+  ToolRepetitionDetectedError,
+  ToolRepetitionDetector,
+} from "./tool-repetition-detector.js";
 
 export interface AgentTextDeltaEvent extends DomainEvent {
   readonly type: "agent.text-delta";
@@ -61,6 +66,7 @@ export const defaultMaxToolSteps = 8;
 
 export interface AgentRuntimeOptions {
   readonly maxToolSteps?: number;
+  readonly toolRepetitionThreshold?: number;
   readonly approvalPolicy?: BasicApprovalPolicy;
   readonly approvalWorkflow?: ToolApprovalWorkflow;
 }
@@ -77,6 +83,7 @@ export class AgentRuntime {
   readonly #eventSink: EventSink<AgentRuntimeEvent>;
   readonly #toolRegistry: ToolRegistry;
   readonly #maxToolSteps: number;
+  readonly #toolRepetitionThreshold: number;
   readonly #approvalPolicy: BasicApprovalPolicy;
   readonly #approvalWorkflow: ToolApprovalWorkflow | undefined;
 
@@ -95,6 +102,9 @@ export class AgentRuntime {
     this.#eventSink = eventSink;
     this.#toolRegistry = toolRegistry;
     this.#maxToolSteps = maxToolSteps;
+    this.#toolRepetitionThreshold = new ToolRepetitionDetector(
+      options.toolRepetitionThreshold ?? defaultToolRepetitionThreshold,
+    ).threshold;
     this.#approvalPolicy = options.approvalPolicy ?? new BasicApprovalPolicy();
     this.#approvalWorkflow = options.approvalWorkflow;
   }
@@ -108,6 +118,7 @@ export class AgentRuntime {
       const messages: ModelMessage[] = [{ role: "user", content: userMessage.content }];
       session.transitionTo("streaming");
       let toolSteps = 0;
+      const repetitionDetector = new ToolRepetitionDetector(this.#toolRepetitionThreshold);
 
       while (true) {
         const toolCall = await this.#streamModel(messages, userMessage.sessionId, signal);
@@ -117,6 +128,15 @@ export class AgentRuntime {
 
         if (toolSteps >= this.#maxToolSteps) {
           throw new MaxToolStepsExceededError(this.#maxToolSteps);
+        }
+
+        const repetition = repetitionDetector.observe(toolCall);
+        if (repetition.thresholdReached) {
+          throw new ToolRepetitionDetectedError(
+            toolCall.name,
+            repetition.consecutiveCount,
+            repetitionDetector.threshold,
+          );
         }
 
         this.#emitToolState(userMessage.sessionId, toolCall, "pending");
