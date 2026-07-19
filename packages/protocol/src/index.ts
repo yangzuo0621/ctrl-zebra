@@ -37,6 +37,26 @@ export {
   userMessageSchema,
 } from "./chat-message.js";
 export type {
+  Checkpoint,
+  CheckpointFile,
+  CheckpointHash,
+  CheckpointId,
+  CheckpointRunId,
+  CheckpointTextHasher,
+} from "./checkpoint.js";
+export {
+  checkpointFileSchema,
+  checkpointHashSchema,
+  checkpointIdSchema,
+  checkpointRunIdSchema,
+  checkpointSchema,
+  InvalidCheckpointIntegrityError,
+  maxCheckpointFiles,
+  maxCheckpointIdCharacters,
+  maxCheckpointRunIdCharacters,
+  parseCheckpoint,
+} from "./checkpoint.js";
+export type {
   ApprovalDecisionIntent,
   ApprovalDecisionMessage,
   ApprovalStateMessage,
