@@ -49,6 +49,19 @@ export {
   readFileToolName,
   readFileUtf8LookaheadBytes,
 } from "./read-file.js";
+export type { RunCommandInput } from "./run-command.js";
+export {
+  maxRunCommandArgumentCharacters,
+  maxRunCommandArguments,
+  maxRunCommandCharacters,
+  maxRunCommandCwdCharacters,
+  maxRunCommandTimeoutMs,
+  minRunCommandTimeoutMs,
+  parseRunCommandInput,
+  runCommandInputSchema,
+  runCommandToolDescription,
+  runCommandToolName,
+} from "./run-command.js";
 export type {
   SearchFileMatch,
   SearchFilesInput,
