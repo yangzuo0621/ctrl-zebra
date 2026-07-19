@@ -71,6 +71,9 @@ Tool contract rules:
 - A serialized Tool Result must not exceed 1,048,576 UTF-8 bytes. Output producers must apply that limit before constructing the result; a successful result that omits content because of the limit sets its truncation marker. Later context budgeting may apply a smaller limit but must not remove that marker.
 - Cancellation is distinct from a Tool Result error. Tools accept the run's `AbortSignal`, stop producing output and side effects after cancellation, and never encode cancellation as ordinary failure.
 - Tools return data or structured failures only. They must not mutate Session status, emit synthetic Agent lifecycle transitions, continue the model loop, approve themselves, or make UI decisions; the Core runtime owns those actions.
+- Command tools model the executable and ordered arguments separately and run only through direct spawn with shell interpretation disabled. Never concatenate a model-supplied command, invoke a shell implicitly, or interpret pipes, redirects, substitutions, globbing, sequencing, or background operators.
+- Every command requires a fresh single-use approval that displays and binds the complete executable, arguments, canonical selected-workspace cwd, and timeout. A retry or any changed field requires a new approval.
+- Command runners inherit only an explicit minimal environment allowlist, redact environment data, require a trusted workspace, enforce a bounded hard timeout and bounded stdout/stderr collection, and terminate the full process tree on cancellation or timeout. Keep timeout, cancellation, spawn failure, non-zero exit, and unconfirmed termination distinct.
 
 Extension lifecycle red lines:
 
@@ -165,6 +168,7 @@ Extension lifecycle red lines:
   global serialized Tool Result limit without first constructing unbounded output.
 - Apply explicit limits to file reads, search results, model context, logs, and command output.
 - File writes and command execution must never bypass approval policy.
+- Do not execute commands in an untrusted workspace or from a cwd outside the canonical selected workspace. Re-check both trust and cwd immediately before spawn.
 - Bind approval to the exact operation. Invalidate prior approval when the file or operation changes.
 - Approval requests are host-created from trusted tool definitions and validated input. Model or
   Webview input cannot assign risk, broaden scope, extend expiration, or replace the bound operation.

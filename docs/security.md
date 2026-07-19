@@ -157,6 +157,48 @@ risk calls to avoid the matrix is forbidden.
 - Cancellation is not a denial, failure, or ordinary Tool Result. Once the owning run is cancelled,
   no later response, consumption, output, or side effect is accepted.
 
+## Command execution boundary
+
+- Every command is an `execute`-risk operation and requires a fresh, single-use approval for that
+  exact invocation. Approval never applies to a Session, Run, executable, directory, prefix, retry,
+  or later command. The immutable approval presentation and consumed operation both contain the
+  complete executable, ordered argument vector, canonical selected-workspace cwd, and timeout.
+- The command contract represents an executable and arguments as separate validated values. The
+  Extension runner uses direct process spawning with shell interpretation disabled. It does not
+  concatenate values into a command line, invoke a platform shell, parse quoting, expand variables
+  or globs, follow aliases, or interpret operators such as pipes, redirects, command substitution,
+  sequencing, or background execution. Shell execution would be a different public operation and
+  requires a later security review and explicit protocol contract.
+- The cwd is a canonical directory inside the one Extension-selected workspace root. It remains a
+  URI through scope validation and must pass the same scheme, authority, segment, symlink, junction,
+  and path-swap checks as workspace tools immediately before spawn. A missing cwd, a non-directory,
+  an unselected root, or a target whose canonical identity cannot be established is rejected.
+- The child receives only an explicit allowlist of environment variables required for baseline
+  process operation. It does not inherit the host environment wholesale. API keys, authorization
+  values, tokens, cookies, credential-helper settings, proxy credentials, arbitrary user variables,
+  and model- or Webview-supplied environment entries are excluded. Environment names and values are
+  treated as sensitive and redacted from approval text, logs, diagnostics, Tool Results, persistence,
+  and model context.
+- Command execution is disabled unless the selected workspace is trusted. Trust is rechecked after
+  approval and immediately before spawn; a trust change invalidates unconsumed approval. A command
+  cannot request a trust change or bypass the host-owned trust decision.
+- Every invocation has a validated positive timeout within the protocol maximum. The runner owns a
+  hard deadline independent of model or Webview activity. Timeout, caller cancellation, spawn
+  failure, and a non-zero exit are distinct outcomes; none extends the deadline or silently retries.
+- Stdout and stderr are collected independently into bounded buffers while streaming. The runner
+  stops retaining bytes at the command-output ceiling without first constructing unbounded output,
+  preserves a truncation marker, and remains subject to the global serialized Tool Result limit.
+  Optional complete log persistence is disabled unless a later task defines its location, retention,
+  permissions, redaction, size ceiling, approval implications, and cleanup ownership.
+- Cancellation or timeout terminates the entire process tree, not only the direct child. No later
+  output, tool continuation, or side effect is accepted after termination begins. Cleanup is
+  idempotent, bounded, and awaited by an explicit owner; failure to confirm tree termination is
+  reported separately and never represented as successful cancellation.
+- Tests use fixed local fixture processes and fake environments; they never invoke a real shell,
+  network client, package manager, developer command, or credential-bearing process. The suite
+  covers Windows process-tree and argument behavior plus POSIX signal and argument behavior without
+  assuming one platform's quoting, separators, executable lookup, exit codes, or termination model.
+
 ## Checkpoint and restore boundary
 
 - Every Agent file mutation is bound to one immutable Checkpoint owned by the exact Session and Run
