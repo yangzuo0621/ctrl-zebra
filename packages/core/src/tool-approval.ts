@@ -13,7 +13,7 @@ export interface PreparedToolApproval {
   readonly sessionId: SessionId;
   readonly runId: CheckpointRunId;
   readonly call: ToolCall;
-  readonly risk: "write";
+  readonly risk: "write" | "execute";
   readonly prepared: ToolExecutionOutput<unknown>;
 }
 

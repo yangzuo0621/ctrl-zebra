@@ -5,7 +5,7 @@ export type ApprovalPolicyDisposition = "allow" | "require_approval" | "deny";
 const dispositionByRisk = {
   read: "allow",
   write: "require_approval",
-  execute: "deny",
+  execute: "require_approval",
   network: "deny",
 } as const satisfies Record<ToolRisk, ApprovalPolicyDisposition>;
 

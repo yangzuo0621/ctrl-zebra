@@ -10,6 +10,8 @@ import {
   type ModelGateway,
   type ModelRequest,
   maxToolOutputEntries,
+  type PreparedToolApproval,
+  type ToolApprovalOperation,
   type ToolApprovalWorkflow,
   ToolRegistry,
   ToolRepetitionDetectedError,
@@ -284,12 +286,12 @@ describe("AgentRuntime", () => {
     });
   });
 
-  it("returns a policy denial without executing a denied-risk tool", async () => {
+  it("returns a policy denial without executing a network-risk tool", async () => {
     const requests: ModelRequest[] = [];
     const gateway = createScriptedModelGateway(
       [
         [
-          { type: "tool.call", call: { id: "call-exec", name: "run_command", input: {} } },
+          { type: "tool.call", call: { id: "call-network", name: "send_request", input: {} } },
           { type: "finish", reason: "tool-calls" },
         ],
         [{ type: "finish", reason: "stop" }],
@@ -299,10 +301,10 @@ describe("AgentRuntime", () => {
     const execute = vi.fn(async () => ({ output: null, truncated: false }));
     const registry = new ToolRegistry();
     registry.register({
-      name: "run_command",
-      description: "Run a command.",
+      name: "send_request",
+      description: "Send a request.",
       inputSchema: emptyInputSchema,
-      risk: "execute",
+      risk: "network",
       parseInput: () => null,
       execute,
     });
@@ -314,11 +316,81 @@ describe("AgentRuntime", () => {
     expect(requests[1]?.messages.at(-1)).toEqual({
       role: "tool",
       result: {
-        callId: "call-exec",
-        name: "run_command",
+        callId: "call-network",
+        name: "send_request",
         status: "error",
-        error: { code: "denied", message: 'Tool "run_command" is denied by policy.' },
+        error: { code: "denied", message: 'Tool "send_request" is denied by policy.' },
       },
+    });
+  });
+
+  it("passes the exact execute-risk command to the per-call approval workflow", async () => {
+    const requests: ModelRequest[] = [];
+    const gateway = createScriptedModelGateway(
+      [
+        [
+          {
+            type: "tool.call",
+            call: {
+              id: "call-command",
+              name: "run_command",
+              input: { command: "node", args: ["check.mjs"], cwd: ".", timeoutMs: 30_000 },
+            },
+          },
+          { type: "finish", reason: "tool-calls" },
+        ],
+        [{ type: "finish", reason: "stop" }],
+      ],
+      requests,
+    );
+    const registry = new ToolRegistry();
+    const execute = vi.fn(async () => ({ output: null, truncated: false }));
+    registry.register({
+      name: "run_command",
+      description: "Run a command.",
+      inputSchema: emptyInputSchema,
+      risk: "execute",
+      parseInput: (input) => input,
+      execute,
+      prepareApproval: async (input) => ({ output: input, truncated: false }),
+    });
+    const create = vi.fn(
+      async (prepared: PreparedToolApproval): Promise<ToolApprovalOperation> => ({
+        request: {
+          id: "approval-command",
+          scope: {
+            sessionId: prepared.sessionId,
+            call: prepared.call,
+            risk: prepared.risk,
+            resources: [],
+          },
+          presentation: { title: "Run command", summary: "Run node in file:///workspace." },
+          createdAt: "2026-07-19T00:00:00.000Z",
+          expiresAt: "2026-07-19T00:05:00.000Z",
+        },
+        requestDecision: async () => ({
+          requestId: "approval-command",
+          decision: "approved",
+          decidedAt: "2026-07-19T00:01:00.000Z",
+        }),
+        consume: async () => ({ outcome: "approved" }),
+      }),
+    );
+    const runtime = new AgentRuntime(gateway, { emit() {} }, registry, {
+      approvalWorkflow: { create },
+    });
+
+    await runtime.run(userMessage, new AbortController().signal);
+
+    expect(execute).not.toHaveBeenCalled();
+    expect(create).toHaveBeenCalledOnce();
+    expect(create.mock.calls[0]?.[0]).toMatchObject({
+      call: {
+        id: "call-command",
+        name: "run_command",
+        input: { command: "node", args: ["check.mjs"], cwd: ".", timeoutMs: 30_000 },
+      },
+      risk: "execute",
     });
   });
 
