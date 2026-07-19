@@ -1,5 +1,6 @@
 import {
   type AgentRuntimeEvent,
+  InMemorySessionRepository,
   type ModelGateway,
   type ModelRequest,
   ToolRegistry,
@@ -9,6 +10,77 @@ import { describe, expect, it } from "vitest";
 import { createChatRunner, createSelectingChatRunner } from "./chat-runner.js";
 
 describe("createChatRunner", () => {
+  it("persists the user message and ordered runtime events", async () => {
+    const repository = new InMemorySessionRepository();
+    const timestamps = [
+      "2026-07-19T10:00:00.000Z",
+      "2026-07-19T10:00:01.000Z",
+      "2026-07-19T10:00:02.000Z",
+      "2026-07-19T10:00:03.000Z",
+      "2026-07-19T10:00:04.000Z",
+    ];
+    const runner = createChatRunner({
+      modelGateway: {
+        async *stream() {
+          yield { type: "text.delta", text: "Hello" } as const;
+          yield { type: "finish", reason: "stop" } as const;
+        },
+      },
+      createId: (() => {
+        const ids = ["session-1", "message-1"];
+        return () => ids.shift() ?? "unexpected-id";
+      })(),
+      now: () => new Date(timestamps.shift() ?? "2026-07-19T10:00:05.000Z"),
+      sessionRepository: repository,
+    });
+
+    await runner.run("Say hello.", new AbortController().signal, () => {});
+
+    const record = await repository.get("session-1");
+    expect(record?.manifest).toMatchObject({ status: "completed", lastEventSequence: 5 });
+    expect(record?.events.map(({ event }) => event.type)).toEqual([
+      "session.user-message",
+      "session.status-changed",
+      "session.status-changed",
+      "agent.text-delta",
+      "session.status-changed",
+    ]);
+    expect(record?.events[0]?.event.data).toMatchObject({
+      role: "user",
+      content: "Say hello.",
+    });
+  });
+
+  it("does not start the model when Session persistence cannot be created", async () => {
+    let gatewayStarted = false;
+    const runner = createChatRunner({
+      modelGateway: {
+        async *stream() {
+          gatewayStarted = true;
+          yield { type: "finish", reason: "stop" } as const;
+        },
+      },
+      sessionRepository: {
+        async create() {
+          throw new Error("storage unavailable");
+        },
+        async get() {
+          return undefined;
+        },
+        async list() {
+          return [];
+        },
+        async update() {},
+        async appendEvent() {},
+      },
+    });
+
+    await expect(runner.run("Hello", new AbortController().signal, () => {})).rejects.toThrow(
+      "storage unavailable",
+    );
+    expect(gatewayStarted).toBe(false);
+  });
+
   it("runs the injected ModelGateway and emits ordered Agent Runtime events", async () => {
     let receivedRequest: ModelRequest | undefined;
     let receivedSignal: AbortSignal | undefined;
