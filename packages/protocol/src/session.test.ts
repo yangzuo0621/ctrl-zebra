@@ -45,8 +45,9 @@ describe("Session DTO", () => {
         "completed",
         "cancelled",
         "failed",
+        "interrupted",
       ].map((status) => sessionStatusSchema.parse(status)),
-    ).toHaveLength(8);
+    ).toHaveLength(9);
   });
 
   it("validates session identifiers independently", () => {

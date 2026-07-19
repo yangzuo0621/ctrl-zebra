@@ -11,6 +11,7 @@ const legalTransitions = {
   completed: [],
   cancelled: [],
   failed: [],
+  interrupted: [],
 } as const satisfies Record<SessionStatus, readonly SessionStatus[]>;
 
 export interface SessionStatusChangedEvent extends DomainEvent {

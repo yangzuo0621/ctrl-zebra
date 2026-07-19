@@ -139,7 +139,8 @@ Extension lifecycle red lines:
 
 - Session status changes must go through the Core state machine; callers must not mutate or bypass its current status.
 - Legal transitions are `idle → preparing`; `preparing → streaming | cancelled | failed`; `streaming → awaiting_approval | executing_tool | completed | cancelled | failed`; `awaiting_approval → streaming | executing_tool | cancelled | failed`; and `executing_tool → streaming | cancelled | failed`.
-- `completed`, `cancelled`, and `failed` are distinct terminal states with no outgoing transitions. A terminal Session must never be restarted by changing its status.
+- `completed`, `cancelled`, and `failed` are distinct live-runtime terminal states with no outgoing transitions. `interrupted` is a recovery-only terminal state with no incoming or outgoing live-runtime transitions. A terminal Session must never be restarted by changing its status.
+- Recovery normalizes `idle`, `preparing`, `streaming`, `awaiting_approval`, and `executing_tool` to `interrupted`; it must not resume persisted model, approval, or tool operations.
 - An illegal transition must fail with a domain error without changing state or emitting an event.
 - A legal transition commits the new status before synchronously emitting exactly one status-change event. Event sink failures propagate and do not roll back the committed status.
 

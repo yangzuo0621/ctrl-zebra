@@ -88,6 +88,15 @@ written and how they rebuild repository state.
 - A damaged session is isolated from other sessions. Recovery must not make it visible as healthy or
   execute persisted approvals, tools, or other side effects.
 
+## Interrupted recovery
+
+- `interrupted` is a persisted recovery-only terminal Session status. The live Agent Runtime never
+  transitions into or out of it.
+- On recovery, `idle`, `preparing`, `streaming`, `awaiting_approval`, and `executing_tool` are written
+  back as `interrupted`. `completed`, `cancelled`, `failed`, and `interrupted` remain unchanged.
+- Recovery may read history and update the manifest status only. It never resumes a model request,
+  consumes an approval, executes a tool, or repeats any other persisted side effect.
+
 ## Secret exclusion
 
 Persistence contains conversation and operational history, never credentials. API keys,

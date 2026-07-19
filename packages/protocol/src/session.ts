@@ -11,6 +11,7 @@ export const sessionStatusSchema = z.enum([
   "completed",
   "cancelled",
   "failed",
+  "interrupted",
 ]);
 
 export const sessionSummarySchema = z.strictObject({
