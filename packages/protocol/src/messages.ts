@@ -5,6 +5,8 @@ import {
   approvalRequestSchema,
   approvalStatusSchema,
 } from "./approval.js";
+import { assistantMessageSchema, userMessageSchema } from "./chat-message.js";
+import { sessionIdSchema, sessionStatusSchema, sessionSummarySchema } from "./session.js";
 import { toolCallSchema, toolErrorResultSchema, toolSuccessResultSchema } from "./tool.js";
 
 export const protocolVersion = 1 as const;
@@ -42,6 +44,17 @@ export const submitMessageSchema = z.strictObject({
 export const cancelMessageSchema = z.strictObject({
   ...protocolEnvelopeSchema.shape,
   type: z.literal("webview/cancel"),
+});
+
+export const listSessionsMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("webview/list-sessions"),
+});
+
+export const restoreSessionMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("webview/restore-session"),
+  sessionId: sessionIdSchema,
 });
 
 export const showApprovalDiffMessageSchema = z.strictObject({
@@ -121,12 +134,40 @@ export const approvalStateMessageSchema = z.strictObject({
   status: approvalStatusSchema,
 });
 
+export const sessionListMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("extension/session-list"),
+  sessions: z.array(sessionSummarySchema).max(10_000),
+});
+
+export const restoredSessionSchema = z.strictObject({
+  sessionId: sessionIdSchema,
+  status: sessionStatusSchema,
+  messages: z.array(z.union([userMessageSchema, assistantMessageSchema])).max(10_000),
+  eventLogTailDamaged: z.boolean(),
+});
+
+export const sessionRestoredMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("extension/session-restored"),
+  session: restoredSessionSchema,
+});
+
+export const sessionErrorMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("extension/session-error"),
+  code: z.enum(["not-found", "corrupt", "unavailable"]),
+  message: z.string().min(1).max(256),
+});
+
 export const webviewToExtensionMessageSchema = z.discriminatedUnion("type", [
   pingMessageSchema,
   submitMessageSchema,
   cancelMessageSchema,
   showApprovalDiffMessageSchema,
   approvalDecisionMessageSchema,
+  listSessionsMessageSchema,
+  restoreSessionMessageSchema,
 ]);
 export const extensionToWebviewMessageSchema = z.union([
   pongMessageSchema,
@@ -134,6 +175,9 @@ export const extensionToWebviewMessageSchema = z.union([
   runStatusMessageSchema,
   toolStateMessageSchema,
   approvalStateMessageSchema,
+  sessionListMessageSchema,
+  sessionRestoredMessageSchema,
+  sessionErrorMessageSchema,
 ]);
 
 export type ProtocolEnvelope = z.infer<typeof protocolEnvelopeSchema>;
@@ -141,6 +185,8 @@ export type PingMessage = z.infer<typeof pingMessageSchema>;
 export type PongMessage = z.infer<typeof pongMessageSchema>;
 export type SubmitMessage = z.infer<typeof submitMessageSchema>;
 export type CancelMessage = z.infer<typeof cancelMessageSchema>;
+export type ListSessionsMessage = z.infer<typeof listSessionsMessageSchema>;
+export type RestoreSessionMessage = z.infer<typeof restoreSessionMessageSchema>;
 export type ShowApprovalDiffMessage = z.infer<typeof showApprovalDiffMessageSchema>;
 export type ApprovalDecisionIntent = z.infer<typeof approvalDecisionIntentSchema>;
 export type ApprovalDecisionMessage = z.infer<typeof approvalDecisionMessageSchema>;
@@ -149,5 +195,9 @@ export type RunStatus = z.infer<typeof runStatusSchema>;
 export type RunStatusMessage = z.infer<typeof runStatusMessageSchema>;
 export type ToolStateMessage = z.infer<typeof toolStateMessageSchema>;
 export type ApprovalStateMessage = z.infer<typeof approvalStateMessageSchema>;
+export type SessionListMessage = z.infer<typeof sessionListMessageSchema>;
+export type RestoredSession = z.infer<typeof restoredSessionSchema>;
+export type SessionRestoredMessage = z.infer<typeof sessionRestoredMessageSchema>;
+export type SessionErrorMessage = z.infer<typeof sessionErrorMessageSchema>;
 export type WebviewToExtensionMessage = z.infer<typeof webviewToExtensionMessageSchema>;
 export type ExtensionToWebviewMessage = z.infer<typeof extensionToWebviewMessageSchema>;

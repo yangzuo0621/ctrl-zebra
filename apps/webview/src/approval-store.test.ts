@@ -39,6 +39,8 @@ class FakeWebviewHost implements WebviewHost {
   readonly actions: unknown[] = [];
   submit(): void {}
   cancel(): void {}
+  listSessions(): void {}
+  restoreSession(): void {}
   subscribe(): () => void {
     return () => {};
   }

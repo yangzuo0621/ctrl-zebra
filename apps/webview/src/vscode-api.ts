@@ -19,6 +19,8 @@ export interface WebviewHost {
   cancel(requestId: string): void;
   showApprovalDiff(requestId: string, approvalId: string): void;
   decideApproval(requestId: string, approvalId: string, decision: ApprovalDecisionIntent): void;
+  listSessions(requestId: string): void;
+  restoreSession(requestId: string, sessionId: string): void;
   subscribe(listener: (message: ExtensionToWebviewMessage) => void): () => void;
 }
 
@@ -74,6 +76,17 @@ const webviewHost: WebviewHost = {
       requestId,
       approvalId,
       decision,
+    });
+  },
+  listSessions(requestId) {
+    getVsCodeApi().postMessage({ protocolVersion, type: "webview/list-sessions", requestId });
+  },
+  restoreSession(requestId, sessionId) {
+    getVsCodeApi().postMessage({
+      protocolVersion,
+      type: "webview/restore-session",
+      requestId,
+      sessionId,
     });
   },
   subscribe,

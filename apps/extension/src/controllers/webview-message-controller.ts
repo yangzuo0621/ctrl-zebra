@@ -8,6 +8,7 @@ import {
 } from "@ctrl-zebra/protocol";
 
 import type { ChatRunner } from "./chat-runner.js";
+import { type SessionRecoveryActions, SessionRecoveryError } from "./session-recovery.js";
 
 interface DisposableResource {
   dispose(): void;
@@ -47,6 +48,7 @@ export function bindWebviewMessageController(
   reportDeliveryFailure: () => void,
   chatRunner: ChatRunner,
   approvalActions?: ApprovalUiActions,
+  sessionActions?: SessionRecoveryActions,
 ): void {
   let disposed = false;
   let activeRun:
@@ -211,6 +213,53 @@ export function bindWebviewMessageController(
 
     if (result.data.type === "webview/submit") {
       startRun(result.data.requestId, result.data.content);
+      return;
+    }
+
+    if (result.data.type === "webview/list-sessions") {
+      void (
+        sessionActions?.list() ?? Promise.reject(new Error("Session storage unavailable."))
+      ).then(
+        (sessions) =>
+          post({
+            protocolVersion,
+            type: "extension/session-list",
+            requestId: result.data.requestId,
+            sessions: [...sessions],
+          }),
+        (error: unknown) =>
+          post({
+            protocolVersion,
+            type: "extension/session-error",
+            requestId: result.data.requestId,
+            code: error instanceof SessionRecoveryError ? error.code : "unavailable",
+            message: "Saved Sessions are unavailable.",
+          }),
+      );
+      return;
+    }
+
+    if (result.data.type === "webview/restore-session") {
+      void (
+        sessionActions?.restore(result.data.sessionId) ??
+        Promise.reject(new Error("Session storage unavailable."))
+      ).then(
+        (session) =>
+          post({
+            protocolVersion,
+            type: "extension/session-restored",
+            requestId: result.data.requestId,
+            session,
+          }),
+        (error: unknown) =>
+          post({
+            protocolVersion,
+            type: "extension/session-error",
+            requestId: result.data.requestId,
+            code: error instanceof SessionRecoveryError ? error.code : "unavailable",
+            message: "The saved Session could not be restored.",
+          }),
+      );
       return;
     }
 
