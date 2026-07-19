@@ -104,6 +104,7 @@ describe("Tool contracts", () => {
     "invalid-input",
     "unknown-tool",
     "denied",
+    "conflict",
     "failed",
     "invalid-output",
   ] as const)("accepts the stable %s error code", (code) => {

@@ -1,4 +1,9 @@
-import type { ListFilesInput, ReadFileInput, SearchFilesInput } from "@ctrl-zebra/builtin-tools";
+import type {
+  ListFilesInput,
+  ProposeFileEditWorkspace,
+  ReadFileInput,
+  SearchFilesInput,
+} from "@ctrl-zebra/builtin-tools";
 import { describe, expect, it, vi } from "vitest";
 import type { Uri } from "vscode";
 
@@ -14,7 +19,7 @@ import {
 } from "./readonly-tool-registry.js";
 
 describe("createReadonlyToolRegistryProvider", () => {
-  it("initializes lazily, registers each read-only tool once, and binds adapters to the selected root", async () => {
+  it("initializes lazily, registers each workspace tool once, and binds adapters to the selected root", async () => {
     const root = uri("/workspace");
     const listed = uri("/workspace/src/index.ts");
     const findFiles = vi.fn<WorkspaceFindFiles>(async () => [listed]);
@@ -34,6 +39,7 @@ describe("createReadonlyToolRegistryProvider", () => {
     expect(second).toBe(first);
     expect(first.declarations().map(({ name }) => name)).toEqual([
       "list_files",
+      "propose_file_edit",
       "read_file",
       "search_files",
     ]);
@@ -77,7 +83,7 @@ describe("createReadonlyToolRegistryProvider", () => {
     const second = await provider.get(signal);
 
     expect(second).not.toBe(first);
-    expect(second.declarations()).toHaveLength(3);
+    expect(second.declarations()).toHaveLength(4);
   });
 
   it.each([
@@ -133,6 +139,14 @@ function createDependencies(
           truncated: false,
         })),
       onDidChangeWorkspaceFolders: registerWorkspaceChange,
+      createProposeFileEditWorkspace: () =>
+        ({
+          captureFileRevision: async () => ({
+            uri: "file:///workspace/file.ts",
+            revision: { kind: "document_version", value: 1 },
+          }),
+          isFileRevisionCurrent: async () => true,
+        }) satisfies ProposeFileEditWorkspace,
     },
     joinPath,
     registerWorkspaceChange,

@@ -102,6 +102,13 @@ export {
   parseTextEditPlan,
   parseTextEdits,
 } from "./text-edit.js";
+export type {
+  ApprovedToolConsumption,
+  PreparedToolApproval,
+  ToolApprovalDecision,
+  ToolApprovalOperation,
+  ToolApprovalWorkflow,
+} from "./tool-approval.js";
 export { InvalidToolInputError, parseToolInput } from "./tool-input-validation.js";
 export type { AgentTool, ToolExecutionContext, ToolExecutionOutput } from "./tool-registry.js";
 export { DuplicateToolRegistrationError, ToolRegistry } from "./tool-registry.js";

@@ -9,6 +9,7 @@ import {
   type ModelEvent,
   type ModelGateway,
   type ModelRequest,
+  type ToolApprovalWorkflow,
   ToolRegistry,
 } from "./index.js";
 
@@ -278,6 +279,263 @@ describe("AgentRuntime", () => {
           message: "Unknown tool: missing_tool.",
         },
       },
+    });
+  });
+
+  it("returns a policy denial without executing a denied-risk tool", async () => {
+    const requests: ModelRequest[] = [];
+    const gateway = createScriptedModelGateway(
+      [
+        [
+          { type: "tool.call", call: { id: "call-exec", name: "run_command", input: {} } },
+          { type: "finish", reason: "tool-calls" },
+        ],
+        [{ type: "finish", reason: "stop" }],
+      ],
+      requests,
+    );
+    const execute = vi.fn(async () => ({ output: null, truncated: false }));
+    const registry = new ToolRegistry();
+    registry.register({
+      name: "run_command",
+      description: "Run a command.",
+      inputSchema: emptyInputSchema,
+      risk: "execute",
+      parseInput: () => null,
+      execute,
+    });
+    const runtime = new AgentRuntime(gateway, { emit() {} }, registry);
+
+    await runtime.run(userMessage, new AbortController().signal);
+
+    expect(execute).not.toHaveBeenCalled();
+    expect(requests[1]?.messages.at(-1)).toEqual({
+      role: "tool",
+      result: {
+        callId: "call-exec",
+        name: "run_command",
+        status: "error",
+        error: { code: "denied", message: 'Tool "run_command" is denied by policy.' },
+      },
+    });
+  });
+
+  it.each([
+    {
+      outcome: "approved",
+      decision: "approved",
+      consumption: { outcome: "approved" },
+      expectedResult: {
+        callId: "call-edit",
+        name: "propose_file_edit",
+        status: "success",
+        output: { outcome: "approved" },
+        truncated: false,
+      },
+      expectedApprovalStatuses: ["pending", "approved", "consumed"],
+    },
+    {
+      outcome: "denied",
+      decision: "denied",
+      consumption: { outcome: "approved" },
+      expectedResult: {
+        callId: "call-edit",
+        name: "propose_file_edit",
+        status: "error",
+        error: { code: "denied", message: 'The user denied tool "propose_file_edit".' },
+      },
+      expectedApprovalStatuses: ["pending", "denied"],
+    },
+    {
+      outcome: "conflict",
+      decision: "approved",
+      consumption: { outcome: "conflict", message: "The approved file changed." },
+      expectedResult: {
+        callId: "call-edit",
+        name: "propose_file_edit",
+        status: "error",
+        error: { code: "conflict", message: "The approved file changed." },
+      },
+      expectedApprovalStatuses: ["pending", "approved", "invalidated"],
+    },
+    {
+      outcome: "expired",
+      decision: "expired",
+      consumption: { outcome: "approved" },
+      expectedResult: {
+        callId: "call-edit",
+        name: "propose_file_edit",
+        status: "error",
+        error: { code: "failed", message: 'Approval for tool "propose_file_edit" expired.' },
+      },
+      expectedApprovalStatuses: ["pending", "expired"],
+    },
+  ] as const)("returns an $outcome file-edit result to the model and continues", async (scenario) => {
+    const requests: ModelRequest[] = [];
+    const gateway = createScriptedModelGateway(
+      [
+        [
+          {
+            type: "tool.call",
+            call: {
+              id: "call-edit",
+              name: "propose_file_edit",
+              input: {},
+            },
+          },
+          { type: "finish", reason: "tool-calls" },
+        ],
+        [
+          { type: "text.delta", text: `continued after ${scenario.outcome}` },
+          { type: "finish", reason: "stop" },
+        ],
+      ],
+      requests,
+    );
+    const registry = new ToolRegistry();
+    const execute = vi.fn(async () => ({ output: null, truncated: false }));
+    const prepareApproval = vi.fn(async () => ({
+      output: {
+        uri: "file:///workspace/src/file.ts",
+        originalRevision: { kind: "document_version", value: 1 },
+        edits: [
+          {
+            range: {
+              start: { line: 0, character: 0 },
+              end: { line: 0, character: 0 },
+            },
+            newText: "zebra",
+          },
+        ],
+      },
+      truncated: false,
+    }));
+    registry.register({
+      name: "propose_file_edit",
+      description: "Prepare a file edit.",
+      inputSchema: emptyInputSchema,
+      risk: "write",
+      parseInput: () => null,
+      execute,
+      prepareApproval,
+    });
+    const consume = vi.fn(async () => scenario.consumption);
+    const workflow: ToolApprovalWorkflow = {
+      async create(prepared) {
+        return {
+          request: {
+            id: "approval-edit",
+            scope: {
+              sessionId: prepared.sessionId,
+              call: prepared.call,
+              risk: "write",
+              resources: [],
+            },
+            presentation: { title: "Apply edit", summary: "Apply one edit." },
+            createdAt: "2026-07-19T00:00:00.000Z",
+            expiresAt: "2026-07-19T00:05:00.000Z",
+          },
+          requestDecision: async () => ({
+            requestId: "approval-edit",
+            decision: scenario.decision,
+            ...(scenario.decision === "expired" ? {} : { decidedAt: "2026-07-19T00:01:00.000Z" }),
+          }),
+          consume,
+        };
+      },
+    };
+    const events: AgentRuntimeEvent[] = [];
+    const runtime = new AgentRuntime(gateway, { emit: (event) => events.push(event) }, registry, {
+      approvalWorkflow: workflow,
+    });
+
+    await runtime.run(userMessage, new AbortController().signal);
+
+    expect(execute).not.toHaveBeenCalled();
+    expect(prepareApproval).toHaveBeenCalledOnce();
+    expect(consume).toHaveBeenCalledTimes(scenario.decision === "approved" ? 1 : 0);
+    expect(requests[1]?.messages.at(-1)).toEqual({ role: "tool", result: scenario.expectedResult });
+    expect(
+      events.filter((event) => event.type === "agent.approval-state").map(({ status }) => status),
+    ).toEqual(scenario.expectedApprovalStatuses);
+    expect(events).toContainEqual({
+      type: "agent.text-delta",
+      sessionId: "session-1",
+      text: `continued after ${scenario.outcome}`,
+    });
+  });
+
+  it("cancels while awaiting approval without consuming or continuing the model", async () => {
+    const requests: ModelRequest[] = [];
+    const gateway = createScriptedModelGateway(
+      [
+        [
+          { type: "tool.call", call: { id: "call-edit", name: "edit_file", input: {} } },
+          { type: "finish", reason: "tool-calls" },
+        ],
+      ],
+      requests,
+    );
+    const registry = new ToolRegistry();
+    registry.register({
+      name: "edit_file",
+      description: "Edit a file.",
+      inputSchema: emptyInputSchema,
+      risk: "write",
+      parseInput: () => null,
+      execute: async () => ({ output: null, truncated: false }),
+      prepareApproval: async () => ({ output: null, truncated: false }),
+    });
+    const consume = vi.fn(async () => ({ outcome: "approved" as const }));
+    const workflow: ToolApprovalWorkflow = {
+      async create(prepared) {
+        return {
+          request: {
+            id: "approval-cancel",
+            scope: {
+              sessionId: prepared.sessionId,
+              call: prepared.call,
+              risk: "write",
+              resources: [],
+            },
+            presentation: { title: "Edit", summary: "Edit one file." },
+            createdAt: "2026-07-19T00:00:00.000Z",
+            expiresAt: "2026-07-19T00:05:00.000Z",
+          },
+          requestDecision: async (signal) => {
+            signal.throwIfAborted();
+            throw new Error("Expected cancellation before approval wait.");
+          },
+          consume,
+        };
+      },
+    };
+    const controller = new AbortController();
+    const cancellation = new Error("cancel approval");
+    const events: AgentRuntimeEvent[] = [];
+    const runtime = new AgentRuntime(
+      gateway,
+      {
+        emit(event) {
+          events.push(event);
+          if (event.type === "agent.approval-state" && event.status === "pending") {
+            controller.abort(cancellation);
+          }
+        },
+      },
+      registry,
+      { approvalWorkflow: workflow },
+    );
+
+    await expect(runtime.run(userMessage, controller.signal)).resolves.toBeUndefined();
+
+    expect(requests).toHaveLength(1);
+    expect(consume).not.toHaveBeenCalled();
+    expect(events.at(-1)).toEqual({
+      type: "session.status-changed",
+      sessionId: "session-1",
+      previousStatus: "awaiting_approval",
+      status: "cancelled",
     });
   });
 

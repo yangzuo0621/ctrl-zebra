@@ -6,6 +6,7 @@ import { createOpenAICompatibleModelGateway } from "@ctrl-zebra/providers";
 import * as vscode from "vscode";
 
 import { createLocalWorkspaceUriCanonicalizer } from "../../adapters/canonicalize-local-workspace-uri.js";
+import { VsCodeProposeFileEditWorkspace } from "../../adapters/vscode-propose-file-edit-workspace.js";
 import { findWorkspaceFiles } from "../../adapters/vscode-workspace-find-files.js";
 import {
   joinWorkspacePath,
@@ -36,6 +37,8 @@ export async function verifyOllamaReadonlyToolSmoke(): Promise<void> {
     readPrefix: readWorkspaceFilePrefix,
     onDidChangeWorkspaceFolders: (listener) =>
       vscode.workspace.onDidChangeWorkspaceFolders(listener),
+    createProposeFileEditWorkspace: (root, scope) =>
+      new VsCodeProposeFileEditWorkspace(root, scope, joinWorkspacePath),
   });
   const events: AgentRuntimeEvent[] = [];
   const runner = createSelectingChatRunner({

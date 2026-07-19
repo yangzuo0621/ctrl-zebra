@@ -73,6 +73,17 @@ describe("CancellableApprovalService", () => {
     expect(emit).not.toHaveBeenCalled();
   });
 
+  it("allows the trusted owner to expire a pending request", async () => {
+    const service = new CancellableApprovalService({ emit() {} });
+    const expiration = new Error("approval expired");
+    const pendingDecision = service.request(request, new AbortController().signal);
+
+    service.cancel(request.id, expiration);
+
+    await expect(pendingDecision).rejects.toBe(expiration);
+    expect(() => service.cancel(request.id, expiration)).toThrow(ApprovalRequestNotPendingError);
+  });
+
   it("rejects duplicate responses without changing the first decision", async () => {
     const service = new CancellableApprovalService({ emit() {} });
     const pendingDecision = service.request(request, new AbortController().signal);

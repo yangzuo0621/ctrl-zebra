@@ -39,7 +39,7 @@ describe("propose_file_edit", () => {
     }).toEqual({
       name: "propose_file_edit",
       description:
-        "Propose bounded text edits for one file in the selected workspace without applying them.",
+        "Propose bounded text edits for one selected-workspace file; changes apply only after explicit user approval.",
       risk: "write",
       inputSchema: expect.objectContaining({
         type: "object",

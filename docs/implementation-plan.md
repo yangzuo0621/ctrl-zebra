@@ -410,12 +410,12 @@ export interface ApprovalService {
 **进度摘要**：
 
 - 总任务：73
-- 已完成：43
+- 已完成：44
 - 进行中：0
 - 受阻：0
-- 待开始：30
-- 当前任务：无（T0508 已完成）
-- 下一任务：T0509
+- 待开始：29
+- 当前任务：无（T0509 已完成）
+- 下一任务：T0601
 - 最后更新：2026-07-19
 
 | 阶段 | 任务 | 状态 | 完成 PR | 完成日期 |
@@ -463,7 +463,7 @@ export interface ApprovalService {
 | 5 | T0506 | 已完成 | [#58](https://github.com/yangzuo0621/ctrl-zebra/pull/58) | 2026-07-19 |
 | 5 | T0507 | 已完成 | [#59](https://github.com/yangzuo0621/ctrl-zebra/pull/59) | 2026-07-19 |
 | 5 | T0508 | 已完成 | [#60](https://github.com/yangzuo0621/ctrl-zebra/pull/60) | 2026-07-19 |
-| 5 | T0509 | 待开始 | — | — |
+| 5 | T0509 | 已完成 | [#61](https://github.com/yangzuo0621/ctrl-zebra/pull/61) | 2026-07-19 |
 | 6 | T0601 | 待开始 | — | — |
 | 6 | T0602 | 待开始 | — | — |
 | 6 | T0603 | 待开始 | — | — |
@@ -886,6 +886,11 @@ export interface ApprovalService {
 ### T0509：将修改结果返回 Agent Loop
 
 **目标**：模型得知批准、拒绝或冲突结果并可继续回答。
+
+**必要契约扩展**：需要审批的写工具将无副作用的操作准备与批准后的授权消费分离；
+`propose_file_edit` 的最终 Tool Result 使用稳定的 `approved`、`denied` 或 `conflict` 结果，
+其中只有 `approved` 表示绑定的文本修改已被单次应用。该扩展不授权模型提供可信 URI、revision、
+risk、审批期限或展示内容，也不改变只读、命令或网络工具的执行边界。
 
 **测试**：三种决定的完整循环测试。
 

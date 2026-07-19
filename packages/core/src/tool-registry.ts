@@ -18,6 +18,10 @@ export interface AgentTool<Input = unknown, Output = unknown> {
   readonly risk: ToolRisk;
   parseInput(value: unknown): Input;
   execute(input: Input, context: ToolExecutionContext): Promise<ToolExecutionOutput<Output>>;
+  prepareApproval?(
+    input: Input,
+    context: ToolExecutionContext,
+  ): Promise<ToolExecutionOutput<Output>>;
 }
 
 export class DuplicateToolRegistrationError extends Error {

@@ -30,6 +30,7 @@ export const toolErrorCodeSchema = z.enum([
   "invalid-input",
   "unknown-tool",
   "denied",
+  "conflict",
   "failed",
   "invalid-output",
 ]);
