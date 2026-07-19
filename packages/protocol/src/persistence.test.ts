@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  getCheckpointPersistencePaths,
   getSessionPersistencePaths,
+  maxPersistedCheckpointIdBytes,
   maxPersistedSessionIdBytes,
   persistedEventRecordSchema,
   persistedMessageRecordSchema,
@@ -51,6 +53,16 @@ describe("persistence format", () => {
     expect(getSessionPersistencePaths("🦓").directory.at(-1)).toBe("f09fa693");
   });
 
+  it("generates a portable versioned Checkpoint path", () => {
+    expect(getCheckpointPersistencePaths("checkpoint-1")).toEqual({
+      directory: ["checkpoints", "v1"],
+      checkpoint: ["checkpoints", "v1", "636865636b706f696e742d31.json"],
+    });
+    expect(getCheckpointPersistencePaths("检查点-1").checkpoint.at(-1)).toBe(
+      "e6a380e69fa5e782b92d31.json",
+    );
+  });
+
   it.each([
     { ...manifest, formatVersion: 2 },
     { ...manifest, sessionId: "x".repeat(maxPersistedSessionIdBytes + 1) },
@@ -92,5 +104,12 @@ describe("persistence format", () => {
   it("rejects a path session ID that cannot be represented portably", () => {
     expect(() => getSessionPersistencePaths("\udfff")).toThrow();
     expect(() => getSessionPersistencePaths("x".repeat(maxPersistedSessionIdBytes + 1))).toThrow();
+  });
+
+  it("rejects a Checkpoint path ID that cannot be represented portably", () => {
+    expect(() => getCheckpointPersistencePaths("\udfff")).toThrow();
+    expect(() =>
+      getCheckpointPersistencePaths("x".repeat(maxPersistedCheckpointIdBytes + 1)),
+    ).toThrow();
   });
 });

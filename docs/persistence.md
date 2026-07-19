@@ -10,12 +10,15 @@ segments and never access a filesystem directly.
 
 ```text
 <storage-root>/
-└── sessions/
+├── sessions/
+│   └── v1/
+│       └── <encoded-session-id>/
+│           ├── manifest.json
+│           ├── messages.jsonl
+│           └── events.jsonl
+└── checkpoints/
     └── v1/
-        └── <encoded-session-id>/
-            ├── manifest.json
-            ├── messages.jsonl
-            └── events.jsonl
+        └── <encoded-checkpoint-id>.json
 ```
 
 - The current persistence format version is the positive integer `1`; its directory component is
@@ -29,6 +32,9 @@ segments and never access a filesystem directly.
   storage URI; callers must not interpret them as absolute filesystem paths.
 - File names and directory components are public persisted-format constants. Changing their meaning
   requires a new format version.
+- A Checkpoint ID uses the same lowercase hexadecimal UTF-8 encoding and 100-byte portable input
+  limit as a persisted Session ID. The `.json` suffix is part of the Checkpoint file name, not the
+  encoded identifier.
 
 ## File responsibilities
 
@@ -113,6 +119,15 @@ must be committed before the first corresponding workspace write begins. A memor
 partially written record, pending flush, or failed rename is not a created Checkpoint and must block
 the entire mutation. T0802 defines the concrete storage layout and commit mechanism; it must not
 weaken this ordering.
+
+T0802 stores each Checkpoint as one strict UTF-8 JSON object followed by LF at
+`checkpoints/v1/<encoded-checkpoint-id>.json`. A record is limited to 4,194,304 UTF-8 bytes. Creation
+writes a sibling `.tmp` file and atomically renames it without overwrite; an existing destination,
+invalid model, before-content Hash mismatch, size violation, temporary write failure, or commit
+failure rejects creation. A failed creation cleans its temporary file when possible and never
+authorizes the bound workspace write. The host retains a successfully committed Checkpoint even if
+the later workspace operation fails, so it never falsely claims the pre-write recovery record was
+absent.
 
 One Checkpoint is the atomic recovery boundary for a multi-file operation:
 

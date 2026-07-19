@@ -2,6 +2,7 @@ import type {
   ApprovalDecision,
   ApprovalRequest,
   ApprovalRequestId,
+  CheckpointRunId,
   SessionId,
   ToolCall,
 } from "@ctrl-zebra/protocol";
@@ -10,6 +11,7 @@ import type { ToolExecutionOutput } from "./tool-registry.js";
 
 export interface PreparedToolApproval {
   readonly sessionId: SessionId;
+  readonly runId: CheckpointRunId;
   readonly call: ToolCall;
   readonly risk: "write";
   readonly prepared: ToolExecutionOutput<unknown>;

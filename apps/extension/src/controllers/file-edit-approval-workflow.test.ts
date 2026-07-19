@@ -16,6 +16,7 @@ const plan = {
 
 const prepared = {
   sessionId: "session-1",
+  runId: "run-1",
   call: {
     id: "call-1",
     name: "propose_file_edit",
@@ -47,6 +48,11 @@ describe("FileEditApprovalWorkflow", () => {
     });
     expect(dependencies.bindPlan).toHaveBeenCalledWith(plan, expect.any(AbortSignal));
     expect(dependencies.applyPlan).toHaveBeenCalledOnce();
+    expect(dependencies.applyPlan).toHaveBeenCalledWith(
+      plan,
+      { sessionId: "session-1", runId: "run-1" },
+      signal,
+    );
   });
 
   it("does not apply a denied operation", async () => {

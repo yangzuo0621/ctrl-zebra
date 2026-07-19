@@ -142,6 +142,7 @@ export class AgentRuntime {
         this.#emitToolState(userMessage.sessionId, toolCall, "pending");
         const toolResult = await this.#executeTool(
           userMessage.sessionId,
+          userMessage.messageId,
           toolCall,
           signal,
           session,
@@ -208,6 +209,7 @@ export class AgentRuntime {
 
   async #executeTool(
     sessionId: SessionId,
+    runId: string,
     toolCall: ToolCall,
     signal: AbortSignal,
     session: SessionStateMachine,
@@ -241,7 +243,15 @@ export class AgentRuntime {
     }
 
     if (disposition === "require_approval") {
-      return this.#executeApprovalRequiredTool(sessionId, toolCall, tool, input, signal, session);
+      return this.#executeApprovalRequiredTool(
+        sessionId,
+        runId,
+        toolCall,
+        tool,
+        input,
+        signal,
+        session,
+      );
     }
 
     let execution: ToolExecutionOutput<unknown>;
@@ -288,6 +298,7 @@ export class AgentRuntime {
 
   async #executeApprovalRequiredTool(
     sessionId: SessionId,
+    runId: string,
     toolCall: ToolCall,
     tool: NonNullable<ReturnType<ToolRegistry["get"]>>,
     input: unknown,
@@ -318,6 +329,7 @@ export class AgentRuntime {
     const operation = await this.#approvalWorkflow.create(
       {
         sessionId,
+        runId,
         call: toolCall,
         risk: "write",
         prepared,

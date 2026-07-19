@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { chatMessageSchema } from "./chat-message.js";
+import { checkpointIdSchema } from "./checkpoint.js";
 import { sessionIdSchema, sessionStatusSchema } from "./session.js";
 import { jsonValueSchema } from "./tool.js";
 
@@ -11,6 +12,8 @@ export const sessionManifestFileName = "manifest.json" as const;
 export const sessionMessagesFileName = "messages.jsonl" as const;
 export const sessionEventsFileName = "events.jsonl" as const;
 export const maxPersistedSessionIdBytes = 100;
+export const persistenceCheckpointsDirectory = "checkpoints" as const;
+export const maxPersistedCheckpointIdBytes = 100;
 
 const persistenceFormatVersionSchema = z.literal(persistenceFormatVersion);
 
@@ -32,6 +35,27 @@ export const persistedSessionIdSchema = sessionIdSchema.superRefine((sessionId, 
     });
   }
 });
+
+export const persistedCheckpointIdSchema = checkpointIdSchema.superRefine(
+  (checkpointId, context) => {
+    const bytes = encodeUtf8(checkpointId);
+
+    if (bytes === undefined) {
+      context.addIssue({
+        code: "custom",
+        message: "Persisted Checkpoint IDs must contain well-formed Unicode.",
+      });
+      return;
+    }
+
+    if (bytes.length > maxPersistedCheckpointIdBytes) {
+      context.addIssue({
+        code: "custom",
+        message: `Persisted Checkpoint IDs must not exceed ${maxPersistedCheckpointIdBytes} UTF-8 bytes.`,
+      });
+    }
+  },
+);
 
 export const sessionManifestSchema = z.strictObject({
   formatVersion: persistenceFormatVersionSchema,
@@ -86,6 +110,18 @@ export interface SessionPersistencePaths {
   ];
 }
 
+export interface CheckpointPersistencePaths {
+  readonly directory: readonly [
+    typeof persistenceCheckpointsDirectory,
+    typeof persistenceFormatDirectory,
+  ];
+  readonly checkpoint: readonly [
+    typeof persistenceCheckpointsDirectory,
+    typeof persistenceFormatDirectory,
+    string,
+  ];
+}
+
 export function getSessionPersistencePaths(sessionId: unknown): SessionPersistencePaths {
   const parsedSessionId = persistedSessionIdSchema.parse(sessionId);
   const encodedSessionId = toLowercaseHex(encodeUtf8(parsedSessionId) ?? []);
@@ -100,6 +136,17 @@ export function getSessionPersistencePaths(sessionId: unknown): SessionPersisten
     manifest: [...directory, sessionManifestFileName],
     messages: [...directory, sessionMessagesFileName],
     events: [...directory, sessionEventsFileName],
+  };
+}
+
+export function getCheckpointPersistencePaths(checkpointId: unknown): CheckpointPersistencePaths {
+  const parsedCheckpointId = persistedCheckpointIdSchema.parse(checkpointId);
+  const encodedCheckpointId = toLowercaseHex(encodeUtf8(parsedCheckpointId) ?? []);
+  const directory = [persistenceCheckpointsDirectory, persistenceFormatDirectory] as const;
+
+  return {
+    directory,
+    checkpoint: [...directory, `${encodedCheckpointId}.json`],
   };
 }
 

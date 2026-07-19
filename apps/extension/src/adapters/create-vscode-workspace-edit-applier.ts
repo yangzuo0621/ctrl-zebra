@@ -1,11 +1,15 @@
 import { createHash } from "node:crypto";
 
+import type { Checkpoint } from "@ctrl-zebra/protocol";
 import { Position, Range, Uri, WorkspaceEdit, workspace } from "vscode";
 import { WorkspaceEditApplier } from "./workspace-edit-applier.js";
 import type { WorkspaceScope } from "./workspace-scope.js";
 
 export function createVsCodeWorkspaceEditApplier(
   scope: Pick<WorkspaceScope, "validate">,
+  createCheckpoint: (checkpoint: Checkpoint, signal: AbortSignal) => Promise<void>,
+  createId: () => string,
+  now: () => Date,
 ): WorkspaceEditApplier<Uri, WorkspaceEdit> {
   return new WorkspaceEditApplier({
     async resolveDocument(serializedUri, signal) {
@@ -23,6 +27,7 @@ export function createVsCodeWorkspaceEditApplier(
           const candidate = new Position(position.line, position.character);
           return document.validatePosition(candidate).isEqual(candidate);
         },
+        offsetAt: (position) => document.offsetAt(new Position(position.line, position.character)),
       };
     },
     createWorkspaceEdit: () => new WorkspaceEdit(),
@@ -35,5 +40,8 @@ export function createVsCodeWorkspaceEditApplier(
     },
     applyWorkspaceEdit: (edit) => Promise.resolve(workspace.applyEdit(edit)),
     hashText: (text) => createHash("sha256").update(text, "utf8").digest("hex"),
+    createId,
+    now,
+    createCheckpoint,
   });
 }
