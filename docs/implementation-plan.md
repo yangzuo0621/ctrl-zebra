@@ -411,10 +411,10 @@ export interface ApprovalService {
 
 - 总任务：73
 - 已完成：39
-- 进行中：0
+- 进行中：1
 - 受阻：0
 - 待开始：34
-- 当前任务：无（T0504 已完成）
+- 当前任务：T0505
 - 下一任务：T0505
 - 最后更新：2026-07-19
 
@@ -459,7 +459,7 @@ export interface ApprovalService {
 | 5 | T0502 | 已完成 | [#54](https://github.com/yangzuo0621/ctrl-zebra/pull/54) | 2026-07-19 |
 | 5 | T0503 | 已完成 | [#55](https://github.com/yangzuo0621/ctrl-zebra/pull/55) | 2026-07-19 |
 | 5 | T0504 | 已完成 | [#56](https://github.com/yangzuo0621/ctrl-zebra/pull/56) | 2026-07-19 |
-| 5 | T0505 | 待开始 | — | — |
+| 5 | T0505 | 进行中 | — | — |
 | 5 | T0506 | 待开始 | — | — |
 | 5 | T0507 | 待开始 | — | — |
 | 5 | T0508 | 待开始 | — | — |
@@ -857,7 +857,13 @@ export interface ApprovalService {
 
 **目标**：工具只生成修改提案，不立即写文件。
 
-**测试**：合法提案、工作区外路径和过期文件版本。
+**必要契约扩展**：Core 的供应商无关 Tool Input Schema 支持描述嵌套 object 和 array，Provider Adapter 将其递归映射为 AI SDK 7 JSON Schema；该扩展仅用于表达结构化编辑输入，不改变 Provider 执行工具或决策的边界。
+
+**产物**：模型只提供 workspace-relative path 和有界文本编辑；可信 workspace adapter 捕获 canonical URI 与当前版本/Hash，并在返回提案前复核 revision。模型不得指定可信 URI、revision 或 risk。
+
+**测试**：合法提案、工作区外路径、过期文件版本、取消、输出边界和嵌套 Tool Schema 映射。
+
+**不包含**：Extension 注册、Diff 展示、审批 UI、实际文件写入和 Agent Loop 接入。
 
 ### T0506：实现 Diff Presenter
 

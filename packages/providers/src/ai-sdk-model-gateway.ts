@@ -106,22 +106,44 @@ function toSdkInputSchema(schema: ToolInputSchema): JSONSchema7 {
 }
 
 function toSdkInputProperty(property: ToolInputPropertySchema): JSONSchema7 {
-  if (property.type === "string") {
-    return {
-      type: property.type,
-      description: property.description,
-      ...(property.minLength === undefined ? {} : { minLength: property.minLength }),
-      ...(property.maxLength === undefined ? {} : { maxLength: property.maxLength }),
-      ...(property.pattern === undefined ? {} : { pattern: property.pattern }),
-    };
+  switch (property.type) {
+    case "string":
+      return {
+        type: property.type,
+        description: property.description,
+        ...(property.minLength === undefined ? {} : { minLength: property.minLength }),
+        ...(property.maxLength === undefined ? {} : { maxLength: property.maxLength }),
+        ...(property.pattern === undefined ? {} : { pattern: property.pattern }),
+      };
+    case "integer":
+      return {
+        type: property.type,
+        description: property.description,
+        ...(property.minimum === undefined ? {} : { minimum: property.minimum }),
+        ...(property.maximum === undefined ? {} : { maximum: property.maximum }),
+      };
+    case "object":
+      return {
+        type: property.type,
+        description: property.description,
+        properties: Object.fromEntries(
+          Object.entries(property.properties).map(([name, nestedProperty]) => [
+            name,
+            toSdkInputProperty(nestedProperty),
+          ]),
+        ),
+        required: [...property.required],
+        additionalProperties: property.additionalProperties,
+      };
+    case "array":
+      return {
+        type: property.type,
+        description: property.description,
+        items: toSdkInputProperty(property.items),
+        ...(property.minItems === undefined ? {} : { minItems: property.minItems }),
+        ...(property.maxItems === undefined ? {} : { maxItems: property.maxItems }),
+      };
   }
-
-  return {
-    type: property.type,
-    description: property.description,
-    ...(property.minimum === undefined ? {} : { minimum: property.minimum }),
-    ...(property.maximum === undefined ? {} : { maximum: property.maximum }),
-  };
 }
 
 function toSdkMessages(messages: readonly ModelMessage[]) {

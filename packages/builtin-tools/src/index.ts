@@ -15,6 +15,23 @@ export {
   maxListFilesLimit,
 } from "./list-files.js";
 export type {
+  CaptureFileEditRevisionRequest,
+  FileEditRevisionSnapshot,
+  ProposeFileEditInput,
+  ProposeFileEditWorkspace,
+} from "./propose-file-edit.js";
+export {
+  createProposeFileEditTool,
+  InvalidWorkspaceFileRevisionError,
+  maxProposedFileEdits,
+  maxProposedReplacementCharacters,
+  maxTotalProposedReplacementBytes,
+  proposeFileEditInputSchema,
+  proposeFileEditToolDescription,
+  proposeFileEditToolName,
+  StaleFileRevisionError,
+} from "./propose-file-edit.js";
+export type {
   ReadFileBytes,
   ReadFileInput,
   ReadFileOutput,
