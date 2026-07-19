@@ -153,5 +153,12 @@ export type {
   ToolApprovalWorkflow,
 } from "./tool-approval.js";
 export { InvalidToolInputError, parseToolInput } from "./tool-input-validation.js";
+export type { LimitedToolOutput } from "./tool-output-limiter.js";
+export {
+  limitToolOutput,
+  maxToolOutputCharacters,
+  maxToolOutputEntries,
+  maxToolOutputLines,
+} from "./tool-output-limiter.js";
 export type { AgentTool, ToolExecutionContext, ToolExecutionOutput } from "./tool-registry.js";
 export { DuplicateToolRegistrationError, ToolRegistry } from "./tool-registry.js";
