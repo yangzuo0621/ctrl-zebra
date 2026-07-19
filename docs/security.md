@@ -157,6 +157,33 @@ risk calls to avoid the matrix is forbidden.
 - Cancellation is not a denial, failure, or ordinary Tool Result. Once the owning run is cancelled,
   no later response, consumption, output, or side effect is accepted.
 
+## Checkpoint and restore boundary
+
+- Every Agent file mutation is bound to one immutable Checkpoint owned by the exact Session and Run
+  that requested it. Model output, Webview input, and a later Run cannot choose an existing
+  Checkpoint ID, change its ownership, replace its targets, or alter its before-content or hashes.
+- The host computes lowercase SHA-256 hashes from the exact UTF-8 text at the workspace boundary.
+  `beforeHash` covers the text captured immediately before the write and `afterHash` covers the
+  exact proposed text. Persisted or client-supplied hashes are never trusted as proof of current
+  workspace state; the host recomputes them for application and recovery checks.
+- The complete Checkpoint is durably committed before any file in the bound operation is changed.
+  If validation or persistence fails, no write is attempted. One Checkpoint covers all files in a
+  semantic multi-file operation, and both application and restoration use one host-atomic workspace
+  operation so a subset is never intentionally authorized or restored.
+- Restore is allowed only for an explicit user request and only after every current target remains
+  in the selected trusted workspace, resolves to the recorded canonical identity, and hashes to its
+  `afterHash`. The host repeats those checks immediately before the atomic restore. Any mismatch,
+  missing target, scope failure, canonicalization failure, binary content, or read failure produces
+  a conflict and leaves every file unchanged.
+- Restore writes only the bounded before-content already present in the selected Checkpoint. It does
+  not accept replacement content, merge instructions, extra targets, or force flags from the model
+  or Webview. Successful restoration is verified against every `beforeHash`; failures use safe
+  diagnostics that do not disclose file contents.
+- Before-content is sensitive local workspace data. It is excluded from model context, Webview
+  state, approval presentation, logs, telemetry, diagnostics, snapshots, and fixtures except for
+  deterministic fake test content. Checkpoints never contain credentials or other forbidden
+  persistence data. No retention or automatic deletion policy is introduced by T0801.
+
 ## API Key Secret Storage
 
 - The OpenAI API key is stored under the stable, Extension-owned name
