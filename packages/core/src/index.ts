@@ -91,6 +91,12 @@ export {
   InvalidSessionStatusTransitionError,
   SessionStateMachine,
 } from "./session-state-machine.js";
+export type { TextEdit, TextEditPlan, TextPosition, TextRange } from "./text-edit.js";
+export {
+  InvalidTextEditPlanError,
+  OverlappingTextEditsError,
+  parseTextEditPlan,
+} from "./text-edit.js";
 export { InvalidToolInputError, parseToolInput } from "./tool-input-validation.js";
 export type { AgentTool, ToolExecutionContext, ToolExecutionOutput } from "./tool-registry.js";
 export { DuplicateToolRegistrationError, ToolRegistry } from "./tool-registry.js";
