@@ -108,6 +108,7 @@ export {
   webviewToExtensionMessageSchema,
 } from "./messages.js";
 export type {
+  CheckpointPersistencePaths,
   PersistedEventPayload,
   PersistedEventRecord,
   PersistedMessageRecord,
@@ -115,12 +116,16 @@ export type {
   SessionPersistencePaths,
 } from "./persistence.js";
 export {
+  getCheckpointPersistencePaths,
   getSessionPersistencePaths,
+  maxPersistedCheckpointIdBytes,
   maxPersistedSessionIdBytes,
+  persistedCheckpointIdSchema,
   persistedEventPayloadSchema,
   persistedEventRecordSchema,
   persistedMessageRecordSchema,
   persistedSessionIdSchema,
+  persistenceCheckpointsDirectory,
   persistenceFormatDirectory,
   persistenceFormatVersion,
   persistenceSessionsDirectory,

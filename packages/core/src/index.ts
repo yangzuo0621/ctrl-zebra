@@ -68,6 +68,17 @@ export {
   InvalidApprovalStatusTransitionError,
 } from "./approval-state-machine.js";
 export type {
+  CheckpointStorage,
+  CheckpointStore,
+  InvalidCheckpointReason,
+} from "./checkpoint-store.js";
+export {
+  AtomicCheckpointStore,
+  DuplicateCheckpointError,
+  InvalidCheckpointError,
+  maxCheckpointRecordBytes,
+} from "./checkpoint-store.js";
+export type {
   ContextOverflowRecoveryDependencies,
   ContextOverflowRecoveryExhaustedReason,
   ContextOverflowRecoveryRequest,

@@ -25,6 +25,7 @@ const plan = {
     },
   ],
 } satisfies TextEditPlan;
+const ownership = { sessionId: "session-1", runId: "run-1" } as const;
 
 interface FakeWorkspaceEdit {
   readonly replacements: Array<{
@@ -40,11 +41,31 @@ describe("WorkspaceEditApplier", () => {
     const applier = new WorkspaceEditApplier(dependencies.values);
     const signal = new AbortController().signal;
 
-    await applier.apply(plan, signal);
+    await applier.apply(plan, ownership, signal);
 
     expect(dependencies.resolveDocument).toHaveBeenCalledWith(plan.uri, signal);
     expect(dependencies.createWorkspaceEdit).toHaveBeenCalledOnce();
     expect(dependencies.applyWorkspaceEdit).toHaveBeenCalledOnce();
+    expect(dependencies.createCheckpoint).toHaveBeenCalledWith(
+      {
+        id: "checkpoint-1",
+        sessionId: ownership.sessionId,
+        runId: ownership.runId,
+        createdAt: "2026-07-19T00:00:00.000Z",
+        files: [
+          {
+            uri: plan.uri,
+            beforeContent: "one\ntwo",
+            beforeHash: "hash:one\ntwo",
+            afterHash: "hash:ONE\nTWO",
+          },
+        ],
+      },
+      signal,
+    );
+    expect(dependencies.createCheckpoint.mock.invocationCallOrder[0]).toBeLessThan(
+      dependencies.applyWorkspaceEdit.mock.invocationCallOrder[0] ?? Number.MAX_SAFE_INTEGER,
+    );
     expect(dependencies.applyWorkspaceEdit.mock.calls[0]?.[0].replacements).toEqual([
       { uri, range: plan.edits[0]?.range, newText: "ONE" },
       { uri, range: plan.edits[1]?.range, newText: "TWO" },
@@ -66,9 +87,9 @@ describe("WorkspaceEditApplier", () => {
     const dependencies = createDependencies();
     const applier = new WorkspaceEditApplier(dependencies.values);
 
-    await expect(applier.apply(value, new AbortController().signal)).rejects.toBeInstanceOf(
-      WorkspaceEditConflictError,
-    );
+    await expect(
+      applier.apply(value, ownership, new AbortController().signal),
+    ).rejects.toBeInstanceOf(WorkspaceEditConflictError);
     expect(dependencies.createWorkspaceEdit).not.toHaveBeenCalled();
     expect(dependencies.applyWorkspaceEdit).not.toHaveBeenCalled();
   });
@@ -81,8 +102,13 @@ describe("WorkspaceEditApplier", () => {
       applier.apply(
         {
           ...plan,
-          originalRevision: { kind: "content_hash", algorithm: "sha256", value: "hash" },
+          originalRevision: {
+            kind: "content_hash",
+            algorithm: "sha256",
+            value: "hash:one\ntwo",
+          },
         },
+        ownership,
         new AbortController().signal,
       ),
     ).resolves.toBeUndefined();
@@ -106,6 +132,7 @@ describe("WorkspaceEditApplier", () => {
             },
           ],
         },
+        ownership,
         new AbortController().signal,
       ),
     ).rejects.toBeInstanceOf(InvalidWorkspaceEditRangeError);
@@ -116,9 +143,9 @@ describe("WorkspaceEditApplier", () => {
     const dependencies = createDependencies({ applied: false });
     const applier = new WorkspaceEditApplier(dependencies.values);
 
-    await expect(applier.apply(plan, new AbortController().signal)).rejects.toBeInstanceOf(
-      WorkspaceEditApplyError,
-    );
+    await expect(
+      applier.apply(plan, ownership, new AbortController().signal),
+    ).rejects.toBeInstanceOf(WorkspaceEditApplyError);
     expect(dependencies.applyWorkspaceEdit).toHaveBeenCalledOnce();
   });
 
@@ -129,8 +156,21 @@ describe("WorkspaceEditApplier", () => {
     const cancellation = new Error("cancel edit");
     controller.abort(cancellation);
 
-    await expect(applier.apply(plan, controller.signal)).rejects.toBe(cancellation);
+    await expect(applier.apply(plan, ownership, controller.signal)).rejects.toBe(cancellation);
     expect(dependencies.resolveDocument).not.toHaveBeenCalled();
+    expect(dependencies.applyWorkspaceEdit).not.toHaveBeenCalled();
+  });
+
+  it("does not construct or apply an edit when Checkpoint creation fails", async () => {
+    const checkpointFailure = new Error("Checkpoint creation failed");
+    const dependencies = createDependencies({ checkpointFailure });
+    const applier = new WorkspaceEditApplier(dependencies.values);
+
+    await expect(applier.apply(plan, ownership, new AbortController().signal)).rejects.toBe(
+      checkpointFailure,
+    );
+    expect(dependencies.createCheckpoint).toHaveBeenCalledOnce();
+    expect(dependencies.createWorkspaceEdit).not.toHaveBeenCalled();
     expect(dependencies.applyWorkspaceEdit).not.toHaveBeenCalled();
   });
 });
@@ -139,6 +179,7 @@ function createDependencies(
   options: {
     readonly applied?: boolean;
     readonly isValidPosition?: (position: TextPosition) => boolean;
+    readonly checkpointFailure?: Error;
   } = {},
 ) {
   const resolveDocument = vi.fn(async () => ({
@@ -146,6 +187,8 @@ function createDependencies(
     version: 7,
     text: "one\ntwo",
     isValidPosition: options.isValidPosition ?? (() => true),
+    offsetAt: (position: TextPosition) =>
+      position.line === 0 ? position.character : 4 + position.character,
   }));
   const createWorkspaceEdit = vi.fn<FakeDependencies["createWorkspaceEdit"]>(() => ({
     replacements: [],
@@ -156,7 +199,12 @@ function createDependencies(
   const applyWorkspaceEdit = vi.fn<FakeDependencies["applyWorkspaceEdit"]>(
     async () => options.applied ?? true,
   );
-  const hashText = vi.fn<FakeDependencies["hashText"]>(() => "hash");
+  const hashText = vi.fn<FakeDependencies["hashText"]>((text) => `hash:${text}`);
+  const createCheckpoint = vi.fn<FakeDependencies["createCheckpoint"]>(async () => {
+    if (options.checkpointFailure !== undefined) {
+      throw options.checkpointFailure;
+    }
+  });
 
   return {
     values: {
@@ -165,11 +213,15 @@ function createDependencies(
       replace,
       applyWorkspaceEdit,
       hashText,
+      createId: () => "checkpoint-1",
+      now: () => new Date("2026-07-19T00:00:00.000Z"),
+      createCheckpoint,
     } satisfies FakeDependencies,
     resolveDocument,
     createWorkspaceEdit,
     applyWorkspaceEdit,
     hashText,
+    createCheckpoint,
   };
 }
 

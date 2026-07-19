@@ -9,6 +9,8 @@ import {
 } from "@ctrl-zebra/core";
 import type { ApprovalDecisionIntent, ApprovalRequest, ApprovalStatus } from "@ctrl-zebra/protocol";
 
+type FileEditOwnership = Pick<PreparedToolApproval, "sessionId" | "runId">;
+
 export const defaultApprovalLifetimeMilliseconds = 5 * 60 * 1_000;
 
 export interface FileEditApprovalActions {
@@ -22,7 +24,11 @@ interface FileEditApprovalWorkflowDependencies {
   readonly bindPlan: (plan: TextEditPlan, signal: AbortSignal) => Promise<string>;
   readonly validatePlan: (plan: TextEditPlan, signal: AbortSignal) => Promise<void>;
   readonly presentDiff: (plan: TextEditPlan, signal: AbortSignal) => Promise<void>;
-  readonly applyPlan: (plan: TextEditPlan, signal: AbortSignal) => Promise<"applied" | "conflict">;
+  readonly applyPlan: (
+    plan: TextEditPlan,
+    ownership: FileEditOwnership,
+    signal: AbortSignal,
+  ) => Promise<"applied" | "conflict">;
   readonly approvalLifetimeMilliseconds?: number;
   readonly reportError: (message: string) => void;
 }
@@ -30,6 +36,7 @@ interface FileEditApprovalWorkflowDependencies {
 interface ApprovalRecord {
   readonly request: ApprovalRequest;
   readonly plan: TextEditPlan;
+  readonly ownership: FileEditOwnership;
   status: ApprovalStatus;
   signal?: AbortSignal;
   expiration?: ReturnType<typeof setTimeout>;
@@ -80,6 +87,7 @@ export class FileEditApprovalWorkflow implements ToolApprovalWorkflow, FileEditA
     const record: ApprovalRecord = {
       request,
       plan,
+      ownership: { sessionId: prepared.sessionId, runId: prepared.runId },
       status: "pending",
       consuming: false,
     };
@@ -193,7 +201,7 @@ export class FileEditApprovalWorkflow implements ToolApprovalWorkflow, FileEditA
     }
 
     record.consuming = true;
-    const result = await this.#dependencies.applyPlan(record.plan, signal);
+    const result = await this.#dependencies.applyPlan(record.plan, record.ownership, signal);
     signal.throwIfAborted();
     if (result === "conflict") {
       record.status = "invalidated";

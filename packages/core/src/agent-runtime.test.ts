@@ -424,6 +424,7 @@ describe("AgentRuntime", () => {
     const consume = vi.fn(async () => scenario.consumption);
     const workflow: ToolApprovalWorkflow = {
       async create(prepared) {
+        expect(prepared.runId).toBe(userMessage.messageId);
         return {
           request: {
             id: "approval-edit",
@@ -491,6 +492,7 @@ describe("AgentRuntime", () => {
     const consume = vi.fn(async () => ({ outcome: "approved" as const }));
     const workflow: ToolApprovalWorkflow = {
       async create(prepared) {
+        expect(prepared.runId).toBe(userMessage.messageId);
         return {
           request: {
             id: "approval-cancel",

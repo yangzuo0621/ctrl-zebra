@@ -1,11 +1,15 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { persistenceFormatVersion } from "@ctrl-zebra/protocol";
 import * as vscode from "vscode";
-
+import {
+  createWorkspaceCheckpointStoreProvider,
+  WorkspaceCheckpointStorageUnavailableError,
+} from "../../adapters/vscode-checkpoint-storage.js";
 import {
   createWorkspaceSessionRepositoryProvider,
   WorkspaceSessionStorageUnavailableError,
@@ -14,6 +18,13 @@ import {
 export async function verifySessionStorage(): Promise<void> {
   const unavailable = createWorkspaceSessionRepositoryProvider(undefined, vscode.workspace.fs);
   await assert.rejects(unavailable(), WorkspaceSessionStorageUnavailableError);
+  const hashText = (text: string) => createHash("sha256").update(text, "utf8").digest("hex");
+  const unavailableCheckpoints = createWorkspaceCheckpointStoreProvider(
+    undefined,
+    vscode.workspace.fs,
+    hashText,
+  );
+  await assert.rejects(unavailableCheckpoints(), WorkspaceCheckpointStorageUnavailableError);
 
   const temporaryDirectory = await mkdtemp(path.join(tmpdir(), "ctrl-zebra-session-storage-"));
   const root = vscode.Uri.file(temporaryDirectory);
@@ -41,6 +52,38 @@ export async function verifySessionStorage(): Promise<void> {
     ]);
     const versionDirectory = vscode.Uri.joinPath(root, "sessions", "v1");
     assert.ok((await vscode.workspace.fs.stat(versionDirectory)).type & vscode.FileType.Directory);
+
+    const checkpointStore = await createWorkspaceCheckpointStoreProvider(
+      root,
+      vscode.workspace.fs,
+      hashText,
+    )();
+    const beforeContent = "before\n";
+    const checkpoint = {
+      id: "checkpoint-1",
+      sessionId: manifest.sessionId,
+      runId: "run-1",
+      createdAt: "2026-07-19T10:00:02.000Z",
+      files: [
+        {
+          uri: "file:///workspace/file.ts",
+          beforeContent,
+          beforeHash: hashText(beforeContent),
+          afterHash: hashText("after\n"),
+        },
+      ],
+    } as const;
+    await checkpointStore.create(checkpoint, new AbortController().signal);
+    const checkpointUri = vscode.Uri.joinPath(
+      root,
+      "checkpoints",
+      "v1",
+      "636865636b706f696e742d31.json",
+    );
+    const persistedCheckpoint = new TextDecoder().decode(
+      await vscode.workspace.fs.readFile(checkpointUri),
+    );
+    assert.deepEqual(JSON.parse(persistedCheckpoint), checkpoint);
   } finally {
     await rm(temporaryDirectory, { recursive: true, force: true });
   }

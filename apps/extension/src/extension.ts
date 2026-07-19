@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { realpath } from "node:fs/promises";
 
 import {
@@ -16,6 +16,7 @@ import { createLocalWorkspaceUriCanonicalizer } from "./adapters/canonicalize-lo
 import { createVsCodeDiffPresenter } from "./adapters/create-vscode-diff-presenter.js";
 import { createVsCodeWorkspaceEditApplier } from "./adapters/create-vscode-workspace-edit-applier.js";
 import { readProviderConfiguration } from "./adapters/provider-configuration.js";
+import { createWorkspaceCheckpointStoreProvider } from "./adapters/vscode-checkpoint-storage.js";
 import { VsCodeProposeFileEditWorkspace } from "./adapters/vscode-propose-file-edit-workspace.js";
 import { createWorkspaceSessionRepositoryProvider } from "./adapters/vscode-session-storage.js";
 import { findWorkspaceFiles } from "./adapters/vscode-workspace-find-files.js";
@@ -46,6 +47,12 @@ export function activate(context: ExtensionContext): void {
     selectWorkspaceRoot(workspace.workspaceFolders?.map((folder) => folder.uri) ?? []);
   const createCurrentScope = () => new WorkspaceScope(getSelectedRoot(), canonicalize);
   const diffPresenter = createVsCodeDiffPresenter();
+  const hashText = (text: string) => createHash("sha256").update(text, "utf8").digest("hex");
+  const selectCheckpointStore = createWorkspaceCheckpointStoreProvider(
+    context.storageUri,
+    workspace.fs,
+    hashText,
+  );
   const approvalWorkflow = new FileEditApprovalWorkflow({
     createId: randomUUID,
     now: () => new Date(),
@@ -65,9 +72,18 @@ export function activate(context: ExtensionContext): void {
       }
     },
     presentDiff: (plan, signal) => diffPresenter.present(plan, signal),
-    async applyPlan(plan, signal) {
+    async applyPlan(plan, ownership, signal) {
       try {
-        await createVsCodeWorkspaceEditApplier(createCurrentScope()).apply(plan, signal);
+        const checkpointStore = await selectCheckpointStore();
+        signal.throwIfAborted();
+        await createVsCodeWorkspaceEditApplier(
+          createCurrentScope(),
+          async (checkpoint, checkpointSignal) => {
+            await checkpointStore.create(checkpoint, checkpointSignal);
+          },
+          randomUUID,
+          () => new Date(),
+        ).apply(plan, ownership, signal);
         return "applied";
       } catch (error) {
         if (error instanceof WorkspaceEditConflictError || error instanceof WorkspaceScopeError) {
