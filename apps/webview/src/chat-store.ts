@@ -1,6 +1,7 @@
 import type {
   ExtensionToWebviewMessage,
   RunStatus,
+  SessionSummary,
   ToolCall,
   ToolErrorResult,
   ToolStateMessage,
@@ -26,8 +27,14 @@ interface ChatState {
   readonly messages: readonly DisplayMessage[];
   readonly status: "idle" | RunStatus;
   readonly activeRequestId?: string;
+  readonly sessions: readonly SessionSummary[];
+  readonly selectedSessionId?: string;
+  readonly sessionError?: string;
   submit(content: string): boolean;
   cancel(): void;
+  loadSessions(): void;
+  selectSession(sessionId: string): void;
+  restoreSelectedSession(): boolean;
   receive(message: ExtensionToWebviewMessage): void;
   dispose(): void;
 }
@@ -52,6 +59,8 @@ export function createChatStore({
 }: ChatStoreOptions): StoreApi<ChatState> {
   let pendingDelta = "";
   let cancelScheduledFlush: (() => void) | undefined;
+  let listRequestId: string | undefined;
+  let restoreRequestId: string | undefined;
 
   const store = createStore<ChatState>()((set, get) => {
     const applyPendingDelta = (terminalStatus?: RunStatus) => {
@@ -106,6 +115,7 @@ export function createChatStore({
     return {
       messages: [],
       status: "idle",
+      sessions: [],
       submit(content) {
         if (get().activeRequestId !== undefined || content.trim().length === 0) {
           return false;
@@ -135,7 +145,71 @@ export function createChatStore({
           host.cancel(activeRequestId);
         }
       },
+      loadSessions() {
+        listRequestId = createRequestId();
+        set({ sessionError: undefined });
+        host.listSessions(listRequestId);
+      },
+      selectSession(sessionId) {
+        set({ selectedSessionId: sessionId.length === 0 ? undefined : sessionId });
+      },
+      restoreSelectedSession() {
+        const { selectedSessionId, activeRequestId } = get();
+        if (selectedSessionId === undefined || activeRequestId !== undefined) {
+          return false;
+        }
+        restoreRequestId = createRequestId();
+        set({ sessionError: undefined });
+        host.restoreSession(restoreRequestId, selectedSessionId);
+        return true;
+      },
       receive(message) {
+        if (message.type === "extension/session-list" && message.requestId === listRequestId) {
+          listRequestId = undefined;
+          set({
+            sessions: message.sessions,
+            selectedSessionId: message.sessions[0]?.sessionId,
+            sessionError: undefined,
+          });
+          return;
+        }
+
+        if (
+          message.type === "extension/session-restored" &&
+          message.requestId === restoreRequestId
+        ) {
+          restoreRequestId = undefined;
+          set({
+            messages: message.session.messages.map((restored) => ({
+              id: restored.messageId,
+              role: restored.role,
+              content: restored.content,
+              toolCalls: [],
+            })),
+            status:
+              message.session.status === "completed" ||
+              message.session.status === "cancelled" ||
+              message.session.status === "failed"
+                ? message.session.status
+                : "idle",
+            selectedSessionId: message.session.sessionId,
+            sessionError: message.session.eventLogTailDamaged
+              ? "Recovered through the last valid event."
+              : undefined,
+          });
+          return;
+        }
+
+        if (
+          message.type === "extension/session-error" &&
+          (message.requestId === listRequestId || message.requestId === restoreRequestId)
+        ) {
+          listRequestId = undefined;
+          restoreRequestId = undefined;
+          set({ sessionError: message.message });
+          return;
+        }
+
         const state = get();
         if (message.requestId !== state.activeRequestId) {
           return;

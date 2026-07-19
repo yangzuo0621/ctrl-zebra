@@ -37,6 +37,7 @@ import {
   createReadonlyToolRegistryProvider,
   selectWorkspaceRoot,
 } from "./controllers/readonly-tool-registry.js";
+import { createSessionRecoveryActions } from "./controllers/session-recovery.js";
 
 export function activate(context: ExtensionContext): void {
   const secrets = createProviderApiKeySecretReader(context.secrets);
@@ -89,11 +90,12 @@ export function activate(context: ExtensionContext): void {
     createProposeFileEditWorkspace: (root, scope) =>
       new VsCodeProposeFileEditWorkspace(root, scope, joinWorkspacePath),
   });
+  const selectSessionRepository = createWorkspaceSessionRepositoryProvider(
+    context.storageUri,
+    workspace.fs,
+  );
   const chatRunner = createSelectingChatRunner({
-    selectSessionRepository: createWorkspaceSessionRepositoryProvider(
-      context.storageUri,
-      workspace.fs,
-    ),
+    selectSessionRepository,
     selectToolRegistry: (signal) => readonlyTools.get(signal),
     approvalWorkflow,
     async selectModelGateway() {
@@ -172,6 +174,7 @@ export function activate(context: ExtensionContext): void {
         showDiff: (_requestId, approvalId) => approvalWorkflow.showDiff(approvalId),
         decide: (_requestId, approvalId, decision) => approvalWorkflow.decide(approvalId, decision),
       },
+      createSessionRecoveryActions(selectSessionRepository),
     ),
   );
 }

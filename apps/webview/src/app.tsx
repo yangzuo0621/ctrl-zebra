@@ -46,6 +46,9 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
   const messages = useStore(store, (state) => state.messages);
   const status = useStore(store, (state) => state.status);
   const activeRequestId = useStore(store, (state) => state.activeRequestId);
+  const sessions = useStore(store, (state) => state.sessions);
+  const selectedSessionId = useStore(store, (state) => state.selectedSessionId);
+  const sessionError = useStore(store, (state) => state.sessionError);
   const approval = useStore(approvalStore, (state) => state.current);
   const pendingDecision = useStore(approvalStore, (state) => state.pendingDecision);
 
@@ -80,6 +83,41 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
           <p className={styles.description}>Ask a question and stream the response.</p>
         </div>
       </header>
+
+      <section className={styles.sessions} aria-labelledby="saved-sessions-title">
+        <h2 id="saved-sessions-title">Saved sessions</h2>
+        <div className={styles.sessionControls}>
+          <select
+            aria-label="Saved session"
+            value={selectedSessionId ?? ""}
+            onChange={(event) => store.getState().selectSession(event.target.value)}
+            disabled={sessions.length === 0 || activeRequestId !== undefined}
+          >
+            {sessions.length === 0 ? <option value="">No saved sessions</option> : null}
+            {sessions.map((session) => (
+              <option value={session.sessionId} key={session.sessionId}>
+                {new Date(session.createdAt).toLocaleString()} — {session.status}
+              </option>
+            ))}
+          </select>
+          <button
+            className={styles.secondaryButton}
+            type="button"
+            onClick={() => store.getState().loadSessions()}
+          >
+            Refresh
+          </button>
+          <button
+            className={styles.secondaryButton}
+            type="button"
+            onClick={() => store.getState().restoreSelectedSession()}
+            disabled={selectedSessionId === undefined || activeRequestId !== undefined}
+          >
+            Restore
+          </button>
+        </div>
+        {sessionError === undefined ? null : <p className={styles.sessionError}>{sessionError}</p>}
+      </section>
 
       <ol className={styles.transcript} aria-label="Conversation">
         {messages.length === 0 ? (

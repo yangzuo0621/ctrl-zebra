@@ -95,6 +95,73 @@ describe("handleWebviewMessage", () => {
     expect(postedMessages).toHaveLength(1);
   });
 
+  it("routes Session list and restore requests without starting a run", async () => {
+    let messageListener: ((message: unknown) => void) | undefined;
+    const postedMessages: unknown[] = [];
+    bindWebviewMessageController(
+      {
+        onDidReceiveMessage(listener) {
+          messageListener = listener;
+          return { dispose() {} };
+        },
+        postMessage(message) {
+          postedMessages.push(message);
+          return Promise.resolve(true);
+        },
+      },
+      {
+        onDidDispose() {
+          return { dispose() {} };
+        },
+      },
+      () => {},
+      idleChatRunner,
+      undefined,
+      {
+        async list() {
+          return [
+            { sessionId: "session-1", status: "completed", createdAt: "2026-07-19T10:00:00.000Z" },
+          ];
+        },
+        async restore(sessionId) {
+          return { sessionId, status: "completed", messages: [], eventLogTailDamaged: false };
+        },
+      },
+    );
+
+    messageListener?.({ protocolVersion, type: "webview/list-sessions", requestId: "list-1" });
+    messageListener?.({
+      protocolVersion,
+      type: "webview/restore-session",
+      requestId: "restore-1",
+      sessionId: "session-1",
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(postedMessages).toEqual([
+      {
+        protocolVersion,
+        type: "extension/session-list",
+        requestId: "list-1",
+        sessions: [
+          { sessionId: "session-1", status: "completed", createdAt: "2026-07-19T10:00:00.000Z" },
+        ],
+      },
+      {
+        protocolVersion,
+        type: "extension/session-restored",
+        requestId: "restore-1",
+        session: {
+          sessionId: "session-1",
+          status: "completed",
+          messages: [],
+          eventLogTailDamaged: false,
+        },
+      },
+    ]);
+  });
+
   it("observes a rejected response delivery", async () => {
     let messageListener: ((message: unknown) => void) | undefined;
     let deliveryFailureCount = 0;

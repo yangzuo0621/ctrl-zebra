@@ -42,6 +42,14 @@ class FakeWebviewHost implements WebviewHost {
     });
   }
 
+  listSessions(requestId: string): void {
+    this.sent.push({ protocolVersion, type: "webview/list-sessions", requestId });
+  }
+
+  restoreSession(requestId: string, sessionId: string): void {
+    this.sent.push({ protocolVersion, type: "webview/restore-session", requestId, sessionId });
+  }
+
   subscribe(listener: (message: ExtensionToWebviewMessage) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
@@ -66,6 +74,74 @@ describe("App streaming chat", () => {
     vi.stubGlobal("cancelAnimationFrame", (frameId: number) => {
       animationFrames[frameId - 1] = undefined;
     });
+  });
+
+  it("lists saved sessions and restores their messages", async () => {
+    const host = new FakeWebviewHost();
+    const ids = ["list-1", "restore-1"];
+    const user = userEvent.setup();
+    render(<App host={host} createRequestId={() => ids.shift() ?? "unexpected"} />);
+
+    expect(screen.getByRole("option", { name: "No saved sessions" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Refresh" }));
+    expect(host.sent.at(-1)).toEqual({
+      protocolVersion,
+      type: "webview/list-sessions",
+      requestId: "list-1",
+    });
+    act(() => {
+      host.emit({
+        protocolVersion,
+        type: "extension/session-list",
+        requestId: "list-1",
+        sessions: [
+          {
+            sessionId: "session-1",
+            status: "completed",
+            createdAt: "2026-07-19T10:00:00.000Z",
+          },
+        ],
+      });
+    });
+
+    await user.click(screen.getByRole("button", { name: "Restore" }));
+    expect(host.sent.at(-1)).toEqual({
+      protocolVersion,
+      type: "webview/restore-session",
+      requestId: "restore-1",
+      sessionId: "session-1",
+    });
+    act(() => {
+      host.emit({
+        protocolVersion,
+        type: "extension/session-restored",
+        requestId: "restore-1",
+        session: {
+          sessionId: "session-1",
+          status: "completed",
+          eventLogTailDamaged: false,
+          messages: [
+            {
+              messageId: "message-1",
+              sessionId: "session-1",
+              createdAt: "2026-07-19T10:00:00.000Z",
+              role: "user",
+              content: "Saved question",
+            },
+            {
+              messageId: "assistant-2",
+              sessionId: "session-1",
+              createdAt: "2026-07-19T10:00:01.000Z",
+              role: "assistant",
+              content: "Saved answer",
+            },
+          ],
+        },
+      });
+    });
+
+    expect(screen.getByText("Saved question")).toBeVisible();
+    expect(screen.getByText("Saved answer")).toBeVisible();
   });
 
   it("submits user content and renders a correlated pending response", async () => {

@@ -125,6 +125,36 @@ describe("Webview protocol messages", () => {
     expect(extensionToWebviewMessageSchema.parse(status)).toEqual(status);
   });
 
+  it("round-trips Session list and restore messages", () => {
+    const listRequest = {
+      protocolVersion,
+      type: "webview/list-sessions",
+      requestId: "list-1",
+    } as const;
+    const restoreRequest = {
+      protocolVersion,
+      type: "webview/restore-session",
+      requestId: "restore-1",
+      sessionId: "session-1",
+    } as const;
+    const listResponse = {
+      protocolVersion,
+      type: "extension/session-list",
+      requestId: "list-1",
+      sessions: [
+        {
+          sessionId: "session-1",
+          status: "completed",
+          createdAt: "2026-07-19T10:00:00.000Z",
+        },
+      ],
+    } as const;
+
+    expect(webviewToExtensionMessageSchema.parse(listRequest)).toEqual(listRequest);
+    expect(webviewToExtensionMessageSchema.parse(restoreRequest)).toEqual(restoreRequest);
+    expect(extensionToWebviewMessageSchema.parse(listResponse)).toEqual(listResponse);
+  });
+
   it.each([
     {
       protocolVersion,

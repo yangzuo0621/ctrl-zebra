@@ -10,6 +10,7 @@ import {
 } from "vscode";
 
 import type { ChatRunner } from "./controllers/chat-runner.js";
+import type { SessionRecoveryActions } from "./controllers/session-recovery.js";
 import {
   type ApprovalUiActions,
   bindWebviewMessageController,
@@ -78,6 +79,7 @@ class AgentViewProvider implements WebviewViewProvider {
     private readonly extensionUri: Uri,
     private readonly chatRunner: ChatRunner,
     private readonly approvalActions?: ApprovalUiActions,
+    private readonly sessionActions?: SessionRecoveryActions,
   ) {}
 
   resolveWebviewView(webviewView: WebviewView): void {
@@ -93,6 +95,7 @@ class AgentViewProvider implements WebviewViewProvider {
       },
       this.chatRunner,
       this.approvalActions,
+      this.sessionActions,
     );
   }
 }
@@ -102,6 +105,10 @@ export function registerAgentView(
   registrar: WebviewViewRegistrar,
   chatRunner: ChatRunner,
   approvalActions?: ApprovalUiActions,
+  sessionActions?: SessionRecoveryActions,
 ): Disposable {
-  return registrar(agentViewId, new AgentViewProvider(extensionUri, chatRunner, approvalActions));
+  return registrar(
+    agentViewId,
+    new AgentViewProvider(extensionUri, chatRunner, approvalActions, sessionActions),
+  );
 }

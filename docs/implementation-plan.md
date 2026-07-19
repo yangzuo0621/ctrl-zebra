@@ -410,12 +410,12 @@ export interface ApprovalService {
 **进度摘要**：
 
 - 总任务：73
-- 已完成：49
+- 已完成：50
 - 进行中：0
 - 受阻：0
-- 待开始：24
-- 当前任务：无（T0605 已完成）
-- 下一任务：T0606
+- 待开始：23
+- 当前任务：无（T0606 已完成）
+- 下一任务：T0607
 - 最后更新：2026-07-19
 
 | 阶段 | 任务 | 状态 | 完成 PR | 完成日期 |
@@ -469,7 +469,7 @@ export interface ApprovalService {
 | 6 | T0603 | 已完成 | [#65](https://github.com/yangzuo0621/ctrl-zebra/pull/65) | 2026-07-19 |
 | 6 | T0604 | 已完成 | [#66](https://github.com/yangzuo0621/ctrl-zebra/pull/66) | 2026-07-19 |
 | 6 | T0605 | 已完成 | [#67](https://github.com/yangzuo0621/ctrl-zebra/pull/67) | 2026-07-19 |
-| 6 | T0606 | 待开始 | — | — |
+| 6 | T0606 | 已完成 | [#68](https://github.com/yangzuo0621/ctrl-zebra/pull/68) | 2026-07-19 |
 | 6 | T0607 | 待开始 | — | — |
 | 7 | T0701 | 待开始 | — | — |
 | 7 | T0702 | 待开始 | — | — |
