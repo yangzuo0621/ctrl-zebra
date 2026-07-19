@@ -138,6 +138,13 @@ export {
   parseTextEditPlan,
   parseTextEdits,
 } from "./text-edit.js";
+export type { TokenBudget, TokenBudgetAllocator } from "./token-budget.js";
+export {
+  allocateTokenBudget,
+  defaultTokenBudgetAllocator,
+  InvalidContextWindowError,
+  maxModelContextWindowTokens,
+} from "./token-budget.js";
 export type {
   ApprovedToolConsumption,
   PreparedToolApproval,
