@@ -7,6 +7,7 @@ import {
   MAX_ENTRY_BYTES,
   validateArchiveEntries,
   validateBuildMetadata,
+  validateGitHubActionsSource,
   validateReleaseDocuments,
   validateSelectedFiles,
 } from "../../scripts/vsix-policy.mjs";
@@ -40,6 +41,75 @@ describe("VSIX package policy", () => {
         100,
       ),
     ).toThrow(/unsafe path/);
+  });
+
+  it("accepts only traceable GitHub Actions packaging sources", () => {
+    const expected = { commit: "a".repeat(40), version: "0.1.0" };
+    expect(
+      validateGitHubActionsSource(
+        {
+          GITHUB_ACTIONS: "true",
+          GITHUB_EVENT_NAME: "workflow_dispatch",
+          GITHUB_REF: "refs/heads/main",
+          GITHUB_REF_TYPE: "branch",
+          GITHUB_SHA: expected.commit,
+        },
+        expected,
+      ),
+    ).toBe(true);
+    expect(
+      validateGitHubActionsSource(
+        {
+          GITHUB_ACTIONS: "true",
+          GITHUB_EVENT_NAME: "push",
+          GITHUB_REF: "refs/tags/v0.1.0",
+          GITHUB_REF_TYPE: "tag",
+          GITHUB_SHA: expected.commit,
+        },
+        expected,
+      ),
+    ).toBe(true);
+    expect(validateGitHubActionsSource({}, expected)).toBe(false);
+  });
+
+  it("rejects mismatched GitHub Actions commits, tags, and events", () => {
+    const expected = { commit: "a".repeat(40), version: "0.1.0" };
+    expect(() =>
+      validateGitHubActionsSource(
+        {
+          GITHUB_ACTIONS: "true",
+          GITHUB_EVENT_NAME: "workflow_dispatch",
+          GITHUB_REF: "refs/heads/main",
+          GITHUB_REF_TYPE: "branch",
+          GITHUB_SHA: "b".repeat(40),
+        },
+        expected,
+      ),
+    ).toThrow(/source SHA/);
+    expect(() =>
+      validateGitHubActionsSource(
+        {
+          GITHUB_ACTIONS: "true",
+          GITHUB_EVENT_NAME: "push",
+          GITHUB_REF: "refs/tags/v0.2.0",
+          GITHUB_REF_TYPE: "tag",
+          GITHUB_SHA: expected.commit,
+        },
+        expected,
+      ),
+    ).toThrow(/tag must exactly match/);
+    expect(() =>
+      validateGitHubActionsSource(
+        {
+          GITHUB_ACTIONS: "true",
+          GITHUB_EVENT_NAME: "pull_request",
+          GITHUB_REF: "refs/pull/1/merge",
+          GITHUB_REF_TYPE: "branch",
+          GITHUB_SHA: expected.commit,
+        },
+        expected,
+      ),
+    ).toThrow(/not allowed/);
   });
 
   it("rejects oversized entries and mismatched build metadata", () => {

@@ -1,0 +1,89 @@
+name: Package VSIX
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: package-vsix-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    name: Build verified VSIX
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@b0f76dfb45f55f8421693e4803ac7bb65143bd34 # v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build and verify VSIX
+        run: xvfb-run -a pnpm package:vsix
+
+      - name: Record VSIX checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t vsix_files < <(find .artifacts -maxdepth 1 -type f -name '*.vsix' -print)
+          if [[ ${#vsix_files[@]} -ne 1 ]]; then
+            echo "Expected exactly one VSIX, found ${#vsix_files[@]}." >&2
+            exit 1
+          fi
+          (
+            cd .artifacts
+            sha256sum -- *.vsix > SHA256SUMS
+          )
+          cat .artifacts/SHA256SUMS
+
+      - name: Upload verified VSIX
+        id: upload
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: ctrl-zebra-vsix-${{ github.sha }}
+          path: |
+            .artifacts/*.vsix
+            .artifacts/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+
+      - name: Write build summary
+        shell: bash
+        env:
+          ARTIFACT_DIGEST: ${{ steps.upload.outputs.artifact-digest }}
+          ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+        run: |
+          {
+            echo "## Verified VSIX"
+            echo
+            echo "Source commit: \`${GITHUB_SHA}\`"
+            echo
+            echo "Artifact archive SHA-256: \`${ARTIFACT_DIGEST}\`"
+            echo
+            echo "[Download artifact](${ARTIFACT_URL})"
+            echo
+            echo '```text'
+            cat .artifacts/SHA256SUMS
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
