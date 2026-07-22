@@ -7,6 +7,8 @@
   "scripts": {
     "build": "pnpm --recursive --if-present run build",
     "check": "biome ci .",
+    "package:vsix": "node ./apps/extension/scripts/package-vsix.mjs",
+    "smoke:vsix": "node ./apps/extension/scripts/smoke-test-vsix.mjs",
     "test": "pnpm run test:unit && pnpm run test:integration",
     "test:integration": "pnpm --filter ./apps/extension run test:integration",
     "test:unit": "vitest run",
@@ -14,7 +16,9 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.3",
+    "@vscode/vsce": "3.9.2",
     "typescript": "6.0.2",
-    "vitest": "4.1.6"
+    "vitest": "4.1.6",
+    "yauzl": "3.4.0"
   }
 }

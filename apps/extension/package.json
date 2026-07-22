@@ -4,8 +4,20 @@
   "description": "A workspace agent for VS Code.",
   "version": "0.0.0",
   "publisher": "ctrl-zebra",
-  "private": true,
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yangzuo0621/ctrl-zebra.git"
+  },
+  "files": [
+    "dist/extension.cjs",
+    "dist/package/build-metadata.json",
+    "dist/webview/index.html",
+    "dist/webview/main.css",
+    "dist/webview/main.js",
+    "media/ctrl-zebra.svg",
+    "README.md"
+  ],
   "engines": {
     "vscode": "^1.125.0"
   },
