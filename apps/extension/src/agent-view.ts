@@ -82,6 +82,7 @@ class AgentViewProvider implements WebviewViewProvider {
     private readonly approvalActions?: ApprovalUiActions,
     private readonly sessionActions?: SessionRecoveryActions,
     private readonly checkpointActions?: CheckpointActions,
+    private readonly reportDeliveryFailure: () => void = () => {},
   ) {}
 
   resolveWebviewView(webviewView: WebviewView): void {
@@ -92,9 +93,7 @@ class AgentViewProvider implements WebviewViewProvider {
     bindWebviewMessageController(
       webviewView.webview,
       webviewView,
-      () => {
-        console.error("CtrlZebra could not deliver a Webview protocol response.");
-      },
+      this.reportDeliveryFailure,
       this.chatRunner,
       this.approvalActions,
       this.sessionActions,
@@ -110,6 +109,7 @@ export function registerAgentView(
   approvalActions?: ApprovalUiActions,
   sessionActions?: SessionRecoveryActions,
   checkpointActions?: CheckpointActions,
+  reportDeliveryFailure?: () => void,
 ): Disposable {
   return registrar(
     agentViewId,
@@ -119,6 +119,7 @@ export function registerAgentView(
       approvalActions,
       sessionActions,
       checkpointActions,
+      reportDeliveryFailure,
     ),
   );
 }
