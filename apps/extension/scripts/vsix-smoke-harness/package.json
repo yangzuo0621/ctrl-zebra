@@ -1,0 +1,15 @@
+{
+  "name": "ctrl-zebra-vsix-smoke-harness",
+  "displayName": "CtrlZebra VSIX Smoke Harness",
+  "description": "Test-only host for exercising an installed CtrlZebra VSIX.",
+  "version": "0.0.0",
+  "publisher": "ctrl-zebra-tests",
+  "private": true,
+  "engines": {
+    "vscode": "^1.125.0"
+  },
+  "main": "./extension.cjs",
+  "activationEvents": [
+    "*"
+  ]
+}

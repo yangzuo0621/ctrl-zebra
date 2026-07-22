@@ -9,6 +9,7 @@ dist/
 out/
 .vite/
 .vscode-test/
+.artifacts/
 *.tsbuildinfo
 
 # Tool caches and logs
