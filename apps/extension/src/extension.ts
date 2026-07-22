@@ -36,10 +36,7 @@ import { createCheckpointActions } from "./controllers/checkpoint-actions.js";
 import { CommandApprovalWorkflow } from "./controllers/command-approval-workflow.js";
 import { FileEditApprovalWorkflow } from "./controllers/file-edit-approval-workflow.js";
 import { registerGeminiApiKeyCommand } from "./controllers/gemini-api-key-command.js";
-import {
-  getProviderSetupErrorMessage,
-  selectModelGateway,
-} from "./controllers/model-gateway-selector.js";
+import { selectModelGateway } from "./controllers/model-gateway-selector.js";
 import {
   createWorkspaceToolRegistryProvider,
   selectWorkspaceRoot,
@@ -162,59 +159,51 @@ export function activate(context: ExtensionContext): void {
     selectToolRegistry: (signal) => workspaceTools.get(signal),
     approvalWorkflow,
     async selectModelGateway() {
-      try {
-        const settings = workspace.getConfiguration("ctrlZebra.provider");
-        const configuration = readProviderConfiguration({
-          get: (setting) => settings.get(setting),
-        });
+      const settings = workspace.getConfiguration("ctrlZebra.provider");
+      const configuration = readProviderConfiguration({
+        get: (setting) => settings.get(setting),
+      });
 
-        return await selectModelGateway({
-          configuration,
-          requiredCapabilities: ["text-streaming", "tool-calling"],
-          secrets,
-          factories: {
-            gemini: ({ configuration: geminiConfiguration, apiKey }) => {
-              if (geminiConfiguration.provider !== "gemini" || apiKey === undefined) {
-                throw new Error("Invalid internal Gemini Provider factory input.");
-              }
+      return selectModelGateway({
+        configuration,
+        requiredCapabilities: ["text-streaming", "tool-calling"],
+        secrets,
+        factories: {
+          gemini: ({ configuration: geminiConfiguration, apiKey }) => {
+            if (geminiConfiguration.provider !== "gemini" || apiKey === undefined) {
+              throw new Error("Invalid internal Gemini Provider factory input.");
+            }
 
-              return createGeminiModelGateway({
-                apiKey,
-                modelId: geminiConfiguration.modelId,
-                baseURL: geminiConfiguration.endpoint,
-              });
-            },
-            "openai-compatible": ({ configuration: openAICompatibleConfiguration, apiKey }) => {
-              if (openAICompatibleConfiguration.provider !== "openai-compatible") {
-                throw new Error("Invalid internal OpenAI-Compatible Provider factory input.");
-              }
-
-              return createOpenAICompatibleModelGateway({
-                apiKey,
-                baseURL: openAICompatibleConfiguration.endpoint,
-                modelId: openAICompatibleConfiguration.modelId,
-              });
-            },
-            openai: ({ configuration: openAIConfiguration, apiKey }) => {
-              if (openAIConfiguration.provider !== "openai" || apiKey === undefined) {
-                throw new Error("Invalid internal OpenAI Provider factory input.");
-              }
-
-              return createOpenAIModelGateway({
-                apiKey,
-                modelId: openAIConfiguration.modelId,
-                baseURL: openAIConfiguration.endpoint,
-              });
-            },
+            return createGeminiModelGateway({
+              apiKey,
+              modelId: geminiConfiguration.modelId,
+              baseURL: geminiConfiguration.endpoint,
+            });
           },
-        });
-      } catch (error) {
-        const message = getProviderSetupErrorMessage(error);
-        if (message !== undefined) {
-          await window.showErrorMessage(message);
-        }
-        throw error;
-      }
+          "openai-compatible": ({ configuration: openAICompatibleConfiguration, apiKey }) => {
+            if (openAICompatibleConfiguration.provider !== "openai-compatible") {
+              throw new Error("Invalid internal OpenAI-Compatible Provider factory input.");
+            }
+
+            return createOpenAICompatibleModelGateway({
+              apiKey,
+              baseURL: openAICompatibleConfiguration.endpoint,
+              modelId: openAICompatibleConfiguration.modelId,
+            });
+          },
+          openai: ({ configuration: openAIConfiguration, apiKey }) => {
+            if (openAIConfiguration.provider !== "openai" || apiKey === undefined) {
+              throw new Error("Invalid internal OpenAI Provider factory input.");
+            }
+
+            return createOpenAIModelGateway({
+              apiKey,
+              modelId: openAIConfiguration.modelId,
+              baseURL: openAIConfiguration.endpoint,
+            });
+          },
+        },
+      });
     },
   });
 

@@ -104,6 +104,22 @@ export const runStatusMessageSchema = z.strictObject({
   status: runStatusSchema,
 });
 
+export const runErrorCodeSchema = z.enum([
+  "authentication",
+  "network",
+  "rate-limit",
+  "context",
+  "tool",
+  "internal",
+]);
+
+export const runErrorMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("extension/run-error"),
+  code: runErrorCodeSchema,
+  message: z.string().min(1).max(256),
+});
+
 const toolStateEnvelopeShape = {
   ...protocolEnvelopeSchema.shape,
   type: z.literal("extension/tool-state"),
@@ -206,6 +222,7 @@ export const extensionToWebviewMessageSchema = z.union([
   pongMessageSchema,
   textDeltaMessageSchema,
   runStatusMessageSchema,
+  runErrorMessageSchema,
   toolStateMessageSchema,
   approvalStateMessageSchema,
   sessionListMessageSchema,
@@ -231,6 +248,8 @@ export type ApprovalDecisionMessage = z.infer<typeof approvalDecisionMessageSche
 export type TextDeltaMessage = z.infer<typeof textDeltaMessageSchema>;
 export type RunStatus = z.infer<typeof runStatusSchema>;
 export type RunStatusMessage = z.infer<typeof runStatusMessageSchema>;
+export type RunErrorCode = z.infer<typeof runErrorCodeSchema>;
+export type RunErrorMessage = z.infer<typeof runErrorMessageSchema>;
 export type ToolStateMessage = z.infer<typeof toolStateMessageSchema>;
 export type ApprovalStateMessage = z.infer<typeof approvalStateMessageSchema>;
 export type SessionListMessage = z.infer<typeof sessionListMessageSchema>;

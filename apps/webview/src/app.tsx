@@ -55,6 +55,7 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
   const sessions = useStore(store, (state) => state.sessions);
   const selectedSessionId = useStore(store, (state) => state.selectedSessionId);
   const sessionError = useStore(store, (state) => state.sessionError);
+  const runError = useStore(store, (state) => state.runError);
   const approval = useStore(approvalStore, (state) => state.current);
   const pendingDecision = useStore(approvalStore, (state) => state.pendingDecision);
 
@@ -159,6 +160,12 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
           onApprove={() => approvalStore.getState().decide("approved")}
           onReject={() => approvalStore.getState().decide("denied")}
         />
+      )}
+
+      {runError === undefined ? null : (
+        <p className={styles.runError} role="alert">
+          {runError}
+        </p>
       )}
 
       <form className={styles.composer} onSubmit={handleSubmit}>

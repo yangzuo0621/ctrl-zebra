@@ -9,6 +9,7 @@ import {
 
 import type { ChatRunner } from "./chat-runner.js";
 import { CheckpointActionError, type CheckpointActions } from "./checkpoint-actions.js";
+import { mapRunErrorToUi } from "./run-error-mapper.js";
 import { type SessionRecoveryActions, SessionRecoveryError } from "./session-recovery.js";
 
 interface DisposableResource {
@@ -162,7 +163,7 @@ export function bindWebviewMessageController(
       return;
     }
 
-    if (event.status === "completed" || event.status === "cancelled" || event.status === "failed") {
+    if (event.status === "completed" || event.status === "cancelled") {
       finishRun(run, event.status);
     }
   };
@@ -187,9 +188,19 @@ export function bindWebviewMessageController(
           const status = run.abortController.signal.aborted ? "cancelled" : "completed";
           finishRun(run, status);
         },
-        () => {
-          const status = run.abortController.signal.aborted ? "cancelled" : "failed";
-          finishRun(run, status);
+        (error: unknown) => {
+          if (run.abortController.signal.aborted) {
+            finishRun(run, "cancelled");
+            return;
+          }
+
+          post({
+            protocolVersion,
+            type: "extension/run-error",
+            requestId: run.requestId,
+            ...mapRunErrorToUi(error),
+          });
+          finishRun(run, "failed");
         },
       )
       .finally(() => {

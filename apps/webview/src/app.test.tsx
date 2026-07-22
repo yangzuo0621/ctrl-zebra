@@ -325,6 +325,71 @@ describe("App streaming chat", () => {
     expect(screen.getByRole("textbox", { name: "Message" })).toBeEnabled();
   });
 
+  it.each([
+    ["authentication", "Check the selected provider and saved API key."],
+    ["network", "Check your connection and try again."],
+    ["rate-limit", "Wait a moment, then try again."],
+    ["context", "Start a new chat or shorten the request."],
+    ["tool", "Review the tool results and try again."],
+    ["internal", "Try again or reload the window if it continues."],
+  ] as const)("renders the %s run error prompt as an alert", async (code, message) => {
+    const host = new FakeWebviewHost();
+    const user = userEvent.setup();
+    render(<App host={host} createRequestId={() => "request-error"} />);
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "Hello.");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    act(() => {
+      host.emit({
+        protocolVersion,
+        type: "extension/run-error",
+        requestId: "request-error",
+        code,
+        message,
+      });
+      host.emit({
+        protocolVersion,
+        type: "extension/run-status",
+        requestId: "request-error",
+        status: "failed",
+      });
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(message);
+    expect(screen.getByRole("status")).toHaveTextContent("Response failed.");
+  });
+
+  it("clears a previous run error when a new run begins", async () => {
+    const host = new FakeWebviewHost();
+    const ids = ["request-1", "request-2"];
+    const user = userEvent.setup();
+    render(<App host={host} createRequestId={() => ids.shift() ?? "unexpected"} />);
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "First.");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    act(() => {
+      host.emit({
+        protocolVersion,
+        type: "extension/run-error",
+        requestId: "request-1",
+        code: "internal",
+        message: "Safe internal guidance.",
+      });
+      host.emit({
+        protocolVersion,
+        type: "extension/run-status",
+        requestId: "request-1",
+        status: "failed",
+      });
+    });
+    expect(screen.getByRole("alert")).toHaveTextContent("Safe internal guidance.");
+
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "Second.");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
   it("sends cancellation and ignores every later delta", async () => {
     const host = new FakeWebviewHost();
     const user = userEvent.setup();
