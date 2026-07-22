@@ -226,6 +226,79 @@ risk calls to avoid the matrix is forbidden.
   deterministic fake test content. Checkpoints never contain credentials or other forbidden
   persistence data. No retention or automatic deletion policy is introduced by T0801.
 
+## Structured Diagnostic Logging
+
+CtrlZebra diagnostic logs are local, bounded operational records written by the Extension Host to
+the VS Code `LogOutputChannel`. They are not telemetry, model context, persisted Session data, or a
+user-facing error surface. Core and provider code may describe an event through host-independent
+values, but only the Extension adapter formats and writes a log entry.
+
+### Entry shape and correlation
+
+- Every entry is one structured object with a stable `event` name in lower `snake_case`, a
+  `component`, and an `outcome` when the operation has completed. The channel's log level and VS
+  Code timestamp remain transport metadata rather than duplicated fields.
+- Optional diagnostic fields are limited to bounded primitive values: `errorCode`, `durationMs`,
+  `provider`, `attempt`, and identifiers needed to correlate an operation. Arbitrary objects and
+  free-form metadata bags are forbidden.
+- Correlation identifiers use explicit keys: `sessionId`, `runId`, `requestId`, `toolCallId`, and
+  `approvalId`. An entry includes only identifiers already owned by the logged operation. Logging
+  must not create a second identity or derive an identifier from content, paths, or secrets.
+- Identifiers are diagnostic labels, not authorization. They cannot be used to approve, resume, or
+  locate an operation without the normal ownership and validation checks.
+- Field order is deterministic so tests and human inspection remain useful. Unknown fields are
+  rejected or dropped before formatting, and each serialized entry has a fixed byte ceiling.
+
+### Sensitive data and default exclusions
+
+The following values are sensitive and must never enter a diagnostic entry, including as a field
+name, nested value, interpolated message, error message, stack, URL query, or serialized object:
+
+- API keys, bearer tokens, OAuth tokens, cookies, authorization and proxy-authorization headers,
+  SecretStorage values, passwords, client secrets, signing material, and credential-helper data.
+- Environment names and values, command environment blocks, request and response headers, and
+  third-party request or response bodies.
+- User prompts, model input or output, tool input or output, command stdout or stderr, file contents,
+  diffs, checkpoint before-content, persisted messages, and workspace source text.
+- Absolute workspace paths, user-directory paths, URIs containing user-controlled query or fragment
+  data, and filenames or identifiers derived from source content.
+
+User source and model content are excluded by default rather than inspected and selectively
+retained. A future exception requires an explicit security review, a documented bounded schema and
+retention rule, user-visible control where appropriate, and tests proving that unrelated content
+remains excluded.
+
+Before formatting, the logging adapter recursively treats input as `unknown`, accepts only the
+documented fields and primitive types, and replaces sensitive key names and recognized credential
+forms with a constant redaction marker. Redaction is defense in depth; callers still must not pass
+sensitive values. Tests use synthetic conspicuous secrets and assert against the final rendered
+entry, not only the intermediate object.
+
+### Errors and third-party causes
+
+- Raw `Error` objects, stacks, SDK response objects, host exceptions, and arbitrary `cause` chains
+  are never serialized or interpolated into logs.
+- A trusted boundary maps a failure to a stable internal `errorCode` and safe `outcome`. The logger
+  may record an allowlisted error `name` only when it is assigned by CtrlZebra; third-party names,
+  messages, status text, response bodies, headers, and stacks are excluded.
+- A third-party `cause` may be inspected only to classify it through documented type guards or
+  stable SDK properties. The resulting stable category may be logged, but the original cause and
+  its recursively nested causes are discarded.
+- Cancellation, timeout, provider failure, tool failure, and cleanup failure remain distinct
+  outcomes. Logging must not convert one into another or replace the primary result.
+
+### User prompts versus diagnostics
+
+- User-facing messages answer what failed and what the user can safely do next. They use stable,
+  localized-safe text and never ask the user to inspect raw secrets or paste credentials into logs.
+- Diagnostic entries identify where and in which correlated operation the failure occurred. They do
+  not contain the user-facing prose, user content, or raw exception message.
+- Showing a user notification and writing a diagnostic entry are independent decisions. A routine
+  cancellation may need neither; a recoverable setup error may need a user prompt but no error log;
+  an internal failure may need both, with only a stable error code linking the two surfaces.
+- The logger must never be used as a fallback store for data omitted from Tool Results, protocol
+  DTOs, persistence, approval presentation, or user notifications.
+
 ## API Key Secret Storage
 
 - The OpenAI API key is stored under the stable, Extension-owned name
