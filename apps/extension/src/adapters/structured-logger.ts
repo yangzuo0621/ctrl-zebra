@@ -15,7 +15,7 @@ const orderedStringFields = [
   "approvalId",
 ] as const;
 
-const orderedNumberFields = ["durationMs", "attempt"] as const;
+const orderedNumberFields = ["durationMs", "memoryBytes", "attempt"] as const;
 const categoricalFields = new Set(["outcome", "errorCode", "provider"]);
 
 type StructuredLogLevel = "trace" | "debug" | "info" | "warn" | "error";

@@ -83,6 +83,7 @@ class AgentViewProvider implements WebviewViewProvider {
     private readonly sessionActions?: SessionRecoveryActions,
     private readonly checkpointActions?: CheckpointActions,
     private readonly reportDeliveryFailure: () => void = () => {},
+    private readonly reportDisplay: () => void = () => {},
   ) {}
 
   resolveWebviewView(webviewView: WebviewView): void {
@@ -99,6 +100,7 @@ class AgentViewProvider implements WebviewViewProvider {
       this.sessionActions,
       this.checkpointActions,
     );
+    this.reportDisplay();
   }
 }
 
@@ -110,6 +112,7 @@ export function registerAgentView(
   sessionActions?: SessionRecoveryActions,
   checkpointActions?: CheckpointActions,
   reportDeliveryFailure?: () => void,
+  reportDisplay?: () => void,
 ): Disposable {
   return registrar(
     agentViewId,
@@ -120,6 +123,7 @@ export function registerAgentView(
       sessionActions,
       checkpointActions,
       reportDeliveryFailure,
+      reportDisplay,
     ),
   );
 }
