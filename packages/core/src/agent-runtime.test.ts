@@ -344,7 +344,10 @@ describe("AgentRuntime", () => {
       requests,
     );
     const registry = new ToolRegistry();
-    const execute = vi.fn(async () => ({ output: null, truncated: false }));
+    const execute = vi.fn(async () => ({
+      output: { stdout: "ok", stderr: "", exitCode: 0, signal: null },
+      truncated: false,
+    }));
     registry.register({
       name: "run_command",
       description: "Run a command.",
@@ -382,7 +385,7 @@ describe("AgentRuntime", () => {
 
     await runtime.run(userMessage, new AbortController().signal);
 
-    expect(execute).not.toHaveBeenCalled();
+    expect(execute).toHaveBeenCalledOnce();
     expect(create).toHaveBeenCalledOnce();
     expect(create.mock.calls[0]?.[0]).toMatchObject({
       call: {
@@ -391,6 +394,16 @@ describe("AgentRuntime", () => {
         input: { command: "node", args: ["check.mjs"], cwd: ".", timeoutMs: 30_000 },
       },
       risk: "execute",
+    });
+    expect(requests[1]?.messages.at(-1)).toEqual({
+      role: "tool",
+      result: {
+        callId: "call-command",
+        name: "run_command",
+        status: "success",
+        output: { stdout: "ok", stderr: "", exitCode: 0, signal: null },
+        truncated: false,
+      },
     });
   });
 

@@ -49,8 +49,9 @@ export {
   readFileToolName,
   readFileUtf8LookaheadBytes,
 } from "./read-file.js";
-export type { RunCommandInput } from "./run-command.js";
+export type { RunCommandExecutor, RunCommandInput } from "./run-command.js";
 export {
+  createRunCommandTool,
   maxRunCommandArgumentCharacters,
   maxRunCommandArguments,
   maxRunCommandCharacters,

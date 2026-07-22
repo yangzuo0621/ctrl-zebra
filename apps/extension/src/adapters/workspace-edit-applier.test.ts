@@ -173,6 +173,19 @@ describe("WorkspaceEditApplier", () => {
     expect(dependencies.createWorkspaceEdit).not.toHaveBeenCalled();
     expect(dependencies.applyWorkspaceEdit).not.toHaveBeenCalled();
   });
+
+  it("rechecks host policy immediately before applying the workspace edit", async () => {
+    const policyFailure = new Error("Workspace trust changed");
+    const dependencies = createDependencies({ policyFailure });
+    const applier = new WorkspaceEditApplier(dependencies.values);
+
+    await expect(applier.apply(plan, ownership, new AbortController().signal)).rejects.toBe(
+      policyFailure,
+    );
+    expect(dependencies.createCheckpoint).toHaveBeenCalledOnce();
+    expect(dependencies.assertCanApply).toHaveBeenCalledOnce();
+    expect(dependencies.applyWorkspaceEdit).not.toHaveBeenCalled();
+  });
 });
 
 function createDependencies(
@@ -180,6 +193,7 @@ function createDependencies(
     readonly applied?: boolean;
     readonly isValidPosition?: (position: TextPosition) => boolean;
     readonly checkpointFailure?: Error;
+    readonly policyFailure?: Error;
   } = {},
 ) {
   const resolveDocument = vi.fn(async () => ({
@@ -199,6 +213,11 @@ function createDependencies(
   const applyWorkspaceEdit = vi.fn<FakeDependencies["applyWorkspaceEdit"]>(
     async () => options.applied ?? true,
   );
+  const assertCanApply = vi.fn<FakeDependencies["assertCanApply"]>(() => {
+    if (options.policyFailure !== undefined) {
+      throw options.policyFailure;
+    }
+  });
   const hashText = vi.fn<FakeDependencies["hashText"]>((text) => `hash:${text}`);
   const createCheckpoint = vi.fn<FakeDependencies["createCheckpoint"]>(async () => {
     if (options.checkpointFailure !== undefined) {
@@ -211,6 +230,7 @@ function createDependencies(
       resolveDocument,
       createWorkspaceEdit,
       replace,
+      assertCanApply,
       applyWorkspaceEdit,
       hashText,
       createId: () => "checkpoint-1",
@@ -220,6 +240,7 @@ function createDependencies(
     resolveDocument,
     createWorkspaceEdit,
     applyWorkspaceEdit,
+    assertCanApply,
     hashText,
     createCheckpoint,
   };

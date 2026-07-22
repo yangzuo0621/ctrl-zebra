@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  createRunCommandTool,
   maxRunCommandTimeoutMs,
   minRunCommandTimeoutMs,
   parseRunCommandInput,
@@ -9,6 +10,32 @@ import {
 } from "./run-command.js";
 
 describe("run_command input", () => {
+  it("prepares the exact input and delegates approved execution", async () => {
+    const input = validInput() as unknown as {
+      command: string;
+      args: string[];
+      cwd: string;
+      timeoutMs: number;
+    };
+    const executor = {
+      run: async () => ({
+        output: { stdout: "ok", stderr: "", exitCode: 0, signal: null },
+        truncated: false,
+      }),
+    };
+    const tool = createRunCommandTool(executor);
+    const signal = new AbortController().signal;
+
+    await expect(tool.prepareApproval?.(input, { signal })).resolves.toEqual({
+      output: input,
+      truncated: false,
+    });
+    await expect(tool.execute(input, { signal })).resolves.toEqual({
+      output: { stdout: "ok", stderr: "", exitCode: 0, signal: null },
+      truncated: false,
+    });
+  });
+
   it("defines and parses a direct-spawn command", () => {
     const input = {
       command: "node",

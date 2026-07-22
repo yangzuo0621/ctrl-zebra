@@ -1,3 +1,6 @@
+import type { AgentTool, ToolExecutionOutput } from "@ctrl-zebra/core";
+import { type RunCommandOutput, runCommandOutputSchema } from "@ctrl-zebra/protocol";
+
 import { hasOnlyKeys, isRecord, isSafeForwardSlashPath } from "./boundary-validation.js";
 
 export const runCommandToolName = "run_command" as const;
@@ -32,6 +35,7 @@ export const runCommandInputSchema = {
       maxItems: maxRunCommandArguments,
       items: {
         type: "string",
+        description: "One argument passed verbatim to the executable.",
         maxLength: maxRunCommandArgumentCharacters,
         pattern: "^[^\\u0000-\\u001f\\u007f]*$",
       },
@@ -60,6 +64,35 @@ export interface RunCommandInput {
   readonly args: readonly string[];
   readonly cwd: string;
   readonly timeoutMs: number;
+}
+
+export interface RunCommandExecutor {
+  run(input: RunCommandInput, signal: AbortSignal): Promise<ToolExecutionOutput<RunCommandOutput>>;
+}
+
+export function createRunCommandTool(
+  executor: RunCommandExecutor,
+): AgentTool<RunCommandInput, RunCommandOutput> {
+  return {
+    name: runCommandToolName,
+    description: runCommandToolDescription,
+    inputSchema: runCommandInputSchema,
+    risk: "execute",
+    parseInput: parseRunCommandInput,
+    prepareApproval: async (input, { signal }) => {
+      signal.throwIfAborted();
+      return { output: input, truncated: false };
+    },
+    async execute(input, { signal }) {
+      signal.throwIfAborted();
+      const execution = await executor.run(input, signal);
+      signal.throwIfAborted();
+      return {
+        output: runCommandOutputSchema.parse(execution.output),
+        truncated: execution.truncated,
+      };
+    },
+  };
 }
 
 export function parseRunCommandInput(value: unknown): RunCommandInput {

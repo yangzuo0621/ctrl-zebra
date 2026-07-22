@@ -9,6 +9,8 @@ import {
 } from "@ctrl-zebra/core";
 import type { ApprovalDecisionIntent, ApprovalRequest, ApprovalStatus } from "@ctrl-zebra/protocol";
 
+import type { WorkspaceTrustPolicy } from "./workspace-trust-policy.js";
+
 type FileEditOwnership = Pick<PreparedToolApproval, "sessionId" | "runId">;
 
 export const defaultApprovalLifetimeMilliseconds = 5 * 60 * 1_000;
@@ -31,6 +33,7 @@ interface FileEditApprovalWorkflowDependencies {
   ) => Promise<"applied" | "conflict">;
   readonly approvalLifetimeMilliseconds?: number;
   readonly reportError: (message: string) => void;
+  readonly workspaceTrust: WorkspaceTrustPolicy;
 }
 
 interface ApprovalRecord {
@@ -56,6 +59,7 @@ export class FileEditApprovalWorkflow implements ToolApprovalWorkflow, FileEditA
     prepared: PreparedToolApproval,
     signal: AbortSignal,
   ): Promise<ToolApprovalOperation> {
+    this.#dependencies.workspaceTrust.requireTrusted();
     const plan = parseTextEditPlan(prepared.prepared.output);
     signal.throwIfAborted();
     const workspaceRootUri = await this.#dependencies.bindPlan(plan, signal);
@@ -199,8 +203,17 @@ export class FileEditApprovalWorkflow implements ToolApprovalWorkflow, FileEditA
       this.#records.delete(record.request.id);
       return { outcome: "expired" as const };
     }
+    if (!this.#dependencies.workspaceTrust.isTrusted()) {
+      record.status = "invalidated";
+      this.#records.delete(record.request.id);
+      return {
+        outcome: "conflict" as const,
+        message: "Workspace trust changed before the approved file edits could be applied.",
+      };
+    }
 
     record.consuming = true;
+    this.#dependencies.workspaceTrust.requireTrusted();
     const result = await this.#dependencies.applyPlan(record.plan, record.ownership, signal);
     signal.throwIfAborted();
     if (result === "conflict") {

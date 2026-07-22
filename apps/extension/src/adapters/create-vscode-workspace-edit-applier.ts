@@ -10,6 +10,7 @@ export function createVsCodeWorkspaceEditApplier(
   createCheckpoint: (checkpoint: Checkpoint, signal: AbortSignal) => Promise<void>,
   createId: () => string,
   now: () => Date,
+  assertCanApply: () => void,
 ): WorkspaceEditApplier<Uri, WorkspaceEdit> {
   return new WorkspaceEditApplier({
     async resolveDocument(serializedUri, signal) {
@@ -38,6 +39,7 @@ export function createVsCodeWorkspaceEditApplier(
         newText,
       );
     },
+    assertCanApply,
     applyWorkspaceEdit: (edit) => Promise.resolve(workspace.applyEdit(edit)),
     hashText: (text) => createHash("sha256").update(text, "utf8").digest("hex"),
     createId,

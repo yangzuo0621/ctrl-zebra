@@ -13,6 +13,8 @@ import {
 } from "@ctrl-zebra/core";
 import type { ApprovalDecisionIntent, ApprovalRequest, ApprovalStatus } from "@ctrl-zebra/protocol";
 
+import type { WorkspaceTrustPolicy } from "./workspace-trust-policy.js";
+
 export const defaultCommandApprovalLifetimeMilliseconds = 5 * 60 * 1_000;
 
 export interface CommandCwdBinding {
@@ -28,11 +30,14 @@ interface CommandApprovalWorkflowDependencies {
   readonly createId: () => string;
   readonly now: () => Date;
   readonly bindCwd: (cwd: string, signal: AbortSignal) => Promise<CommandCwdBinding>;
+  readonly workspaceTrust: WorkspaceTrustPolicy;
   readonly approvalLifetimeMilliseconds?: number;
 }
 
 interface CommandApprovalRecord {
   readonly request: ApprovalRequest;
+  readonly input: RunCommandInput;
+  readonly binding: CommandCwdBinding;
   status: ApprovalStatus;
   signal?: AbortSignal;
   expiration?: ReturnType<typeof setTimeout>;
@@ -52,6 +57,7 @@ export class CommandApprovalWorkflow implements ToolApprovalWorkflow, CommandApp
     prepared: PreparedToolApproval,
     signal: AbortSignal,
   ): Promise<ToolApprovalOperation> {
+    this.#dependencies.workspaceTrust.requireTrusted();
     if (prepared.risk !== "execute" || prepared.call.name !== runCommandToolName) {
       throw new InvalidCommandApprovalError();
     }
@@ -92,6 +98,8 @@ export class CommandApprovalWorkflow implements ToolApprovalWorkflow, CommandApp
 
     const record: CommandApprovalRecord = {
       request,
+      input,
+      binding,
       status: "pending",
       consuming: false,
     };
@@ -180,10 +188,32 @@ export class CommandApprovalWorkflow implements ToolApprovalWorkflow, CommandApp
       return { outcome: "expired" as const };
     }
 
+    if (!this.#dependencies.workspaceTrust.isTrusted()) {
+      return this.#invalidateForTrustChange(record);
+    }
+    const currentBinding = await this.#dependencies.bindCwd(record.input.cwd, signal);
+    signal.throwIfAborted();
+    if (
+      !this.#dependencies.workspaceTrust.isTrusted() ||
+      currentBinding.workspaceRootUri !== record.binding.workspaceRootUri ||
+      currentBinding.cwdUri !== record.binding.cwdUri
+    ) {
+      return this.#invalidateForTrustChange(record);
+    }
+
     record.consuming = true;
     record.status = "consumed";
     this.#records.delete(record.request.id);
     return { outcome: "approved" as const };
+  }
+
+  #invalidateForTrustChange(record: CommandApprovalRecord) {
+    record.status = "invalidated";
+    this.#records.delete(record.request.id);
+    return {
+      outcome: "conflict" as const,
+      message: "Workspace trust or command scope changed before execution.",
+    };
   }
 
   #expire(record: CommandApprovalRecord): void {

@@ -14,11 +14,11 @@ import type {
 } from "../adapters/workspace-file-reader.js";
 
 import {
-  createReadonlyToolRegistryProvider,
+  createWorkspaceToolRegistryProvider,
   WorkspaceRootSelectionError,
 } from "./readonly-tool-registry.js";
 
-describe("createReadonlyToolRegistryProvider", () => {
+describe("createWorkspaceToolRegistryProvider", () => {
   it("initializes lazily, registers each workspace tool once, and binds adapters to the selected root", async () => {
     const root = uri("/workspace");
     const listed = uri("/workspace/src/index.ts");
@@ -28,7 +28,7 @@ describe("createReadonlyToolRegistryProvider", () => {
       truncated: false,
     }));
     const dependencies = createDependencies([root], { findFiles, readPrefix });
-    const provider = createReadonlyToolRegistryProvider(dependencies.values);
+    const provider = createWorkspaceToolRegistryProvider(dependencies.values);
 
     expect(findFiles).not.toHaveBeenCalled();
     expect(readPrefix).not.toHaveBeenCalled();
@@ -41,6 +41,7 @@ describe("createReadonlyToolRegistryProvider", () => {
       "list_files",
       "propose_file_edit",
       "read_file",
+      "run_command",
       "search_files",
     ]);
 
@@ -74,7 +75,7 @@ describe("createReadonlyToolRegistryProvider", () => {
   it("invalidates the cached composition when workspace folders change", async () => {
     const roots = [uri("/first")];
     const dependencies = createDependencies(roots);
-    const provider = createReadonlyToolRegistryProvider(dependencies.values);
+    const provider = createWorkspaceToolRegistryProvider(dependencies.values);
     const signal = new AbortController().signal;
     const first = await provider.get(signal);
 
@@ -83,14 +84,14 @@ describe("createReadonlyToolRegistryProvider", () => {
     const second = await provider.get(signal);
 
     expect(second).not.toBe(first);
-    expect(second.declarations()).toHaveLength(4);
+    expect(second.declarations()).toHaveLength(5);
   });
 
   it.each([
     [[], "missing-workspace"],
     [[uri("/first"), uri("/second")], "ambiguous-workspace"],
   ] as const)("rejects an unsafe workspace root selection %#", async (roots, code) => {
-    const provider = createReadonlyToolRegistryProvider(createDependencies(roots).values);
+    const provider = createWorkspaceToolRegistryProvider(createDependencies(roots).values);
 
     await expect(provider.get(new AbortController().signal)).rejects.toEqual(
       new WorkspaceRootSelectionError(code),
@@ -99,13 +100,37 @@ describe("createReadonlyToolRegistryProvider", () => {
 
   it("cleans up its listener idempotently and rejects later initialization", async () => {
     const dependencies = createDependencies([uri("/workspace")]);
-    const provider = createReadonlyToolRegistryProvider(dependencies.values);
+    const provider = createWorkspaceToolRegistryProvider(dependencies.values);
 
     provider.dispose();
     provider.dispose();
 
     expect(dependencies.disposeWorkspaceChange).toHaveBeenCalledOnce();
+    expect(dependencies.disposeTrustChange).toHaveBeenCalledOnce();
     await expect(provider.get(new AbortController().signal)).rejects.toThrow("has been disposed");
+  });
+
+  it("exposes only read tools until the host grants workspace trust", async () => {
+    const dependencies = createDependencies([uri("/workspace")], { trusted: false });
+    const provider = createWorkspaceToolRegistryProvider(dependencies.values);
+    const signal = new AbortController().signal;
+
+    expect((await provider.get(signal)).declarations().map(({ name }) => name)).toEqual([
+      "list_files",
+      "read_file",
+      "search_files",
+    ]);
+
+    dependencies.setTrusted(true);
+    dependencies.emitTrustGrant();
+
+    expect((await provider.get(signal)).declarations().map(({ name }) => name)).toEqual([
+      "list_files",
+      "propose_file_edit",
+      "read_file",
+      "run_command",
+      "search_files",
+    ]);
   });
 });
 
@@ -114,14 +139,22 @@ function createDependencies(
   overrides: {
     readonly findFiles?: WorkspaceFindFiles;
     readonly readPrefix?: ReadWorkspaceFilePrefix;
+    readonly trusted?: boolean;
   } = {},
 ) {
+  let trusted = overrides.trusted ?? true;
   let workspaceChangeListener: (() => void) | undefined;
+  let trustChangeListener: (() => void) | undefined;
   const registerWorkspaceChange = vi.fn((listener: () => void) => {
     workspaceChangeListener = listener;
     return { dispose: disposeWorkspaceChange };
   });
   const disposeWorkspaceChange = vi.fn();
+  const disposeTrustChange = vi.fn();
+  const registerTrustChange = vi.fn((listener: () => void) => {
+    trustChangeListener = listener;
+    return { dispose: disposeTrustChange };
+  });
   const joinPath = vi.fn<JoinWorkspacePath>((root, path) =>
     uri(`${root.path}/${path}`, root.scheme, root.authority),
   );
@@ -139,6 +172,7 @@ function createDependencies(
           truncated: false,
         })),
       onDidChangeWorkspaceFolders: registerWorkspaceChange,
+      onDidGrantWorkspaceTrust: registerTrustChange,
       createProposeFileEditWorkspace: () =>
         ({
           captureFileRevision: async () => ({
@@ -147,11 +181,30 @@ function createDependencies(
           }),
           isFileRevisionCurrent: async () => true,
         }) satisfies ProposeFileEditWorkspace,
+      commandExecutor: {
+        run: async () => ({
+          output: { stdout: "", stderr: "", exitCode: 0, signal: null },
+          truncated: false,
+        }),
+      },
+      workspaceTrust: {
+        isTrusted: () => trusted,
+        requireTrusted() {
+          if (!trusted) {
+            throw new Error("Workspace is not trusted.");
+          }
+        },
+      },
     },
     joinPath,
     registerWorkspaceChange,
     disposeWorkspaceChange,
+    disposeTrustChange,
     emitWorkspaceChange: () => workspaceChangeListener?.(),
+    emitTrustGrant: () => trustChangeListener?.(),
+    setTrusted(value: boolean) {
+      trusted = value;
+    },
   };
 }
 

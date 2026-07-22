@@ -2,8 +2,10 @@ import {
   createListFilesTool,
   createProposeFileEditTool,
   createReadFileTool,
+  createRunCommandTool,
   createSearchFilesTool,
   type ProposeFileEditWorkspace,
+  type RunCommandExecutor,
 } from "@ctrl-zebra/builtin-tools";
 import { ToolRegistry } from "@ctrl-zebra/core";
 import type { Disposable, Uri } from "vscode";
@@ -16,6 +18,7 @@ import {
 } from "../adapters/workspace-file-reader.js";
 import { type CanonicalizeWorkspaceUri, WorkspaceScope } from "../adapters/workspace-scope.js";
 import { WorkspaceSearchFiles } from "../adapters/workspace-search-files.js";
+import type { WorkspaceTrustPolicy } from "./workspace-trust-policy.js";
 
 export type WorkspaceRootSelectionErrorCode = "missing-workspace" | "ambiguous-workspace";
 
@@ -30,36 +33,45 @@ export class WorkspaceRootSelectionError extends Error {
   }
 }
 
-export interface ReadonlyToolRegistryProvider extends Disposable {
+export interface WorkspaceToolRegistryProvider extends Disposable {
   get(signal: AbortSignal): Promise<ToolRegistry>;
 }
 
-interface ReadonlyToolRegistryDependencies {
+interface WorkspaceToolRegistryDependencies {
   readonly getWorkspaceRoots: () => readonly Uri[];
   readonly canonicalize: CanonicalizeWorkspaceUri;
   readonly findFiles: WorkspaceFindFiles;
   readonly joinPath: JoinWorkspacePath;
   readonly readPrefix: ReadWorkspaceFilePrefix;
   readonly onDidChangeWorkspaceFolders: (listener: () => void) => Disposable;
+  readonly onDidGrantWorkspaceTrust: (listener: () => void) => Disposable;
   readonly createProposeFileEditWorkspace: (
     root: Uri,
     scope: WorkspaceScope,
   ) => ProposeFileEditWorkspace;
+  readonly commandExecutor: RunCommandExecutor;
+  readonly workspaceTrust: WorkspaceTrustPolicy;
 }
 
-export function createReadonlyToolRegistryProvider({
+export function createWorkspaceToolRegistryProvider({
   getWorkspaceRoots,
   canonicalize,
   findFiles,
   joinPath,
   readPrefix,
   onDidChangeWorkspaceFolders,
+  onDidGrantWorkspaceTrust,
   createProposeFileEditWorkspace,
-}: ReadonlyToolRegistryDependencies): ReadonlyToolRegistryProvider {
+  commandExecutor,
+  workspaceTrust,
+}: WorkspaceToolRegistryDependencies): WorkspaceToolRegistryProvider {
   let initialization: Promise<ToolRegistry> | undefined;
   let disposed = false;
 
   const invalidateRegistration = onDidChangeWorkspaceFolders(() => {
+    initialization = undefined;
+  });
+  const invalidateTrustRegistration = onDidGrantWorkspaceTrust(() => {
     initialization = undefined;
   });
 
@@ -71,11 +83,14 @@ export function createReadonlyToolRegistryProvider({
     const registry = new ToolRegistry();
 
     registry.register(createListFilesTool(lister));
-    registry.register(
-      createProposeFileEditTool(createProposeFileEditWorkspace(selectedRoot, scope)),
-    );
     registry.register(createReadFileTool(reader));
     registry.register(createSearchFilesTool(new WorkspaceSearchFiles(lister, reader)));
+    if (workspaceTrust.isTrusted()) {
+      registry.register(
+        createProposeFileEditTool(createProposeFileEditWorkspace(selectedRoot, scope)),
+      );
+      registry.register(createRunCommandTool(commandExecutor));
+    }
     return registry;
   };
 
@@ -108,6 +123,7 @@ export function createReadonlyToolRegistryProvider({
       disposed = true;
       initialization = undefined;
       invalidateRegistration.dispose();
+      invalidateTrustRegistration.dispose();
     },
   };
 }

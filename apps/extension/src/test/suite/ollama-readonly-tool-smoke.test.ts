@@ -13,7 +13,7 @@ import {
   readWorkspaceFilePrefix,
 } from "../../adapters/vscode-workspace-read-file.js";
 import { createSelectingChatRunner } from "../../controllers/chat-runner.js";
-import { createReadonlyToolRegistryProvider } from "../../controllers/readonly-tool-registry.js";
+import { createWorkspaceToolRegistryProvider } from "../../controllers/readonly-tool-registry.js";
 
 const ollamaBaseUrl = "http://127.0.0.1:11434/v1";
 
@@ -29,7 +29,7 @@ export async function verifyOllamaReadonlyToolSmoke(): Promise<void> {
     "Ollama smoke test requires exactly one workspace folder.",
   );
 
-  const readonlyTools = createReadonlyToolRegistryProvider({
+  const readonlyTools = createWorkspaceToolRegistryProvider({
     getWorkspaceRoots: () => vscode.workspace.workspaceFolders?.map((folder) => folder.uri) ?? [],
     canonicalize: createLocalWorkspaceUriCanonicalizer(realpath, vscode.Uri.file),
     findFiles: findWorkspaceFiles,
@@ -37,8 +37,21 @@ export async function verifyOllamaReadonlyToolSmoke(): Promise<void> {
     readPrefix: readWorkspaceFilePrefix,
     onDidChangeWorkspaceFolders: (listener) =>
       vscode.workspace.onDidChangeWorkspaceFolders(listener),
+    onDidGrantWorkspaceTrust: () => ({ dispose() {} }),
     createProposeFileEditWorkspace: (root, scope) =>
       new VsCodeProposeFileEditWorkspace(root, scope, joinWorkspacePath),
+    commandExecutor: {
+      run: async () => ({
+        output: { stdout: "", stderr: "", exitCode: 0, signal: null },
+        truncated: false,
+      }),
+    },
+    workspaceTrust: {
+      isTrusted: () => false,
+      requireTrusted() {
+        throw new Error("Readonly smoke test does not enable dangerous tools.");
+      },
+    },
   });
   const events: AgentRuntimeEvent[] = [];
   const runner = createSelectingChatRunner({

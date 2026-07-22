@@ -2,14 +2,14 @@ import assert from "node:assert/strict";
 import * as vscode from "vscode";
 
 import { VsCodeProposeFileEditWorkspace } from "../../adapters/vscode-propose-file-edit-workspace.js";
-import { createReadonlyToolRegistryProvider } from "../../controllers/readonly-tool-registry.js";
+import { createWorkspaceToolRegistryProvider } from "../../controllers/readonly-tool-registry.js";
 
 export async function verifyReadonlyToolRegistration(): Promise<void> {
   const root = vscode.Uri.from({ scheme: "file", path: "/ctrl-zebra-integration-workspace" });
   const target = vscode.Uri.joinPath(root, "README.md");
   let observedBaseUri: vscode.Uri | undefined;
   let workspaceChangeListener: (() => void) | undefined;
-  const provider = createReadonlyToolRegistryProvider({
+  const provider = createWorkspaceToolRegistryProvider({
     getWorkspaceRoots: () => [root],
     canonicalize: async (uri) => uri,
     findFiles: async ({ baseUri }) => {
@@ -25,10 +25,21 @@ export async function verifyReadonlyToolRegistration(): Promise<void> {
       workspaceChangeListener = listener;
       return { dispose() {} };
     },
+    onDidGrantWorkspaceTrust: () => ({ dispose() {} }),
     createProposeFileEditWorkspace: (selectedRoot, scope) =>
       new VsCodeProposeFileEditWorkspace(selectedRoot, scope, (base, path) =>
         vscode.Uri.joinPath(base, path),
       ),
+    commandExecutor: {
+      run: async () => ({
+        output: { stdout: "", stderr: "", exitCode: 0, signal: null },
+        truncated: false,
+      }),
+    },
+    workspaceTrust: {
+      isTrusted: () => true,
+      requireTrusted() {},
+    },
   });
   const signal = new AbortController().signal;
 
@@ -37,7 +48,7 @@ export async function verifyReadonlyToolRegistration(): Promise<void> {
     assert.equal(first, repeated, "Concurrent initialization must share one Tool Registry.");
     assert.deepEqual(
       first.declarations().map(({ name }) => name),
-      ["list_files", "propose_file_edit", "read_file", "search_files"],
+      ["list_files", "propose_file_edit", "read_file", "run_command", "search_files"],
     );
 
     const listFiles = first.get("list_files");
@@ -48,7 +59,7 @@ export async function verifyReadonlyToolRegistration(): Promise<void> {
     workspaceChangeListener?.();
     const refreshed = await provider.get(signal);
     assert.notEqual(refreshed, first, "Workspace changes must invalidate the cached composition.");
-    assert.equal(refreshed.declarations().length, 4);
+    assert.equal(refreshed.declarations().length, 5);
   } finally {
     provider.dispose();
   }

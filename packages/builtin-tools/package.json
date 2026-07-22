@@ -7,6 +7,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@ctrl-zebra/core": "workspace:*"
+    "@ctrl-zebra/core": "workspace:*",
+    "@ctrl-zebra/protocol": "workspace:*"
   }
 }
