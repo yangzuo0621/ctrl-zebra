@@ -37,14 +37,18 @@ does not authorize Marketplace publication, version changes, tags, or release cr
 
 ## Final verification
 
-- [ ] `pnpm install --frozen-lockfile`, `pnpm check`, `pnpm typecheck`, `pnpm test:unit`,
+- [x] `pnpm install --frozen-lockfile`, `pnpm check`, `pnpm typecheck`, `pnpm test:unit`,
   `pnpm test:integration`, and `pnpm build` pass.
-- [ ] `pnpm package:vsix` produces a clean, upstream-traceable artifact whose independent inspection
+- [x] `pnpm package:vsix` produces a clean, upstream-traceable artifact whose independent inspection
   confirms the allowlist, license, commit, and size limits.
-- [ ] `pnpm smoke:vsix -- <artifact>` installs that exact VSIX in isolated user-data and extensions
+- [x] `pnpm smoke:vsix -- <artifact>` installs that exact VSIX in isolated user-data and extensions
   directories, activates CtrlZebra, opens the Agent view, and observes the expected structured log.
-- [ ] `git diff --check`, final diff review, and `git status --short` show only the intended T1005
+- [x] `git diff --check`, final diff review, and `git status --short` show only the intended T1005
   source changes before commit and a clean worktree before official packaging.
 
 The verification items are checked only after the commands execute successfully on the release
 candidate commit. A checked repository gate is not evidence that the VSIX was published.
+
+Verification completed on 2026-07-22. The inspected and smoke-tested candidate is
+`ctrl-zebra-0.0.0-2dee574f5cdf.vsix`: 11 files, 437,435 compressed bytes, 2,367,140 uncompressed
+bytes, with source commit `2dee574f5cdf724703bb0b44858ba7b7999a18d2` in its build metadata.
