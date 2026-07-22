@@ -11,6 +11,7 @@ describe("structured logger", () => {
       attempt: 2,
       component: "agent_runtime",
       durationMs: 25,
+      memoryBytes: 52_428_800,
       event: "tool_execution_completed",
       outcome: "success",
       runId: "run-1",
@@ -24,7 +25,7 @@ describe("structured logger", () => {
     logger.error(entry);
 
     const expected =
-      '{"event":"tool_execution_completed","component":"agent_runtime","outcome":"success","sessionId":"session-1","runId":"run-1","approvalId":"approval-1","durationMs":25,"attempt":2}';
+      '{"event":"tool_execution_completed","component":"agent_runtime","outcome":"success","sessionId":"session-1","runId":"run-1","approvalId":"approval-1","durationMs":25,"memoryBytes":52428800,"attempt":2}';
     expect(channel.trace).toHaveBeenCalledWith(expected);
     expect(channel.debug).toHaveBeenCalledWith(expected);
     expect(channel.info).toHaveBeenCalledWith(expected);

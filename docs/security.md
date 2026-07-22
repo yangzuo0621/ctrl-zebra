@@ -239,8 +239,9 @@ values, but only the Extension adapter formats and writes a log entry.
   `component`, and an `outcome` when the operation has completed. The channel's log level and VS
   Code timestamp remain transport metadata rather than duplicated fields.
 - Optional diagnostic fields are limited to bounded primitive values: `errorCode`, `durationMs`,
-  `provider`, `attempt`, and identifiers needed to correlate an operation. Arbitrary objects and
-  free-form metadata bags are forbidden.
+  `memoryBytes`, `provider`, `attempt`, and identifiers needed to correlate an operation. Memory
+  values describe only the Extension Host process and never contain heap snapshots or object data.
+  Arbitrary objects and free-form metadata bags are forbidden.
 - Correlation identifiers use explicit keys: `sessionId`, `runId`, `requestId`, `toolCallId`, and
   `approvalId`. An entry includes only identifiers already owned by the logged operation. Logging
   must not create a second identity or derive an identifier from content, paths, or secrets.

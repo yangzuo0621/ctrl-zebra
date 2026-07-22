@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { realpath } from "node:fs/promises";
-import { env, platform } from "node:process";
+import { performance } from "node:perf_hooks";
+import { env, memoryUsage, platform } from "node:process";
 
 import {
   createGeminiModelGateway,
@@ -17,6 +18,7 @@ import { createLocalWorkspaceUriCanonicalizer } from "./adapters/canonicalize-lo
 import { createVsCodeCheckpointRestorer } from "./adapters/create-vscode-checkpoint-restorer.js";
 import { createVsCodeDiffPresenter } from "./adapters/create-vscode-diff-presenter.js";
 import { createVsCodeWorkspaceEditApplier } from "./adapters/create-vscode-workspace-edit-applier.js";
+import { PerformanceBaselineRecorder } from "./adapters/performance-baseline.js";
 import { readProviderConfiguration } from "./adapters/provider-configuration.js";
 import { SpawnCommandRunner } from "./adapters/spawn-command-runner.js";
 import { createStructuredLogger } from "./adapters/structured-logger.js";
@@ -50,7 +52,14 @@ import {
 import { createWorkspaceTrustPolicy } from "./controllers/workspace-trust-policy.js";
 
 export function activate(context: ExtensionContext): void {
+  const activationStartedAt = performance.now();
   const logger = createStructuredLogger(window.createOutputChannel("CtrlZebra", { log: true }));
+  const performanceBaseline = new PerformanceBaselineRecorder({
+    startedAt: activationStartedAt,
+    now: () => performance.now(),
+    readRssBytes: () => memoryUsage.rss(),
+    logger,
+  });
   const secrets = createProviderApiKeySecretReader(context.secrets);
   const canonicalize = createLocalWorkspaceUriCanonicalizer(realpath, Uri.file);
   const getSelectedRoot = () =>
@@ -237,14 +246,11 @@ export function activate(context: ExtensionContext): void {
           errorCode: "delivery_failed",
         });
       },
+      () => performanceBaseline.recordFirstWebviewDisplay(),
     ),
   );
 
-  logger.info({
-    event: "extension_activated",
-    component: "extension",
-    outcome: "success",
-  });
+  performanceBaseline.recordActivationComplete();
 }
 
 export function deactivate(): void {}
