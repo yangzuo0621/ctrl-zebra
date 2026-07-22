@@ -254,46 +254,7 @@ export class AgentRuntime {
       );
     }
 
-    let execution: ToolExecutionOutput<unknown>;
-    try {
-      execution = await tool.execute(input, { signal });
-    } catch {
-      signal.throwIfAborted();
-      return createToolErrorResult(
-        toolCall,
-        "failed",
-        `Tool "${toolCall.name}" failed during execution.`,
-      );
-    }
-
-    signal.throwIfAborted();
-    const output = jsonValueSchema.safeParse(execution.output);
-    if (!output.success) {
-      return createToolErrorResult(
-        toolCall,
-        "invalid-output",
-        `Tool "${toolCall.name}" returned invalid output.`,
-      );
-    }
-
-    const limited = limitToolOutput(output.data);
-    const result = toolResultSchema.safeParse({
-      callId: toolCall.id,
-      name: toolCall.name,
-      status: "success",
-      output: limited.output,
-      truncated: execution.truncated || limited.truncated,
-    });
-
-    if (!result.success) {
-      return createToolErrorResult(
-        toolCall,
-        "invalid-output",
-        `Tool "${toolCall.name}" returned invalid output.`,
-      );
-    }
-
-    return result.data;
+    return this.#executeToolImplementation(toolCall, tool, input, signal);
   }
 
   async #executeApprovalRequiredTool(
@@ -384,13 +345,59 @@ export class AgentRuntime {
     }
 
     this.#emitApprovalState(sessionId, operation.request, "consumed");
-    return {
+    if (tool.risk === "execute") {
+      return this.#executeToolImplementation(toolCall, tool, input, signal);
+    }
+
+    return createApprovedToolResult(toolCall);
+  }
+
+  async #executeToolImplementation(
+    toolCall: ToolCall,
+    tool: NonNullable<ReturnType<ToolRegistry["get"]>>,
+    input: unknown,
+    signal: AbortSignal,
+  ): Promise<ToolResult> {
+    let execution: ToolExecutionOutput<unknown>;
+    try {
+      execution = await tool.execute(input, { signal });
+    } catch {
+      signal.throwIfAborted();
+      return createToolErrorResult(
+        toolCall,
+        "failed",
+        `Tool "${toolCall.name}" failed during execution.`,
+      );
+    }
+
+    signal.throwIfAborted();
+    const output = jsonValueSchema.safeParse(execution.output);
+    if (!output.success) {
+      return createToolErrorResult(
+        toolCall,
+        "invalid-output",
+        `Tool "${toolCall.name}" returned invalid output.`,
+      );
+    }
+
+    const limited = limitToolOutput(output.data);
+    const result = toolResultSchema.safeParse({
       callId: toolCall.id,
       name: toolCall.name,
       status: "success",
-      output: { outcome: "approved" },
-      truncated: false,
-    };
+      output: limited.output,
+      truncated: execution.truncated || limited.truncated,
+    });
+
+    if (!result.success) {
+      return createToolErrorResult(
+        toolCall,
+        "invalid-output",
+        `Tool "${toolCall.name}" returned invalid output.`,
+      );
+    }
+
+    return result.data;
   }
 
   #emitToolState(sessionId: SessionId, call: ToolCall, status: "pending" | "running"): void {
@@ -425,6 +432,16 @@ export class AgentRuntime {
       result,
     });
   }
+}
+
+function createApprovedToolResult(toolCall: ToolCall): ToolResult {
+  return {
+    callId: toolCall.id,
+    name: toolCall.name,
+    status: "success",
+    output: { outcome: "approved" },
+    truncated: false,
+  };
 }
 
 function createToolErrorResult(

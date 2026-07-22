@@ -91,6 +91,9 @@ importers:
       '@ctrl-zebra/core':
         specifier: workspace:*
         version: link:../core
+      '@ctrl-zebra/protocol':
+        specifier: workspace:*
+        version: link:../protocol
 
   packages/core:
     dependencies:

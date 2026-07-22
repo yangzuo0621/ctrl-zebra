@@ -55,6 +55,7 @@ describe("CommandApprovalWorkflow", () => {
         "Timeout: 30000 ms",
       ].join("\n"),
     });
+    expect(dependencies.bindCwd).toHaveBeenCalledTimes(2);
     expect(dependencies.bindCwd).toHaveBeenCalledWith("packages/core", expect.any(AbortSignal));
 
     workflow.decide(operation.request.id, "denied");
@@ -153,20 +154,79 @@ describe("CommandApprovalWorkflow", () => {
       InvalidCommandApprovalError,
     );
   });
+
+  it("invalidates approval when trust is lost before execution", async () => {
+    const dependencies = createDependencies();
+    const workflow = new CommandApprovalWorkflow(dependencies.values);
+    const operation = await workflow.create(prepared, new AbortController().signal);
+    const signal = new AbortController().signal;
+    const decision = operation.requestDecision(signal);
+    workflow.decide(operation.request.id, "approved");
+    await decision;
+
+    dependencies.setTrusted(false);
+
+    await expect(operation.consume(signal)).resolves.toEqual({
+      outcome: "conflict",
+      message: "Workspace trust or command scope changed before execution.",
+    });
+    expect(dependencies.bindCwd).toHaveBeenCalledOnce();
+  });
+
+  it("invalidates approval when the canonical cwd binding changes", async () => {
+    const dependencies = createDependencies();
+    const workflow = new CommandApprovalWorkflow(dependencies.values);
+    const operation = await workflow.create(prepared, new AbortController().signal);
+    const signal = new AbortController().signal;
+    const decision = operation.requestDecision(signal);
+    workflow.decide(operation.request.id, "approved");
+    await decision;
+
+    dependencies.setCwdUri("file:///workspace/packages/changed");
+
+    await expect(operation.consume(signal)).resolves.toMatchObject({ outcome: "conflict" });
+  });
+
+  it("rejects approval preparation in an untrusted workspace", async () => {
+    const dependencies = createDependencies();
+    dependencies.setTrusted(false);
+    const workflow = new CommandApprovalWorkflow(dependencies.values);
+
+    await expect(workflow.create(prepared, new AbortController().signal)).rejects.toThrow(
+      "Trust this workspace",
+    );
+    expect(dependencies.bindCwd).not.toHaveBeenCalled();
+  });
 });
 
 function createDependencies() {
   let nextId = 1;
+  let trusted = true;
+  let cwdUri = "file:///workspace/packages/core";
   const bindCwd = vi.fn(async () => ({
     workspaceRootUri: "file:///workspace",
-    cwdUri: "file:///workspace/packages/core",
+    cwdUri,
   }));
   return {
     values: {
       createId: () => `approval-command-${nextId++}`,
       now: () => new Date("2026-07-19T00:00:00.000Z"),
       bindCwd,
+      workspaceTrust: {
+        isTrusted: () => trusted,
+        requireTrusted() {
+          if (!trusted) {
+            throw new Error("Trust this workspace before using file writes or command execution.");
+          }
+        },
+      },
     },
     bindCwd,
+    setTrusted(value: boolean) {
+      trusted = value;
+    },
+    setCwdUri(value: string) {
+      cwdUri = value;
+    },
   };
 }

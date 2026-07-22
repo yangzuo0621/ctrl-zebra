@@ -21,7 +21,7 @@ export interface AgentTool<Input = unknown, Output = unknown> {
   prepareApproval?(
     input: Input,
     context: ToolExecutionContext,
-  ): Promise<ToolExecutionOutput<Output>>;
+  ): Promise<ToolExecutionOutput<unknown>>;
 }
 
 export class DuplicateToolRegistrationError extends Error {

@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { realpath } from "node:fs/promises";
+import { env, platform } from "node:process";
 
 import {
   createGeminiModelGateway,
@@ -17,6 +18,7 @@ import { createVsCodeCheckpointRestorer } from "./adapters/create-vscode-checkpo
 import { createVsCodeDiffPresenter } from "./adapters/create-vscode-diff-presenter.js";
 import { createVsCodeWorkspaceEditApplier } from "./adapters/create-vscode-workspace-edit-applier.js";
 import { readProviderConfiguration } from "./adapters/provider-configuration.js";
+import { SpawnCommandRunner } from "./adapters/spawn-command-runner.js";
 import { createWorkspaceCheckpointStoreProvider } from "./adapters/vscode-checkpoint-storage.js";
 import { VsCodeProposeFileEditWorkspace } from "./adapters/vscode-propose-file-edit-workspace.js";
 import { createWorkspaceSessionRepositoryProvider } from "./adapters/vscode-session-storage.js";
@@ -30,6 +32,7 @@ import { WorkspaceScope, WorkspaceScopeError } from "./adapters/workspace-scope.
 import { registerAgentView } from "./agent-view.js";
 import { createSelectingChatRunner } from "./controllers/chat-runner.js";
 import { createCheckpointActions } from "./controllers/checkpoint-actions.js";
+import { CommandApprovalWorkflow } from "./controllers/command-approval-workflow.js";
 import { FileEditApprovalWorkflow } from "./controllers/file-edit-approval-workflow.js";
 import { registerGeminiApiKeyCommand } from "./controllers/gemini-api-key-command.js";
 import {
@@ -37,10 +40,16 @@ import {
   selectModelGateway,
 } from "./controllers/model-gateway-selector.js";
 import {
-  createReadonlyToolRegistryProvider,
+  createWorkspaceToolRegistryProvider,
   selectWorkspaceRoot,
 } from "./controllers/readonly-tool-registry.js";
 import { createSessionRecoveryActions } from "./controllers/session-recovery.js";
+import { ToolApprovalWorkflowRouter } from "./controllers/tool-approval-workflow.js";
+import {
+  selectCommandEnvironment,
+  WorkspaceCommandExecutor,
+} from "./controllers/workspace-command-executor.js";
+import { createWorkspaceTrustPolicy } from "./controllers/workspace-trust-policy.js";
 
 export function activate(context: ExtensionContext): void {
   const secrets = createProviderApiKeySecretReader(context.secrets);
@@ -48,6 +57,7 @@ export function activate(context: ExtensionContext): void {
   const getSelectedRoot = () =>
     selectWorkspaceRoot(workspace.workspaceFolders?.map((folder) => folder.uri) ?? []);
   const createCurrentScope = () => new WorkspaceScope(getSelectedRoot(), canonicalize);
+  const workspaceTrust = createWorkspaceTrustPolicy(() => workspace.isTrusted);
   const diffPresenter = createVsCodeDiffPresenter();
   const hashText = (text: string) => createHash("sha256").update(text, "utf8").digest("hex");
   const selectCheckpointStore = createWorkspaceCheckpointStoreProvider(
@@ -64,7 +74,7 @@ export function activate(context: ExtensionContext): void {
       );
     },
   });
-  const approvalWorkflow = new FileEditApprovalWorkflow({
+  const fileEditApprovalWorkflow = new FileEditApprovalWorkflow({
     createId: randomUUID,
     now: () => new Date(),
     async bindPlan(plan, signal) {
@@ -94,6 +104,7 @@ export function activate(context: ExtensionContext): void {
           },
           randomUUID,
           () => new Date(),
+          () => workspaceTrust.requireTrusted(),
         ).apply(plan, ownership, signal);
         return "applied";
       } catch (error) {
@@ -106,16 +117,39 @@ export function activate(context: ExtensionContext): void {
     reportError: (message) => {
       void window.showErrorMessage(message);
     },
+    workspaceTrust,
   });
-  const readonlyTools = createReadonlyToolRegistryProvider({
+  const commandExecutor = new WorkspaceCommandExecutor({
+    getSelectedRoot,
+    createScope: (root) => new WorkspaceScope(root, canonicalize),
+    joinPath: joinWorkspacePath,
+    stat: (uri) => Promise.resolve(workspace.fs.stat(uri)),
+    runner: new SpawnCommandRunner(),
+    workspaceTrust,
+    environment: selectCommandEnvironment(env, platform),
+  });
+  const commandApprovalWorkflow = new CommandApprovalWorkflow({
+    createId: randomUUID,
+    now: () => new Date(),
+    bindCwd: (cwd, signal) => commandExecutor.bindCwd(cwd, signal),
+    workspaceTrust,
+  });
+  const approvalWorkflow = new ToolApprovalWorkflowRouter(
+    fileEditApprovalWorkflow,
+    commandApprovalWorkflow,
+  );
+  const workspaceTools = createWorkspaceToolRegistryProvider({
     getWorkspaceRoots: () => workspace.workspaceFolders?.map((folder) => folder.uri) ?? [],
     canonicalize,
     findFiles: findWorkspaceFiles,
     joinPath: joinWorkspacePath,
     readPrefix: readWorkspaceFilePrefix,
     onDidChangeWorkspaceFolders: (listener) => workspace.onDidChangeWorkspaceFolders(listener),
+    onDidGrantWorkspaceTrust: (listener) => workspace.onDidGrantWorkspaceTrust(listener),
     createProposeFileEditWorkspace: (root, scope) =>
       new VsCodeProposeFileEditWorkspace(root, scope, joinWorkspacePath),
+    commandExecutor,
+    workspaceTrust,
   });
   const selectSessionRepository = createWorkspaceSessionRepositoryProvider(
     context.storageUri,
@@ -123,7 +157,7 @@ export function activate(context: ExtensionContext): void {
   );
   const chatRunner = createSelectingChatRunner({
     selectSessionRepository,
-    selectToolRegistry: (signal) => readonlyTools.get(signal),
+    selectToolRegistry: (signal) => workspaceTools.get(signal),
     approvalWorkflow,
     async selectModelGateway() {
       try {
@@ -183,7 +217,7 @@ export function activate(context: ExtensionContext): void {
   });
 
   context.subscriptions.push(
-    readonlyTools,
+    workspaceTools,
     diffPresenter,
     approvalWorkflow,
     registerGeminiApiKeyCommand({

@@ -16,6 +16,12 @@
   "activationEvents": [
     "onStartupFinished"
   ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "CtrlZebra keeps read-only workspace tools available, but disables file writes and command execution until the workspace is trusted."
+    }
+  },
   "contributes": {
     "commands": [
       {

@@ -25,6 +25,7 @@ export interface WorkspaceEditApplierDependencies<Resource extends WorkspaceEdit
   ) => Promise<WorkspaceEditDocument<Resource>>;
   readonly createWorkspaceEdit: () => Edit;
   readonly replace: (edit: Edit, uri: Resource, range: TextRange, newText: string) => void;
+  readonly assertCanApply: () => void;
   readonly applyWorkspaceEdit: (edit: Edit) => Promise<boolean>;
   readonly hashText: (text: string) => string;
   readonly createId: () => string;
@@ -106,6 +107,7 @@ export class WorkspaceEditApplier<Resource extends WorkspaceEditResource, Edit> 
     }
 
     // VS Code exposes no cancellation input after this atomic text-only operation is submitted.
+    this.#dependencies.assertCanApply();
     const applied = await this.#dependencies.applyWorkspaceEdit(workspaceEdit);
     if (!applied) {
       throw new WorkspaceEditApplyError();

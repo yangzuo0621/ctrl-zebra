@@ -135,9 +135,39 @@ describe("FileEditApprovalWorkflow", () => {
       vi.useRealTimers();
     }
   });
+
+  it("invalidates an approval when workspace trust is lost before apply", async () => {
+    const dependencies = createDependencies();
+    const workflow = new FileEditApprovalWorkflow(dependencies.values);
+    const operation = await workflow.create(prepared, new AbortController().signal);
+    const signal = new AbortController().signal;
+    const decision = operation.requestDecision(signal);
+    workflow.decide(operation.request.id, "approved");
+    await decision;
+
+    dependencies.setTrusted(false);
+
+    await expect(operation.consume(signal)).resolves.toEqual({
+      outcome: "conflict",
+      message: "Workspace trust changed before the approved file edits could be applied.",
+    });
+    expect(dependencies.applyPlan).not.toHaveBeenCalled();
+  });
+
+  it("rejects approval preparation in an untrusted workspace", async () => {
+    const dependencies = createDependencies();
+    dependencies.setTrusted(false);
+    const workflow = new FileEditApprovalWorkflow(dependencies.values);
+
+    await expect(workflow.create(prepared, new AbortController().signal)).rejects.toThrow(
+      "Trust this workspace",
+    );
+    expect(dependencies.bindPlan).not.toHaveBeenCalled();
+  });
 });
 
 function createDependencies(result: "applied" | "conflict" = "applied") {
+  let trusted = true;
   const validatePlan = vi.fn(async () => {});
   const bindPlan = vi.fn(async () => "file:///workspace");
   const presentDiff = vi.fn(async () => {});
@@ -152,11 +182,22 @@ function createDependencies(result: "applied" | "conflict" = "applied") {
       presentDiff,
       applyPlan,
       reportError,
+      workspaceTrust: {
+        isTrusted: () => trusted,
+        requireTrusted() {
+          if (!trusted) {
+            throw new Error("Trust this workspace before using file writes or command execution.");
+          }
+        },
+      },
     },
     validatePlan,
     bindPlan,
     presentDiff,
     applyPlan,
     reportError,
+    setTrusted(value: boolean) {
+      trusted = value;
+    },
   };
 }
