@@ -75,3 +75,16 @@ and user-data directory.
 VSIX artifacts and temporary profiles are never committed. Verification reports the artifact path,
 compressed and uncompressed sizes, file list, version, and embedded source commit so a retained
 artifact can be traced without relying on its filename.
+
+## Repository commands
+
+- `pnpm package:vsix` runs the official clean-worktree workflow and writes the verified artifact to
+  `.artifacts/`.
+- `pnpm smoke:vsix -- <path-to-vsix>` installs that exact artifact into temporary isolated VS Code
+  user-data and extensions directories, activates the installed extension, opens the Agent view,
+  checks its structured log, and removes the temporary profile.
+
+T1004 uses `vsce --skip-license` because the release license is a T1005 deliverable. This is the only
+temporary manifest exception: secret scanning, the file allowlist, dependency exclusion, size limits,
+and archive verification remain mandatory. T1005 must remove this exception before the Phase 1
+release gate is considered complete.
