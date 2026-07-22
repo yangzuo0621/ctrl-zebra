@@ -17,6 +17,7 @@ const scriptsDirectory = dirname(fileURLToPath(import.meta.url));
 const extensionRoot = resolve(scriptsDirectory, "..");
 const repositoryRoot = resolve(extensionRoot, "..", "..");
 const harnessRoot = join(scriptsDirectory, "vsix-smoke-harness");
+const manifest = JSON.parse(await readFile(join(extensionRoot, "package.json"), "utf8"));
 const artifactArgument = process.argv[2];
 
 if (!artifactArgument) {
@@ -55,7 +56,8 @@ try {
     "--user-data-dir",
     userDataDirectory,
   ]);
-  if (!listed.stdout.split(/\r?\n/u).includes("ctrl-zebra.ctrl-zebra@0.0.0")) {
+  const expectedExtension = `${manifest.publisher}.${manifest.name}@${manifest.version}`;
+  if (!listed.stdout.split(/\r?\n/u).includes(expectedExtension)) {
     throw new Error("The isolated VS Code profile did not list the packaged CtrlZebra extension.");
   }
 

@@ -2,13 +2,31 @@
   "name": "ctrl-zebra",
   "displayName": "CtrlZebra",
   "description": "A workspace agent for VS Code.",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "publisher": "ctrl-zebra",
   "license": "MIT",
+  "categories": [
+    "Machine Learning",
+    "Other"
+  ],
+  "keywords": [
+    "ai",
+    "coding-agent",
+    "workspace",
+    "openai",
+    "gemini",
+    "developer-tools"
+  ],
+  "icon": "media/ctrl-zebra.png",
+  "pricing": "Free",
   "type": "module",
   "repository": {
     "type": "git",
     "url": "https://github.com/yangzuo0621/ctrl-zebra.git"
+  },
+  "homepage": "https://github.com/yangzuo0621/ctrl-zebra#readme",
+  "bugs": {
+    "url": "https://github.com/yangzuo0621/ctrl-zebra/issues"
   },
   "files": [
     "LICENSE",
@@ -17,6 +35,7 @@
     "dist/webview/index.html",
     "dist/webview/main.css",
     "dist/webview/main.js",
+    "media/ctrl-zebra.png",
     "media/ctrl-zebra.svg",
     "README.md"
   ],

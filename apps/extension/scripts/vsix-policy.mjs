@@ -10,6 +10,7 @@ export const expectedSelectedFiles = Object.freeze([
   "dist/webview/index.html",
   "dist/webview/main.css",
   "dist/webview/main.js",
+  "media/ctrl-zebra.png",
   "media/ctrl-zebra.svg",
   "package.json",
 ]);
@@ -23,6 +24,7 @@ export const expectedArchiveFiles = Object.freeze([
   "extension/dist/webview/index.html",
   "extension/dist/webview/main.css",
   "extension/dist/webview/main.js",
+  "extension/media/ctrl-zebra.png",
   "extension/media/ctrl-zebra.svg",
   "extension/package.json",
   "extension/readme.md",
