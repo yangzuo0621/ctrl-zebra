@@ -8,6 +8,14 @@ export interface VsixBuildMetadata {
   readonly version: string;
 }
 
+export interface GitHubActionsEnvironment {
+  readonly GITHUB_ACTIONS?: string;
+  readonly GITHUB_EVENT_NAME?: string;
+  readonly GITHUB_REF?: string;
+  readonly GITHUB_REF_TYPE?: string;
+  readonly GITHUB_SHA?: string;
+}
+
 export interface VsixInspection {
   readonly compressedBytes: number;
   readonly uncompressedBytes: number;
@@ -28,6 +36,10 @@ export const expectedSelectedFiles: readonly string[];
 export const expectedArchiveFiles: readonly string[];
 
 export function assertCleanStatus(status: string): void;
+export function validateGitHubActionsSource(
+  environment: GitHubActionsEnvironment,
+  expected: VsixBuildMetadata,
+): boolean;
 export function validateSelectedFiles(files: string[]): void;
 export function validateArchiveEntries(
   entries: VsixArchiveEntry[],

@@ -60,6 +60,12 @@ An official package may start only when:
 3. the current branch has an upstream and `HEAD` is reachable from that exact upstream; and
 4. the build metadata records the full `HEAD` SHA and the extension version.
 
+In GitHub Actions, the checked-out `HEAD` must instead exactly equal the event's immutable
+`GITHUB_SHA`. Only a manual `workflow_dispatch` branch or tag ref and a pushed release tag are
+accepted. A pushed tag must exactly equal `v` followed by the extension manifest version; other
+events and mismatched refs fail before quality checks or packaging. Local packaging continues to
+require the upstream ancestry check above.
+
 Generated bundles, metadata, and VSIX output live only in ignored build/output locations. The
 packaging command rechecks that tracked files did not change. A dirty workspace, missing upstream,
 unpublished commit, mismatched metadata, or changed tracked file makes the package unofficial and
@@ -75,6 +81,11 @@ and user-data directory.
 VSIX artifacts and temporary profiles are never committed. Verification reports the artifact path,
 compressed and uncompressed sizes, file list, version, and embedded source commit so a retained
 artifact can be traced without relying on its filename.
+
+The repository packaging workflow retains exactly one verified VSIX together with its SHA-256
+checksum for 30 days. It may be started manually or by pushing the matching version tag. This is
+artifact retention only: downloading and publishing the VSIX to the Marketplace remains a separate
+manual release action.
 
 ## Repository commands
 

@@ -10,6 +10,7 @@ import {
   assertCleanStatus,
   validateArchiveEntries,
   validateBuildMetadata,
+  validateGitHubActionsSource,
   validateReleaseDocuments,
   validateSelectedFiles,
 } from "./vsix-policy.mjs";
@@ -28,10 +29,16 @@ validateReleaseDocuments({
   extensionLicense: await readFile(join(extensionRoot, "LICENSE"), "utf8"),
 });
 const commit = (await git(["rev-parse", "HEAD"])).trim();
-const upstream = (
-  await git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"])
-).trim();
-await git(["merge-base", "--is-ancestor", "HEAD", upstream]);
+const isGitHubActionsSource = validateGitHubActionsSource(process.env, {
+  commit,
+  version: manifest.version,
+});
+if (!isGitHubActionsSource) {
+  const upstream = (
+    await git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"])
+  ).trim();
+  await git(["merge-base", "--is-ancestor", "HEAD", upstream]);
+}
 
 for (const command of ["check", "typecheck", "test:unit", "test:integration", "build"]) {
   await pnpm([command]);

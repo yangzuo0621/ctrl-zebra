@@ -36,6 +36,42 @@ export function assertCleanStatus(status) {
   }
 }
 
+export function validateGitHubActionsSource(environment, expected) {
+  if (environment.GITHUB_ACTIONS !== "true") {
+    return false;
+  }
+
+  if (environment.GITHUB_SHA !== expected.commit) {
+    throw new Error("GitHub Actions source SHA does not match the checked-out commit.");
+  }
+
+  const eventName = environment.GITHUB_EVENT_NAME;
+  const ref = environment.GITHUB_REF;
+  const refType = environment.GITHUB_REF_TYPE;
+  if (eventName === "push") {
+    if (refType !== "tag" || ref !== `refs/tags/v${expected.version}`) {
+      throw new Error("Release tag must exactly match the packaged extension version.");
+    }
+    return true;
+  }
+
+  if (eventName === "workflow_dispatch") {
+    if (
+      (refType !== "branch" && refType !== "tag") ||
+      typeof ref !== "string" ||
+      !ref.startsWith(`refs/${refType === "tag" ? "tags" : "heads"}/`)
+    ) {
+      throw new Error("Manual GitHub Actions packaging requires a valid branch or tag ref.");
+    }
+    if (refType === "tag" && ref !== `refs/tags/v${expected.version}`) {
+      throw new Error("Release tag must exactly match the packaged extension version.");
+    }
+    return true;
+  }
+
+  throw new Error("Official VSIX packaging is not allowed for this GitHub Actions event.");
+}
+
 export function validateSelectedFiles(files) {
   assertExactFileSet(files, expectedSelectedFiles, "vsce file selection");
 }
