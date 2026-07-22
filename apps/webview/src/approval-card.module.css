@@ -17,6 +17,7 @@
 .eyebrow,
 .title,
 .summary,
+.commandSummary,
 .status {
   margin: 0;
 }
@@ -45,9 +46,22 @@
 }
 
 .summary,
+.commandSummary,
 .status,
 .details {
   line-height: 1.5;
+}
+
+.commandSummary {
+  max-height: 12rem;
+  padding: 8px;
+  overflow: auto;
+  border-radius: 2px;
+  color: var(--vscode-editor-foreground);
+  background: var(--vscode-textCodeBlock-background, var(--vscode-editor-background));
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: var(--vscode-editor-font-size, 0.9em);
+  white-space: pre-wrap;
 }
 
 .details {

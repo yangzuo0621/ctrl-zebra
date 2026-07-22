@@ -1,0 +1,136 @@
+.card {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 4px;
+  background: var(--vscode-textCodeBlock-background, var(--vscode-editor-background));
+}
+
+.card[data-status="running"] {
+  border-color: var(--vscode-progressBar-background, var(--vscode-focusBorder));
+}
+
+.card[data-status="error"] {
+  border-color: var(--vscode-inputValidation-errorBorder, var(--vscode-panel-border));
+}
+
+.header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.eyebrow,
+.title,
+.note,
+.error {
+  margin: 0;
+}
+
+.eyebrow,
+.state,
+.label,
+.note,
+.exit dt {
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.85em;
+}
+
+.eyebrow,
+.state,
+.label,
+.exit dt {
+  font-weight: 600;
+}
+
+.title {
+  margin-top: 2px;
+  overflow-wrap: anywhere;
+  font-size: 0.95rem;
+}
+
+.field {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.code,
+.output {
+  max-height: 12rem;
+  margin: 0;
+  padding: 8px;
+  overflow: auto;
+  border-radius: 2px;
+  color: var(--vscode-editor-foreground);
+  background: var(--vscode-editor-background);
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: var(--vscode-editor-font-size, 0.9em);
+  line-height: 1.4;
+  white-space: pre-wrap;
+}
+
+.result {
+  display: grid;
+  gap: 8px;
+}
+
+.exit {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin: 0;
+}
+
+.exit div {
+  display: flex;
+  gap: 6px;
+}
+
+.exit dd {
+  margin: 0;
+  font-family: var(--vscode-editor-font-family, monospace);
+}
+
+.error {
+  color: var(--vscode-errorForeground);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.terminateButton {
+  padding: 5px 10px;
+  border: 1px solid var(--vscode-button-border, transparent);
+  border-radius: 2px;
+  color: var(--vscode-button-secondaryForeground);
+  background: var(--vscode-button-secondaryBackground);
+  cursor: pointer;
+  font: inherit;
+}
+
+.terminateButton:hover:not(:disabled) {
+  background: var(--vscode-button-secondaryHoverBackground);
+}
+
+.terminateButton:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 2px;
+}
+
+.terminateButton:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card {
+    scroll-behavior: auto;
+  }
+}

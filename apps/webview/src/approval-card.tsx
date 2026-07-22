@@ -28,19 +28,25 @@ export function ApprovalCard({
   onReject,
 }: ApprovalCardProps) {
   const interactive = item.status === "pending" && pendingDecision === undefined;
+  const commandApproval =
+    item.approval.scope.risk === "execute" && item.approval.scope.call.name === "run_command";
   const titleId = `approval-${item.approval.id}-title`;
   const visibleStatus =
     pendingDecision === "approved"
       ? "Submitting approval…"
       : pendingDecision === "denied"
         ? "Submitting rejection…"
-        : statusText[item.status];
+        : item.status === "consumed" && commandApproval
+          ? "Approved command started."
+          : statusText[item.status];
 
   return (
     <article className={styles.card} aria-labelledby={titleId}>
       <header className={styles.header}>
         <div>
-          <p className={styles.eyebrow}>File change approval</p>
+          <p className={styles.eyebrow}>
+            {commandApproval ? "Command approval" : "File change approval"}
+          </p>
           <h2 className={styles.title} id={titleId}>
             {item.approval.presentation.title}
           </h2>
@@ -48,10 +54,16 @@ export function ApprovalCard({
         <span className={styles.risk}>{item.approval.scope.risk}</span>
       </header>
 
-      <p className={styles.summary}>{item.approval.presentation.summary}</p>
+      {commandApproval ? (
+        <pre className={styles.commandSummary}>{item.approval.presentation.summary}</pre>
+      ) : (
+        <p className={styles.summary}>{item.approval.presentation.summary}</p>
+      )}
 
       <div className={styles.details}>
-        <span className={styles.detailLabel}>Target files</span>
+        <span className={styles.detailLabel}>
+          {commandApproval ? "Working directory" : "Target files"}
+        </span>
         <ul className={styles.resources}>
           {item.approval.scope.resources.map((resource) => (
             <li key={resource.uri}>{resource.uri}</li>
@@ -66,14 +78,16 @@ export function ApprovalCard({
       </p>
 
       <div className={styles.actions}>
-        <button
-          className={styles.secondaryButton}
-          type="button"
-          onClick={onViewDiff}
-          disabled={!interactive}
-        >
-          View Diff
-        </button>
+        {commandApproval ? null : (
+          <button
+            className={styles.secondaryButton}
+            type="button"
+            onClick={onViewDiff}
+            disabled={!interactive}
+          >
+            View Diff
+          </button>
+        )}
         <button
           className={styles.secondaryButton}
           type="button"

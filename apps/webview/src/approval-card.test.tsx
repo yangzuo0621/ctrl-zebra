@@ -66,6 +66,56 @@ describe("ApprovalCard", () => {
     expect(onReject).toHaveBeenCalledOnce();
   });
 
+  it("shows an exact command approval without offering a file diff", async () => {
+    const user = userEvent.setup();
+    const onApprove = vi.fn();
+    render(
+      <ApprovalCard
+        item={{
+          ...approval,
+          approval: {
+            ...approval.approval,
+            scope: {
+              sessionId: "session-1",
+              call: {
+                id: "call-command",
+                name: "run_command",
+                input: {
+                  command: "node",
+                  args: ["scripts/check.mjs", "--safe value"],
+                  cwd: ".",
+                  timeoutMs: 30_000,
+                },
+              },
+              risk: "execute",
+              workspaceRootUri: "file:///workspace",
+              resources: [{ uri: "file:///workspace" }],
+            },
+            presentation: {
+              title: "Run command",
+              summary:
+                'Executable: "node"\nArguments: ["scripts/check.mjs","--safe value"]\nWorking directory: file:///workspace\nTimeout: 30000 ms',
+            },
+          },
+        }}
+        onViewDiff={() => {}}
+        onApprove={onApprove}
+        onReject={() => {}}
+      />,
+    );
+
+    expect(screen.getByText("Command approval")).toBeVisible();
+    expect(screen.getByText(/Executable: "node"/)).toHaveTextContent(
+      "Working directory: file:///workspace",
+    );
+    expect(screen.getByText("file:///workspace")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "View Diff" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Approve" }));
+
+    expect(onApprove).toHaveBeenCalledOnce();
+  });
+
   it.each([
     ["cancelled", "Approval cancelled."],
     ["expired", "Approval expired."],
