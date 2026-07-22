@@ -2,6 +2,7 @@
   "name": "ctrl-zebra",
   "version": "0.0.0",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "packageManager": "pnpm@11.11.0",
   "scripts": {

@@ -3,6 +3,7 @@ export const MAX_UNCOMPRESSED_BYTES = 10 * 1024 * 1024;
 export const MAX_ENTRY_BYTES = 5 * 1024 * 1024;
 
 export const expectedSelectedFiles = Object.freeze([
+  "LICENSE",
   "README.md",
   "dist/extension.cjs",
   "dist/package/build-metadata.json",
@@ -16,6 +17,7 @@ export const expectedSelectedFiles = Object.freeze([
 export const expectedArchiveFiles = Object.freeze([
   "[Content_Types].xml",
   "extension.vsixmanifest",
+  "extension/LICENSE.txt",
   "extension/dist/extension.cjs",
   "extension/dist/package/build-metadata.json",
   "extension/dist/webview/index.html",
@@ -72,6 +74,15 @@ export function validateBuildMetadata(metadata, expected) {
     metadata.version !== expected.version
   ) {
     throw new Error("VSIX build metadata does not match the packaged source commit and version.");
+  }
+}
+
+export function validateReleaseDocuments(documents) {
+  if (documents.rootReadme.length === 0 || documents.rootReadme !== documents.extensionReadme) {
+    throw new Error("The repository and packaged README files must be identical and non-empty.");
+  }
+  if (documents.rootLicense.length === 0 || documents.rootLicense !== documents.extensionLicense) {
+    throw new Error("The repository and packaged LICENSE files must be identical and non-empty.");
   }
 }
 

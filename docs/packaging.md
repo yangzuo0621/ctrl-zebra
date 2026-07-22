@@ -10,7 +10,7 @@ The extension manifest owns one explicit `files` allowlist. The package contains
 - the bundled Extension Host entry point;
 - the production Webview bundle and its static assets;
 - the extension icon and other declared media;
-- the extension README and package manifest; and
+- the extension README, MIT license, and package manifest; and
 - generated build metadata containing the exact source Git commit.
 
 The allowlist is authoritative; do not add a `.vscodeignore` alongside it. Before packaging, `vsce
@@ -84,7 +84,6 @@ artifact can be traced without relying on its filename.
   user-data and extensions directories, activates the installed extension, opens the Agent view,
   checks its structured log, and removes the temporary profile.
 
-T1004 uses `vsce --skip-license` because the release license is a T1005 deliverable. This is the only
-temporary manifest exception: secret scanning, the file allowlist, dependency exclusion, size limits,
-and archive verification remain mandatory. T1005 must remove this exception before the Phase 1
-release gate is considered complete.
+The repository and packaged extension declare MIT and contain identical license text. The official
+command does not use `--skip-license`; `vsce` and the independent archive verifier must both observe
+the packaged license.

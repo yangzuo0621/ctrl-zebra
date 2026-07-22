@@ -10,6 +10,7 @@ import {
   assertCleanStatus,
   validateArchiveEntries,
   validateBuildMetadata,
+  validateReleaseDocuments,
   validateSelectedFiles,
 } from "./vsix-policy.mjs";
 
@@ -20,6 +21,12 @@ const repositoryRoot = resolve(extensionRoot, "..", "..");
 const manifest = JSON.parse(await readFile(join(extensionRoot, "package.json"), "utf8"));
 
 assertCleanStatus(await git(["status", "--porcelain=v1", "--untracked-files=all"]));
+validateReleaseDocuments({
+  rootReadme: await readFile(join(repositoryRoot, "README.md"), "utf8"),
+  extensionReadme: await readFile(join(extensionRoot, "README.md"), "utf8"),
+  rootLicense: await readFile(join(repositoryRoot, "LICENSE"), "utf8"),
+  extensionLicense: await readFile(join(extensionRoot, "LICENSE"), "utf8"),
+});
 const commit = (await git(["rev-parse", "HEAD"])).trim();
 const upstream = (
   await git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"])
@@ -48,7 +55,7 @@ const artifactPath = join(
   `${manifest.name}-${manifest.version}-${commit.slice(0, 12)}.vsix`,
 );
 await mkdir(artifactDirectory, { recursive: true });
-await vsce(["package", "--no-dependencies", "--skip-license", "--out", artifactPath]);
+await vsce(["package", "--no-dependencies", "--out", artifactPath]);
 
 const inspection = await inspectVsix(artifactPath, metadata);
 assertCleanStatus(await git(["status", "--porcelain=v1", "--untracked-files=no"]));
