@@ -1,10 +1,13 @@
 import type { JsonValue } from "@ctrl-zebra/protocol";
 
 import type { DisplayToolCall } from "./chat-store.js";
+import { CommandToolCard, type DisplayRunStatus } from "./command-tool-card.js";
 import styles from "./tool-call-card.module.css";
 
 interface ToolCallCardProps {
   readonly toolCall: DisplayToolCall;
+  readonly runStatus?: DisplayRunStatus;
+  readonly onTerminate?: () => void;
 }
 
 const statusLabels = {
@@ -14,7 +17,15 @@ const statusLabels = {
   error: "Error",
 } as const;
 
-export function ToolCallCard({ toolCall }: ToolCallCardProps) {
+export function ToolCallCard({
+  toolCall,
+  runStatus = "idle",
+  onTerminate = () => {},
+}: ToolCallCardProps) {
+  if (toolCall.call.name === "run_command") {
+    return <CommandToolCard toolCall={toolCall} runStatus={runStatus} onTerminate={onTerminate} />;
+  }
+
   const headingId = `tool-call-${toolCall.call.id}`;
 
   return (

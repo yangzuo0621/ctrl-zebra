@@ -148,6 +148,11 @@ export {
   sessionManifestSchema,
   sessionMessagesFileName,
 } from "./persistence.js";
+export type { RunCommandOutput } from "./run-command.js";
+export {
+  maxCommandDisplayOutputBytes,
+  runCommandOutputSchema,
+} from "./run-command.js";
 export type { SessionId, SessionStatus, SessionSummary } from "./session.js";
 export {
   sessionIdSchema,

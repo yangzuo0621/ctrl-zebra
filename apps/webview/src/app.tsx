@@ -139,7 +139,12 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
               </span>
               <p>{messageContent(message, status)}</p>
               {message.toolCalls.map((toolCall) => (
-                <ToolCallCard key={toolCall.call.id} toolCall={toolCall} />
+                <ToolCallCard
+                  key={toolCall.call.id}
+                  toolCall={toolCall}
+                  runStatus={status}
+                  onTerminate={() => store.getState().cancel()}
+                />
               ))}
             </li>
           ))

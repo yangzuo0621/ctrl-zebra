@@ -482,4 +482,61 @@ describe("App streaming chat", () => {
     expect(screen.getByText("Submitting rejection…")).toBeVisible();
     expect(screen.getByRole("button", { name: "Approve" })).toBeDisabled();
   });
+
+  it("terminates the active command through the correlated Run cancellation", async () => {
+    const host = new FakeWebviewHost();
+    const user = userEvent.setup();
+    render(<App host={host} createRequestId={() => "request-command"} />);
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "Run the check.");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    const call = {
+      id: "call-command",
+      name: "run_command",
+      input: { command: "node", args: ["check.mjs"], cwd: ".", timeoutMs: 30_000 },
+    } as const;
+
+    act(() => {
+      host.emit({
+        protocolVersion,
+        type: "extension/run-status",
+        requestId: "request-command",
+        status: "streaming",
+      });
+      host.emit({
+        protocolVersion,
+        type: "extension/tool-state",
+        requestId: "request-command",
+        call,
+        status: "running",
+      });
+    });
+
+    await user.click(screen.getByRole("button", { name: "Terminate command" }));
+
+    expect(host.sent).toEqual([
+      {
+        protocolVersion,
+        type: "webview/submit",
+        requestId: "request-command",
+        content: "Run the check.",
+      },
+      {
+        protocolVersion,
+        type: "webview/cancel",
+        requestId: "request-command",
+      },
+    ]);
+
+    act(() => {
+      host.emit({
+        protocolVersion,
+        type: "extension/run-status",
+        requestId: "request-command",
+        status: "cancelled",
+      });
+    });
+
+    expect(screen.getByLabelText("Command status")).toHaveTextContent("Terminated");
+    expect(screen.getByRole("status", { name: "Command status" })).toBeVisible();
+  });
 });
