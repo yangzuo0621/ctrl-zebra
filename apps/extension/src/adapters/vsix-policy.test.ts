@@ -7,6 +7,7 @@ import {
   MAX_ENTRY_BYTES,
   validateArchiveEntries,
   validateBuildMetadata,
+  validateReleaseDocuments,
   validateSelectedFiles,
 } from "../../scripts/vsix-policy.mjs";
 
@@ -57,5 +58,32 @@ describe("VSIX package policy", () => {
         { commit: "expected", version: "0.0.0" },
       ),
     ).toThrow(/does not match/);
+  });
+
+  it("requires identical non-empty repository and packaged release documents", () => {
+    expect(() =>
+      validateReleaseDocuments({
+        rootReadme: "readme\n",
+        extensionReadme: "readme\n",
+        rootLicense: "license\n",
+        extensionLicense: "license\n",
+      }),
+    ).not.toThrow();
+    expect(() =>
+      validateReleaseDocuments({
+        rootReadme: "current\n",
+        extensionReadme: "stale\n",
+        rootLicense: "license\n",
+        extensionLicense: "license\n",
+      }),
+    ).toThrow(/README files must be identical/);
+    expect(() =>
+      validateReleaseDocuments({
+        rootReadme: "readme\n",
+        extensionReadme: "readme\n",
+        rootLicense: "",
+        extensionLicense: "",
+      }),
+    ).toThrow(/LICENSE files must be identical/);
   });
 });
