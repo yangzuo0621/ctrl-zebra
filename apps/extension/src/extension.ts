@@ -19,6 +19,7 @@ import { createVsCodeDiffPresenter } from "./adapters/create-vscode-diff-present
 import { createVsCodeWorkspaceEditApplier } from "./adapters/create-vscode-workspace-edit-applier.js";
 import { readProviderConfiguration } from "./adapters/provider-configuration.js";
 import { SpawnCommandRunner } from "./adapters/spawn-command-runner.js";
+import { createStructuredLogger } from "./adapters/structured-logger.js";
 import { createWorkspaceCheckpointStoreProvider } from "./adapters/vscode-checkpoint-storage.js";
 import { VsCodeProposeFileEditWorkspace } from "./adapters/vscode-propose-file-edit-workspace.js";
 import { createWorkspaceSessionRepositoryProvider } from "./adapters/vscode-session-storage.js";
@@ -52,6 +53,7 @@ import {
 import { createWorkspaceTrustPolicy } from "./controllers/workspace-trust-policy.js";
 
 export function activate(context: ExtensionContext): void {
+  const logger = createStructuredLogger(window.createOutputChannel("CtrlZebra", { log: true }));
   const secrets = createProviderApiKeySecretReader(context.secrets);
   const canonicalize = createLocalWorkspaceUriCanonicalizer(realpath, Uri.file);
   const getSelectedRoot = () =>
@@ -217,6 +219,7 @@ export function activate(context: ExtensionContext): void {
   });
 
   context.subscriptions.push(
+    logger,
     workspaceTools,
     diffPresenter,
     approvalWorkflow,
@@ -237,8 +240,22 @@ export function activate(context: ExtensionContext): void {
       },
       createSessionRecoveryActions(selectSessionRepository),
       checkpointActions,
+      () => {
+        logger.error({
+          event: "webview_response_delivery_failed",
+          component: "agent_view",
+          outcome: "failure",
+          errorCode: "delivery_failed",
+        });
+      },
     ),
   );
+
+  logger.info({
+    event: "extension_activated",
+    component: "extension",
+    outcome: "success",
+  });
 }
 
 export function deactivate(): void {}
