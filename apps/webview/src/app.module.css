@@ -82,6 +82,15 @@
   color: var(--vscode-errorForeground);
 }
 
+.runError {
+  margin: 0;
+  padding: 8px;
+  border: 1px solid var(--vscode-inputValidation-errorBorder, var(--vscode-errorForeground));
+  color: var(--vscode-inputValidation-errorForeground, var(--vscode-foreground));
+  background: var(--vscode-inputValidation-errorBackground, var(--vscode-sideBar-background));
+  line-height: 1.5;
+}
+
 .transcript {
   display: flex;
   flex-direction: column;

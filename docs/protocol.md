@@ -30,6 +30,22 @@ This document defines the Webview/Extension message boundary established before 
 - The Webview likewise ignores invalid Extension messages and responses that do not correlate to its active request.
 - TypeScript types are inferred from the authoritative Schemas. Handwritten duplicate wire types are forbidden.
 
+## Run Errors
+
+- A failed chat run emits one correlated `extension/run-error` message before its terminal
+  `extension/run-status` message. Cancellation emits only `cancelled` and never an error message.
+- The run error category is a closed set: `authentication`, `network`, `rate-limit`, `context`,
+  `tool`, and `internal`. The Extension maps trusted error types to these categories; unknown
+  failures use `internal`.
+- Each category has one fixed, user-safe message that explains the failure and a reasonable next
+  action. Raw error messages, stacks, SDK objects, response bodies, Tool input/output, workspace
+  content, and nested causes are forbidden.
+- `requestId` associates the error with the active run. The Webview ignores stale or unrelated run
+  errors and clears the previous error when a new run begins.
+- Tool Result errors remain attached to their exact Tool Call through `extension/tool-state`.
+  `extension/run-error` represents only a terminal run failure and does not replace Tool Result
+  details or turn a recoverable Tool failure into a failed run.
+
 ## Serializable Boundary
 
 - Protocol values must survive `JSON.stringify` followed by `JSON.parse` without semantic change.

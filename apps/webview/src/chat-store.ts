@@ -30,6 +30,7 @@ interface ChatState {
   readonly sessions: readonly SessionSummary[];
   readonly selectedSessionId?: string;
   readonly sessionError?: string;
+  readonly runError?: string;
   submit(content: string): boolean;
   cancel(): void;
   loadSessions(): void;
@@ -135,6 +136,7 @@ export function createChatStore({
           ],
           status: "preparing",
           activeRequestId: requestId,
+          runError: undefined,
         }));
         host.submit(requestId, content);
         return true;
@@ -159,7 +161,7 @@ export function createChatStore({
           return false;
         }
         restoreRequestId = createRequestId();
-        set({ sessionError: undefined });
+        set({ sessionError: undefined, runError: undefined });
         host.restoreSession(restoreRequestId, selectedSessionId);
         return true;
       },
@@ -194,6 +196,7 @@ export function createChatStore({
                 ? message.session.status
                 : "idle",
             selectedSessionId: message.session.sessionId,
+            runError: undefined,
             sessionError: message.session.eventLogTailDamaged
               ? "Recovered through the last valid event."
               : undefined,
@@ -227,6 +230,11 @@ export function createChatStore({
           if (state.status === "preparing" || state.status === "streaming") {
             applyToolState(message);
           }
+          return;
+        }
+
+        if (message.type === "extension/run-error") {
+          set({ runError: message.message });
           return;
         }
 

@@ -1,4 +1,4 @@
-import type { AgentRuntimeEvent } from "@ctrl-zebra/core";
+import { type AgentRuntimeEvent, ModelGatewayError } from "@ctrl-zebra/core";
 import { protocolVersion } from "@ctrl-zebra/protocol";
 import { describe, expect, it } from "vitest";
 
@@ -462,6 +462,70 @@ describe("handleWebviewMessage", () => {
         status: "cancelled",
       },
     ]);
+  });
+
+  it("maps a run failure to a safe UI error before the failed terminal status", async () => {
+    let messageListener: ((message: unknown) => void) | undefined;
+    const postedMessages: unknown[] = [];
+
+    bindWebviewMessageController(
+      {
+        onDidReceiveMessage(listener) {
+          messageListener = listener;
+          return { dispose() {} };
+        },
+        postMessage(message) {
+          postedMessages.push(message);
+          return Promise.resolve(true);
+        },
+      },
+      { onDidDispose: () => ({ dispose() {} }) },
+      () => {},
+      {
+        async run(_content, _signal, emit) {
+          emit({
+            type: "session.status-changed",
+            sessionId: "session-1",
+            previousStatus: "streaming",
+            status: "failed",
+          });
+          throw new ModelGatewayError("authentication");
+        },
+      },
+    );
+
+    messageListener?.({
+      protocolVersion,
+      type: "webview/submit",
+      requestId: "request-error",
+      content: "Hello.",
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(postedMessages).toEqual([
+      {
+        protocolVersion,
+        type: "extension/run-status",
+        requestId: "request-error",
+        status: "preparing",
+      },
+      {
+        protocolVersion,
+        type: "extension/run-error",
+        requestId: "request-error",
+        code: "authentication",
+        message:
+          "Authentication failed. Check the selected provider and saved API key, then try again.",
+      },
+      {
+        protocolVersion,
+        type: "extension/run-status",
+        requestId: "request-error",
+        status: "failed",
+      },
+    ]);
+    expect(JSON.stringify(postedMessages)).not.toContain("Model provider failed");
   });
 
   it("accepts a new run immediately after cancelling the active run", async () => {

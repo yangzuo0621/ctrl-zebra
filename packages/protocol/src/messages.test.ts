@@ -125,6 +125,43 @@ describe("Webview protocol messages", () => {
     expect(extensionToWebviewMessageSchema.parse(status)).toEqual(status);
   });
 
+  it.each([
+    "authentication",
+    "network",
+    "rate-limit",
+    "context",
+    "tool",
+    "internal",
+  ] as const)("round-trips the %s run error category", (code) => {
+    const message = {
+      protocolVersion,
+      type: "extension/run-error",
+      requestId: "request-error",
+      code,
+      message: `Safe ${code} guidance.`,
+    } as const;
+
+    expect(extensionToWebviewMessageSchema.parse(message)).toEqual(message);
+  });
+
+  it.each([
+    { code: "unknown" },
+    { message: "" },
+    { message: "x".repeat(257) },
+    { unexpected: true },
+  ])("rejects an invalid run error payload %#", (override) => {
+    expect(
+      extensionToWebviewMessageSchema.safeParse({
+        protocolVersion,
+        type: "extension/run-error",
+        requestId: "request-error",
+        code: "internal",
+        message: "Safe guidance.",
+        ...override,
+      }).success,
+    ).toBe(false);
+  });
+
   it("round-trips Session list and restore messages", () => {
     const listRequest = {
       protocolVersion,
