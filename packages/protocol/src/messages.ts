@@ -105,6 +105,7 @@ export const runStatusMessageSchema = z.strictObject({
 });
 
 export const runErrorCodeSchema = z.enum([
+  "configuration",
   "authentication",
   "network",
   "rate-limit",

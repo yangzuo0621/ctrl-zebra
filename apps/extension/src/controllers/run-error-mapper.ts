@@ -14,7 +14,10 @@ import {
 import type { RunErrorCode, RunErrorMessage } from "@ctrl-zebra/protocol";
 
 import { ApiKeySecretStorageError } from "../adapters/api-key-secret-storage.js";
-import { ProviderConfigurationError } from "../adapters/provider-configuration.js";
+import {
+  ProviderConfigurationError,
+  type ProviderConfigurationErrorCode,
+} from "../adapters/provider-configuration.js";
 import {
   MissingProviderApiKeyError,
   ProviderAdapterUnavailableError,
@@ -24,6 +27,8 @@ import {
 type RunErrorDto = Pick<RunErrorMessage, "code" | "message">;
 
 const messages = {
+  configuration:
+    "The model provider configuration is invalid. Review the CtrlZebra provider settings and try again.",
   authentication:
     "Authentication failed. Check the selected provider and saved API key, then try again.",
   network: "The model provider is unavailable. Check your connection and try again.",
@@ -34,6 +39,18 @@ const messages = {
   internal:
     "CtrlZebra encountered an internal error. Try again or reload the window if it continues.",
 } as const satisfies Readonly<Record<RunErrorCode, string>>;
+
+const providerConfigurationMessages = {
+  "unknown-provider": "Select a supported model provider: OpenAI, Gemini, or OpenAI-Compatible.",
+  "missing-model": "Configure a model ID before starting a chat.",
+  "invalid-model":
+    "The configured model ID must be a non-empty string without surrounding whitespace.",
+  "missing-endpoint": "OpenAI-Compatible requires an endpoint URL.",
+  "invalid-endpoint":
+    "Use an HTTPS endpoint, or HTTP only with an explicit local loopback address.",
+  "invalid-capabilities":
+    "Capabilities must be a unique list containing only text-streaming or tool-calling.",
+} as const satisfies Readonly<Record<ProviderConfigurationErrorCode, string>>;
 
 const providerMessages = {
   "permission-denied":
@@ -63,6 +80,13 @@ export interface RunFailureLogEntry {
 }
 
 export function mapRunErrorToUi(error: unknown): RunErrorDto {
+  if (error instanceof ProviderConfigurationError) {
+    return {
+      code: "configuration",
+      message: providerConfigurationMessages[error.code],
+    };
+  }
+
   if (error instanceof ModelGatewayError && error.code in providerMessages) {
     const code = error.code as keyof typeof providerMessages;
     return {

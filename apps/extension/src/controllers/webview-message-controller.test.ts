@@ -1,7 +1,8 @@
-import { type AgentRuntimeEvent, ModelGatewayError } from "@ctrl-zebra/core";
+import type { AgentRuntimeEvent } from "@ctrl-zebra/core";
 import { protocolVersion } from "@ctrl-zebra/protocol";
 import { describe, expect, it } from "vitest";
 
+import { ProviderConfigurationError } from "../adapters/provider-configuration.js";
 import {
   bindWebviewMessageController,
   handleWebviewMessage,
@@ -464,11 +465,11 @@ describe("handleWebviewMessage", () => {
     ]);
   });
 
-  it("maps a run failure to a safe UI error before the failed terminal status", async () => {
+  it("maps a configuration failure to a safe UI error before the failed terminal status", async () => {
     let messageListener: ((message: unknown) => void) | undefined;
     const postedMessages: unknown[] = [];
     const reportedFailures: unknown[] = [];
-    const failure = new ModelGatewayError("authentication");
+    const failure = new ProviderConfigurationError("missing-model", "model", "secret-token");
 
     bindWebviewMessageController(
       {
@@ -520,9 +521,8 @@ describe("handleWebviewMessage", () => {
         protocolVersion,
         type: "extension/run-error",
         requestId: "request-error",
-        code: "authentication",
-        message:
-          "Authentication failed. Check the selected provider and saved API key, then try again.",
+        code: "configuration",
+        message: "Configure a model ID before starting a chat.",
       },
       {
         protocolVersion,
@@ -531,7 +531,7 @@ describe("handleWebviewMessage", () => {
         status: "failed",
       },
     ]);
-    expect(JSON.stringify(postedMessages)).not.toContain("Model provider failed");
+    expect(JSON.stringify(postedMessages)).not.toContain("secret-token");
     expect(reportedFailures).toEqual([failure]);
   });
 
