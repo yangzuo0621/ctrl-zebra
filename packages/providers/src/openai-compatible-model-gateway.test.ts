@@ -164,7 +164,8 @@ describe("OpenAI-Compatible ModelGateway", () => {
 
   it.each([
     [401, false, "authentication"],
-    [403, false, "authentication"],
+    [403, false, "permission-denied"],
+    [404, false, "model-not-found"],
     [429, true, "rate-limit"],
     [400, false, "invalid-request"],
     [408, true, "unavailable"],
