@@ -126,6 +126,7 @@ describe("Webview protocol messages", () => {
   });
 
   it.each([
+    "configuration",
     "authentication",
     "network",
     "rate-limit",

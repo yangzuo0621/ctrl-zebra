@@ -9,12 +9,17 @@ import {
 import { describe, expect, it } from "vitest";
 
 import { ApiKeySecretStorageError } from "../adapters/api-key-secret-storage.js";
+import {
+  ProviderConfigurationError,
+  type ProviderConfigurationErrorCode,
+} from "../adapters/provider-configuration.js";
 import { MissingProviderApiKeyError } from "./model-gateway-selector.js";
 import { getRunFailureLogEntry, mapRunErrorToUi } from "./run-error-mapper.js";
 
 describe("mapRunErrorToUi", () => {
   it.each([
     [new ModelGatewayError("authentication"), "authentication"],
+    [new ProviderConfigurationError("missing-model", "model", "secret-token"), "configuration"],
     [new MissingProviderApiKeyError("openai"), "authentication"],
     [new ApiKeySecretStorageError("read"), "authentication"],
     [new ModelGatewayError("unavailable"), "network"],
@@ -38,6 +43,7 @@ describe("mapRunErrorToUi", () => {
   it("provides a distinct fixed prompt for every category", () => {
     const prompts = [
       new ModelGatewayError("authentication"),
+      new ProviderConfigurationError("missing-model", "model", "secret-token"),
       new ModelGatewayError("unavailable"),
       new ModelGatewayError("rate-limit"),
       new ModelGatewayError("permission-denied"),
@@ -50,7 +56,47 @@ describe("mapRunErrorToUi", () => {
       new Error("internal"),
     ].map((error) => mapRunErrorToUi(error).message);
 
-    expect(new Set(prompts).size).toBe(11);
+    expect(new Set(prompts).size).toBe(12);
+  });
+
+  it.each([
+    [
+      "unknown-provider",
+      "id",
+      "Select a supported model provider: OpenAI, Gemini, or OpenAI-Compatible.",
+    ],
+    ["missing-model", "model", "Configure a model ID before starting a chat."],
+    [
+      "invalid-model",
+      "model",
+      "The configured model ID must be a non-empty string without surrounding whitespace.",
+    ],
+    ["missing-endpoint", "endpoint", "OpenAI-Compatible requires an endpoint URL."],
+    [
+      "invalid-endpoint",
+      "endpoint",
+      "Use an HTTPS endpoint, or HTTP only with an explicit local loopback address.",
+    ],
+    [
+      "invalid-capabilities",
+      "capabilities",
+      "Capabilities must be a unique list containing only text-streaming or tool-calling.",
+    ],
+  ] as const)("provides a fixed safe configuration prompt for %s", (code: ProviderConfigurationErrorCode, setting, message) => {
+    const error = new ProviderConfigurationError(code, setting, "secret-token");
+
+    expect(mapRunErrorToUi(error)).toEqual({
+      code: "configuration",
+      message,
+    });
+    expect(getRunFailureLogEntry(error)).toEqual({
+      event: "run_failed",
+      component: "agent_run",
+      outcome: "failure",
+      errorCode: `provider-${code}`,
+    });
+    expect(JSON.stringify(mapRunErrorToUi(error))).not.toContain("secret-token");
+    expect(JSON.stringify(getRunFailureLogEntry(error))).not.toContain("secret-token");
   });
 
   it.each([
