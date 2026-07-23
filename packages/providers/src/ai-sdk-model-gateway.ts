@@ -44,6 +44,7 @@ export function createAISDKModelGateway(model: LanguageModel): ModelGateway {
         const tools = toSdkTools(request.tools);
         const result = streamText({
           abortSignal: signal,
+          ...(request.instructions === undefined ? {} : { instructions: request.instructions }),
           maxRetries: 0,
           messages: toSdkMessages(request.messages),
           model,

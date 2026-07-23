@@ -18,10 +18,8 @@ vi.mock("ai", async (importOriginal) => {
 });
 
 const request = {
-  messages: [
-    { role: "system", content: "Be concise." },
-    { role: "user", content: "Say hello." },
-  ],
+  instructions: "Be concise.",
+  messages: [{ role: "user", content: "Say hello." }],
 } as const;
 
 const readonlyToolsRequest = createReadonlyToolsRequest();
@@ -79,6 +77,7 @@ describe("Gemini ModelGateway", () => {
     expect(selectModel).toHaveBeenCalledWith("gemini-test");
     expect(sdkMocks.streamText).toHaveBeenCalledWith({
       abortSignal: signal,
+      instructions: request.instructions,
       maxRetries: 0,
       messages: request.messages,
       model,

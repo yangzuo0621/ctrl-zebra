@@ -104,6 +104,7 @@ describe("createChatRunner", () => {
     await runner.run("Say hello.", signal, (event) => events.push(event));
 
     expect(receivedRequest).toEqual({
+      instructions: expect.stringContaining("greetings and simple questions without using tools"),
       messages: [{ role: "user", content: "Say hello." }],
     });
     expect(receivedSignal).toBe(signal);
@@ -212,6 +213,7 @@ describe("createSelectingChatRunner", () => {
   it("selects a ModelGateway lazily for each run", async () => {
     const gateway: ModelGateway = {
       async *stream() {
+        yield { type: "text.delta", text: "Done" };
         yield { type: "finish", reason: "stop" };
       },
     };

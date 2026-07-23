@@ -12,6 +12,7 @@ import {
   toolResultSchema,
   type UserMessage,
 } from "@ctrl-zebra/protocol";
+import { agentSystemInstruction, shouldOfferWorkspaceTools } from "./agent-behavior-policy.js";
 import { BasicApprovalPolicy } from "./approval-policy.js";
 import type { DomainEvent, EventSink } from "./events.js";
 import type { ModelGateway, ModelMessage } from "./model-gateway.js";
@@ -78,6 +79,24 @@ export class MaxToolStepsExceededError extends Error {
   }
 }
 
+export class EmptyAgentResponseError extends Error {
+  constructor(readonly followedToolUse: boolean) {
+    super(
+      followedToolUse
+        ? "The model completed after Tool use without a non-empty final text response."
+        : "The model completed without a non-empty text response.",
+    );
+    this.name = "EmptyAgentResponseError";
+  }
+}
+
+export class UnexpectedToolCallError extends Error {
+  constructor(readonly toolName: string) {
+    super(`The model requested Tool "${toolName}" when tools were unavailable for this request.`);
+    this.name = "UnexpectedToolCallError";
+  }
+}
+
 export class AgentRuntime {
   readonly #modelGateway: ModelGateway;
   readonly #eventSink: EventSink<AgentRuntimeEvent>;
@@ -116,13 +135,22 @@ export class AgentRuntime {
       session.transitionTo("preparing");
       signal.throwIfAborted();
       const messages: ModelMessage[] = [{ role: "user", content: userMessage.content }];
+      const offerTools = shouldOfferWorkspaceTools(userMessage.content);
       session.transitionTo("streaming");
       let toolSteps = 0;
       const repetitionDetector = new ToolRepetitionDetector(this.#toolRepetitionThreshold);
 
       while (true) {
-        const toolCall = await this.#streamModel(messages, userMessage.sessionId, signal);
-        if (toolCall === undefined) {
+        const response = await this.#streamModel(
+          messages,
+          userMessage.sessionId,
+          signal,
+          offerTools,
+        );
+        if (response.toolCall === undefined) {
+          if (!response.hasMeaningfulText) {
+            throw new EmptyAgentResponseError(toolSteps > 0);
+          }
           break;
         }
 
@@ -130,25 +158,28 @@ export class AgentRuntime {
           throw new MaxToolStepsExceededError(this.#maxToolSteps);
         }
 
-        const repetition = repetitionDetector.observe(toolCall);
+        const repetition = repetitionDetector.observe(response.toolCall);
         if (repetition.thresholdReached) {
           throw new ToolRepetitionDetectedError(
-            toolCall.name,
+            response.toolCall.name,
             repetition.consecutiveCount,
             repetitionDetector.threshold,
           );
         }
 
-        this.#emitToolState(userMessage.sessionId, toolCall, "pending");
+        this.#emitToolState(userMessage.sessionId, response.toolCall, "pending");
         const toolResult = await this.#executeTool(
           userMessage.sessionId,
           userMessage.messageId,
-          toolCall,
+          response.toolCall,
           signal,
           session,
         );
-        this.#emitToolResult(userMessage.sessionId, toolCall, toolResult);
-        messages.push({ role: "assistant", toolCall }, { role: "tool", result: toolResult });
+        this.#emitToolResult(userMessage.sessionId, response.toolCall, toolResult);
+        messages.push(
+          { role: "assistant", toolCall: response.toolCall },
+          { role: "tool", result: toolResult },
+        );
         toolSteps += 1;
         signal.throwIfAborted();
         if (session.status === "executing_tool") {
@@ -177,24 +208,36 @@ export class AgentRuntime {
     messages: readonly ModelMessage[],
     sessionId: SessionId,
     signal: AbortSignal,
-  ): Promise<ToolCall | undefined> {
+    offerTools: boolean,
+  ): Promise<{ readonly toolCall?: ToolCall; readonly hasMeaningfulText: boolean }> {
     let toolCall: ToolCall | undefined;
-    const toolDeclarations = this.#toolRegistry.declarations();
+    let hasMeaningfulText = false;
+    const toolDeclarations = offerTools ? this.#toolRegistry.declarations() : [];
     const request =
       toolDeclarations.length === 0
-        ? { messages: [...messages] }
-        : { messages: [...messages], tools: toolDeclarations };
+        ? { instructions: agentSystemInstruction, messages: [...messages] }
+        : {
+            instructions: agentSystemInstruction,
+            messages: [...messages],
+            tools: toolDeclarations,
+          };
 
     for await (const event of this.#modelGateway.stream(request, signal)) {
       signal.throwIfAborted();
 
       if (event.type === "text.delta") {
+        if (event.text.trim() !== "") {
+          hasMeaningfulText = true;
+        }
         this.#eventSink.emit({
           type: "agent.text-delta",
           sessionId,
           text: event.text,
         });
       } else if (event.type === "tool.call") {
+        if (!offerTools) {
+          throw new UnexpectedToolCallError(event.call.name);
+        }
         if (toolCall !== undefined) {
           throw new Error("AgentRuntime supports only one Tool Call per model response.");
         }
@@ -204,7 +247,7 @@ export class AgentRuntime {
     }
 
     signal.throwIfAborted();
-    return toolCall;
+    return { ...(toolCall === undefined ? {} : { toolCall }), hasMeaningfulText };
   }
 
   async #executeTool(

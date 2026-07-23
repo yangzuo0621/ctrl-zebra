@@ -1,10 +1,11 @@
 import type { UserMessage } from "@ctrl-zebra/protocol";
 import { describe, expect, it, vi } from "vitest";
-
+import { agentSystemInstruction } from "./agent-behavior-policy.js";
 import {
   AgentRuntime,
   type AgentRuntimeEvent,
   type AgentTool,
+  EmptyAgentResponseError,
   MaxToolStepsExceededError,
   type ModelEvent,
   type ModelGateway,
@@ -15,6 +16,7 @@ import {
   type ToolApprovalWorkflow,
   ToolRegistry,
   ToolRepetitionDetectedError,
+  UnexpectedToolCallError,
 } from "./index.js";
 
 const emptyInputSchema = {
@@ -69,21 +71,128 @@ describe("AgentRuntime", () => {
     ]);
   });
 
-  it("sends only the supplied user content to the model", async () => {
+  it("sends the stable system instruction and supplied user content to the model", async () => {
     const requests: ModelRequest[] = [];
-    const gateway = createModelGateway([], (request) => requests.push(request));
+    const gateway = createModelGateway(
+      [
+        { type: "text.delta", text: "Hello." },
+        { type: "finish", reason: "stop" },
+      ],
+      (request) => requests.push(request),
+    );
     const runtime = new AgentRuntime(gateway, { emit() {} });
 
     await runtime.run(userMessage, new AbortController().signal);
 
     expect(requests).toEqual([
       {
+        instructions: agentSystemInstruction,
         messages: [{ role: "user", content: "Say hello." }],
       },
     ]);
   });
 
+  it("withholds tools for a greeting and completes with conversational text", async () => {
+    const requests: ModelRequest[] = [];
+    const execute = vi.fn(async () => ({ output: null, truncated: false }));
+    const registry = new ToolRegistry();
+    registry.register({
+      name: "list_files",
+      description: "List workspace files.",
+      inputSchema: emptyInputSchema,
+      risk: "read",
+      parseInput: () => null,
+      execute,
+    });
+    const gateway = createModelGateway(
+      [
+        { type: "text.delta", text: "Hello! How can I help?" },
+        { type: "finish", reason: "stop" },
+      ],
+      (request) => requests.push(request),
+    );
+    const runtime = new AgentRuntime(gateway, { emit() {} }, registry);
+
+    await runtime.run({ ...userMessage, content: "hello" }, new AbortController().signal);
+
+    expect(requests).toEqual([
+      {
+        instructions: agentSystemInstruction,
+        messages: [{ role: "user", content: "hello" }],
+      },
+    ]);
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it("rejects an undeclared Tool Call for a greeting without executing it", async () => {
+    const execute = vi.fn(async () => ({ output: null, truncated: false }));
+    const registry = new ToolRegistry();
+    registry.register({
+      name: "list_files",
+      description: "List workspace files.",
+      inputSchema: emptyInputSchema,
+      risk: "read",
+      parseInput: () => null,
+      execute,
+    });
+    const gateway = createModelGateway([
+      { type: "tool.call", call: { id: "call-1", name: "list_files", input: {} } },
+      { type: "finish", reason: "tool-calls" },
+    ]);
+    const runtime = new AgentRuntime(gateway, { emit() {} }, registry);
+
+    await expect(
+      runtime.run({ ...userMessage, content: "hello" }, new AbortController().signal),
+    ).rejects.toEqual(new UnexpectedToolCallError("list_files"));
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it("fails instead of completing when the model returns no usable text", async () => {
+    const events: AgentRuntimeEvent[] = [];
+    const gateway = createModelGateway([
+      { type: "text.delta", text: "  " },
+      { type: "finish", reason: "stop" },
+    ]);
+    const runtime = new AgentRuntime(gateway, { emit: (event) => events.push(event) });
+
+    await expect(runtime.run(userMessage, new AbortController().signal)).rejects.toEqual(
+      new EmptyAgentResponseError(false),
+    );
+    expect(events.at(-1)).toMatchObject({
+      type: "session.status-changed",
+      status: "failed",
+    });
+  });
+
+  it("fails when a Tool result is not followed by a usable final response", async () => {
+    const gateway = createScriptedModelGateway(
+      [
+        [
+          { type: "tool.call", call: { id: "call-1", name: "list_files", input: {} } },
+          { type: "finish", reason: "tool-calls" },
+        ],
+        [{ type: "finish", reason: "stop" }],
+      ],
+      [],
+    );
+    const registry = new ToolRegistry();
+    registry.register({
+      name: "list_files",
+      description: "List workspace files.",
+      inputSchema: emptyInputSchema,
+      risk: "read",
+      parseInput: () => null,
+      execute: async () => ({ output: { files: [] }, truncated: false }),
+    });
+    const runtime = new AgentRuntime(gateway, { emit() {} }, registry);
+
+    await expect(
+      runtime.run({ ...userMessage, content: "List files." }, new AbortController().signal),
+    ).rejects.toEqual(new EmptyAgentResponseError(true));
+  });
+
   it("executes one Tool Call and returns its structured result to the model", async () => {
+    const readRequest = { ...userMessage, content: "Look up zebra facts in the workspace." };
     const requests: ModelRequest[] = [];
     const gateway = createScriptedModelGateway(
       [
@@ -134,12 +243,13 @@ describe("AgentRuntime", () => {
     const events: AgentRuntimeEvent[] = [];
     const runtime = new AgentRuntime(gateway, { emit: (event) => events.push(event) }, registry);
 
-    await runtime.run(userMessage, new AbortController().signal);
+    await runtime.run(readRequest, new AbortController().signal);
 
     expect(execute).toHaveBeenCalledWith({ query: "stripes" }, { signal: expect.any(AbortSignal) });
     expect(requests).toEqual([
       {
-        messages: [{ role: "user", content: "Say hello." }],
+        instructions: agentSystemInstruction,
+        messages: [{ role: "user", content: readRequest.content }],
         tools: [
           {
             name: "lookup_zebra",
@@ -154,8 +264,9 @@ describe("AgentRuntime", () => {
         ],
       },
       {
+        instructions: agentSystemInstruction,
         messages: [
-          { role: "user", content: "Say hello." },
+          { role: "user", content: readRequest.content },
           {
             role: "assistant",
             toolCall: {
@@ -264,13 +375,19 @@ describe("AgentRuntime", () => {
           },
           { type: "finish", reason: "tool-calls" },
         ],
-        [{ type: "finish", reason: "stop" }],
+        [
+          { type: "text.delta", text: "The requested tool is unavailable." },
+          { type: "finish", reason: "stop" },
+        ],
       ],
       requests,
     );
     const runtime = new AgentRuntime(gateway, { emit() {} });
 
-    await runtime.run(userMessage, new AbortController().signal);
+    await runtime.run(
+      { ...userMessage, content: "Run node check.mjs in the workspace." },
+      new AbortController().signal,
+    );
 
     expect(requests[1]?.messages.at(-1)).toEqual({
       role: "tool",
@@ -294,7 +411,10 @@ describe("AgentRuntime", () => {
           { type: "tool.call", call: { id: "call-network", name: "send_request", input: {} } },
           { type: "finish", reason: "tool-calls" },
         ],
-        [{ type: "finish", reason: "stop" }],
+        [
+          { type: "text.delta", text: "That network operation is not allowed." },
+          { type: "finish", reason: "stop" },
+        ],
       ],
       requests,
     );
@@ -339,7 +459,10 @@ describe("AgentRuntime", () => {
           },
           { type: "finish", reason: "tool-calls" },
         ],
-        [{ type: "finish", reason: "stop" }],
+        [
+          { type: "text.delta", text: "The approved command completed." },
+          { type: "finish", reason: "stop" },
+        ],
       ],
       requests,
     );
@@ -383,7 +506,10 @@ describe("AgentRuntime", () => {
       approvalWorkflow: { create },
     });
 
-    await runtime.run(userMessage, new AbortController().signal);
+    await runtime.run(
+      { ...userMessage, content: "Run node check.mjs in the workspace." },
+      new AbortController().signal,
+    );
 
     expect(execute).toHaveBeenCalledOnce();
     expect(create).toHaveBeenCalledOnce();
@@ -636,7 +762,10 @@ describe("AgentRuntime", () => {
           { type: "tool.call", call: { id: "call-1", name: "limited_tool", input: null } },
           { type: "finish", reason: "tool-calls" },
         ],
-        [{ type: "finish", reason: "stop" }],
+        [
+          { type: "text.delta", text: "The result was truncated." },
+          { type: "finish", reason: "stop" },
+        ],
       ],
       requests,
     );
@@ -674,7 +803,10 @@ describe("AgentRuntime", () => {
           { type: "tool.call", call: { id: "call-1", name: "large_tool", input: null } },
           { type: "finish", reason: "tool-calls" },
         ],
-        [{ type: "finish", reason: "stop" }],
+        [
+          { type: "text.delta", text: "The bounded result is available." },
+          { type: "finish", reason: "stop" },
+        ],
       ],
       requests,
     );
@@ -714,7 +846,10 @@ describe("AgentRuntime", () => {
           { type: "tool.call", call: { id: "call-1", name: "invalid_tool", input: null } },
           { type: "finish", reason: "tool-calls" },
         ],
-        [{ type: "finish", reason: "stop" }],
+        [
+          { type: "text.delta", text: "The tool returned invalid output." },
+          { type: "finish", reason: "stop" },
+        ],
       ],
       requests,
     );
@@ -847,7 +982,10 @@ describe("AgentRuntime", () => {
           },
           { type: "finish", reason: "tool-calls" },
         ],
-        [{ type: "finish", reason: "stop" }],
+        [
+          { type: "text.delta", text: "The tool failed safely." },
+          { type: "finish", reason: "stop" },
+        ],
       ],
       requests,
     );
@@ -1024,9 +1162,15 @@ describe("AgentRuntime", () => {
   it("passes the caller's AbortSignal to the model", async () => {
     const controller = new AbortController();
     let receivedSignal: AbortSignal | undefined;
-    const gateway = createModelGateway([], (_request, signal) => {
-      receivedSignal = signal;
-    });
+    const gateway = createModelGateway(
+      [
+        { type: "text.delta", text: "Hello." },
+        { type: "finish", reason: "stop" },
+      ],
+      (_request, signal) => {
+        receivedSignal = signal;
+      },
+    );
     const runtime = new AgentRuntime(gateway, { emit() {} });
 
     await runtime.run(userMessage, controller.signal);
