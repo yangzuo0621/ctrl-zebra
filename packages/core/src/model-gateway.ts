@@ -93,6 +93,8 @@ export type ModelEvent =
 
 export type ModelGatewayErrorCode =
   | "authentication"
+  | "permission-denied"
+  | "model-not-found"
   | "rate-limit"
   | "invalid-request"
   | "unavailable"

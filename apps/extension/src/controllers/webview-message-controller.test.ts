@@ -467,6 +467,8 @@ describe("handleWebviewMessage", () => {
   it("maps a run failure to a safe UI error before the failed terminal status", async () => {
     let messageListener: ((message: unknown) => void) | undefined;
     const postedMessages: unknown[] = [];
+    const reportedFailures: unknown[] = [];
+    const failure = new ModelGatewayError("authentication");
 
     bindWebviewMessageController(
       {
@@ -489,9 +491,13 @@ describe("handleWebviewMessage", () => {
             previousStatus: "streaming",
             status: "failed",
           });
-          throw new ModelGatewayError("authentication");
+          throw failure;
         },
       },
+      undefined,
+      undefined,
+      undefined,
+      (error) => reportedFailures.push(error),
     );
 
     messageListener?.({
@@ -526,6 +532,7 @@ describe("handleWebviewMessage", () => {
       },
     ]);
     expect(JSON.stringify(postedMessages)).not.toContain("Model provider failed");
+    expect(reportedFailures).toEqual([failure]);
   });
 
   it("accepts a new run immediately after cancelling the active run", async () => {

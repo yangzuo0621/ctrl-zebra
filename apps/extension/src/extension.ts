@@ -43,6 +43,7 @@ import {
   createWorkspaceToolRegistryProvider,
   selectWorkspaceRoot,
 } from "./controllers/readonly-tool-registry.js";
+import { getRunFailureLogEntry } from "./controllers/run-error-mapper.js";
 import { createSessionRecoveryActions } from "./controllers/session-recovery.js";
 import { ToolApprovalWorkflowRouter } from "./controllers/tool-approval-workflow.js";
 import {
@@ -247,6 +248,9 @@ export function activate(context: ExtensionContext): void {
         });
       },
       () => performanceBaseline.recordFirstWebviewDisplay(),
+      (error) => {
+        logger.error(getRunFailureLogEntry(error));
+      },
     ),
   );
 

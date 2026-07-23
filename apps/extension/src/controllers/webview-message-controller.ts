@@ -52,6 +52,7 @@ export function bindWebviewMessageController(
   approvalActions?: ApprovalUiActions,
   sessionActions?: SessionRecoveryActions,
   checkpointActions?: CheckpointActions,
+  reportRunFailure: (error: unknown) => void = () => {},
 ): void {
   let disposed = false;
   const checkpointRequests = new Set<AbortController>();
@@ -194,6 +195,7 @@ export function bindWebviewMessageController(
             return;
           }
 
+          reportRunFailure(error);
           post({
             protocolVersion,
             type: "extension/run-error",

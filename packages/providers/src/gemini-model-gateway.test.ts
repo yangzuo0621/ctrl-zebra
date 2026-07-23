@@ -1,5 +1,10 @@
-import type { ModelEvent, ModelGatewayErrorCode, ModelRequest } from "@ctrl-zebra/core";
-import { APICallError, InvalidResponseDataError, LoadAPIKeyError } from "ai";
+import {
+  type ModelEvent,
+  ModelGatewayError,
+  type ModelGatewayErrorCode,
+  type ModelRequest,
+} from "@ctrl-zebra/core";
+import { APICallError, InvalidResponseDataError, LoadAPIKeyError, NoSuchModelError } from "ai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createGeminiModelGateway } from "./gemini-model-gateway.js";
@@ -162,7 +167,8 @@ describe("Gemini ModelGateway", () => {
 
   it.each([
     [401, false, "authentication"],
-    [403, false, "authentication"],
+    [403, false, "permission-denied"],
+    [404, false, "model-not-found"],
     [429, true, "rate-limit"],
     [400, false, "invalid-request"],
     [408, true, "unavailable"],
@@ -189,7 +195,42 @@ describe("Gemini ModelGateway", () => {
   });
 
   it.each([
+    [403, "permission-denied"],
+    [404, "model-not-found"],
+  ] as const)("maps streamed API status %s to %s", async (statusCode, expectedCode) => {
+    setStreamParts([
+      {
+        type: "error",
+        error: new APICallError({
+          isRetryable: false,
+          message: "provider failure with secret-token",
+          requestBodyValues: { apiKey: "secret-token" },
+          responseBody: '{"message":"secret-token"}',
+          statusCode,
+          url: "https://example.invalid?key=secret-token",
+        }),
+      },
+    ]);
+    const gateway = createGeminiModelGateway({
+      apiKey: "test-gemini-api-key",
+      modelId: "gemini-test",
+    });
+
+    await expect(
+      collectEvents(gateway.stream(request, new AbortController().signal)),
+    ).rejects.toEqual(new ModelGatewayError(expectedCode));
+  });
+
+  it.each([
     [new LoadAPIKeyError({ message: "missing key" }), "authentication"],
+    [
+      new NoSuchModelError({
+        modelId: "secret-model-id",
+        modelType: "languageModel",
+        message: "secret-token",
+      }),
+      "model-not-found",
+    ],
     [new InvalidResponseDataError({ data: null }), "malformed-response"],
   ] as const)("maps typed SDK failures without inspecting their messages", async (failure, expectedCode) => {
     setStreamParts([{ type: "error", error: failure }]);

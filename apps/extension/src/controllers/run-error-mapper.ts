@@ -14,7 +14,12 @@ import {
 import type { RunErrorCode, RunErrorMessage } from "@ctrl-zebra/protocol";
 
 import { ApiKeySecretStorageError } from "../adapters/api-key-secret-storage.js";
-import { MissingProviderApiKeyError } from "./model-gateway-selector.js";
+import { ProviderConfigurationError } from "../adapters/provider-configuration.js";
+import {
+  MissingProviderApiKeyError,
+  ProviderAdapterUnavailableError,
+  ProviderCapabilityMismatchError,
+} from "./model-gateway-selector.js";
 
 type RunErrorDto = Pick<RunErrorMessage, "code" | "message">;
 
@@ -30,7 +35,42 @@ const messages = {
     "CtrlZebra encountered an internal error. Try again or reload the window if it continues.",
 } as const satisfies Readonly<Record<RunErrorCode, string>>;
 
+const providerMessages = {
+  "permission-denied":
+    "The model provider denied access. Check the API key permissions and restrictions, then try again.",
+  "model-not-found":
+    "The selected model was not found or is unavailable to this API key. Check the model ID and provider access.",
+  "invalid-request":
+    "The model provider rejected the request. Check the saved API key, model ID, and endpoint configuration.",
+  "malformed-response":
+    "The model provider returned an unexpected response. Check the provider endpoint or try again later.",
+  unknown: "The model provider failed unexpectedly. Check its configuration and try again.",
+} as const satisfies Readonly<
+  Record<
+    Extract<
+      ModelGatewayError["code"],
+      "permission-denied" | "model-not-found" | "invalid-request" | "malformed-response" | "unknown"
+    >,
+    string
+  >
+>;
+
+export interface RunFailureLogEntry {
+  readonly event: "run_failed";
+  readonly component: "agent_run";
+  readonly outcome: "failure";
+  readonly errorCode: string;
+}
+
 export function mapRunErrorToUi(error: unknown): RunErrorDto {
+  if (error instanceof ModelGatewayError && error.code in providerMessages) {
+    const code = error.code as keyof typeof providerMessages;
+    return {
+      code: code === "permission-denied" ? "authentication" : "internal",
+      message: providerMessages[code],
+    };
+  }
+
   if (error instanceof MaxToolStepsExceededError) {
     return {
       code: "tool",
@@ -57,6 +97,43 @@ export function mapRunErrorToUi(error: unknown): RunErrorDto {
 
   const code = classifyRunError(error);
   return { code, message: messages[code] };
+}
+
+export function getRunFailureLogEntry(error: unknown): RunFailureLogEntry {
+  return {
+    event: "run_failed",
+    component: "agent_run",
+    outcome: "failure",
+    errorCode: classifyRunFailureForLog(error),
+  };
+}
+
+function classifyRunFailureForLog(error: unknown): string {
+  if (error instanceof ModelGatewayError) {
+    return error.code;
+  }
+
+  if (error instanceof ProviderConfigurationError) {
+    return `provider-${error.code}`;
+  }
+
+  if (error instanceof ApiKeySecretStorageError) {
+    return `secret-storage-${error.operation}`;
+  }
+
+  if (error instanceof MissingProviderApiKeyError) {
+    return "missing-api-key";
+  }
+
+  if (error instanceof ProviderCapabilityMismatchError) {
+    return "provider-capability-mismatch";
+  }
+
+  if (error instanceof ProviderAdapterUnavailableError) {
+    return "provider-adapter-unavailable";
+  }
+
+  return "internal";
 }
 
 function classifyRunError(error: unknown): RunErrorCode {

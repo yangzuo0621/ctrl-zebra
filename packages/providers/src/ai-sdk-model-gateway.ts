@@ -350,12 +350,12 @@ function classifyProviderError(error: unknown): ModelGatewayErrorCode {
     return "authentication";
   }
 
-  if (
-    InvalidArgumentError.isInstance(error) ||
-    InvalidPromptError.isInstance(error) ||
-    NoSuchModelError.isInstance(error)
-  ) {
+  if (InvalidArgumentError.isInstance(error) || InvalidPromptError.isInstance(error)) {
     return "invalid-request";
+  }
+
+  if (NoSuchModelError.isInstance(error)) {
+    return "model-not-found";
   }
 
   if (
@@ -378,8 +378,16 @@ function classifyApiCallError(
   statusCode: number | undefined,
   isRetryable: boolean,
 ): ModelGatewayErrorCode {
-  if (statusCode === 401 || statusCode === 403) {
+  if (statusCode === 401) {
     return "authentication";
+  }
+
+  if (statusCode === 403) {
+    return "permission-denied";
+  }
+
+  if (statusCode === 404) {
+    return "model-not-found";
   }
 
   if (statusCode === 429) {
