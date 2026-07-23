@@ -1,14 +1,14 @@
 import {
   approvalRequestSchema,
-  CancellableApprovalService,
   type PreparedToolApproval,
   parseTextEditPlan,
   type TextEditPlan,
   type ToolApprovalOperation,
   type ToolApprovalWorkflow,
 } from "@ctrl-zebra/core";
-import type { ApprovalDecisionIntent, ApprovalRequest, ApprovalStatus } from "@ctrl-zebra/protocol";
+import type { ApprovalDecisionIntent, ApprovalRequest } from "@ctrl-zebra/protocol";
 
+import { ApprovalLifecycle, type ApprovalLifecycleRecord } from "./approval-lifecycle.js";
 import type { WorkspaceTrustPolicy } from "./workspace-trust-policy.js";
 
 type FileEditOwnership = Pick<PreparedToolApproval, "sessionId" | "runId">;
@@ -36,23 +36,19 @@ interface FileEditApprovalWorkflowDependencies {
   readonly workspaceTrust: WorkspaceTrustPolicy;
 }
 
-interface ApprovalRecord {
+interface ApprovalRecord extends ApprovalLifecycleRecord {
   readonly request: ApprovalRequest;
   readonly plan: TextEditPlan;
   readonly ownership: FileEditOwnership;
-  status: ApprovalStatus;
-  signal?: AbortSignal;
-  expiration?: ReturnType<typeof setTimeout>;
-  consuming: boolean;
 }
 
 export class FileEditApprovalWorkflow implements ToolApprovalWorkflow, FileEditApprovalActions {
   readonly #dependencies: FileEditApprovalWorkflowDependencies;
-  readonly #service = new CancellableApprovalService({ emit() {} });
-  readonly #records = new Map<string, ApprovalRecord>();
+  readonly #lifecycle: ApprovalLifecycle<ApprovalRecord>;
 
   constructor(dependencies: FileEditApprovalWorkflowDependencies) {
     this.#dependencies = dependencies;
+    this.#lifecycle = new ApprovalLifecycle(dependencies.now);
   }
 
   async create(
@@ -85,9 +81,6 @@ export class FileEditApprovalWorkflow implements ToolApprovalWorkflow, FileEditA
       createdAt: createdAt.toISOString(),
       expiresAt: expiresAt.toISOString(),
     });
-    if (this.#records.has(request.id)) {
-      throw new Error("Approval identifier is already active.");
-    }
     const record: ApprovalRecord = {
       request,
       plan,
@@ -95,17 +88,17 @@ export class FileEditApprovalWorkflow implements ToolApprovalWorkflow, FileEditA
       status: "pending",
       consuming: false,
     };
-    this.#records.set(request.id, record);
+    this.#lifecycle.register(record);
 
     return {
       request,
-      requestDecision: (signal) => this.#requestDecision(record, signal),
+      requestDecision: (signal) => this.#lifecycle.requestDecision(record, signal),
       consume: (signal) => this.#consume(record, signal),
     };
   }
 
   showDiff(approvalId: string): void {
-    const record = this.#records.get(approvalId);
+    const record = this.#lifecycle.get(approvalId);
     if (record === undefined) {
       return;
     }
@@ -125,136 +118,38 @@ export class FileEditApprovalWorkflow implements ToolApprovalWorkflow, FileEditA
   }
 
   decide(approvalId: string, decision: ApprovalDecisionIntent): void {
-    const record = this.#records.get(approvalId);
-    if (record === undefined) {
-      return;
-    }
-    if (record.status !== "pending") {
-      return;
-    }
-
-    if (this.#dependencies.now().getTime() >= Date.parse(record.request.expiresAt)) {
-      this.#expire(record);
-      return;
-    }
-
-    this.#service.respond({
-      requestId: record.request.id,
-      decision,
-      decidedAt: this.#dependencies.now().toISOString(),
-    });
+    this.#lifecycle.decide(approvalId, decision);
   }
 
   dispose(): void {
-    for (const record of this.#records.values()) {
-      this.#clearExpiration(record);
-      if (record.status === "pending" && record.signal !== undefined) {
-        record.status = "cancelled";
-        this.#service.cancel(record.request.id, new Error("Approval workflow disposed."));
-      }
-    }
-    this.#records.clear();
-  }
-
-  async #requestDecision(record: ApprovalRecord, signal: AbortSignal) {
-    if (record.status !== "pending" || record.signal !== undefined) {
-      throw new Error("Approval operation is not pending.");
-    }
-
-    record.signal = signal;
-    const remaining = Date.parse(record.request.expiresAt) - this.#dependencies.now().getTime();
-    if (remaining <= 0) {
-      record.status = "expired";
-      this.#records.delete(record.request.id);
-      return { requestId: record.request.id, decision: "expired" as const };
-    }
-
-    const decision = this.#service.request(record.request, signal);
-    record.expiration = setTimeout(() => this.#expire(record), remaining);
-    try {
-      const value = await decision;
-      record.status = value.decision;
-      if (value.decision === "denied") {
-        this.#records.delete(record.request.id);
-      }
-      return value;
-    } catch (error) {
-      if (hasApprovalStatus(record, "expired")) {
-        this.#records.delete(record.request.id);
-        return { requestId: record.request.id, decision: "expired" as const };
-      }
-      if (record.status === "pending" && signal.aborted) {
-        record.status = "cancelled";
-        this.#records.delete(record.request.id);
-      }
-      throw error;
-    } finally {
-      this.#clearExpiration(record);
-    }
+    this.#lifecycle.dispose();
   }
 
   async #consume(record: ApprovalRecord, signal: AbortSignal) {
-    signal.throwIfAborted();
-    if (record.status !== "approved" || record.consuming) {
-      throw new Error("Approval is not available for consumption.");
-    }
-    if (this.#dependencies.now().getTime() >= Date.parse(record.request.expiresAt)) {
-      record.status = "expired";
-      this.#records.delete(record.request.id);
+    if (!this.#lifecycle.validateConsumption(record, signal)) {
       return { outcome: "expired" as const };
     }
     if (!this.#dependencies.workspaceTrust.isTrusted()) {
-      record.status = "invalidated";
-      this.#records.delete(record.request.id);
+      this.#lifecycle.finish(record, "invalidated");
       return {
         outcome: "conflict" as const,
         message: "Workspace trust changed before the approved file edits could be applied.",
       };
     }
 
-    record.consuming = true;
+    this.#lifecycle.markConsuming(record);
     this.#dependencies.workspaceTrust.requireTrusted();
     const result = await this.#dependencies.applyPlan(record.plan, record.ownership, signal);
     signal.throwIfAborted();
     if (result === "conflict") {
-      record.status = "invalidated";
-      this.#records.delete(record.request.id);
+      this.#lifecycle.finish(record, "invalidated");
       return {
         outcome: "conflict" as const,
         message: "The approved file changed before its edits could be applied.",
       };
     }
 
-    record.status = "consumed";
-    this.#records.delete(record.request.id);
+    this.#lifecycle.finish(record, "consumed");
     return { outcome: "approved" as const };
   }
-
-  #expire(record: ApprovalRecord): void {
-    if (record.status !== "pending") {
-      return;
-    }
-
-    record.status = "expired";
-    this.#clearExpiration(record);
-    this.#service.cancel(record.request.id, new ApprovalExpiredError());
-  }
-
-  #clearExpiration(record: ApprovalRecord): void {
-    if (record.expiration !== undefined) {
-      clearTimeout(record.expiration);
-      record.expiration = undefined;
-    }
-  }
-}
-
-export class ApprovalExpiredError extends Error {
-  constructor() {
-    super("The approval request expired.");
-    this.name = "ApprovalExpiredError";
-  }
-}
-
-function hasApprovalStatus(record: ApprovalRecord, status: ApprovalStatus): boolean {
-  return record.status === status;
 }
