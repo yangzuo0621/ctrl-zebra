@@ -1,5 +1,6 @@
 import {
   ContextOverflowRecoveryExhaustedError,
+  EmptyAgentResponseError,
   InvalidContextRecoverySummaryError,
   InvalidContextWindowError,
   InvalidHistoryBudgetError,
@@ -8,6 +9,7 @@ import {
   MaxToolStepsExceededError,
   ModelGatewayError,
   ToolRepetitionDetectedError,
+  UnexpectedToolCallError,
 } from "@ctrl-zebra/core";
 import type { RunErrorCode, RunErrorMessage } from "@ctrl-zebra/protocol";
 
@@ -29,6 +31,30 @@ const messages = {
 } as const satisfies Readonly<Record<RunErrorCode, string>>;
 
 export function mapRunErrorToUi(error: unknown): RunErrorDto {
+  if (error instanceof MaxToolStepsExceededError) {
+    return {
+      code: "tool",
+      message: `The agent stopped after reaching the ${error.maxToolSteps}-step tool limit. No additional tool was run.`,
+    };
+  }
+
+  if (error instanceof UnexpectedToolCallError) {
+    return {
+      code: "tool",
+      message:
+        "The model requested a workspace tool that was not available for this request. No tool was run.",
+    };
+  }
+
+  if (error instanceof EmptyAgentResponseError) {
+    return {
+      code: "internal",
+      message: error.followedToolUse
+        ? "The model used tools but did not provide a final response. Review the tool results and try again."
+        : "The model completed without a usable response. Try again or rephrase the request.",
+    };
+  }
+
   const code = classifyRunError(error);
   return { code, message: messages[code] };
 }
@@ -61,7 +87,7 @@ function classifyRunError(error: unknown): RunErrorCode {
     return "context";
   }
 
-  if (error instanceof MaxToolStepsExceededError || error instanceof ToolRepetitionDetectedError) {
+  if (error instanceof ToolRepetitionDetectedError) {
     return "tool";
   }
 

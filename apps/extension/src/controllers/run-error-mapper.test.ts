@@ -1,8 +1,10 @@
 import {
   ContextOverflowRecoveryExhaustedError,
+  EmptyAgentResponseError,
   MaxToolStepsExceededError,
   ModelGatewayError,
   ToolRepetitionDetectedError,
+  UnexpectedToolCallError,
 } from "@ctrl-zebra/core";
 import { describe, expect, it } from "vitest";
 
@@ -41,5 +43,27 @@ describe("mapRunErrorToUi", () => {
     ].map((error) => mapRunErrorToUi(error).message);
 
     expect(new Set(prompts).size).toBe(6);
+  });
+
+  it("provides bounded safe prompts for tool limits and unusable completions", () => {
+    expect(mapRunErrorToUi(new MaxToolStepsExceededError(8))).toEqual({
+      code: "tool",
+      message:
+        "The agent stopped after reaching the 8-step tool limit. No additional tool was run.",
+    });
+    expect(mapRunErrorToUi(new UnexpectedToolCallError("read_file"))).toEqual({
+      code: "tool",
+      message:
+        "The model requested a workspace tool that was not available for this request. No tool was run.",
+    });
+    expect(mapRunErrorToUi(new EmptyAgentResponseError(false))).toEqual({
+      code: "internal",
+      message: "The model completed without a usable response. Try again or rephrase the request.",
+    });
+    expect(mapRunErrorToUi(new EmptyAgentResponseError(true))).toEqual({
+      code: "internal",
+      message:
+        "The model used tools but did not provide a final response. Review the tool results and try again.",
+    });
   });
 });

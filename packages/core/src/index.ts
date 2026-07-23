@@ -52,7 +52,9 @@ export type {
 export {
   AgentRuntime,
   defaultMaxToolSteps,
+  EmptyAgentResponseError,
   MaxToolStepsExceededError,
+  UnexpectedToolCallError,
 } from "./agent-runtime.js";
 export type { ApprovalPolicyDisposition } from "./approval-policy.js";
 export { BasicApprovalPolicy } from "./approval-policy.js";
