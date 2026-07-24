@@ -31,6 +31,7 @@ load every domain document or completed phase archive by default.
 | Webview/Extension messages or Tool DTOs | `docs/protocol.md`; add `docs/architecture.md` for runtime ownership |
 | Workspace access, approval, commands, checkpoints, secrets, logging | `docs/security.md` |
 | Webview state, components, styling, accessibility, streaming | `docs/webview.md` |
+| User journeys, information architecture, interaction feedback, visual hierarchy, UX acceptance | `docs/ux.md`; add `docs/webview.md` for implementation constraints |
 | Persistence or recovery | `docs/persistence.md`; add `docs/security.md` for checkpoint restore |
 | CI, VSIX packaging, or release | `docs/ci.md`, `docs/packaging.md`, or `docs/release-checklist.md` as applicable |
 
