@@ -160,3 +160,20 @@ This document defines the initial runtime boundaries for the CtrlZebra desktop V
   Provider retry policy may perform at most two retries after the initial attempt, and tool
   repetition detection must pause at a configured threshold no greater than 10 consecutive matching
   calls. Cancellation ends every recovery, retry, delay, summary, and tool-loop action immediately.
+
+## Session State Machine
+
+- Session status changes go through the Core state machine; callers and tools do not mutate or
+  bypass the current status.
+- Legal live transitions are `idle → preparing`; `preparing → streaming | cancelled | failed`;
+  `streaming → awaiting_approval | executing_tool | completed | cancelled | failed`;
+  `awaiting_approval → streaming | executing_tool | cancelled | failed`; and
+  `executing_tool → streaming | cancelled | failed`.
+- `completed`, `cancelled`, and `failed` are distinct live terminal states with no outgoing
+  transitions. A terminal Session is never restarted by changing its status.
+- `interrupted` is a recovery-only terminal state with no incoming or outgoing live transition.
+  Recovery normalizes `idle`, `preparing`, `streaming`, `awaiting_approval`, and `executing_tool` to
+  `interrupted`; it never resumes persisted model, approval, or Tool operations.
+- An illegal transition fails with a domain error without changing state or emitting an event.
+- A legal transition commits the new status before synchronously emitting exactly one status-change
+  event. Event-sink failures propagate and do not roll back the committed status.
