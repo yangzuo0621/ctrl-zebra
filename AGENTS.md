@@ -4,22 +4,24 @@ These rules apply to every developer and coding agent working in this repository
 
 ## 1. Source of Truth and Task Scope
 
-- `docs/implementation-plan.md` is the single source of truth for implementation order, task scope, acceptance criteria, and phase gates.
+- `docs/implementation-plan.md` is the authoritative roadmap entry point and the single source of truth for task order, status, completion evidence, and the current execution point.
+- The phase specification linked from the roadmap index is the single source of truth for a task's goal, deliverables, tests, exclusions, prerequisites, and phase gate. Active and planned phases live under `docs/roadmap/phases/`; completed phase specifications live under `docs/roadmap/archive/`.
+- `docs/roadmap/product-foundation.md` owns the first-phase product scope, technical baseline, module boundaries, interface drafts, test layers, and definition of done. Do not duplicate those details in the roadmap index or phase files.
 - Work on exactly one roadmap task ID or one standalone maintenance change at a time. Stop after verification and reporting; do not start another item automatically.
-- Before roadmap implementation, read the task's goal, deliverables, tests, exclusions, and prerequisites.
+- Before roadmap implementation, read the roadmap index, then the linked active phase specification containing the task and its surrounding phase context. Read product-foundation, domain, prerequisite, or archived documents only when the task explicitly depends on them or investigation requires them; do not load all completed phase archives by default.
 - Do not expand a task through opportunistic refactoring, speculative abstractions, dependency upgrades, or work intended for a later task.
-- If implementation requires changing a module boundary, technical baseline, task order, or acceptance criterion, present the evidence and update the implementation plan before changing code.
+- If implementation requires changing a module boundary, technical baseline, task order, or acceptance criterion, present the evidence and update the owning roadmap document before changing code.
 
-Phase 1 is limited to the desktop VS Code extension capabilities listed in the implementation plan. Unless the plan is updated first, it excludes multi-agent or sub-agent features, MCP, browser automation, automatic Git commits or PRs, SQLite, vector databases, semantic code indexes, Web Extensions, and cloud accounts, sync, or telemetry backends.
+Phase 1 is limited to the desktop VS Code extension capabilities listed in `docs/roadmap/product-foundation.md`. Unless the product foundation and roadmap are updated first, it excludes multi-agent or sub-agent features, MCP, browser automation, automatic Git commits or PRs, SQLite, vector databases, semantic code indexes, Web Extensions, and cloud accounts, sync, or telemetry backends.
 
 ### 1.1 Standalone Maintenance Changes
 
-- `docs/implementation-plan.md` is a committed execution roadmap, not an inbox for every cleanup idea.
+- The roadmap document set rooted at `docs/implementation-plan.md` is a committed execution roadmap, not an inbox for every cleanup idea.
 - A small, local, behavior-preserving maintenance change may use a dedicated branch and PR without becoming a roadmap task when it does not change architecture, public contracts, persisted data, user-facing behavior, or task ordering.
 - If the maintenance is directly required by the current task and concerns code introduced or modified by that task, keep the smallest necessary change in the current task PR.
 - If it concerns pre-existing code unrelated to the current task, use a separate maintenance PR; never mix it into the active task PR.
 - Deferred optional maintenance does not need a roadmap entry. Create a GitHub Issue only when the work is valuable enough to track.
-- A change that affects package public APIs, Webview/Extension protocol, tool names, VS Code command IDs, persisted fields, user configuration, module boundaries, or technical baselines is not minor maintenance. Update the implementation plan and, when appropriate, an ADR before implementation.
+- A change that affects package public APIs, Webview/Extension protocol, tool names, VS Code command IDs, persisted fields, user configuration, module boundaries, or technical baselines is not minor maintenance. Update the owning roadmap document and, when appropriate, an ADR before implementation.
 - Standalone maintenance PRs do not alter the implementation-plan task ledger unless they are explicitly accepted as roadmap work.
 
 ## 2. Architecture Boundaries
@@ -201,7 +203,7 @@ Extension lifecycle red lines:
 ### 6.1 Before Implementation
 
 1. Check `git status` and preserve all existing user changes.
-2. For roadmap work, read the current task and its surrounding implementation-plan context. For standalone maintenance, confirm that Section 1.1 applies and that the change does not overlap an active roadmap task.
+2. For roadmap work, use `docs/implementation-plan.md` to locate the current task, then read only its linked active phase specification and surrounding phase context. Read referenced product-foundation or domain documents as required; do not read completed phase archives unless needed for investigation. For standalone maintenance, confirm that Section 1.1 applies and that the change does not overlap an active roadmap task.
 3. Confirm prerequisites, intended files, explicit exclusions, public-contract impact, and validation commands.
 4. Fetch current documentation through Context7 when the work involves a library, framework, SDK, API, CLI, or cloud service.
 5. Stop and explain any ambiguity that would materially change the implementation.
@@ -297,7 +299,7 @@ When an unplanned design change is required:
 
 1. Present concrete evidence that blocks the current task.
 2. Describe at least one alternative and its impact.
-3. Obtain direction and update `docs/implementation-plan.md` or the relevant ADR first.
+3. Obtain direction and update the authoritative roadmap index, phase specification, product foundation, or relevant ADR first.
 4. Then change and verify the code.
 
 Create an ADR only for decisions that affect long-term architecture, persisted formats, the security model, or cross-module contracts. Do not create ADRs for ordinary implementation details.
