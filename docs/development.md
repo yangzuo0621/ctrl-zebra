@@ -23,7 +23,30 @@ owned by Biome, EditorConfig, and Git attributes.
 - Use `kebab-case` filenames, `PascalCase` for types, classes, and React components, and `camelCase`
   for functions and variables. Do not prefix interfaces with `I`.
 - Name tests `*.test.ts` or `*.test.tsx`.
-- Comments explain constraints, rationale, or non-obvious behavior rather than restating code.
+
+## Code Comments and Documentation
+
+- Comments explain why a constraint exists, not what the next line does.
+- Add a local comment when behavior depends on a non-obvious invariant that types, names, Schemas,
+  assertions, or tests cannot express clearly.
+- Document security boundaries, cancellation behavior, resource ownership, atomicity, race
+  prevention, and error-priority decisions when their rationale is not evident from the code.
+- Explain workarounds for host APIs, SDK limitations, platform behavior, or compatibility
+  constraints. Reference the owning document or upstream issue when that context is stable and
+  useful.
+- Explain non-obvious numeric limits and constants, including what owns the value and what behavior
+  occurs at the boundary.
+- Public exports need TSDoc only when lifecycle, failure, cancellation, ownership, or side-effect
+  semantics are not clear from the type signature.
+- An unsafe cast, `@ts-expect-error`, lint exception, or unavoidable cancellation gap requires a
+  narrowly scoped rationale.
+- Keep comments synchronized with the code. A stale or contradictory comment is a defect.
+- Prefer executable enforcement through types, Schemas, assertions, and tests. Comments document
+  rationale that cannot be enforced mechanically.
+- Do not add comments that restate names, narrate straightforward control flow, duplicate domain
+  documentation, or speculate about future work.
+- Do not bulk-comment existing code. Add or improve comments when changing the relevant behavior;
+  broader comment audits are separate maintenance work.
 
 ## Files and Formatting
 
