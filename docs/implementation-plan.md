@@ -150,7 +150,7 @@
 | 10 | T1006 | 已完成 | [#104](https://github.com/yangzuo0621/ctrl-zebra/pull/104) | 2026-07-23 |
 | 10 | T1007 | 已完成 | [#105](https://github.com/yangzuo0621/ctrl-zebra/pull/105) | 2026-07-23 |
 | 10 | T1008 | 已完成 | [#106](https://github.com/yangzuo0621/ctrl-zebra/pull/106) | 2026-07-23 |
-| 11 | T1101 | 已完成 | — | 2026-07-27 |
+| 11 | T1101 | 已完成 | [#114](https://github.com/yangzuo0621/ctrl-zebra/pull/114) | 2026-07-27 |
 | 11 | T1102 | 待开始 | — | — |
 | 11 | T1103 | 待开始 | — | — |
 | 11 | T1104 | 待开始 | — | — |
