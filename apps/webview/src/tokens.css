@@ -83,3 +83,9 @@
     --cz-transition-normal: 0ms;
   }
 }
+
+@media (forced-colors: active) {
+  :root {
+    --cz-focus-outline: 2px solid Highlight;
+  }
+}
