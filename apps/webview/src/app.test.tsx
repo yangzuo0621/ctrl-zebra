@@ -95,6 +95,7 @@ describe("App streaming chat", () => {
     const user = userEvent.setup();
     render(<App host={host} createRequestId={() => ids.shift() ?? "unexpected"} />);
 
+    await user.click(screen.getByRole("button", { name: "Sessions" }));
     await user.click(screen.getByRole("button", { name: "Refresh changes" }));
     expect(host.sent.at(-1)).toEqual({
       protocolVersion,
@@ -150,6 +151,7 @@ describe("App streaming chat", () => {
     const user = userEvent.setup();
     render(<App host={host} createRequestId={() => ids.shift() ?? "unexpected"} />);
 
+    await user.click(screen.getByRole("button", { name: "Sessions" }));
     expect(screen.getByRole("option", { name: "No saved sessions" })).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Refresh" }));
     expect(host.sent.at(-1)).toEqual({
@@ -217,6 +219,7 @@ describe("App streaming chat", () => {
     const ids = ["list-interrupted", "restore-interrupted"];
     const user = userEvent.setup();
     render(<App host={host} createRequestId={() => ids.shift() ?? "unexpected"} />);
+    await user.click(screen.getByRole("button", { name: "Sessions" }));
     await user.click(screen.getByRole("button", { name: "Refresh" }));
     act(() =>
       host.emit({

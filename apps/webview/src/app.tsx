@@ -8,6 +8,7 @@ import { createChatStore, type DisplayMessage } from "./chat-store.js";
 import { CheckpointPanel } from "./checkpoint-panel.js";
 import { createCheckpointStore } from "./checkpoint-store.js";
 import { ToolCallCard } from "./tool-call-card.js";
+import { Button } from "./ui/button.js";
 import { getWebviewHost, type WebviewHost } from "./vscode-api.js";
 
 interface AppProps {
@@ -49,6 +50,8 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
     createCheckpointStore(host, createRequestId ?? (() => crypto.randomUUID())),
   );
   const [draft, setDraft] = useState("");
+  const [showSessionsDrawer, setShowSessionsDrawer] = useState(false);
+
   const messages = useStore(store, (state) => state.messages);
   const status = useStore(store, (state) => state.status);
   const activeRequestId = useStore(store, (state) => state.activeRequestId);
@@ -79,129 +82,142 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
   };
 
   return (
-    <main className={styles.shell} aria-labelledby="agent-view-title">
+    <div className={styles.shell}>
       <header className={styles.header}>
-        <div className={styles.mark} aria-hidden="true">
-          CZ
+        <div className={styles.headerTitleGroup}>
+          <div className={styles.mark} aria-hidden="true">
+            CZ
+          </div>
+          <div>
+            <h1 className={styles.title} id="agent-view-title">
+              CtrlZebra
+            </h1>
+            <p className={styles.description}>Ask a question and stream the response.</p>
+          </div>
         </div>
-        <div>
-          <h1 className={styles.title} id="agent-view-title">
-            CtrlZebra
-          </h1>
-          <p className={styles.description}>Ask a question and stream the response.</p>
-        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setShowSessionsDrawer((prev) => !prev)}
+          aria-expanded={showSessionsDrawer}
+        >
+          {showSessionsDrawer ? "Hide Sessions" : "Sessions"}
+        </Button>
       </header>
 
-      <section className={styles.sessions} aria-labelledby="saved-sessions-title">
-        <h2 id="saved-sessions-title">Saved sessions</h2>
-        <div className={styles.sessionControls}>
-          <select
-            aria-label="Saved session"
-            value={selectedSessionId ?? ""}
-            onChange={(event) => store.getState().selectSession(event.target.value)}
-            disabled={sessions.length === 0 || activeRequestId !== undefined}
-          >
-            {sessions.length === 0 ? <option value="">No saved sessions</option> : null}
-            {sessions.map((session) => (
-              <option value={session.sessionId} key={session.sessionId}>
-                {new Date(session.createdAt).toLocaleString()} — {session.status}
-              </option>
-            ))}
-          </select>
-          <button
-            className={styles.secondaryButton}
-            type="button"
-            onClick={() => store.getState().loadSessions()}
-          >
-            Refresh
-          </button>
-          <button
-            className={styles.secondaryButton}
-            type="button"
-            onClick={() => store.getState().restoreSelectedSession()}
-            disabled={selectedSessionId === undefined || activeRequestId !== undefined}
-          >
-            Restore
-          </button>
-        </div>
-        {sessionError === undefined ? null : <p className={styles.sessionError}>{sessionError}</p>}
-      </section>
+      {showSessionsDrawer ? (
+        <section className={styles.secondaryDrawer} aria-label="Session history and checkpoints">
+          <section className={styles.sessions} aria-labelledby="saved-sessions-title">
+            <h2 id="saved-sessions-title">Saved sessions</h2>
+            <div className={styles.sessionControls}>
+              <select
+                aria-label="Saved session"
+                value={selectedSessionId ?? ""}
+                onChange={(event) => store.getState().selectSession(event.target.value)}
+                disabled={sessions.length === 0 || activeRequestId !== undefined}
+              >
+                {sessions.length === 0 ? <option value="">No saved sessions</option> : null}
+                {sessions.map((session) => (
+                  <option value={session.sessionId} key={session.sessionId}>
+                    {new Date(session.createdAt).toLocaleString()} — {session.status}
+                  </option>
+                ))}
+              </select>
+              <Button variant="secondary" size="sm" onClick={() => store.getState().loadSessions()}>
+                Refresh
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => store.getState().restoreSelectedSession()}
+                disabled={selectedSessionId === undefined || activeRequestId !== undefined}
+              >
+                Restore
+              </Button>
+            </div>
+            {sessionError === undefined ? null : (
+              <p className={styles.sessionError}>{sessionError}</p>
+            )}
+          </section>
+          <CheckpointPanel store={checkpointStore} />
+        </section>
+      ) : null}
 
-      <CheckpointPanel store={checkpointStore} />
+      <main className={styles.transcriptSection} aria-label="Conversation">
+        <ol className={styles.transcript}>
+          {messages.length === 0 ? (
+            <li className={styles.empty}>No messages yet.</li>
+          ) : (
+            messages.map((message) => (
+              <li className={styles.message} data-role={message.role} key={message.id}>
+                <span className={styles.messageRole}>
+                  {message.role === "user" ? "You" : "Agent"}
+                </span>
+                <p>{messageContent(message, status)}</p>
+                {message.toolCalls.map((toolCall) => (
+                  <ToolCallCard
+                    key={toolCall.call.id}
+                    toolCall={toolCall}
+                    runStatus={status}
+                    onTerminate={() => store.getState().cancel()}
+                  />
+                ))}
+              </li>
+            ))
+          )}
+        </ol>
 
-      <ol className={styles.transcript} aria-label="Conversation">
-        {messages.length === 0 ? (
-          <li className={styles.empty}>No messages yet.</li>
-        ) : (
-          messages.map((message) => (
-            <li className={styles.message} data-role={message.role} key={message.id}>
-              <span className={styles.messageRole}>
-                {message.role === "user" ? "You" : "Agent"}
-              </span>
-              <p>{messageContent(message, status)}</p>
-              {message.toolCalls.map((toolCall) => (
-                <ToolCallCard
-                  key={toolCall.call.id}
-                  toolCall={toolCall}
-                  runStatus={status}
-                  onTerminate={() => store.getState().cancel()}
-                />
-              ))}
-            </li>
-          ))
+        {approval === undefined ? null : (
+          <ApprovalCard
+            item={approval}
+            pendingDecision={pendingDecision}
+            onViewDiff={() => approvalStore.getState().showDiff()}
+            onApprove={() => approvalStore.getState().decide("approved")}
+            onReject={() => approvalStore.getState().decide("denied")}
+          />
         )}
-      </ol>
+      </main>
 
-      {approval === undefined ? null : (
-        <ApprovalCard
-          item={approval}
-          pendingDecision={pendingDecision}
-          onViewDiff={() => approvalStore.getState().showDiff()}
-          onApprove={() => approvalStore.getState().decide("approved")}
-          onReject={() => approvalStore.getState().decide("denied")}
-        />
-      )}
+      <footer className={styles.footer}>
+        {runError === undefined ? null : (
+          <p className={styles.runError} role="alert">
+            {runError}
+          </p>
+        )}
 
-      {runError === undefined ? null : (
-        <p className={styles.runError} role="alert">
-          {runError}
+        <form className={styles.composer} onSubmit={handleSubmit}>
+          <label className={styles.label} htmlFor="chat-message">
+            Message
+          </label>
+          <textarea
+            className={styles.input}
+            id="chat-message"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            rows={3}
+            disabled={activeRequestId !== undefined}
+          />
+          <div className={styles.actions}>
+            <Button
+              type="submit"
+              disabled={activeRequestId !== undefined || draft.trim().length === 0}
+            >
+              Send
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => store.getState().cancel()}
+              disabled={activeRequestId === undefined}
+            >
+              Cancel
+            </Button>
+          </div>
+        </form>
+
+        <p className={styles.status} role="status">
+          {statusText[status]}
         </p>
-      )}
-
-      <form className={styles.composer} onSubmit={handleSubmit}>
-        <label className={styles.label} htmlFor="chat-message">
-          Message
-        </label>
-        <textarea
-          className={styles.input}
-          id="chat-message"
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          rows={3}
-          disabled={activeRequestId !== undefined}
-        />
-        <div className={styles.actions}>
-          <button
-            className={styles.button}
-            type="submit"
-            disabled={activeRequestId !== undefined || draft.trim().length === 0}
-          >
-            Send
-          </button>
-          <button
-            className={styles.secondaryButton}
-            type="button"
-            onClick={() => store.getState().cancel()}
-            disabled={activeRequestId === undefined}
-          >
-            Cancel
-          </button>
-        </div>
-      </form>
-
-      <p className={styles.status} role="status">
-        {statusText[status]}
-      </p>
-    </main>
+      </footer>
+    </div>
   );
 }
