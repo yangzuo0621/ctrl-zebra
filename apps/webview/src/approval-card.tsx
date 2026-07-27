@@ -5,9 +5,10 @@ import type { DisplayApproval } from "./approval-store.js";
 import { Badge } from "./ui/badge.js";
 import { Button } from "./ui/button.js";
 
-interface ApprovalCardProps {
+export interface ApprovalCardProps {
   readonly item: DisplayApproval;
   readonly pendingDecision?: ApprovalDecisionIntent;
+  readonly embedded?: boolean;
   readonly onViewDiff: () => void;
   readonly onApprove: () => void;
   readonly onReject: () => void;
@@ -26,6 +27,7 @@ const statusText = {
 export function ApprovalCard({
   item,
   pendingDecision,
+  embedded = false,
   onViewDiff,
   onApprove,
   onReject,
@@ -43,21 +45,25 @@ export function ApprovalCard({
           ? "Approved command started."
           : statusText[item.status];
 
+  const cardClassName = embedded ? styles.embeddedCard : styles.card;
+
   return (
-    <article className={styles.card} aria-labelledby={titleId}>
-      <header className={styles.header}>
-        <div>
-          <p className={styles.eyebrow}>
-            {commandApproval ? "Command approval" : "File change approval"}
-          </p>
-          <h2 className={styles.title} id={titleId}>
-            {item.approval.presentation.title}
-          </h2>
-        </div>
-        <Badge variant={item.approval.scope.risk === "execute" ? "error" : "warning"}>
-          {item.approval.scope.risk}
-        </Badge>
-      </header>
+    <article className={cardClassName} aria-labelledby={titleId}>
+      {embedded ? null : (
+        <header className={styles.header}>
+          <div>
+            <p className={styles.eyebrow}>
+              {commandApproval ? "Command approval" : "File change approval"}
+            </p>
+            <h2 className={styles.title} id={titleId}>
+              {item.approval.presentation.title}
+            </h2>
+          </div>
+          <Badge variant={item.approval.scope.risk === "execute" ? "error" : "warning"}>
+            {item.approval.scope.risk}
+          </Badge>
+        </header>
+      )}
 
       {commandApproval ? (
         <pre className={styles.commandSummary}>
