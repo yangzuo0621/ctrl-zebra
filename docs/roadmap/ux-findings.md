@@ -32,5 +32,5 @@
 - **影响场景**：文件修改审批、命令执行审批。
 - **关联 PR**：[#122](https://github.com/yangzuo0621/ctrl-zebra/pull/122), [#123](https://github.com/yangzuo0621/ctrl-zebra/pull/123), [#124](https://github.com/yangzuo0621/ctrl-zebra/pull/124), [#125](https://github.com/yangzuo0621/ctrl-zebra/pull/125), [#126](https://github.com/yangzuo0621/ctrl-zebra/pull/126)
 - **验证与规范状态**：
-  - 需进一步验证用户在面对复杂/高风险操作时是否仍需要一键展开查看完整原始 JSON 的能力。
-  - 确定有效部分后续补充写入 `docs/ux.md`。
+  - 确定有效的交互规则（Inline Approval Fusion、原始 JSON 渐进披露）已写入 [ux.md](../ux.md) 2.3 及第 5 节。
+  - 待后续在更多复杂/高风险操作场景下进一步走查用户体验。
