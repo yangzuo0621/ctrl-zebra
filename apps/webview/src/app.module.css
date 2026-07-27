@@ -174,6 +174,35 @@
   gap: var(--cz-space-2);
 }
 
+.composerHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cz-space-2);
+}
+
+.composerHint {
+  font-size: var(--cz-font-size-xs);
+  color: var(--cz-color-muted);
+}
+
+.jumpBottomButton {
+  align-self: center;
+  margin-top: var(--cz-space-2);
+  background-color: var(--cz-color-secondary-bg);
+  color: var(--cz-color-secondary-fg);
+  border: 1px solid var(--cz-color-border);
+  border-radius: var(--cz-radius-pill);
+  padding: var(--cz-space-1) var(--cz-space-3);
+  font-size: var(--cz-font-size-xs);
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.jumpBottomButton:hover {
+  background-color: var(--cz-color-secondary-hover);
+}
+
 .label {
   font-size: var(--cz-font-size-xs);
   font-weight: var(--cz-font-weight-semibold);
