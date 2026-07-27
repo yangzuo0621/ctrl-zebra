@@ -3,6 +3,8 @@ import { useState } from "react";
 
 import type { DisplayToolCall } from "./chat-store.js";
 import styles from "./command-tool-card.module.css";
+import { Badge } from "./ui/badge.js";
+import { Button } from "./ui/button.js";
 
 export type DisplayRunStatus = "idle" | "interrupted" | RunStatus;
 
@@ -31,6 +33,15 @@ export function CommandToolCard({ toolCall, runStatus, onTerminate }: CommandToo
         ? "Terminating…"
         : commandStatus(toolCall);
   const visualStatus = commandCancelled || commandInterrupted ? "error" : toolCall.status;
+  const badgeVariant =
+    visualStatus === "success"
+      ? "success"
+      : visualStatus === "error"
+        ? "error"
+        : visualStatus === "running"
+          ? "info"
+          : "neutral";
+
   const output =
     toolCall.status === "success" ? runCommandOutputSchema.safeParse(toolCall.result.output) : null;
 
@@ -52,9 +63,11 @@ export function CommandToolCard({ toolCall, runStatus, onTerminate }: CommandToo
             run_command
           </h3>
         </div>
-        <span className={styles.state} role="status" aria-label="Command status">
-          {visibleStatus}
-        </span>
+        <Badge variant={badgeVariant}>
+          <span className={styles.state} role="status" aria-label="Command status">
+            {visibleStatus}
+          </span>
+        </Badge>
       </header>
 
       <fieldset className={styles.field}>
@@ -102,14 +115,14 @@ export function CommandToolCard({ toolCall, runStatus, onTerminate }: CommandToo
 
       {toolCall.status === "running" ? (
         <div className={styles.actions}>
-          <button
+          <Button
+            variant="secondary"
             className={styles.terminateButton}
-            type="button"
             onClick={terminate}
             disabled={!canTerminate}
           >
             Terminate command
-          </button>
+          </Button>
         </div>
       ) : null}
     </article>
