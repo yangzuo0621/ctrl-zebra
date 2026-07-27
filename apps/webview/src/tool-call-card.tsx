@@ -39,7 +39,7 @@ export function ToolCallCard({
         ? "error"
         : toolCall.status === "running"
           ? "info"
-          : "neutral";
+          : "default";
 
   return (
     <article aria-labelledby={headingId} className={styles.card} data-status={toolCall.status}>

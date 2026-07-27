@@ -40,7 +40,7 @@ export function CommandToolCard({ toolCall, runStatus, onTerminate }: CommandToo
         ? "error"
         : visualStatus === "running"
           ? "info"
-          : "neutral";
+          : "default";
 
   const output =
     toolCall.status === "success" ? runCommandOutputSchema.safeParse(toolCall.result.output) : null;
