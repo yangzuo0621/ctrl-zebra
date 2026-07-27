@@ -607,4 +607,17 @@ describe("App streaming chat", () => {
     expect(screen.getByLabelText("Command status")).toHaveTextContent("Terminated");
     expect(screen.getByRole("status", { name: "Command status" })).toBeVisible();
   });
+
+  it("populates composer draft when selecting an onboarding sample prompt (T1104)", async () => {
+    const host = new FakeWebviewHost();
+    const user = userEvent.setup();
+    render(<App host={host} />);
+
+    expect(screen.getByRole("heading", { name: "Welcome to CtrlZebra" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Explain workspace structure" }));
+
+    expect(screen.getByRole("textbox", { name: "Message" })).toHaveValue(
+      "Explain workspace structure",
+    );
+  });
 });
