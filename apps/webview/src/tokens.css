@@ -1,0 +1,85 @@
+/* CtrlZebra Design Tokens - Integrated with VS Code CSS Variables */
+
+:root {
+  /* Typography Tokens */
+  --cz-font-family: var(
+    --vscode-font-family,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    Helvetica,
+    Arial,
+    sans-serif
+  );
+  --cz-font-size-xs: 11px;
+  --cz-font-size-sm: 12px;
+  --cz-font-size-md: 13px;
+  --cz-font-size-lg: 14px;
+  --cz-font-size-xl: 16px;
+  --cz-font-weight-normal: 400;
+  --cz-font-weight-medium: 500;
+  --cz-font-weight-semibold: 600;
+
+  /* Spacing Tokens */
+  --cz-space-1: 4px;
+  --cz-space-2: 8px;
+  --cz-space-3: 12px;
+  --cz-space-4: 16px;
+  --cz-space-5: 20px;
+  --cz-space-6: 24px;
+
+  /* Border Radius Tokens */
+  --cz-radius-sm: 2px;
+  --cz-radius-md: 4px;
+  --cz-radius-lg: 6px;
+  --cz-radius-pill: 9999px;
+
+  /* Color & Surface Tokens (VS Code CSS Variable Integration) */
+  --cz-color-bg: var(--vscode-sideBar-background, #1e1e1e);
+  --cz-color-fg: var(--vscode-sideBar-foreground, #cccccc);
+  --cz-color-muted: var(--vscode-disabledForeground, #858585);
+  --cz-color-border: var(--vscode-sideBarSectionHeader-border, rgba(255, 255, 255, 0.12));
+
+  /* Button Tokens */
+  --cz-color-primary-bg: var(--vscode-button-background, #0e639c);
+  --cz-color-primary-fg: var(--vscode-button-foreground, #ffffff);
+  --cz-color-primary-hover: var(--vscode-button-hoverBackground, #1177bb);
+
+  --cz-color-secondary-bg: var(--vscode-button-secondaryBackground, #3a3d41);
+  --cz-color-secondary-fg: var(--vscode-button-secondaryForeground, #ffffff);
+  --cz-color-secondary-hover: var(--vscode-button-secondaryHoverBackground, #45494e);
+
+  /* Form & Input Tokens */
+  --cz-color-input-bg: var(--vscode-input-background, #252526);
+  --cz-color-input-fg: var(--vscode-input-foreground, #cccccc);
+  --cz-color-input-border: var(--vscode-input-border, #3c3c3c);
+  --cz-color-input-placeholder: var(--vscode-input-placeholderForeground, #a6a6a6);
+
+  /* Focus Indicator Tokens */
+  --cz-color-focus-border: var(--vscode-focusBorder, #007acc);
+  --cz-focus-outline: 2px solid var(--cz-color-focus-border);
+
+  /* Feedback & State Tokens */
+  --cz-color-error-fg: var(--vscode-errorForeground, #f48771);
+  --cz-color-error-bg: var(--vscode-inputValidation-errorBackground, #5a1d1d);
+  --cz-color-error-border: var(--vscode-inputValidation-errorBorder, #be1100);
+
+  --cz-color-warning-fg: var(--vscode-editorWarning-foreground, #cca700);
+  --cz-color-warning-bg: var(--vscode-inputValidation-warningBackground, #352a0b);
+  --cz-color-warning-border: var(--vscode-inputValidation-warningBorder, #b89500);
+
+  --cz-color-badge-bg: var(--vscode-badge-background, #4d4d4d);
+  --cz-color-badge-fg: var(--vscode-badge-foreground, #ffffff);
+
+  /* Motion & Transition Tokens */
+  --cz-transition-fast: 120ms cubic-bezier(0.4, 0, 0.2, 1);
+  --cz-transition-normal: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --cz-transition-fast: 0ms;
+    --cz-transition-normal: 0ms;
+  }
+}
