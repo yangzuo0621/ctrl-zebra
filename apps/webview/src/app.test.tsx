@@ -500,6 +500,7 @@ describe("App streaming chat", () => {
 
     expect(screen.getAllByRole("article", { name: "read_file" })).toHaveLength(1);
     expect(screen.getByLabelText("Tool status")).toHaveTextContent("Success");
+    await user.click(screen.getByRole("button", { name: "Details" }));
     expect(screen.getByRole("group", { name: "Result" })).toHaveTextContent("Hello");
   });
 

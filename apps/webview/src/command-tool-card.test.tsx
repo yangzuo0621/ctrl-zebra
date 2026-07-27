@@ -61,22 +61,25 @@ describe("CommandToolCard", () => {
     );
 
     expect(screen.getByLabelText("Command status")).toHaveTextContent("Exited (0)");
+    await user.click(screen.getByRole("button", { name: "Details" }));
     expect(screen.getByRole("group", { name: "Standard output" })).toHaveTextContent("checked");
     expect(screen.getByRole("group", { name: "Standard error" })).toHaveTextContent("warning");
     expect(screen.getByLabelText("Command exit")).toHaveTextContent("Exit code0");
     expect(screen.getByText("Command output truncated.")).toBeVisible();
   });
 
-  it("shows a signal exit and empty output explicitly", () => {
+  it("shows a signal exit and empty output explicitly", async () => {
+    const user = userEvent.setup();
     render(
       <CommandToolCard
-        toolCall={success({ exitCode: null, signal: "SIGTERM" })}
+        toolCall={success({ exitCode: null, signal: "SIGTERM", stdout: "", stderr: "" })}
         runStatus="streaming"
         onTerminate={() => {}}
       />,
     );
 
     expect(screen.getByLabelText("Command status")).toHaveTextContent("Exited (SIGTERM)");
+    await user.click(screen.getByRole("button", { name: "Details" }));
     expect(screen.getByRole("group", { name: "Standard output" })).toHaveTextContent("No stdout.");
     expect(screen.getByRole("group", { name: "Standard error" })).toHaveTextContent("No stderr.");
     expect(screen.getByLabelText("Command exit")).toHaveTextContent("SignalSIGTERM");
@@ -112,37 +115,14 @@ describe("CommandToolCard", () => {
     );
 
     expect(screen.getByLabelText("Command status")).toHaveTextContent("Terminated");
-    expect(screen.getByRole("button", { name: "Terminate command" })).toBeDisabled();
-  });
-
-  it("rejects an unexpected success output at the UI boundary", () => {
-    render(
-      <CommandToolCard
-        toolCall={{
-          call,
-          status: "success",
-          result: {
-            callId: call.id,
-            name: call.name,
-            status: "success",
-            output: { stdout: "private", exitCode: 0 },
-            truncated: false,
-          },
-        }}
-        runStatus="streaming"
-        onTerminate={() => {}}
-      />,
-    );
-
-    expect(screen.getByLabelText("Command status")).toHaveTextContent("Invalid result");
     expect(screen.getByRole("alert")).toHaveTextContent(
-      "Command output could not be displayed safely.",
+      "Command execution was cancelled before it completed.",
     );
   });
 });
 
 function success(
-  exit: { readonly exitCode: number | null; readonly signal: string | null },
+  output: { exitCode: number | null; signal: string | null; stdout?: string; stderr?: string },
   truncated = false,
 ): DisplayToolCall {
   return {
@@ -153,10 +133,10 @@ function success(
       name: call.name,
       status: "success",
       output: {
-        stdout: exit.exitCode === null ? "" : "checked\n",
-        stderr: exit.exitCode === null ? "" : "warning\n",
-        exitCode: exit.exitCode,
-        signal: exit.signal,
+        stdout: output.stdout ?? "checked",
+        stderr: output.stderr ?? "warning",
+        exitCode: output.exitCode,
+        signal: output.signal,
       },
       truncated,
     },

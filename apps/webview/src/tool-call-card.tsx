@@ -25,14 +25,15 @@ export function ToolCallCard({
   runStatus = "idle",
   onTerminate = () => {},
 }: ToolCallCardProps) {
-  const [isExpanded, setIsExpanded] = useState(
-    () =>
-      toolCall.status === "running" || toolCall.status === "pending" || toolCall.status === "error",
-  );
+  const [userExpanded, setUserExpanded] = useState<boolean | null>(null);
 
   if (toolCall.call.name === "run_command") {
     return <CommandToolCard toolCall={toolCall} runStatus={runStatus} onTerminate={onTerminate} />;
   }
+
+  const isExpanded =
+    userExpanded ??
+    (toolCall.status === "pending" || toolCall.status === "running" || toolCall.status === "error");
 
   const headingId = `tool-call-${toolCall.call.id}`;
   const badgeVariant =
@@ -60,7 +61,7 @@ export function ToolCallCard({
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => setIsExpanded((prev) => !prev)}
+          onClick={() => setUserExpanded(!isExpanded)}
           aria-expanded={isExpanded}
         >
           {isExpanded ? "Collapse" : "Details"}

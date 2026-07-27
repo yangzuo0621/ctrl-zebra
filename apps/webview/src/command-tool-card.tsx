@@ -16,6 +16,8 @@ interface CommandToolCardProps {
 
 export function CommandToolCard({ toolCall, runStatus, onTerminate }: CommandToolCardProps) {
   const [terminationRequested, setTerminationRequested] = useState(false);
+  const [userExpanded, setUserExpanded] = useState<boolean | null>(null);
+
   const headingId = `command-tool-${toolCall.call.id}`;
   const commandCancelled =
     runStatus === "cancelled" && (toolCall.status === "pending" || toolCall.status === "running");
@@ -42,6 +44,13 @@ export function CommandToolCard({ toolCall, runStatus, onTerminate }: CommandToo
           ? "info"
           : "default";
 
+  const isExpanded =
+    userExpanded ??
+    (toolCall.status === "pending" ||
+      toolCall.status === "running" ||
+      toolCall.status === "error" ||
+      visualStatus === "error");
+
   const output =
     toolCall.status === "success" ? runCommandOutputSchema.safeParse(toolCall.result.output) : null;
 
@@ -63,67 +72,87 @@ export function CommandToolCard({ toolCall, runStatus, onTerminate }: CommandToo
             run_command
           </h3>
         </div>
-        <Badge variant={badgeVariant}>
-          <span className={styles.state} role="status" aria-label="Command status">
-            {visibleStatus}
-          </span>
-        </Badge>
-      </header>
-
-      <fieldset className={styles.field}>
-        <legend className={styles.label}>Command request</legend>
-        <pre className={styles.code}>{JSON.stringify(toolCall.call.input, null, 2)}</pre>
-      </fieldset>
-
-      {toolCall.status === "success" && output?.success ? (
-        <div className={styles.result}>
-          <fieldset className={styles.field}>
-            <legend className={styles.label}>Standard output</legend>
-            <pre className={styles.output}>{output.data.stdout || "No stdout."}</pre>
-          </fieldset>
-          <fieldset className={styles.field}>
-            <legend className={styles.label}>Standard error</legend>
-            <pre className={styles.output}>{output.data.stderr || "No stderr."}</pre>
-          </fieldset>
-          <dl className={styles.exit} aria-label="Command exit">
-            <div>
-              <dt>Exit code</dt>
-              <dd>{output.data.exitCode === null ? "None" : output.data.exitCode}</dd>
-            </div>
-            <div>
-              <dt>Signal</dt>
-              <dd>{output.data.signal ?? "None"}</dd>
-            </div>
-          </dl>
-          {toolCall.result.truncated ? (
-            <p className={styles.note}>Command output truncated.</p>
-          ) : null}
-        </div>
-      ) : null}
-
-      {toolCall.status === "success" && output !== null && !output.success ? (
-        <p className={styles.error} role="alert">
-          Command output could not be displayed safely.
-        </p>
-      ) : null}
-
-      {toolCall.status === "error" ? (
-        <p className={styles.error} role="alert">
-          {toolCall.result.error.message}
-        </p>
-      ) : null}
-
-      {toolCall.status === "running" ? (
-        <div className={styles.actions}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <Badge variant={badgeVariant}>
+            <span className={styles.state} role="status" aria-label="Command status">
+              {visibleStatus}
+            </span>
+          </Badge>
           <Button
-            variant="secondary"
-            className={styles.terminateButton}
-            onClick={terminate}
-            disabled={!canTerminate}
+            variant="ghost"
+            size="sm"
+            onClick={() => setUserExpanded(!isExpanded)}
+            aria-expanded={isExpanded}
           >
-            Terminate command
+            {isExpanded ? "Collapse" : "Details"}
           </Button>
         </div>
+      </header>
+
+      {isExpanded ? (
+        <>
+          <fieldset className={styles.field}>
+            <legend className={styles.label}>Command request</legend>
+            <pre className={styles.code}>{JSON.stringify(toolCall.call.input, null, 2)}</pre>
+          </fieldset>
+
+          {commandCancelled ? (
+            <p className={styles.error} role="alert">
+              Command execution was cancelled before it completed.
+            </p>
+          ) : null}
+
+          {toolCall.status === "success" && output?.success ? (
+            <div className={styles.result}>
+              <fieldset className={styles.field}>
+                <legend className={styles.label}>Standard output</legend>
+                <pre className={styles.output}>{output.data.stdout || "No stdout."}</pre>
+              </fieldset>
+              <fieldset className={styles.field}>
+                <legend className={styles.label}>Standard error</legend>
+                <pre className={styles.output}>{output.data.stderr || "No stderr."}</pre>
+              </fieldset>
+              <dl className={styles.exit} aria-label="Command exit">
+                <div>
+                  <dt>Exit code</dt>
+                  <dd>{output.data.exitCode === null ? "None" : output.data.exitCode}</dd>
+                </div>
+                <div>
+                  <dt>Signal</dt>
+                  <dd>{output.data.signal ?? "None"}</dd>
+                </div>
+              </dl>
+              {toolCall.result.truncated ? (
+                <p className={styles.note}>Command output truncated.</p>
+              ) : null}
+            </div>
+          ) : null}
+
+          {toolCall.status === "success" && output !== null && !output.success ? (
+            <p className={styles.error} role="alert">
+              Command output could not be displayed safely.
+            </p>
+          ) : null}
+
+          {toolCall.status === "error" ? (
+            <p className={styles.error} role="alert">
+              {toolCall.result.error.message}
+            </p>
+          ) : null}
+
+          {toolCall.status === "running" ? (
+            <div className={styles.actions}>
+              <Button
+                variant="secondary"
+                className={styles.terminateButton}
+                onClick={terminate}
+                disabled={!canTerminate}
+              >
+                Terminate command
+              </Button>
+            </div>
+          ) : null}
+        </>
       ) : null}
     </article>
   );

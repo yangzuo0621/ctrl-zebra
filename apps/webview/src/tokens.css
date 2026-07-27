@@ -36,10 +36,16 @@
   --cz-radius-pill: 9999px;
 
   /* Color & Surface Tokens (VS Code CSS Variable Integration) */
-  --cz-color-bg: var(--vscode-sideBar-background, #1e1e1e);
-  --cz-color-fg: var(--vscode-sideBar-foreground, #cccccc);
-  --cz-color-muted: var(--vscode-disabledForeground, #858585);
-  --cz-color-border: var(--vscode-sideBarSectionHeader-border, rgba(255, 255, 255, 0.12));
+  --cz-color-bg: var(--vscode-sideBar-background, var(--vscode-editor-background, #1e1e1e));
+  --cz-color-fg: var(
+    --vscode-editor-foreground,
+    var(--vscode-foreground, var(--vscode-sideBar-foreground, #cccccc))
+  );
+  --cz-color-muted: var(--vscode-descriptionForeground, var(--vscode-disabledForeground, #717171));
+  --cz-color-border: var(
+    --vscode-panel-border,
+    var(--vscode-sideBarSectionHeader-border, rgba(128, 128, 128, 0.25))
+  );
 
   /* Button Tokens */
   --cz-color-primary-bg: var(--vscode-button-background, #0e639c);
@@ -52,9 +58,12 @@
 
   /* Form & Input Tokens */
   --cz-color-input-bg: var(--vscode-input-background, #252526);
-  --cz-color-input-fg: var(--vscode-input-foreground, #cccccc);
-  --cz-color-input-border: var(--vscode-input-border, #3c3c3c);
-  --cz-color-input-placeholder: var(--vscode-input-placeholderForeground, #a6a6a6);
+  --cz-color-input-fg: var(
+    --vscode-input-foreground,
+    var(--vscode-editor-foreground, var(--vscode-foreground, #cccccc))
+  );
+  --cz-color-input-border: var(--vscode-input-border, rgba(128, 128, 128, 0.35));
+  --cz-color-input-placeholder: var(--vscode-input-placeholderForeground, #717171);
 
   /* Focus Indicator Tokens */
   --cz-color-focus-border: var(--vscode-focusBorder, #007acc);
@@ -65,23 +74,9 @@
   --cz-color-error-bg: var(--vscode-inputValidation-errorBackground, #5a1d1d);
   --cz-color-error-border: var(--vscode-inputValidation-errorBorder, #be1100);
 
-  --cz-color-warning-fg: var(--vscode-editorWarning-foreground, #cca700);
-  --cz-color-warning-bg: var(--vscode-inputValidation-warningBackground, #352a0b);
-  --cz-color-warning-border: var(--vscode-inputValidation-warningBorder, #b89500);
-
-  --cz-color-badge-bg: var(--vscode-badge-background, #4d4d4d);
-  --cz-color-badge-fg: var(--vscode-badge-foreground, #ffffff);
-
-  /* Motion & Transition Tokens */
-  --cz-transition-fast: 120ms cubic-bezier(0.4, 0, 0.2, 1);
-  --cz-transition-normal: 200ms cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  :root {
-    --cz-transition-fast: 0ms;
-    --cz-transition-normal: 0ms;
-  }
+  /* Animation Tokens */
+  --cz-transition-fast: 150ms ease;
+  --cz-transition-normal: 250ms ease;
 }
 
 @media (forced-colors: active) {
