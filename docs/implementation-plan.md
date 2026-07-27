@@ -156,7 +156,7 @@
 | 11 | T1104 | 已完成 | [#117](https://github.com/yangzuo0621/ctrl-zebra/pull/117) | 2026-07-27 |
 | 11 | T1105 | 已完成 | [#118](https://github.com/yangzuo0621/ctrl-zebra/pull/118) | 2026-07-27 |
 | 11 | T1106 | 已完成 | [#119](https://github.com/yangzuo0621/ctrl-zebra/pull/119) | 2026-07-27 |
-| 11 | T1107 | 进行中 | — | — |
+| 11 | T1107 | 已完成 | [#120](https://github.com/yangzuo0621/ctrl-zebra/pull/120) | 2026-07-27 |
 | 11 | T1108 | 待开始 | — | — |
 
 ---
