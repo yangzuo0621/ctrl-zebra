@@ -7,6 +7,7 @@ import { createApprovalStore } from "./approval-store.js";
 import { createChatStore, type DisplayMessage } from "./chat-store.js";
 import { CheckpointPanel } from "./checkpoint-panel.js";
 import { createCheckpointStore } from "./checkpoint-store.js";
+import { OnboardingCard } from "./onboarding-card.js";
 import { ToolCallCard } from "./tool-call-card.js";
 import { Button } from "./ui/button.js";
 import { getWebviewHost, type WebviewHost } from "./vscode-api.js";
@@ -146,7 +147,10 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
       <main className={styles.transcriptSection} aria-label="Conversation">
         <ol className={styles.transcript}>
           {messages.length === 0 ? (
-            <li className={styles.empty}>No messages yet.</li>
+            <li className={styles.empty}>
+              <OnboardingCard onSelectPrompt={(prompt) => setDraft(prompt)} />
+              <p className={styles.emptyText}>No messages yet.</p>
+            </li>
           ) : (
             messages.map((message) => (
               <li className={styles.message} data-role={message.role} key={message.id}>
