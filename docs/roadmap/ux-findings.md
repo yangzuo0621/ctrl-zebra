@@ -14,8 +14,9 @@
 
 - `观察中`：初次记录的现象或设计设想，尚需收集更多场景或反馈。
 - `待验证`：已完成代码调整或已实现初步方案，正等待可用性走查或用户验证。
-- `已转任务`：已收敛并转化为具体的 Roadmap Task。
-- `已归档`：已被规范 ([ux.md](../ux.md)) 吸收合并，或决定不处理。
+- `已确认回归`：涉及现有安全或架构契约违例的确认缺陷，需强制独立开辟修复 Task。在修复 Task 创建并明确边界后转换为 `已转任务`。
+- `已转任务`：已收敛或已确认需修复，并已转化为具体的 Roadmap Task。
+- `已归档`：已被规范 ([ux.md](../ux.md)) 吸收合并、修复合入主干，或决定不处理。
 
 ---
 
@@ -32,5 +33,19 @@
 - **影响场景**：文件修改审批、命令执行审批。
 - **关联 PR**：[#122](https://github.com/yangzuo0621/ctrl-zebra/pull/122), [#123](https://github.com/yangzuo0621/ctrl-zebra/pull/123), [#124](https://github.com/yangzuo0621/ctrl-zebra/pull/124), [#125](https://github.com/yangzuo0621/ctrl-zebra/pull/125), [#126](https://github.com/yangzuo0621/ctrl-zebra/pull/126)
 - **验证与规范状态**：
-  - 需进一步验证用户在面对复杂/高风险操作时是否仍需要一键展开查看完整原始 JSON 的能力。
-  - 确定有效部分后续补充写入 `docs/ux.md`。
+  - [ux.md](../ux.md) 2.3 与第 5 节已更新，精准同步当前已落地的 UI 行为（待审批状态下通过 Inline Approval Fusion 置换隐藏原始 Tool JSON 参数，优先呈现操作动作、结构化 URI、Diff 与时效）。
+  - **待验证项（保留在台账中）**：在复杂或高风险操作决策中，用户是否需要在待审批卡片内提供额外的嵌套展开控件以查看完整原始 Tool JSON 参数。由于目前尚缺乏可用性走查与用户验证证据，该项保持 `待验证` 状态，不作为已确认规则。
+
+### UX-002：PR #126 嵌式审批卡隐去风险等级标识（确定性安全回归）
+
+- **状态**：`已确认回归`
+- **发现来源**：PR #126 / PR #128 Review 审查 ([security.md](../security.md) 强制契约校验)
+- **问题定义与契约冲突**：
+  - [security.md](../security.md) 明确规定：审批 UI 为不可变 Request 的安全投影，必须展示包含工具/效果、目标资源、工作区、**风险** (`risk`)、有效时间及 Diff 在内的完整边界。
+  - 在 PR #126 引入的 Inline Approval Fusion 模式下（`embedded` 为 true），`ApprovalCard` 隐藏了头部包含的 `write`/`execute` 风险等级 Badge，外层卡片 Badge 仅显示 `Awaiting Decision`。
+  - 此项隐去风险标识的行为违反了 [security.md](../security.md) 的强制安全边界要求，属于 PR #126 引入的**确定性安全/规范回归**，不能作为可选 UX 设想进行延迟评估，也不能在 [ux.md](../ux.md) 中被正当化。
+- **影响场景**：文件修改审批、命令执行审批。
+- **关联 PR**：[#126](https://github.com/yangzuo0621/ctrl-zebra/pull/126), [#128](https://github.com/yangzuo0621/ctrl-zebra/pull/128)
+- **后续处理**：
+  - [ux.md](../ux.md) 保持 [security.md](../security.md) 的安全要求，明确规定待审批呈现必须包含显性风险等级标识。
+  - 必须设立有明确边界的 Webview 修复 Task，在内嵌审批卡片或外层卡片中恢复显式的 `write`/`execute` 风险等级标识。
