@@ -26,7 +26,8 @@ export function ToolCallCard({
   onTerminate = () => {},
 }: ToolCallCardProps) {
   const [isExpanded, setIsExpanded] = useState(
-    () => toolCall.status === "running" || toolCall.status === "pending",
+    () =>
+      toolCall.status === "running" || toolCall.status === "pending" || toolCall.status === "error",
   );
 
   if (toolCall.call.name === "run_command") {
