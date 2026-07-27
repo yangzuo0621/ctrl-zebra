@@ -2,6 +2,8 @@ import { useStore } from "zustand";
 import type { StoreApi } from "zustand/vanilla";
 import styles from "./checkpoint-panel.module.css";
 import type { CheckpointState } from "./checkpoint-store.js";
+import { Badge } from "./ui/badge.js";
+import { Button } from "./ui/button.js";
 
 export function CheckpointPanel({ store }: { readonly store: StoreApi<CheckpointState> }) {
   const checkpoints = useStore(store, (state) => state.checkpoints);
@@ -13,7 +15,15 @@ export function CheckpointPanel({ store }: { readonly store: StoreApi<Checkpoint
 
   return (
     <section className={styles.panel} aria-labelledby="checkpoints-title">
-      <h2 id="checkpoints-title">Agent changes</h2>
+      <div className={styles.panelHeader}>
+        <h2 id="checkpoints-title">Agent changes</h2>
+        {status === "restoring" ? (
+          <Badge variant="info">Restoring…</Badge>
+        ) : selectedCheckpoint ? (
+          <Badge variant="default">{selectedCheckpoint.files.length} file(s)</Badge>
+        ) : null}
+      </div>
+
       <div className={styles.controls}>
         <select
           aria-label="Checkpoint"
@@ -28,20 +38,22 @@ export function CheckpointPanel({ store }: { readonly store: StoreApi<Checkpoint
             </option>
           ))}
         </select>
-        <button
-          type="button"
+        <Button
+          variant="secondary"
+          size="sm"
           onClick={() => store.getState().load()}
           disabled={status === "restoring"}
         >
           Refresh changes
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
           onClick={() => store.getState().restoreSelected()}
           disabled={selected === undefined || status === "restoring"}
         >
           Restore change
-        </button>
+        </Button>
       </div>
       {selectedCheckpoint === undefined ? null : (
         <ul className={styles.targets} aria-label="Checkpoint targets">
