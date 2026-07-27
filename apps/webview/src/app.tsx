@@ -198,10 +198,12 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
             </li>
           ) : (
             messages.map((message) => (
-              <li className={styles.message} data-role={message.role} key={message.id}>
-                <span className={styles.messageRole}>
-                  {message.role === "user" ? "You" : "Agent"}
-                </span>
+              <li
+                className={styles.message}
+                data-role={message.role}
+                key={message.id}
+                aria-label={message.role === "user" ? "Your message" : "Agent message"}
+              >
                 <MarkdownMessage content={messageContent(message, status)} />
                 {message.toolCalls.map((toolCall) => (
                   <ToolCallCard
@@ -246,37 +248,42 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
         )}
 
         <form className={styles.composer} onSubmit={handleSubmit}>
-          <div className={styles.composerHeader}>
-            <label className={styles.label} htmlFor="chat-message">
+          <div className={styles.composerBox}>
+            <label className={styles.srOnly} htmlFor="chat-message">
               Message
             </label>
-            <span className={styles.composerHint}>Enter to send, Shift+Enter for line break</span>
-          </div>
-          <textarea
-            className={styles.input}
-            id="chat-message"
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={handleKeyDown}
-            onCompositionStart={() => setIsComposing(true)}
-            onCompositionEnd={() => setIsComposing(false)}
-            rows={3}
-            disabled={activeRequestId !== undefined}
-          />
-          <div className={styles.actions}>
-            <Button
-              type="submit"
-              disabled={activeRequestId !== undefined || draft.trim().length === 0}
-            >
-              Send
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={() => store.getState().cancel()}
-              disabled={activeRequestId === undefined}
-            >
-              Cancel
-            </Button>
+            <textarea
+              className={styles.input}
+              id="chat-message"
+              placeholder="Describe what to build or ask a question…"
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={handleKeyDown}
+              onCompositionStart={() => setIsComposing(true)}
+              onCompositionEnd={() => setIsComposing(false)}
+              rows={3}
+              disabled={activeRequestId !== undefined}
+            />
+            <div className={styles.composerFooter}>
+              <span className={styles.composerHint}>Enter to send, Shift+Enter for line break</span>
+              <div className={styles.actions}>
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={activeRequestId !== undefined || draft.trim().length === 0}
+                >
+                  Send
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => store.getState().cancel()}
+                  disabled={activeRequestId === undefined}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
           </div>
         </form>
 
