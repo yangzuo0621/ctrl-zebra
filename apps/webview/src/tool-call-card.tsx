@@ -25,7 +25,9 @@ export function ToolCallCard({
   runStatus = "idle",
   onTerminate = () => {},
 }: ToolCallCardProps) {
-  const [isExpanded, setIsExpanded] = useState(true);
+  const [isExpanded, setIsExpanded] = useState(
+    () => toolCall.status === "running" || toolCall.status === "pending",
+  );
 
   if (toolCall.call.name === "run_command") {
     return <CommandToolCard toolCall={toolCall} runStatus={runStatus} onTerminate={onTerminate} />;
@@ -98,6 +100,8 @@ function formatJson(value: JsonValue): string {
 
 function summarizeJson(value: JsonValue): string {
   const formatted = formatJson(value);
-  const maxCharacters = 500;
-  return formatted.length <= maxCharacters ? formatted : `${formatted.slice(0, maxCharacters)}…`;
+  if (formatted.length <= 1200) {
+    return formatted;
+  }
+  return `${formatted.slice(0, 1200)}\n… (truncated)`;
 }
