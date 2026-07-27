@@ -17,9 +17,7 @@ export function Notice({
   role = variant === "error" ? "alert" : "status",
   ...props
 }: NoticeProps) {
-  const classNames = [styles.notice, styles[variant], className]
-    .filter(Boolean)
-    .join(" ");
+  const classNames = [styles.notice, styles[variant], className].filter(Boolean).join(" ");
 
   return (
     <div className={classNames} role={role} {...props}>

@@ -16,9 +16,7 @@ export function Card({
   children,
   ...props
 }: CardProps) {
-  const classNames = [styles.card, styles[variant], className]
-    .filter(Boolean)
-    .join(" ");
+  const classNames = [styles.card, styles[variant], className].filter(Boolean).join(" ");
 
   return (
     <div className={classNames} {...props}>

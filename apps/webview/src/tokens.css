@@ -2,7 +2,16 @@
 
 :root {
   /* Typography Tokens */
-  --cz-font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);
+  --cz-font-family: var(
+    --vscode-font-family,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    Helvetica,
+    Arial,
+    sans-serif
+  );
   --cz-font-size-xs: 11px;
   --cz-font-size-sm: 12px;
   --cz-font-size-md: 13px;

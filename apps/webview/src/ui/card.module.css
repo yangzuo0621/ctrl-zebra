@@ -16,7 +16,9 @@
 
 .interactive {
   cursor: pointer;
-  transition: border-color var(--cz-transition-fast), background-color var(--cz-transition-fast);
+  transition:
+    border-color var(--cz-transition-fast),
+    background-color var(--cz-transition-fast);
 }
 
 .interactive:hover {

@@ -15,12 +15,7 @@ export function Button({
   children,
   ...props
 }: ButtonProps) {
-  const classNames = [
-    styles.button,
-    styles[variant],
-    styles[size],
-    className,
-  ]
+  const classNames = [styles.button, styles[variant], styles[size], className]
     .filter(Boolean)
     .join(" ");
 

@@ -7,13 +7,7 @@ export interface EmptyStateProps extends HTMLAttributes<HTMLDivElement> {
   readonly action?: ReactNode;
 }
 
-export function EmptyState({
-  title,
-  description,
-  action,
-  className,
-  ...props
-}: EmptyStateProps) {
+export function EmptyState({ title, description, action, className, ...props }: EmptyStateProps) {
   const classNames = [styles.emptyState, className].filter(Boolean).join(" ");
 
   return (

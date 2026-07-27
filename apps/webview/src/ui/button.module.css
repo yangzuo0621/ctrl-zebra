@@ -11,7 +11,10 @@
   border: 1px solid transparent;
   padding: var(--cz-space-2) var(--cz-space-3);
   cursor: pointer;
-  transition: background-color var(--cz-transition-fast), border-color var(--cz-transition-fast), opacity var(--cz-transition-fast);
+  transition:
+    background-color var(--cz-transition-fast),
+    border-color var(--cz-transition-fast),
+    opacity var(--cz-transition-fast);
   user-select: none;
   white-space: nowrap;
 }
