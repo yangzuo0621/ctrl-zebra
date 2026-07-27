@@ -620,4 +620,35 @@ describe("App streaming chat", () => {
       "Explain workspace structure",
     );
   });
+
+  it("submits message on Enter key without Shift and renders code blocks safely (T1105)", async () => {
+    const host = new FakeWebviewHost();
+    const user = userEvent.setup();
+    render(<App host={host} createRequestId={() => "request-enter"} />);
+
+    const input = screen.getByRole("textbox", { name: "Message" });
+    await user.type(input, "Generate code{Enter}");
+
+    expect(host.sent).toEqual([
+      {
+        protocolVersion,
+        type: "webview/submit",
+        requestId: "request-enter",
+        content: "Generate code",
+      },
+    ]);
+
+    act(() => {
+      host.emit({
+        protocolVersion,
+        type: "extension/text-delta",
+        requestId: "request-enter",
+        text: "Here is code:\n```ts\nconst x = 42;\n```",
+      });
+      animationFrames[0]?.(0);
+    });
+
+    expect(screen.getByText("const x = 42;")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Copy" })).toBeVisible();
+  });
 });

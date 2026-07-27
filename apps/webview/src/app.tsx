@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
 
 import styles from "./app.module.css";
@@ -7,6 +7,7 @@ import { createApprovalStore } from "./approval-store.js";
 import { createChatStore, type DisplayMessage } from "./chat-store.js";
 import { CheckpointPanel } from "./checkpoint-panel.js";
 import { createCheckpointStore } from "./checkpoint-store.js";
+import { MarkdownMessage } from "./markdown-message.js";
 import { OnboardingCard } from "./onboarding-card.js";
 import { ToolCallCard } from "./tool-call-card.js";
 import { Button } from "./ui/button.js";
@@ -52,6 +53,10 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
   );
   const [draft, setDraft] = useState("");
   const [showSessionsDrawer, setShowSessionsDrawer] = useState(false);
+  const [isComposing, setIsComposing] = useState(false);
+  const [userScrolledUp, setUserScrolledUp] = useState(false);
+
+  const mainRef = useRef<HTMLDivElement>(null);
 
   const messages = useStore(store, (state) => state.messages);
   const status = useStore(store, (state) => state.status);
@@ -75,10 +80,45 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
     };
   }, [approvalStore, checkpointStore, host, store]);
 
+  // Scroll to bottom when new messages arrive unless user scrolled up
+  // biome-ignore lint/correctness/useExhaustiveDependencies: scroll on message updates
+  useEffect(() => {
+    if (!userScrolledUp && mainRef.current) {
+      mainRef.current.scrollTop = mainRef.current.scrollHeight;
+    }
+  }, [messages, userScrolledUp]);
+
+  const handleScroll = () => {
+    if (!mainRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = mainRef.current;
+    const isAtBottom = scrollHeight - scrollTop - clientHeight < 50;
+    setUserScrolledUp(!isAtBottom);
+  };
+
+  const scrollToBottom = () => {
+    if (mainRef.current) {
+      mainRef.current.scrollTop = mainRef.current.scrollHeight;
+      setUserScrolledUp(false);
+    }
+  };
+
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (store.getState().submit(draft)) {
       setDraft("");
+      setUserScrolledUp(false);
+    }
+  };
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === "Enter" && !event.shiftKey && !isComposing) {
+      event.preventDefault();
+      if (draft.trim().length > 0 && activeRequestId === undefined) {
+        if (store.getState().submit(draft)) {
+          setDraft("");
+          setUserScrolledUp(false);
+        }
+      }
     }
   };
 
@@ -144,7 +184,12 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
         </section>
       ) : null}
 
-      <main className={styles.transcriptSection} aria-label="Conversation">
+      <main
+        ref={mainRef}
+        onScroll={handleScroll}
+        className={styles.transcriptSection}
+        aria-label="Conversation"
+      >
         <ol className={styles.transcript}>
           {messages.length === 0 ? (
             <li className={styles.empty}>
@@ -157,7 +202,7 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
                 <span className={styles.messageRole}>
                   {message.role === "user" ? "You" : "Agent"}
                 </span>
-                <p>{messageContent(message, status)}</p>
+                <MarkdownMessage content={messageContent(message, status)} />
                 {message.toolCalls.map((toolCall) => (
                   <ToolCallCard
                     key={toolCall.call.id}
@@ -170,6 +215,17 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
             ))
           )}
         </ol>
+
+        {userScrolledUp ? (
+          <button
+            type="button"
+            className={styles.jumpBottomButton}
+            onClick={scrollToBottom}
+            aria-label="Scroll to newest messages"
+          >
+            ↓ Jump to bottom
+          </button>
+        ) : null}
 
         {approval === undefined ? null : (
           <ApprovalCard
@@ -190,14 +246,20 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
         )}
 
         <form className={styles.composer} onSubmit={handleSubmit}>
-          <label className={styles.label} htmlFor="chat-message">
-            Message
-          </label>
+          <div className={styles.composerHeader}>
+            <label className={styles.label} htmlFor="chat-message">
+              Message
+            </label>
+            <span className={styles.composerHint}>Enter to send, Shift+Enter for line break</span>
+          </div>
           <textarea
             className={styles.input}
             id="chat-message"
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={handleKeyDown}
+            onCompositionStart={() => setIsComposing(true)}
+            onCompositionEnd={() => setIsComposing(false)}
             rows={3}
             disabled={activeRequestId !== undefined}
           />
