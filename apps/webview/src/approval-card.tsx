@@ -1,6 +1,9 @@
 import type { ApprovalDecisionIntent } from "@ctrl-zebra/protocol";
+
 import styles from "./approval-card.module.css";
 import type { DisplayApproval } from "./approval-store.js";
+import { Badge } from "./ui/badge.js";
+import { Button } from "./ui/button.js";
 
 interface ApprovalCardProps {
   readonly item: DisplayApproval;
@@ -51,7 +54,9 @@ export function ApprovalCard({
             {item.approval.presentation.title}
           </h2>
         </div>
-        <span className={styles.risk}>{item.approval.scope.risk}</span>
+        <Badge variant={item.approval.scope.risk === "execute" ? "error" : "warning"}>
+          {item.approval.scope.risk}
+        </Badge>
       </header>
 
       {commandApproval ? (
@@ -79,31 +84,16 @@ export function ApprovalCard({
 
       <div className={styles.actions}>
         {commandApproval ? null : (
-          <button
-            className={styles.secondaryButton}
-            type="button"
-            onClick={onViewDiff}
-            disabled={!interactive}
-          >
+          <Button variant="secondary" onClick={onViewDiff} disabled={!interactive}>
             View Diff
-          </button>
+          </Button>
         )}
-        <button
-          className={styles.secondaryButton}
-          type="button"
-          onClick={onReject}
-          disabled={!interactive}
-        >
+        <Button variant="secondary" onClick={onReject} disabled={!interactive}>
           Reject
-        </button>
-        <button
-          className={styles.primaryButton}
-          type="button"
-          onClick={onApprove}
-          disabled={!interactive}
-        >
+        </Button>
+        <Button variant="primary" onClick={onApprove} disabled={!interactive}>
           Approve
-        </button>
+        </Button>
       </div>
     </article>
   );
