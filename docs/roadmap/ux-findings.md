@@ -32,5 +32,5 @@
 - **影响场景**：文件修改审批、命令执行审批。
 - **关联 PR**：[#122](https://github.com/yangzuo0621/ctrl-zebra/pull/122), [#123](https://github.com/yangzuo0621/ctrl-zebra/pull/123), [#124](https://github.com/yangzuo0621/ctrl-zebra/pull/124), [#125](https://github.com/yangzuo0621/ctrl-zebra/pull/125), [#126](https://github.com/yangzuo0621/ctrl-zebra/pull/126)
 - **验证与规范状态**：
-  - 确定有效的交互规则（Inline Approval Fusion、原始 JSON 渐进披露）已写入 [ux.md](../ux.md) 2.3 及第 5 节。
-  - 待后续在更多复杂/高风险操作场景下进一步走查用户体验。
+  - [ux.md](../ux.md) 2.3 与第 5 节已更新，精准同步当前已落地的 UI 行为（待审批状态下通过 Inline Approval Fusion 置换隐藏原始 Tool JSON 参数，优先呈现操作动作、结构化 URI、Diff 与时效）。
+  - **待验证项（保留在台账中）**：在复杂或高风险操作决策中，用户是否需要在待审批卡片内提供额外的嵌套展开控件以查看完整原始 Tool JSON 参数。由于目前尚缺乏可用性走查与用户验证证据，该项保持 `待验证` 状态，不作为已确认规则。
