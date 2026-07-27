@@ -204,7 +204,6 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
                 key={message.id}
                 aria-label={message.role === "user" ? "Your message" : "Agent message"}
               >
-                <MarkdownMessage content={messageContent(message, status)} />
                 {message.toolCalls.map((toolCall) => (
                   <ToolCallCard
                     key={toolCall.call.id}
@@ -213,6 +212,7 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
                     onTerminate={() => store.getState().cancel()}
                   />
                 ))}
+                <MarkdownMessage content={messageContent(message, status)} />
               </li>
             ))
           )}

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import type { DisplayToolCall } from "./chat-store.js";
@@ -29,7 +29,7 @@ describe("ToolCallCard", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
-  it("renders a bounded success summary and truncation marker", () => {
+  it("renders a bounded success summary and truncation marker when expanded", () => {
     const toolCall = {
       call,
       status: "success",
@@ -45,6 +45,10 @@ describe("ToolCallCard", () => {
     render(<ToolCallCard toolCall={toolCall} />);
 
     expect(screen.getByLabelText("Tool status")).toHaveTextContent("Success");
+    expect(screen.queryByRole("group", { name: "Result" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Details" }));
+
     expect(screen.getByRole("group", { name: "Result" })).toHaveTextContent('"content": "hello"');
     expect(screen.getByText("Result truncated.")).toBeVisible();
   });
