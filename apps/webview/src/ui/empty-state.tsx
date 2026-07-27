@@ -1,7 +1,7 @@
 import type { HTMLAttributes, ReactNode } from "react";
 import styles from "./empty-state.module.css";
 
-export interface EmptyStateProps extends HTMLAttributes<HTMLDivElement> {
+export interface EmptyStateProps extends Omit<HTMLAttributes<HTMLDivElement>, "title"> {
   readonly title: ReactNode;
   readonly description?: ReactNode;
   readonly action?: ReactNode;

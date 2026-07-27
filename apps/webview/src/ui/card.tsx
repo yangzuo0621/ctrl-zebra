@@ -1,7 +1,7 @@
 import type { HTMLAttributes, ReactNode } from "react";
 import styles from "./card.module.css";
 
-export interface CardProps extends HTMLAttributes<HTMLDivElement> {
+export interface CardProps extends Omit<HTMLAttributes<HTMLDivElement>, "title"> {
   readonly variant?: "default" | "interactive" | "warning" | "error";
   readonly title?: ReactNode;
   readonly headerAction?: ReactNode;

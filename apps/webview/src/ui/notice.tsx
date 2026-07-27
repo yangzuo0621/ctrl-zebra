@@ -1,7 +1,7 @@
 import type { HTMLAttributes, ReactNode } from "react";
 import styles from "./notice.module.css";
 
-export interface NoticeProps extends HTMLAttributes<HTMLDivElement> {
+export interface NoticeProps extends Omit<HTMLAttributes<HTMLDivElement>, "title"> {
   readonly variant?: "info" | "warning" | "error";
   readonly title?: ReactNode;
   readonly action?: ReactNode;
