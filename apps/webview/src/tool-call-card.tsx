@@ -1,16 +1,23 @@
-import type { JsonValue } from "@ctrl-zebra/protocol";
+import type { ApprovalDecisionIntent, JsonValue } from "@ctrl-zebra/protocol";
 import { useState } from "react";
 
+import { ApprovalCard } from "./approval-card.js";
+import type { DisplayApproval } from "./approval-store.js";
 import type { DisplayToolCall } from "./chat-store.js";
 import { CommandToolCard, type DisplayRunStatus } from "./command-tool-card.js";
 import styles from "./tool-call-card.module.css";
 import { Badge } from "./ui/badge.js";
 import { Button } from "./ui/button.js";
 
-interface ToolCallCardProps {
+export interface ToolCallCardProps {
   readonly toolCall: DisplayToolCall;
   readonly runStatus?: DisplayRunStatus;
+  readonly approval?: DisplayApproval;
+  readonly pendingDecision?: ApprovalDecisionIntent;
   readonly onTerminate?: () => void;
+  readonly onViewDiff?: () => void;
+  readonly onApprove?: () => void;
+  readonly onReject?: () => void;
 }
 
 const statusLabels = {
@@ -23,27 +30,50 @@ const statusLabels = {
 export function ToolCallCard({
   toolCall,
   runStatus = "idle",
+  approval,
+  pendingDecision,
   onTerminate = () => {},
+  onViewDiff = () => {},
+  onApprove = () => {},
+  onReject = () => {},
 }: ToolCallCardProps) {
   const [userExpanded, setUserExpanded] = useState<boolean | null>(null);
 
   if (toolCall.call.name === "run_command") {
-    return <CommandToolCard toolCall={toolCall} runStatus={runStatus} onTerminate={onTerminate} />;
+    return (
+      <CommandToolCard
+        toolCall={toolCall}
+        runStatus={runStatus}
+        approval={approval}
+        pendingDecision={pendingDecision}
+        onTerminate={onTerminate}
+        onViewDiff={onViewDiff}
+        onApprove={onApprove}
+        onReject={onReject}
+      />
+    );
   }
 
+  const isAwaitingApproval = approval !== undefined;
   const isExpanded =
     userExpanded ??
-    (toolCall.status === "pending" || toolCall.status === "running" || toolCall.status === "error");
+    (isAwaitingApproval ||
+      toolCall.status === "pending" ||
+      toolCall.status === "running" ||
+      toolCall.status === "error");
 
   const headingId = `tool-call-${toolCall.call.id}`;
-  const badgeVariant =
-    toolCall.status === "success"
+  const badgeVariant = isAwaitingApproval
+    ? "warning"
+    : toolCall.status === "success"
       ? "success"
       : toolCall.status === "error"
         ? "error"
         : toolCall.status === "running"
           ? "info"
           : "default";
+
+  const badgeText = isAwaitingApproval ? "Awaiting Decision" : statusLabels[toolCall.status];
 
   return (
     <article aria-labelledby={headingId} className={styles.card} data-status={toolCall.status}>
@@ -54,7 +84,7 @@ export function ToolCallCard({
           </h3>
           <Badge variant={badgeVariant}>
             <span className={styles.state} role="status" aria-label="Tool status">
-              {statusLabels[toolCall.status]}
+              {badgeText}
             </span>
           </Badge>
         </div>
@@ -70,10 +100,21 @@ export function ToolCallCard({
 
       {isExpanded ? (
         <>
-          <fieldset className={styles.field}>
-            <legend className={styles.label}>Arguments</legend>
-            <pre className={styles.code}>{formatJson(toolCall.call.input)}</pre>
-          </fieldset>
+          {isAwaitingApproval ? (
+            <ApprovalCard
+              embedded
+              item={approval}
+              pendingDecision={pendingDecision}
+              onViewDiff={onViewDiff}
+              onApprove={onApprove}
+              onReject={onReject}
+            />
+          ) : (
+            <fieldset className={styles.field}>
+              <legend className={styles.label}>Arguments</legend>
+              <pre className={styles.code}>{formatJson(toolCall.call.input)}</pre>
+            </fieldset>
+          )}
 
           {toolCall.status === "success" ? (
             <div className={styles.result}>

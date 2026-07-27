@@ -1,6 +1,12 @@
-import { type RunStatus, runCommandOutputSchema } from "@ctrl-zebra/protocol";
+import {
+  type ApprovalDecisionIntent,
+  type RunStatus,
+  runCommandOutputSchema,
+} from "@ctrl-zebra/protocol";
 import { useState } from "react";
 
+import { ApprovalCard } from "./approval-card.js";
+import type { DisplayApproval } from "./approval-store.js";
 import type { DisplayToolCall } from "./chat-store.js";
 import styles from "./command-tool-card.module.css";
 import { Badge } from "./ui/badge.js";
@@ -11,13 +17,28 @@ export type DisplayRunStatus = "idle" | "interrupted" | RunStatus;
 interface CommandToolCardProps {
   readonly toolCall: DisplayToolCall;
   readonly runStatus: DisplayRunStatus;
+  readonly approval?: DisplayApproval;
+  readonly pendingDecision?: ApprovalDecisionIntent;
   readonly onTerminate: () => void;
+  readonly onViewDiff?: () => void;
+  readonly onApprove?: () => void;
+  readonly onReject?: () => void;
 }
 
-export function CommandToolCard({ toolCall, runStatus, onTerminate }: CommandToolCardProps) {
+export function CommandToolCard({
+  toolCall,
+  runStatus,
+  approval,
+  pendingDecision,
+  onTerminate,
+  onViewDiff = () => {},
+  onApprove = () => {},
+  onReject = () => {},
+}: CommandToolCardProps) {
   const [terminationRequested, setTerminationRequested] = useState(false);
   const [userExpanded, setUserExpanded] = useState<boolean | null>(null);
 
+  const isAwaitingApproval = approval !== undefined;
   const headingId = `command-tool-${toolCall.call.id}`;
   const commandCancelled =
     runStatus === "cancelled" && (toolCall.status === "pending" || toolCall.status === "running");
@@ -27,16 +48,19 @@ export function CommandToolCard({ toolCall, runStatus, onTerminate }: CommandToo
     toolCall.status === "running" &&
     (runStatus === "preparing" || runStatus === "streaming") &&
     !terminationRequested;
-  const visibleStatus = commandCancelled
-    ? "Terminated"
-    : commandInterrupted
-      ? "Interrupted"
-      : terminationRequested && toolCall.status === "running"
-        ? "Terminating…"
-        : commandStatus(toolCall);
+  const visibleStatus = isAwaitingApproval
+    ? "Awaiting Decision"
+    : commandCancelled
+      ? "Terminated"
+      : commandInterrupted
+        ? "Interrupted"
+        : terminationRequested && toolCall.status === "running"
+          ? "Terminating…"
+          : commandStatus(toolCall);
   const visualStatus = commandCancelled || commandInterrupted ? "error" : toolCall.status;
-  const badgeVariant =
-    visualStatus === "success"
+  const badgeVariant = isAwaitingApproval
+    ? "warning"
+    : visualStatus === "success"
       ? "success"
       : visualStatus === "error"
         ? "error"
@@ -46,7 +70,8 @@ export function CommandToolCard({ toolCall, runStatus, onTerminate }: CommandToo
 
   const isExpanded =
     userExpanded ??
-    (toolCall.status === "pending" ||
+    (isAwaitingApproval ||
+      toolCall.status === "pending" ||
       toolCall.status === "running" ||
       toolCall.status === "error" ||
       visualStatus === "error");
@@ -91,10 +116,21 @@ export function CommandToolCard({ toolCall, runStatus, onTerminate }: CommandToo
 
       {isExpanded ? (
         <>
-          <fieldset className={styles.field}>
-            <legend className={styles.label}>Command request</legend>
-            <pre className={styles.code}>{JSON.stringify(toolCall.call.input, null, 2)}</pre>
-          </fieldset>
+          {isAwaitingApproval ? (
+            <ApprovalCard
+              embedded
+              item={approval}
+              pendingDecision={pendingDecision}
+              onViewDiff={onViewDiff}
+              onApprove={onApprove}
+              onReject={onReject}
+            />
+          ) : (
+            <fieldset className={styles.field}>
+              <legend className={styles.label}>Command request</legend>
+              <pre className={styles.code}>{JSON.stringify(toolCall.call.input, null, 2)}</pre>
+            </fieldset>
+          )}
 
           {commandCancelled ? (
             <p className={styles.error} role="alert">

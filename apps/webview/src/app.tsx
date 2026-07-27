@@ -122,6 +122,10 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
     }
   };
 
+  const hasInlineApproval =
+    approval !== undefined &&
+    messages.some((m) => m.toolCalls.some((tc) => tc.call.id === approval.approval.scope.call.id));
+
   return (
     <div className={styles.shell}>
       <header className={styles.header}>
@@ -209,7 +213,18 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
                     key={toolCall.call.id}
                     toolCall={toolCall}
                     runStatus={status}
+                    approval={
+                      approval?.approval.scope.call.id === toolCall.call.id ? approval : undefined
+                    }
+                    pendingDecision={
+                      approval?.approval.scope.call.id === toolCall.call.id
+                        ? pendingDecision
+                        : undefined
+                    }
                     onTerminate={() => store.getState().cancel()}
+                    onViewDiff={() => approvalStore.getState().showDiff()}
+                    onApprove={() => approvalStore.getState().decide("approved")}
+                    onReject={() => approvalStore.getState().decide("denied")}
                   />
                 ))}
                 <MarkdownMessage content={messageContent(message, status)} />
@@ -229,7 +244,7 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
           </button>
         ) : null}
 
-        {approval === undefined ? null : (
+        {approval === undefined || hasInlineApproval ? null : (
           <ApprovalCard
             item={approval}
             pendingDecision={pendingDecision}
