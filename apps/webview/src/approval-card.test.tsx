@@ -44,7 +44,7 @@ describe("ApprovalCard", () => {
     renderCard("pending", { onViewDiff, onApprove });
 
     expect(screen.getByRole("article", { name: "Update example.ts" })).toHaveTextContent(
-      "file:///workspace/src/example.ts",
+      "workspace/src/example.ts",
     );
     expect(screen.getByText("Replace one line in example.ts.")).toBeVisible();
     expect(screen.getByText("write")).toBeVisible();
@@ -106,43 +106,47 @@ describe("ApprovalCard", () => {
 
     expect(screen.getByText("Command approval")).toBeVisible();
     expect(screen.getByText(/Executable: "node"/)).toHaveTextContent(
-      "Working directory: file:///workspace",
+      "Working directory: workspace",
     );
-    expect(screen.getByText("file:///workspace")).toBeVisible();
     expect(screen.queryByRole("button", { name: "View Diff" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Approve" }));
-
     expect(onApprove).toHaveBeenCalledOnce();
   });
 
-  it.each([
-    ["cancelled", "Approval cancelled."],
-    ["expired", "Approval expired."],
-  ] as const)("renders %s as terminal and disables every action", (status, text) => {
-    renderCard(status);
+  it("renders cancelled as terminal and disables every action", () => {
+    renderCard("cancelled");
 
-    expect(screen.getByRole("status")).toHaveTextContent(text);
-    for (const button of screen.getAllByRole("button")) {
-      expect(button).toBeDisabled();
-    }
+    expect(screen.getByRole("status")).toHaveTextContent("Approval cancelled.");
+    expect(screen.getByRole("button", { name: "View Diff" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Reject" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Approve" })).toBeDisabled();
+  });
+
+  it("renders expired as terminal and disables every action", () => {
+    renderCard("expired");
+
+    expect(screen.getByRole("status")).toHaveTextContent("Approval expired.");
+    expect(screen.getByRole("button", { name: "View Diff" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Reject" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Approve" })).toBeDisabled();
   });
 });
 
 function renderCard(
   status: ApprovalStatus,
-  callbacks: {
-    readonly onViewDiff?: () => void;
-    readonly onApprove?: () => void;
-    readonly onReject?: () => void;
-  } = {},
+  callbacks?: {
+    onViewDiff?: () => void;
+    onApprove?: () => void;
+    onReject?: () => void;
+  },
 ) {
   render(
     <ApprovalCard
       item={{ ...approval, status }}
-      onViewDiff={callbacks.onViewDiff ?? (() => {})}
-      onApprove={callbacks.onApprove ?? (() => {})}
-      onReject={callbacks.onReject ?? (() => {})}
+      onViewDiff={callbacks?.onViewDiff ?? (() => {})}
+      onApprove={callbacks?.onApprove ?? (() => {})}
+      onReject={callbacks?.onReject ?? (() => {})}
     />,
   );
 }

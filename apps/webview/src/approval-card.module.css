@@ -74,7 +74,19 @@
   display: grid;
   gap: 3px;
   margin: 0 0 4px;
-  padding-left: 18px;
+  padding-left: 0;
+  list-style: none;
+}
+
+.resources code {
+  display: inline-block;
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: var(--cz-font-size-xs);
+  color: var(--cz-color-fg);
+  background-color: var(--cz-color-input-bg);
+  padding: var(--cz-space-1) var(--cz-space-2);
+  border-radius: var(--cz-radius-sm);
+  border: 1px solid var(--cz-color-border);
 }
 
 .status {
@@ -98,11 +110,12 @@
 }
 
 .primaryButton {
+  border-color: var(--vscode-button-border, transparent);
   color: var(--vscode-button-foreground);
   background: var(--vscode-button-background);
 }
 
-.primaryButton:hover:not(:disabled) {
+.primaryButton:hover {
   background: var(--vscode-button-hoverBackground);
 }
 
@@ -111,18 +124,21 @@
   background: var(--vscode-button-secondaryBackground);
 }
 
-.secondaryButton:hover:not(:disabled) {
+.secondaryButton:hover {
   background: var(--vscode-button-secondaryHoverBackground);
 }
 
-.primaryButton:focus-visible,
-.secondaryButton:focus-visible {
-  outline: 1px solid var(--vscode-focusBorder);
-  outline-offset: 2px;
-}
-
+.buttonDisabled,
 .primaryButton:disabled,
 .secondaryButton:disabled {
-  cursor: default;
-  opacity: 0.6;
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto;
+  }
 }

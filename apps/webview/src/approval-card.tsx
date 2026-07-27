@@ -60,9 +60,11 @@ export function ApprovalCard({
       </header>
 
       {commandApproval ? (
-        <pre className={styles.commandSummary}>{item.approval.presentation.summary}</pre>
+        <pre className={styles.commandSummary}>
+          {formatSummary(item.approval.presentation.summary)}
+        </pre>
       ) : (
-        <p className={styles.summary}>{item.approval.presentation.summary}</p>
+        <p className={styles.summary}>{formatSummary(item.approval.presentation.summary)}</p>
       )}
 
       <div className={styles.details}>
@@ -71,11 +73,13 @@ export function ApprovalCard({
         </span>
         <ul className={styles.resources}>
           {item.approval.scope.resources.map((resource) => (
-            <li key={resource.uri}>{resource.uri}</li>
+            <li key={resource.uri}>
+              <code>{formatResourceUri(resource.uri)}</code>
+            </li>
           ))}
         </ul>
         <span className={styles.detailLabel}>Expires</span>
-        <time dateTime={item.approval.expiresAt}>{item.approval.expiresAt}</time>
+        <time dateTime={item.approval.expiresAt}>{formatExpiryTime(item.approval.expiresAt)}</time>
       </div>
 
       <p className={styles.status} role="status" aria-live="polite">
@@ -97,4 +101,34 @@ export function ApprovalCard({
       </div>
     </article>
   );
+}
+
+export function formatResourceUri(uri: string): string {
+  try {
+    const decoded = decodeURIComponent(uri);
+    const cleanPath = decoded.replace(/^file:\/\/\/?/i, "");
+    return cleanPath.replace(/\\/g, "/");
+  } catch {
+    return uri;
+  }
+}
+
+export function formatSummary(summary: string): string {
+  return summary.replace(/file:\/\/\/[^\s]+/g, (match) => formatResourceUri(match));
+}
+
+export function formatExpiryTime(expiresAt: string): string {
+  try {
+    const date = new Date(expiresAt);
+    if (Number.isNaN(date.getTime())) {
+      return expiresAt;
+    }
+    return date.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+  } catch {
+    return expiresAt;
+  }
 }
