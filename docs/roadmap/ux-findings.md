@@ -34,3 +34,16 @@
 - **验证与规范状态**：
   - [ux.md](../ux.md) 2.3 与第 5 节已更新，精准同步当前已落地的 UI 行为（待审批状态下通过 Inline Approval Fusion 置换隐藏原始 Tool JSON 参数，优先呈现操作动作、结构化 URI、Diff 与时效）。
   - **待验证项（保留在台账中）**：在复杂或高风险操作决策中，用户是否需要在待审批卡片内提供额外的嵌套展开控件以查看完整原始 Tool JSON 参数。由于目前尚缺乏可用性走查与用户验证证据，该项保持 `待验证` 状态，不作为已确认规则。
+
+### UX-002：嵌式审批卡缺失明确的风险等级标识
+
+- **状态**：`观察中`
+- **发现来源**：PR #126 / PR #128 Review 走查
+- **背景与现象**：
+  - 在 Inline Approval Fusion 模式下（`embedded` 为 true），`ApprovalCard` 收起其 Header，隐去了原本包含的 `write`/`execute` 风险等级 Badge。外层 `ToolCallCard` / `CommandToolCard` 的状态 Badge 仅显示 `Awaiting Decision` (待决策)。
+  - 用户在待审批时虽然可以看到动作、资源 URI 和 Diff/命令，但缺乏高亮/可视化的风险等级直观标识（如修改 vs 执行）。
+- **影响场景**：文件写审批、命令执行审批。
+- **关联 PR**：[#126](https://github.com/yangzuo0621/ctrl-zebra/pull/126), [#128](https://github.com/yangzuo0621/ctrl-zebra/pull/128)
+- **验证与规范状态**：
+  - [ux.md](../ux.md) 当前准确反映实际 UI 行为（嵌入模式下暂不展示独立的风险等级 Badge）。
+  - **待后续任务规划**：评估是否需要在外层 Badge 或内嵌头部恢复显式的 `write`/`execute` 风险等级标识，收敛后将通过独立的 Webview Task 实施。
