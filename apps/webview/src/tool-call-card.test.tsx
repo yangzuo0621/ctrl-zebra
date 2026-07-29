@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
+import type { DisplayApproval } from "./approval-store.js";
 import type { DisplayToolCall } from "./chat-store.js";
 import { ToolCallCard } from "./tool-call-card.js";
 
@@ -70,5 +71,39 @@ describe("ToolCallCard", () => {
     expect(screen.getByLabelText("Tool status")).toHaveTextContent("Error");
     expect(screen.getByRole("alert")).toHaveTextContent("The file could not be read.");
     expect(screen.queryByRole("group", { name: "Result" })).not.toBeInTheDocument();
+  });
+
+  it("renders awaiting approval state with status badge and embedded risk badge", () => {
+    const editCall = {
+      id: "call-2",
+      name: "propose_file_edit",
+      input: { path: "src/index.ts" },
+    } as const;
+
+    const approval = {
+      requestId: "req-1",
+      status: "pending",
+      approval: {
+        id: "app-1",
+        scope: {
+          sessionId: "sess-1",
+          call: editCall,
+          risk: "write",
+          workspaceRootUri: "file:///workspace",
+          resources: [{ uri: "file:///workspace/src/index.ts" }],
+        },
+        presentation: {
+          title: "Update index.ts",
+          summary: "Update file content",
+        },
+        createdAt: "2026-07-29T00:00:00.000Z",
+        expiresAt: "2026-07-29T00:05:00.000Z",
+      },
+    } as const satisfies DisplayApproval;
+
+    render(<ToolCallCard toolCall={{ call: editCall, status: "pending" }} approval={approval} />);
+
+    expect(screen.getByLabelText("Tool status")).toHaveTextContent("Awaiting Decision");
+    expect(screen.getByText("write")).toBeVisible();
   });
 });
