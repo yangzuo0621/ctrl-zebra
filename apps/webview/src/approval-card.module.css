@@ -17,11 +17,16 @@
   background: transparent;
 }
 
-.header {
+.header,
+.embeddedHeader {
   display: flex;
-  align-items: start;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.header {
+  align-items: start;
 }
 
 .eyebrow,

@@ -49,7 +49,14 @@ export function ApprovalCard({
 
   return (
     <article className={cardClassName} aria-labelledby={titleId}>
-      {embedded ? null : (
+      {embedded ? (
+        <div className={styles.embeddedHeader}>
+          <span className={styles.detailLabel}>Risk level</span>
+          <Badge variant={item.approval.scope.risk === "execute" ? "error" : "warning"}>
+            {item.approval.scope.risk}
+          </Badge>
+        </div>
+      ) : (
         <header className={styles.header}>
           <div>
             <p className={styles.eyebrow}>

@@ -131,6 +131,49 @@ describe("ApprovalCard", () => {
     expect(screen.getByRole("button", { name: "Reject" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Approve" })).toBeDisabled();
   });
+
+  it("shows explicit risk badge for write risk in embedded mode", () => {
+    render(
+      <ApprovalCard
+        embedded
+        item={{ ...approval, status: "pending" }}
+        onViewDiff={() => {}}
+        onApprove={() => {}}
+        onReject={() => {}}
+      />,
+    );
+
+    expect(screen.getByText("write")).toBeVisible();
+  });
+
+  it("shows explicit risk badge for execute risk in embedded mode", () => {
+    render(
+      <ApprovalCard
+        embedded
+        item={{
+          ...approval,
+          status: "pending",
+          approval: {
+            ...approval.approval,
+            scope: {
+              ...approval.approval.scope,
+              call: {
+                id: "call-command",
+                name: "run_command",
+                input: { command: "npm test" },
+              },
+              risk: "execute",
+            },
+          },
+        }}
+        onViewDiff={() => {}}
+        onApprove={() => {}}
+        onReject={() => {}}
+      />,
+    );
+
+    expect(screen.getByText("execute")).toBeVisible();
+  });
 });
 
 function renderCard(

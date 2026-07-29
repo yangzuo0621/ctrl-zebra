@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
+import type { DisplayApproval } from "./approval-store.js";
 import type { DisplayToolCall } from "./chat-store.js";
 import { CommandToolCard } from "./command-tool-card.js";
 
@@ -118,6 +119,41 @@ describe("CommandToolCard", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Command execution was cancelled before it completed.",
     );
+  });
+
+  it("renders awaiting approval state with status badge and embedded execute risk badge", () => {
+    const approval = {
+      requestId: "req-cmd-1",
+      status: "pending",
+      approval: {
+        id: "app-cmd-1",
+        scope: {
+          sessionId: "sess-1",
+          call,
+          risk: "execute",
+          workspaceRootUri: "file:///workspace",
+          resources: [{ uri: "file:///workspace" }],
+        },
+        presentation: {
+          title: "Run command",
+          summary: "Run npm test",
+        },
+        createdAt: "2026-07-29T00:00:00.000Z",
+        expiresAt: "2026-07-29T00:05:00.000Z",
+      },
+    } as const satisfies DisplayApproval;
+
+    render(
+      <CommandToolCard
+        toolCall={{ call, status: "pending" }}
+        runStatus="idle"
+        approval={approval}
+        onTerminate={() => {}}
+      />,
+    );
+
+    expect(screen.getByLabelText("Command status")).toHaveTextContent("Awaiting Decision");
+    expect(screen.getByText("execute")).toBeVisible();
   });
 });
 
