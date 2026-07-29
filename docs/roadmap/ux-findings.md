@@ -38,7 +38,7 @@
 
 ### UX-002：PR #126 嵌式审批卡隐去风险等级标识（确定性安全回归）
 
-- **状态**：`已转任务`
+- **状态**：`已归档`
 - **发现来源**：PR #126 / PR #128 Review 审查 ([security.md](../security.md) 强制契约校验)
 - **问题定义与契约冲突**：
   - [security.md](../security.md) 明确规定：审批 UI 为不可变 Request 的安全投影，必须展示包含工具/效果、目标资源、工作区、**风险** (`risk`)、有效时间及 Diff 在内的完整边界。
@@ -48,4 +48,4 @@
 - **关联 PR**：[#126](https://github.com/yangzuo0621/ctrl-zebra/pull/126), [#128](https://github.com/yangzuo0621/ctrl-zebra/pull/128)
 - **后续处理**：
   - [ux.md](../ux.md) 保持 [security.md](../security.md) 的安全要求，明确规定待审批呈现必须包含显性风险等级标识。
-  - 已转为 [T1201](phases/phase-12.md#t1201恢复内嵌审批风险等级标识)，在内嵌审批卡片中恢复显式的 `write`/`execute` 风险等级标识。
+  - [T1201](archive/phase-12.md#t1201恢复内嵌审批风险等级标识) 通过 [PR #129](https://github.com/yangzuo0621/ctrl-zebra/pull/129) 在内嵌审批卡片中恢复显式的 `write`/`execute` 风险等级标识。
