@@ -1,8 +1,8 @@
-import type { AgentRuntimeEvent } from "@ctrl-zebra/core";
 import { protocolVersion } from "@ctrl-zebra/protocol";
 import { describe, expect, it } from "vitest";
 
 import { ProviderConfigurationError } from "../adapters/provider-configuration.js";
+import type { ChatRunnerEvent } from "./chat-runner.js";
 import {
   bindWebviewMessageController,
   handleWebviewMessage,
@@ -125,7 +125,15 @@ describe("handleWebviewMessage", () => {
           ];
         },
         async restore(sessionId) {
-          return { sessionId, status: "completed", messages: [], eventLogTailDamaged: false };
+          return {
+            session: {
+              sessionId,
+              status: "completed",
+              messages: [],
+              eventLogTailDamaged: false,
+            },
+            reasoning: { sessionId, blocks: [], runTruncated: false },
+          };
         },
       },
     );
@@ -148,6 +156,14 @@ describe("handleWebviewMessage", () => {
         sessions: [
           { sessionId: "session-1", status: "completed", createdAt: "2026-07-19T10:00:00.000Z" },
         ],
+      },
+      {
+        protocolVersion,
+        type: "extension/reasoning-restored",
+        requestId: "restore-1",
+        sessionId: "session-1",
+        blocks: [],
+        runTruncated: false,
       },
       {
         protocolVersion,
@@ -264,7 +280,7 @@ describe("handleWebviewMessage", () => {
     expect(deliveryFailureCount).toBe(1);
   });
 
-  it("forwards supported runtime events while keeping reasoning internal", async () => {
+  it("forwards bounded reasoning with supported runtime events in source order", async () => {
     let messageListener: ((message: unknown) => void) | undefined;
     const postedMessages: unknown[] = [];
 
@@ -295,20 +311,26 @@ describe("handleWebviewMessage", () => {
           });
           emit({ type: "agent.text-delta", sessionId: "session-1", text: "Hel" });
           emit({
-            type: "agent.reasoning-start",
+            type: "session.reasoning-start",
+            sessionId: "session-other",
+            blockId: "mismatched",
+          });
+          emit({
+            type: "session.reasoning-start",
             sessionId: "session-1",
             blockId: "reasoning-1",
           });
           emit({
-            type: "agent.reasoning-delta",
+            type: "session.reasoning-delta",
             sessionId: "session-1",
             blockId: "reasoning-1",
             text: "Check the workspace.",
           });
           emit({
-            type: "agent.reasoning-end",
+            type: "session.reasoning-end",
             sessionId: "session-1",
             blockId: "reasoning-1",
+            truncated: false,
           });
           emit({
             type: "agent.tool-state",
@@ -342,6 +364,11 @@ describe("handleWebviewMessage", () => {
             previousStatus: "streaming",
             status: "completed",
           });
+          emit({
+            type: "session.reasoning-start",
+            sessionId: "session-1",
+            blockId: "late-reasoning",
+          });
         },
       },
     );
@@ -372,6 +399,26 @@ describe("handleWebviewMessage", () => {
         type: "extension/text-delta",
         requestId: "request-1",
         text: "Hel",
+      },
+      {
+        protocolVersion,
+        type: "extension/reasoning-start",
+        requestId: "request-1",
+        blockId: "reasoning-1",
+      },
+      {
+        protocolVersion,
+        type: "extension/reasoning-delta",
+        requestId: "request-1",
+        blockId: "reasoning-1",
+        text: "Check the workspace.",
+      },
+      {
+        protocolVersion,
+        type: "extension/reasoning-end",
+        requestId: "request-1",
+        blockId: "reasoning-1",
+        truncated: false,
       },
       {
         protocolVersion,
@@ -419,7 +466,7 @@ describe("handleWebviewMessage", () => {
   it("aborts the correlated run and ignores later deltas after cancellation", async () => {
     let messageListener: ((message: unknown) => void) | undefined;
     const postedMessages: unknown[] = [];
-    let emitRuntimeEvent: ((event: AgentRuntimeEvent) => void) | undefined;
+    let emitRuntimeEvent: ((event: ChatRunnerEvent) => void) | undefined;
     let receivedSignal: AbortSignal | undefined;
 
     bindWebviewMessageController(
@@ -462,6 +509,12 @@ describe("handleWebviewMessage", () => {
       requestId: "request-1",
     });
     emitRuntimeEvent?.({ type: "agent.text-delta", sessionId: "session-1", text: "late" });
+    emitRuntimeEvent?.({
+      type: "session.reasoning-delta",
+      sessionId: "session-1",
+      blockId: "reasoning-1",
+      text: "late reasoning",
+    });
     await Promise.resolve();
 
     expect(receivedSignal?.aborted).toBe(true);
@@ -507,6 +560,11 @@ describe("handleWebviewMessage", () => {
             sessionId: "session-1",
             previousStatus: "streaming",
             status: "failed",
+          });
+          emit({
+            type: "session.reasoning-start",
+            sessionId: "session-1",
+            blockId: "late-reasoning",
           });
           throw failure;
         },
@@ -556,6 +614,7 @@ describe("handleWebviewMessage", () => {
     const postedMessages: unknown[] = [];
     const receivedContents: string[] = [];
     const resolveRuns: Array<() => void> = [];
+    const emitters: Array<(event: ChatRunnerEvent) => void> = [];
 
     bindWebviewMessageController(
       {
@@ -575,8 +634,9 @@ describe("handleWebviewMessage", () => {
       },
       () => {},
       {
-        run(content) {
+        run(content, _signal, emit) {
           receivedContents.push(content);
+          emitters.push(emit);
           return new Promise((resolve) => resolveRuns.push(resolve));
         },
       },
@@ -598,6 +658,11 @@ describe("handleWebviewMessage", () => {
       type: "webview/submit",
       requestId: "request-2",
       content: "Second request.",
+    });
+    emitters[0]?.({
+      type: "session.reasoning-start",
+      sessionId: "session-old",
+      blockId: "stale-request",
     });
 
     expect(receivedContents).toEqual(["First request.", "Second request."]);

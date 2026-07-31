@@ -65,11 +65,11 @@
 
 - 总任务：89
 - 已完成：87
-- 进行中：0
+- 进行中：1
 - 受阻：0
-- 待开始：2
-- 当前任务：无
-- 下一任务：T1303
+- 待开始：1
+- 当前任务：T1303
+- 下一任务：T1304
 - 最后更新：2026-07-31
 
 | 阶段 | 任务 | 状态 | 完成 PR | 完成日期 |
@@ -161,7 +161,7 @@
 | 12 | T1201 | 已完成 | [#129](https://github.com/yangzuo0621/ctrl-zebra/pull/129) | 2026-07-29 |
 | 13 | T1301 | 已完成 | [#131](https://github.com/yangzuo0621/ctrl-zebra/pull/131) | 2026-07-31 |
 | 13 | T1302 | 已完成 | [#132](https://github.com/yangzuo0621/ctrl-zebra/pull/132) | 2026-07-31 |
-| 13 | T1303 | 待开始 | — | — |
+| 13 | T1303 | 进行中 | — | — |
 | 13 | T1304 | 待开始 | — | — |
 
 ---
@@ -223,4 +223,4 @@
 以及
 [T1302：标准化 Provider reasoning 流并接入 Core Runtime](roadmap/phases/phase-13.md#t1302标准化-provider-reasoning-流并接入-core-runtime)
 均已完成。T1302 通过 [#132](https://github.com/yangzuo0621/ctrl-zebra/pull/132) squash 合入
-`main`；当前没有进行中任务，下一任务为 T1303。
+`main`；T1303 已从最新 `main` 建立任务分支并进入实现，下一任务为 T1304。

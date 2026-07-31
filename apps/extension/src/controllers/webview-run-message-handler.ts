@@ -1,4 +1,3 @@
-import type { AgentRuntimeEvent } from "@ctrl-zebra/core";
 import {
   type ApprovalDecisionIntent,
   type ExtensionToWebviewMessage,
@@ -6,7 +5,7 @@ import {
   type RunStatus,
 } from "@ctrl-zebra/protocol";
 
-import type { ChatRunner } from "./chat-runner.js";
+import type { ChatRunner, ChatRunnerEvent } from "./chat-runner.js";
 import { mapRunErrorToUi } from "./run-error-mapper.js";
 
 type PostWebviewMessage = (message: ExtensionToWebviewMessage) => void;
@@ -19,6 +18,8 @@ interface ApprovalUiActions {
 interface ActiveRun {
   readonly requestId: string;
   readonly abortController: AbortController;
+  sessionId?: string;
+  eventsClosed: boolean;
   terminalSent: boolean;
 }
 
@@ -41,6 +42,7 @@ export class WebviewRunMessageHandler {
     const run: ActiveRun = {
       requestId,
       abortController: new AbortController(),
+      eventsClosed: false,
       terminalSent: false,
     };
     this.#activeRun = run;
@@ -123,8 +125,13 @@ export class WebviewRunMessageHandler {
     this.#postStatus(run.requestId, status);
   }
 
-  #handleRuntimeEvent(run: ActiveRun, event: AgentRuntimeEvent): void {
-    if (this.#disposed || this.#activeRun !== run || run.terminalSent) {
+  #handleRuntimeEvent(run: ActiveRun, event: ChatRunnerEvent): void {
+    if (this.#disposed || this.#activeRun !== run || run.terminalSent || run.eventsClosed) {
+      return;
+    }
+    if (run.sessionId === undefined) {
+      run.sessionId = event.sessionId;
+    } else if (run.sessionId !== event.sessionId) {
       return;
     }
 
@@ -180,11 +187,47 @@ export class WebviewRunMessageHandler {
       return;
     }
 
-    if (
-      event.type === "agent.reasoning-start" ||
-      event.type === "agent.reasoning-delta" ||
-      event.type === "agent.reasoning-end"
-    ) {
+    if (event.type === "session.reasoning-start") {
+      this.post({
+        protocolVersion,
+        type: "extension/reasoning-start",
+        requestId: run.requestId,
+        blockId: event.blockId,
+      });
+      return;
+    }
+
+    if (event.type === "session.reasoning-delta") {
+      this.post({
+        protocolVersion,
+        type: "extension/reasoning-delta",
+        requestId: run.requestId,
+        blockId: event.blockId,
+        text: event.text,
+      });
+      return;
+    }
+
+    if (event.type === "session.reasoning-end") {
+      this.post({
+        protocolVersion,
+        type: "extension/reasoning-end",
+        requestId: run.requestId,
+        blockId: event.blockId,
+        truncated: event.truncated,
+      });
+      return;
+    }
+
+    if (event.type === "session.reasoning-limit") {
+      this.post({
+        protocolVersion,
+        type: "extension/reasoning-limit",
+        requestId: run.requestId,
+        ...(event.scope === "block"
+          ? { scope: event.scope, blockId: event.blockId, reason: event.reason }
+          : { scope: event.scope, reason: event.reason }),
+      });
       return;
     }
 
@@ -194,6 +237,11 @@ export class WebviewRunMessageHandler {
 
     if (event.status === "streaming") {
       this.#postStatus(run.requestId, event.status);
+      return;
+    }
+
+    if (event.status === "failed") {
+      run.eventsClosed = true;
       return;
     }
 

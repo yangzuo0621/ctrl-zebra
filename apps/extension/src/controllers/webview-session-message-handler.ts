@@ -34,13 +34,20 @@ export class WebviewSessionMessageHandler {
     void (
       this.actions?.restore(sessionId) ?? Promise.reject(new Error("Session storage unavailable."))
     ).then(
-      (session) =>
+      ({ session, reasoning }) => {
+        this.post({
+          protocolVersion,
+          type: "extension/reasoning-restored",
+          requestId,
+          ...reasoning,
+        });
         this.post({
           protocolVersion,
           type: "extension/session-restored",
           requestId,
           session,
-        }),
+        });
+      },
       (error: unknown) =>
         this.post({
           protocolVersion,

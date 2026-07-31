@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { realpath } from "node:fs/promises";
 
-import type { AgentRuntimeEvent } from "@ctrl-zebra/core";
 import { createOpenAICompatibleModelGateway } from "@ctrl-zebra/providers";
 import * as vscode from "vscode";
 
@@ -12,7 +11,7 @@ import {
   joinWorkspacePath,
   readWorkspaceFilePrefix,
 } from "../../adapters/vscode-workspace-read-file.js";
-import { createSelectingChatRunner } from "../../controllers/chat-runner.js";
+import { type ChatRunnerEvent, createSelectingChatRunner } from "../../controllers/chat-runner.js";
 import { createWorkspaceToolRegistryProvider } from "../../controllers/readonly-tool-registry.js";
 
 const ollamaBaseUrl = "http://127.0.0.1:11434/v1";
@@ -53,7 +52,7 @@ export async function verifyOllamaReadonlyToolSmoke(): Promise<void> {
       },
     },
   });
-  const events: AgentRuntimeEvent[] = [];
+  const events: ChatRunnerEvent[] = [];
   const runner = createSelectingChatRunner({
     selectToolRegistry: (signal) => readonlyTools.get(signal),
     selectModelGateway: async () =>
