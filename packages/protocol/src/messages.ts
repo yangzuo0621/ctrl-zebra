@@ -7,6 +7,14 @@ import {
 } from "./approval.js";
 import { assistantMessageSchema, userMessageSchema } from "./chat-message.js";
 import { checkpointIdSchema, checkpointSummarySchema } from "./checkpoint.js";
+import {
+  reasoningBlockLimitDataSchema,
+  reasoningBlockStartDataSchema,
+  reasoningDeltaDataSchema,
+  reasoningEndDataSchema,
+  reasoningRunLimitDataSchema,
+  restoredReasoningSchema,
+} from "./reasoning.js";
 import { sessionIdSchema, sessionStatusSchema, sessionSummarySchema } from "./session.js";
 import { toolCallSchema, toolErrorResultSchema, toolSuccessResultSchema } from "./tool.js";
 
@@ -89,6 +97,56 @@ export const textDeltaMessageSchema = z.strictObject({
   type: z.literal("extension/text-delta"),
   text: z.string().min(1).max(1_000_000),
 });
+
+export const reasoningStartMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("extension/reasoning-start"),
+  ...reasoningBlockStartDataSchema.shape,
+});
+
+export const reasoningDeltaMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("extension/reasoning-delta"),
+  ...reasoningDeltaDataSchema.shape,
+});
+
+export const reasoningEndMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("extension/reasoning-end"),
+  ...reasoningEndDataSchema.shape,
+});
+
+export const reasoningBlockLimitMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("extension/reasoning-limit"),
+  ...reasoningBlockLimitDataSchema.shape,
+});
+
+export const reasoningRunLimitMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("extension/reasoning-limit"),
+  ...reasoningRunLimitDataSchema.shape,
+});
+
+export const reasoningLimitMessageSchema = z.discriminatedUnion("scope", [
+  reasoningBlockLimitMessageSchema,
+  reasoningRunLimitMessageSchema,
+]);
+
+export const reasoningRestoredMessageSchema = z
+  .strictObject({
+    ...protocolEnvelopeSchema.shape,
+    type: z.literal("extension/reasoning-restored"),
+    ...restoredReasoningSchema.shape,
+  })
+  .superRefine(({ sessionId, blocks, runTruncated }, context) => {
+    if (!restoredReasoningSchema.safeParse({ sessionId, blocks, runTruncated }).success) {
+      context.addIssue({
+        code: "custom",
+        message: "Restored reasoning must satisfy the bounded display projection schema.",
+      });
+    }
+  });
 
 export const runStatusSchema = z.enum([
   "preparing",
@@ -222,6 +280,11 @@ export const webviewToExtensionMessageSchema = z.discriminatedUnion("type", [
 export const extensionToWebviewMessageSchema = z.union([
   pongMessageSchema,
   textDeltaMessageSchema,
+  reasoningStartMessageSchema,
+  reasoningDeltaMessageSchema,
+  reasoningEndMessageSchema,
+  reasoningLimitMessageSchema,
+  reasoningRestoredMessageSchema,
   runStatusMessageSchema,
   runErrorMessageSchema,
   toolStateMessageSchema,
@@ -247,6 +310,11 @@ export type ShowApprovalDiffMessage = z.infer<typeof showApprovalDiffMessageSche
 export type ApprovalDecisionIntent = z.infer<typeof approvalDecisionIntentSchema>;
 export type ApprovalDecisionMessage = z.infer<typeof approvalDecisionMessageSchema>;
 export type TextDeltaMessage = z.infer<typeof textDeltaMessageSchema>;
+export type ReasoningStartMessage = z.infer<typeof reasoningStartMessageSchema>;
+export type ReasoningDeltaMessage = z.infer<typeof reasoningDeltaMessageSchema>;
+export type ReasoningEndMessage = z.infer<typeof reasoningEndMessageSchema>;
+export type ReasoningLimitMessage = z.infer<typeof reasoningLimitMessageSchema>;
+export type ReasoningRestoredMessage = z.infer<typeof reasoningRestoredMessageSchema>;
 export type RunStatus = z.infer<typeof runStatusSchema>;
 export type RunStatusMessage = z.infer<typeof runStatusMessageSchema>;
 export type RunErrorCode = z.infer<typeof runErrorCodeSchema>;

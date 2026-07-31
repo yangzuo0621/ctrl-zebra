@@ -2,6 +2,12 @@ import { z } from "zod";
 
 import { chatMessageSchema } from "./chat-message.js";
 import { checkpointIdSchema } from "./checkpoint.js";
+import {
+  reasoningBlockStartDataSchema,
+  reasoningDeltaDataSchema,
+  reasoningEndDataSchema,
+  reasoningLimitDataSchema,
+} from "./reasoning.js";
 import { sessionIdSchema, sessionStatusSchema } from "./session.js";
 import { jsonValueSchema } from "./tool.js";
 
@@ -68,10 +74,50 @@ export const sessionManifestSchema = z.strictObject({
 
 export const persistedMessageRecordSchema = chatMessageSchema;
 
-export const persistedEventPayloadSchema = z.strictObject({
+const genericPersistedEventPayloadSchema = z.strictObject({
   type: z.string().regex(/^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9-]*)+$/),
   data: jsonValueSchema,
 });
+
+export const persistedReasoningEventPayloadSchema = z.discriminatedUnion("type", [
+  z.strictObject({
+    type: z.literal("session.reasoning-start"),
+    data: reasoningBlockStartDataSchema,
+  }),
+  z.strictObject({
+    type: z.literal("session.reasoning-delta"),
+    data: reasoningDeltaDataSchema,
+  }),
+  z.strictObject({
+    type: z.literal("session.reasoning-end"),
+    data: reasoningEndDataSchema,
+  }),
+  z.strictObject({
+    type: z.literal("session.reasoning-limit"),
+    data: reasoningLimitDataSchema,
+  }),
+]);
+
+const persistedReasoningEventTypes = new Set([
+  "session.reasoning-start",
+  "session.reasoning-delta",
+  "session.reasoning-end",
+  "session.reasoning-limit",
+]);
+
+export const persistedEventPayloadSchema = genericPersistedEventPayloadSchema.superRefine(
+  (payload, context) => {
+    if (
+      persistedReasoningEventTypes.has(payload.type) &&
+      !persistedReasoningEventPayloadSchema.safeParse(payload).success
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Persisted reasoning events must match their strict version 1 schema.",
+      });
+    }
+  },
+);
 
 export const persistedEventRecordSchema = z.strictObject({
   sequence: z.int().positive(),
@@ -82,6 +128,7 @@ export const persistedEventRecordSchema = z.strictObject({
 export type SessionManifest = z.infer<typeof sessionManifestSchema>;
 export type PersistedMessageRecord = z.infer<typeof persistedMessageRecordSchema>;
 export type PersistedEventPayload = z.infer<typeof persistedEventPayloadSchema>;
+export type PersistedReasoningEventPayload = z.infer<typeof persistedReasoningEventPayloadSchema>;
 export type PersistedEventRecord = z.infer<typeof persistedEventRecordSchema>;
 
 export interface SessionPersistencePaths {

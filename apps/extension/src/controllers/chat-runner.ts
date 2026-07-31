@@ -10,12 +10,23 @@ import {
 } from "@ctrl-zebra/core";
 import { jsonValueSchema, persistenceFormatVersion, type UserMessage } from "@ctrl-zebra/protocol";
 
+import {
+  type CollectedReasoningEvent,
+  isRuntimeReasoningEvent,
+  ReasoningCollector,
+} from "./reasoning-collector.js";
+
+type NonReasoningAgentRuntimeEvent = Exclude<
+  AgentRuntimeEvent,
+  {
+    readonly type: "agent.reasoning-start" | "agent.reasoning-delta" | "agent.reasoning-end";
+  }
+>;
+
+export type ChatRunnerEvent = NonReasoningAgentRuntimeEvent | CollectedReasoningEvent;
+
 export interface ChatRunner {
-  run(
-    content: string,
-    signal: AbortSignal,
-    emit: (event: AgentRuntimeEvent) => void,
-  ): Promise<void>;
+  run(content: string, signal: AbortSignal, emit: (event: ChatRunnerEvent) => void): Promise<void>;
 }
 
 interface ChatRunnerDependencies {
@@ -55,11 +66,27 @@ export function createChatRunner({
         role: "user",
         content,
       };
+      const reasoning = new ReasoningCollector(sessionId);
       if (sessionRepository === undefined) {
-        const runtime = new AgentRuntime(modelGateway, { emit }, toolRegistry, {
-          approvalWorkflow,
-        });
-        await runtime.run(userMessage, signal);
+        const runtime = new AgentRuntime(
+          modelGateway,
+          {
+            emit: (event) => {
+              for (const projected of projectRuntimeEvent(sessionId, signal, reasoning, event)) {
+                emit(projected);
+              }
+            },
+          },
+          toolRegistry,
+          {
+            approvalWorkflow,
+          },
+        );
+        try {
+          await runtime.run(userMessage, signal);
+        } finally {
+          reasoning.close();
+        }
         return;
       }
 
@@ -81,7 +108,7 @@ export function createChatRunner({
         },
       });
       let persistence = Promise.resolve();
-      const persist = (event: AgentRuntimeEvent) => {
+      const persist = (event: ChatRunnerEvent) => {
         emit(event);
         sequence += 1;
         const eventSequence = sequence;
@@ -101,17 +128,50 @@ export function createChatRunner({
               : undefined,
           );
       };
-      const runtime = new AgentRuntime(modelGateway, { emit: persist }, toolRegistry, {
-        approvalWorkflow,
-      });
+      const runtime = new AgentRuntime(
+        modelGateway,
+        {
+          emit: (event) => {
+            for (const projected of projectRuntimeEvent(sessionId, signal, reasoning, event)) {
+              persist(projected);
+            }
+          },
+        },
+        toolRegistry,
+        {
+          approvalWorkflow,
+        },
+      );
 
       try {
         await runtime.run(userMessage, signal);
       } finally {
+        reasoning.close();
         await persistence;
       }
     },
   };
+}
+
+function projectRuntimeEvent(
+  sessionId: string,
+  signal: AbortSignal,
+  reasoning: ReasoningCollector,
+  event: AgentRuntimeEvent,
+): readonly ChatRunnerEvent[] {
+  if (event.sessionId !== sessionId) {
+    return [];
+  }
+  if (isRuntimeReasoningEvent(event)) {
+    return signal.aborted ? [] : reasoning.accept(event);
+  }
+  if (
+    event.type === "session.status-changed" &&
+    (event.status === "completed" || event.status === "cancelled" || event.status === "failed")
+  ) {
+    reasoning.close();
+  }
+  return [event];
 }
 
 export function createSelectingChatRunner({

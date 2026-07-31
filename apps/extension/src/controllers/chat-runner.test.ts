@@ -1,5 +1,4 @@
 import {
-  type AgentRuntimeEvent,
   InMemorySessionRepository,
   type ModelGateway,
   type ModelRequest,
@@ -7,7 +6,11 @@ import {
 } from "@ctrl-zebra/core";
 import { describe, expect, it } from "vitest";
 
-import { createChatRunner, createSelectingChatRunner } from "./chat-runner.js";
+import {
+  type ChatRunnerEvent,
+  createChatRunner,
+  createSelectingChatRunner,
+} from "./chat-runner.js";
 
 describe("createChatRunner", () => {
   it("persists the user message and ordered runtime events", async () => {
@@ -51,6 +54,105 @@ describe("createChatRunner", () => {
     });
   });
 
+  it("persists only the bounded reasoning projection in source order", async () => {
+    const repository = new InMemorySessionRepository();
+    const ids = ["session-reasoning", "message-reasoning"];
+    const runner = createChatRunner({
+      modelGateway: {
+        async *stream() {
+          yield { type: "reasoning.start", blockId: "provider-secret-id" } as const;
+          yield {
+            type: "reasoning.delta",
+            blockId: "provider-secret-id",
+            text: "Check the workspace.",
+          } as const;
+          yield { type: "reasoning.end", blockId: "provider-secret-id" } as const;
+          yield { type: "text.delta", text: "Done" } as const;
+          yield { type: "finish", reason: "stop" } as const;
+        },
+      },
+      createId: () => ids.shift() ?? "unexpected-id",
+      now: () => new Date("2026-07-31T00:00:00.000Z"),
+      sessionRepository: repository,
+    });
+
+    await runner.run("Inspect.", new AbortController().signal, () => {});
+
+    const record = await repository.get("session-reasoning");
+    expect(record?.events.map(({ event }) => event.type)).toEqual([
+      "session.user-message",
+      "session.status-changed",
+      "session.status-changed",
+      "session.reasoning-start",
+      "session.reasoning-delta",
+      "session.reasoning-end",
+      "agent.text-delta",
+      "session.status-changed",
+    ]);
+    expect(record?.events.slice(3, 6).map(({ event }) => event.data)).toEqual([
+      { blockId: "reasoning-1" },
+      { blockId: "reasoning-1", text: "Check the workspace." },
+      { blockId: "reasoning-1", truncated: false },
+    ]);
+    expect(JSON.stringify(record)).not.toContain("provider-secret-id");
+  });
+
+  it("persists structured truncation without retaining overflow reasoning", async () => {
+    const repository = new InMemorySessionRepository();
+    const ids = ["session-truncated", "message-truncated"];
+    const runner = createChatRunner({
+      modelGateway: {
+        async *stream() {
+          yield { type: "reasoning.start", blockId: "provider-block" } as const;
+          for (let index = 0; index < 4; index += 1) {
+            yield {
+              type: "reasoning.delta",
+              blockId: "provider-block",
+              text: "x".repeat(8_192),
+            } as const;
+          }
+          yield {
+            type: "reasoning.delta",
+            blockId: "provider-block",
+            text: "must-not-persist",
+          } as const;
+          yield { type: "reasoning.end", blockId: "provider-block" } as const;
+          yield { type: "text.delta", text: "Done" } as const;
+          yield { type: "finish", reason: "stop" } as const;
+        },
+      },
+      createId: () => ids.shift() ?? "unexpected-id",
+      now: () => new Date("2026-07-31T00:00:00.000Z"),
+      sessionRepository: repository,
+    });
+
+    await runner.run("Inspect.", new AbortController().signal, () => {});
+
+    const record = await repository.get("session-truncated");
+    const reasoningEvents = record?.events
+      .map(({ event }) => event)
+      .filter(({ type }) => type.startsWith("session.reasoning-"));
+    expect(reasoningEvents?.map(({ type }) => type)).toEqual([
+      "session.reasoning-start",
+      "session.reasoning-delta",
+      "session.reasoning-delta",
+      "session.reasoning-delta",
+      "session.reasoning-delta",
+      "session.reasoning-limit",
+      "session.reasoning-end",
+    ]);
+    expect(reasoningEvents?.at(-2)?.data).toEqual({
+      scope: "block",
+      blockId: "reasoning-1",
+      reason: "code-points",
+    });
+    expect(reasoningEvents?.at(-1)?.data).toEqual({
+      blockId: "reasoning-1",
+      truncated: true,
+    });
+    expect(JSON.stringify(reasoningEvents)).not.toContain("must-not-persist");
+  });
+
   it("does not start the model when Session persistence cannot be created", async () => {
     let gatewayStarted = false;
     const runner = createChatRunner({
@@ -92,7 +194,7 @@ describe("createChatRunner", () => {
         yield { type: "finish", reason: "stop" };
       },
     };
-    const events: AgentRuntimeEvent[] = [];
+    const events: ChatRunnerEvent[] = [];
     const ids = ["session-1", "message-1"];
     const signal = new AbortController().signal;
     const runner = createChatRunner({
@@ -176,7 +278,7 @@ describe("createChatRunner", () => {
       parseInput: () => null,
       execute: async () => ({ output: { files: ["README.md"] }, truncated: false }),
     });
-    const events: AgentRuntimeEvent[] = [];
+    const events: ChatRunnerEvent[] = [];
     const ids = ["session-1", "message-1"];
     const runner = createChatRunner({
       modelGateway,
