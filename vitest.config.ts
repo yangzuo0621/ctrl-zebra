@@ -19,7 +19,7 @@ export default defineConfig({
           name: "webview",
           environment: "jsdom",
           globals: false,
-          include: ["apps/webview/src/**/*.test.tsx"],
+          include: ["apps/webview/src/**/*.test.{ts,tsx}"],
           setupFiles: ["apps/webview/src/test-setup.ts"],
         },
       },

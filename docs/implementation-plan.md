@@ -65,11 +65,11 @@
 
 - 总任务：89
 - 已完成：88
-- 进行中：0
+- 进行中：1
 - 受阻：0
-- 待开始：1
-- 当前任务：无
-- 下一任务：T1304
+- 待开始：0
+- 当前任务：T1304
+- 下一任务：无
 - 最后更新：2026-07-31
 
 | 阶段 | 任务 | 状态 | 完成 PR | 完成日期 |
@@ -162,7 +162,7 @@
 | 13 | T1301 | 已完成 | [#131](https://github.com/yangzuo0621/ctrl-zebra/pull/131) | 2026-07-31 |
 | 13 | T1302 | 已完成 | [#132](https://github.com/yangzuo0621/ctrl-zebra/pull/132) | 2026-07-31 |
 | 13 | T1303 | 已完成 | [#133](https://github.com/yangzuo0621/ctrl-zebra/pull/133) | 2026-07-31 |
-| 13 | T1304 | 待开始 | — | — |
+| 13 | T1304 | 进行中 | — | — |
 
 ---
 
@@ -225,4 +225,6 @@
 以及
 [T1303：打通 Extension 协议、持久化与恢复](roadmap/phases/phase-13.md#t1303打通-extension-协议持久化与恢复)
 均已完成。T1303 已通过 [#133](https://github.com/yangzuo0621/ctrl-zebra/pull/133) squash 合入
-`main`；当前没有进行中任务，下一任务为 T1304。
+`main`；当前任务为
+[T1304：实现可访问的推理摘要 Webview 体验](roadmap/phases/phase-13.md#t1304实现可访问的推理摘要-webview-体验)，
+下一任务为无。

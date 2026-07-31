@@ -1,21 +1,39 @@
-import type {
-  ExtensionToWebviewMessage,
-  RunStatus,
-  SessionSummary,
-  ToolCall,
-  ToolErrorResult,
-  ToolStateMessage,
-  ToolSuccessResult,
+import {
+  type ExtensionToWebviewMessage,
+  maxReasoningBlockCodePoints,
+  maxReasoningBlocksPerRun,
+  maxReasoningBlockUtf8Bytes,
+  maxReasoningRunCodePoints,
+  maxReasoningRunUtf8Bytes,
+  measureReasoningText,
+  type ReasoningRestoredMessage,
+  type RunStatus,
+  type SessionSummary,
+  type ToolCall,
+  type ToolErrorResult,
+  type ToolStateMessage,
+  type ToolSuccessResult,
+  takeReasoningTextPrefix,
 } from "@ctrl-zebra/protocol";
 import { createStore, type StoreApi } from "zustand/vanilla";
 
 import type { WebviewHost } from "./vscode-api.js";
+
+export interface DisplayReasoningBlock {
+  readonly blockId: string;
+  readonly content: string;
+  readonly state: "streaming" | "complete" | "partial";
+  readonly truncated: boolean;
+  readonly expanded: boolean;
+}
 
 export interface DisplayMessage {
   readonly id: string;
   readonly role: "user" | "assistant";
   readonly content: string;
   readonly toolCalls: readonly DisplayToolCall[];
+  readonly reasoningBlocks: readonly DisplayReasoningBlock[];
+  readonly reasoningRunTruncated: boolean;
 }
 
 export type DisplayToolCall =
@@ -31,11 +49,14 @@ interface ChatState {
   readonly selectedSessionId?: string;
   readonly sessionError?: string;
   readonly runError?: string;
+  readonly reasoningAnnouncement: string;
   submit(content: string): boolean;
   cancel(): void;
   loadSessions(): void;
   selectSession(sessionId: string): void;
   restoreSelectedSession(): boolean;
+  toggleReasoningBlock(messageId: string, blockId: string): void;
+  announceReasoning(message: string): void;
   receive(message: ExtensionToWebviewMessage): void;
   dispose(): void;
 }
@@ -48,9 +69,40 @@ export interface ChatStoreOptions {
   readonly scheduleFlush?: ScheduleFlush;
 }
 
+interface LiveReasoningBlock {
+  readonly blockId: string;
+  content: string;
+  pendingParts: string[];
+  codePoints: number;
+  utf8Bytes: number;
+  state: "streaming" | "complete" | "partial";
+  truncated: boolean;
+  expanded: boolean;
+  discardText: boolean;
+}
+
 const defaultScheduleFlush: ScheduleFlush = (callback) => {
-  const frameId = requestAnimationFrame(callback);
-  return () => cancelAnimationFrame(frameId);
+  let pending = true;
+  const flush = () => {
+    if (!pending) {
+      return;
+    }
+    pending = false;
+    cancelAnimationFrame(frameId);
+    clearTimeout(timeoutId);
+    callback();
+  };
+  const frameId = requestAnimationFrame(flush);
+  const timeoutId = setTimeout(flush, 50);
+
+  return () => {
+    if (!pending) {
+      return;
+    }
+    pending = false;
+    cancelAnimationFrame(frameId);
+    clearTimeout(timeoutId);
+  };
 };
 
 export function createChatStore({
@@ -58,41 +110,155 @@ export function createChatStore({
   createRequestId = () => crypto.randomUUID(),
   scheduleFlush = defaultScheduleFlush,
 }: ChatStoreOptions): StoreApi<ChatState> {
-  let pendingDelta = "";
+  let pendingTextDelta = "";
   let cancelScheduledFlush: (() => void) | undefined;
   let listRequestId: string | undefined;
   let restoreRequestId: string | undefined;
+  let stagedReasoningRestore: ReasoningRestoredMessage | undefined;
+  let activeAssistantMessageId: string | undefined;
+  let openReasoningBlockId: string | undefined;
+  let reasoningRunCodePoints = 0;
+  let reasoningRunUtf8Bytes = 0;
+  let reasoningRunTruncated = false;
+  let reasoningTextLimited = false;
+  let reasoningBlockCountLimited = false;
+  let reasoningDirty = false;
+  let pendingReasoningAnnouncement: string | undefined;
+  const liveReasoningBlocks = new Map<string, LiveReasoningBlock>();
+
+  const cancelFlush = () => {
+    cancelScheduledFlush?.();
+    cancelScheduledFlush = undefined;
+  };
+
+  const resetLiveReasoning = () => {
+    openReasoningBlockId = undefined;
+    reasoningRunCodePoints = 0;
+    reasoningRunUtf8Bytes = 0;
+    reasoningRunTruncated = false;
+    reasoningTextLimited = false;
+    reasoningBlockCountLimited = false;
+    reasoningDirty = false;
+    pendingReasoningAnnouncement = undefined;
+    liveReasoningBlocks.clear();
+  };
 
   const store = createStore<ChatState>()((set, get) => {
-    const applyPendingDelta = (terminalStatus?: RunStatus) => {
-      cancelScheduledFlush?.();
-      cancelScheduledFlush = undefined;
-      const delta = pendingDelta;
-      pendingDelta = "";
+    const reasoningSnapshots = (): readonly DisplayReasoningBlock[] =>
+      [...liveReasoningBlocks.values()]
+        .filter((block) => block.content.length > 0 || block.pendingParts.length > 0)
+        .map((block) => {
+          const pending = block.pendingParts.join("");
+          block.pendingParts = [];
+          block.content += pending;
+          return {
+            blockId: block.blockId,
+            content: block.content,
+            state: block.state,
+            truncated: block.truncated,
+            expanded: block.expanded,
+          };
+        });
+
+    const applyPendingStreams = (terminalStatus?: RunStatus) => {
+      cancelFlush();
+      const textDelta = pendingTextDelta;
+      pendingTextDelta = "";
+      const updateReasoning = reasoningDirty;
+      reasoningDirty = false;
+      const blocks = updateReasoning ? reasoningSnapshots() : undefined;
+      const announcement = pendingReasoningAnnouncement;
+      pendingReasoningAnnouncement = undefined;
+      const targetMessageId = activeAssistantMessageId;
 
       set((state) => ({
         messages:
-          delta.length === 0
+          targetMessageId === undefined || (textDelta.length === 0 && blocks === undefined)
             ? state.messages
             : state.messages.map((message) =>
-                message.id === `${state.activeRequestId}:assistant`
-                  ? { ...message, content: message.content + delta }
+                message.id === targetMessageId
+                  ? {
+                      ...message,
+                      content: message.content + textDelta,
+                      reasoningBlocks: blocks ?? message.reasoningBlocks,
+                      reasoningRunTruncated:
+                        blocks === undefined
+                          ? message.reasoningRunTruncated
+                          : reasoningRunTruncated,
+                    }
                   : message,
               ),
         status: terminalStatus ?? state.status,
         activeRequestId: terminalStatus === undefined ? state.activeRequestId : undefined,
+        reasoningAnnouncement: announcement ?? state.reasoningAnnouncement,
       }));
     };
 
-    const queueDelta = (text: string) => {
-      pendingDelta += text;
-      cancelScheduledFlush ??= scheduleFlush(() => applyPendingDelta());
+    const schedulePendingFlush = () => {
+      cancelScheduledFlush ??= scheduleFlush(() => applyPendingStreams());
+    };
+
+    const queueTextDelta = (text: string) => {
+      pendingTextDelta += text;
+      schedulePendingFlush();
+    };
+
+    const queueReasoningDelta = (block: LiveReasoningBlock, text: string) => {
+      if (block.discardText || reasoningTextLimited) {
+        return;
+      }
+
+      const measurement = measureReasoningText(text);
+      if (measurement === undefined) {
+        return;
+      }
+      const blockCodePointsRemaining = maxReasoningBlockCodePoints - block.codePoints;
+      const blockUtf8BytesRemaining = maxReasoningBlockUtf8Bytes - block.utf8Bytes;
+      const runCodePointsRemaining = maxReasoningRunCodePoints - reasoningRunCodePoints;
+      const runUtf8BytesRemaining = maxReasoningRunUtf8Bytes - reasoningRunUtf8Bytes;
+      const prefix = takeReasoningTextPrefix(
+        text,
+        Math.min(blockCodePointsRemaining, runCodePointsRemaining),
+        Math.min(blockUtf8BytesRemaining, runUtf8BytesRemaining),
+      );
+      if (prefix === undefined) {
+        return;
+      }
+
+      const wasVisible = block.content.length > 0 || block.pendingParts.length > 0;
+      if (prefix.text.length > 0) {
+        block.pendingParts.push(prefix.text);
+        block.codePoints += prefix.measurement.codePoints;
+        block.utf8Bytes += prefix.measurement.utf8Bytes;
+        reasoningRunCodePoints += prefix.measurement.codePoints;
+        reasoningRunUtf8Bytes += prefix.measurement.utf8Bytes;
+        reasoningDirty = true;
+        if (!wasVisible) {
+          pendingReasoningAnnouncement = "推理摘要已开始生成。";
+        }
+        schedulePendingFlush();
+      }
+
+      if (!prefix.complete) {
+        block.truncated = true;
+        block.discardText = true;
+        reasoningDirty = true;
+        if (
+          runCodePointsRemaining <= blockCodePointsRemaining ||
+          runUtf8BytesRemaining <= blockUtf8BytesRemaining
+        ) {
+          reasoningRunTruncated = true;
+          reasoningTextLimited = true;
+        }
+        pendingReasoningAnnouncement = "推理摘要已截断。";
+        schedulePendingFlush();
+      }
     };
 
     const applyToolState = (message: ToolStateMessage) => {
       set((state) => ({
         messages: state.messages.map((displayMessage) => {
-          if (displayMessage.id !== `${state.activeRequestId}:assistant`) {
+          if (displayMessage.id !== activeAssistantMessageId) {
             return displayMessage;
           }
 
@@ -113,30 +279,99 @@ export function createChatStore({
       }));
     };
 
+    const restoreMessages = (
+      message: Extract<ExtensionToWebviewMessage, { type: "extension/session-restored" }>,
+      staged: ReasoningRestoredMessage | undefined,
+    ): readonly DisplayMessage[] => {
+      const restoredBlocks: readonly DisplayReasoningBlock[] =
+        staged?.sessionId === message.session.sessionId
+          ? staged.blocks.map((block) => ({
+              blockId: block.blockId,
+              content: block.content,
+              state: block.state,
+              truncated: block.truncated,
+              expanded: false,
+            }))
+          : [];
+      const restoredMessages: DisplayMessage[] = message.session.messages.map((restored) => ({
+        id: restored.messageId,
+        role: restored.role,
+        content: restored.content,
+        toolCalls: [],
+        reasoningBlocks: [],
+        reasoningRunTruncated: false,
+      }));
+      if (restoredBlocks.length === 0) {
+        return restoredMessages;
+      }
+
+      let assistantIndex = -1;
+      for (let index = restoredMessages.length - 1; index >= 0; index -= 1) {
+        if (restoredMessages[index]?.role === "assistant") {
+          assistantIndex = index;
+          break;
+        }
+      }
+      if (assistantIndex >= 0) {
+        restoredMessages[assistantIndex] = {
+          ...restoredMessages[assistantIndex],
+          reasoningBlocks: restoredBlocks,
+          reasoningRunTruncated: staged?.runTruncated ?? false,
+        };
+      } else {
+        restoredMessages.push({
+          id: `${message.session.sessionId}:assistant-reasoning`,
+          role: "assistant",
+          content: "",
+          toolCalls: [],
+          reasoningBlocks: restoredBlocks,
+          reasoningRunTruncated: staged?.runTruncated ?? false,
+        });
+      }
+      return restoredMessages;
+    };
+
     return {
       messages: [],
       status: "idle",
       sessions: [],
+      reasoningAnnouncement: "",
       submit(content) {
         if (get().activeRequestId !== undefined || content.trim().length === 0) {
           return false;
         }
 
+        cancelFlush();
+        pendingTextDelta = "";
+        stagedReasoningRestore = undefined;
+        resetLiveReasoning();
         const requestId = createRequestId();
+        const assistantMessageId = `${requestId}:assistant`;
+        activeAssistantMessageId = assistantMessageId;
         set((state) => ({
           messages: [
             ...state.messages,
-            { id: `${requestId}:user`, role: "user", content, toolCalls: [] },
             {
-              id: `${requestId}:assistant`,
+              id: `${requestId}:user`,
+              role: "user",
+              content,
+              toolCalls: [],
+              reasoningBlocks: [],
+              reasoningRunTruncated: false,
+            },
+            {
+              id: assistantMessageId,
               role: "assistant",
               content: "",
               toolCalls: [],
+              reasoningBlocks: [],
+              reasoningRunTruncated: false,
             },
           ],
           status: "preparing",
           activeRequestId: requestId,
           runError: undefined,
+          reasoningAnnouncement: "",
         }));
         host.submit(requestId, content);
         return true;
@@ -153,6 +388,7 @@ export function createChatStore({
         host.listSessions(listRequestId);
       },
       selectSession(sessionId) {
+        stagedReasoningRestore = undefined;
         set({ selectedSessionId: sessionId.length === 0 ? undefined : sessionId });
       },
       restoreSelectedSession() {
@@ -160,12 +396,50 @@ export function createChatStore({
         if (selectedSessionId === undefined || activeRequestId !== undefined) {
           return false;
         }
+        stagedReasoningRestore = undefined;
         restoreRequestId = createRequestId();
-        set({ sessionError: undefined, runError: undefined });
+        set({ sessionError: undefined, runError: undefined, reasoningAnnouncement: "" });
         host.restoreSession(restoreRequestId, selectedSessionId);
         return true;
       },
+      toggleReasoningBlock(messageId, blockId) {
+        const live = liveReasoningBlocks.get(blockId);
+        set((state) => ({
+          messages: state.messages.map((message) => {
+            if (message.id !== messageId) {
+              return message;
+            }
+            return {
+              ...message,
+              reasoningBlocks: message.reasoningBlocks.map((block) => {
+                if (block.blockId !== blockId) {
+                  return block;
+                }
+                const expanded = !block.expanded;
+                if (live !== undefined) {
+                  live.expanded = expanded;
+                }
+                return { ...block, expanded };
+              }),
+            };
+          }),
+        }));
+      },
+      announceReasoning(message) {
+        set({ reasoningAnnouncement: message });
+      },
       receive(message) {
+        if (
+          message.type === "extension/reasoning-restored" &&
+          message.requestId === restoreRequestId
+        ) {
+          stagedReasoningRestore = message;
+          return;
+        }
+
+        const stagedForCurrentMessage = stagedReasoningRestore;
+        stagedReasoningRestore = undefined;
+
         if (message.type === "extension/session-list" && message.requestId === listRequestId) {
           listRequestId = undefined;
           set({
@@ -182,12 +456,7 @@ export function createChatStore({
         ) {
           restoreRequestId = undefined;
           set({
-            messages: message.session.messages.map((restored) => ({
-              id: restored.messageId,
-              role: restored.role,
-              content: restored.content,
-              toolCalls: [],
-            })),
+            messages: restoreMessages(message, stagedForCurrentMessage),
             status:
               message.session.status === "completed" ||
               message.session.status === "cancelled" ||
@@ -197,6 +466,7 @@ export function createChatStore({
                 : "idle",
             selectedSessionId: message.session.sessionId,
             runError: undefined,
+            reasoningAnnouncement: "",
             sessionError: message.session.eventLogTailDamaged
               ? "Recovered through the last valid event."
               : undefined,
@@ -221,8 +491,93 @@ export function createChatStore({
 
         if (message.type === "extension/text-delta") {
           if (state.status === "preparing" || state.status === "streaming") {
-            queueDelta(message.text);
+            queueTextDelta(message.text);
           }
+          return;
+        }
+
+        if (message.type === "extension/reasoning-start") {
+          if (
+            (state.status !== "preparing" && state.status !== "streaming") ||
+            openReasoningBlockId !== undefined ||
+            liveReasoningBlocks.has(message.blockId) ||
+            reasoningBlockCountLimited
+          ) {
+            return;
+          }
+          if (liveReasoningBlocks.size >= maxReasoningBlocksPerRun) {
+            reasoningBlockCountLimited = true;
+            reasoningRunTruncated = true;
+            reasoningDirty = true;
+            pendingReasoningAnnouncement = "部分推理摘要因块数限制已省略。";
+            schedulePendingFlush();
+            return;
+          }
+          liveReasoningBlocks.set(message.blockId, {
+            blockId: message.blockId,
+            content: "",
+            pendingParts: [],
+            codePoints: 0,
+            utf8Bytes: 0,
+            state: "streaming",
+            truncated: false,
+            expanded: true,
+            discardText: reasoningTextLimited,
+          });
+          openReasoningBlockId = message.blockId;
+          return;
+        }
+
+        if (message.type === "extension/reasoning-delta") {
+          if (message.blockId !== openReasoningBlockId) {
+            return;
+          }
+          const block = liveReasoningBlocks.get(message.blockId);
+          if (block !== undefined && block.state === "streaming") {
+            queueReasoningDelta(block, message.text);
+          }
+          return;
+        }
+
+        if (message.type === "extension/reasoning-limit") {
+          if (message.scope === "block") {
+            const block = liveReasoningBlocks.get(message.blockId);
+            if (block === undefined || block.state !== "streaming") {
+              return;
+            }
+            block.truncated = true;
+            block.discardText = true;
+            reasoningDirty = true;
+            pendingReasoningAnnouncement = "推理摘要已截断。";
+          } else {
+            reasoningRunTruncated = true;
+            reasoningBlockCountLimited = true;
+            reasoningTextLimited = message.reason !== "block-count";
+            reasoningDirty = true;
+            pendingReasoningAnnouncement = "部分推理摘要因运行限制已省略。";
+          }
+          schedulePendingFlush();
+          return;
+        }
+
+        if (message.type === "extension/reasoning-end") {
+          if (message.blockId !== openReasoningBlockId) {
+            return;
+          }
+          const block = liveReasoningBlocks.get(message.blockId);
+          if (block === undefined || block.state !== "streaming") {
+            return;
+          }
+          block.state = "complete";
+          block.truncated ||= message.truncated;
+          reasoningDirty = true;
+          openReasoningBlockId = undefined;
+          if (block.content.length > 0 || block.pendingParts.length > 0) {
+            pendingReasoningAnnouncement = block.truncated
+              ? "推理摘要已截断并完成。"
+              : "推理摘要生成完成。";
+          }
+          applyPendingStreams();
           return;
         }
 
@@ -244,16 +599,31 @@ export function createChatStore({
             message.status === "cancelled" ||
             message.status === "failed"
           ) {
-            applyPendingDelta(message.status);
+            const openBlock =
+              openReasoningBlockId === undefined
+                ? undefined
+                : liveReasoningBlocks.get(openReasoningBlockId);
+            if (
+              openBlock !== undefined &&
+              (openBlock.content.length > 0 || openBlock.pendingParts.length > 0)
+            ) {
+              openBlock.state = "partial";
+              reasoningDirty = true;
+              pendingReasoningAnnouncement = "推理摘要已部分结束。";
+            }
+            openReasoningBlockId = undefined;
+            applyPendingStreams(message.status);
           } else {
             set({ status: message.status });
           }
         }
       },
       dispose() {
-        cancelScheduledFlush?.();
-        cancelScheduledFlush = undefined;
-        pendingDelta = "";
+        cancelFlush();
+        pendingTextDelta = "";
+        stagedReasoningRestore = undefined;
+        activeAssistantMessageId = undefined;
+        resetLiveReasoning();
       },
     };
   });

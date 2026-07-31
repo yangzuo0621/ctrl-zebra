@@ -250,7 +250,9 @@ describe("App streaming chat", () => {
       }),
     );
 
-    expect(screen.getByRole("status")).toHaveTextContent("Session was interrupted by a restart.");
+    expect(screen.getByRole("status", { name: "Run status" })).toHaveTextContent(
+      "Session was interrupted by a restart.",
+    );
     expect(host.sent.some(({ type }) => type === "webview/submit")).toBe(false);
   });
 
@@ -272,7 +274,9 @@ describe("App streaming chat", () => {
     ]);
     expect(screen.getByText("Say hello.")).toBeVisible();
     expect(screen.getByText("Waiting for response…")).toBeVisible();
-    expect(screen.getByRole("status")).toHaveTextContent("Preparing response…");
+    expect(screen.getByRole("status", { name: "Run status" })).toHaveTextContent(
+      "Preparing response…",
+    );
     expect(screen.getByRole("textbox", { name: "Message" })).toBeDisabled();
   });
 
@@ -324,7 +328,9 @@ describe("App streaming chat", () => {
     });
 
     expect(screen.getByText("Hello!")).toBeVisible();
-    expect(screen.getByRole("status")).toHaveTextContent("Response complete.");
+    expect(screen.getByRole("status", { name: "Run status" })).toHaveTextContent(
+      "Response complete.",
+    );
     expect(screen.getByRole("textbox", { name: "Message" })).toBeEnabled();
   });
 
@@ -359,7 +365,9 @@ describe("App streaming chat", () => {
     });
 
     expect(screen.getByRole("alert")).toHaveTextContent(message);
-    expect(screen.getByRole("status")).toHaveTextContent("Response failed.");
+    expect(screen.getByRole("status", { name: "Run status" })).toHaveTextContent(
+      "Response failed.",
+    );
   });
 
   it("clears a previous run error when a new run begins", async () => {
@@ -434,7 +442,9 @@ describe("App streaming chat", () => {
 
     expect(screen.getByText("Before")).toBeVisible();
     expect(screen.queryByText("Before after")).not.toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("Response cancelled.");
+    expect(screen.getByRole("status", { name: "Run status" })).toHaveTextContent(
+      "Response cancelled.",
+    );
   });
 
   it("updates one Tool Call card through pending, running, and success", async () => {
@@ -607,6 +617,164 @@ describe("App streaming chat", () => {
 
     expect(screen.getByLabelText("Command status")).toHaveTextContent("Terminated");
     expect(screen.getByRole("status", { name: "Command status" })).toBeVisible();
+  });
+
+  it("renders reasoning beside answer and Tool state without reopening a collapsed block", async () => {
+    const host = new FakeWebviewHost();
+    const user = userEvent.setup();
+    render(<App host={host} createRequestId={() => "request-reasoning"} />);
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "Inspect this.");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    act(() => {
+      host.emit({
+        protocolVersion,
+        type: "extension/run-status",
+        requestId: "request-reasoning",
+        status: "streaming",
+      });
+      host.emit({
+        protocolVersion,
+        type: "extension/reasoning-start",
+        requestId: "request-reasoning",
+        blockId: "reasoning-1",
+      });
+      host.emit({
+        protocolVersion,
+        type: "extension/reasoning-delta",
+        requestId: "request-reasoning",
+        blockId: "reasoning-1",
+        text: "Inspect contracts.",
+      });
+      host.emit({
+        protocolVersion,
+        type: "extension/text-delta",
+        requestId: "request-reasoning",
+        text: "Final answer.",
+      });
+      host.emit({
+        protocolVersion,
+        type: "extension/tool-state",
+        requestId: "request-reasoning",
+        call: { id: "call-1", name: "read_file", input: { path: "README.md" } },
+        status: "pending",
+      });
+      animationFrames[0]?.(0);
+    });
+
+    expect(screen.getByRole("region", { name: "推理摘要" })).toBeVisible();
+    expect(screen.getByText("Inspect contracts.")).toBeVisible();
+    expect(screen.getByText("Final answer.")).toBeVisible();
+    expect(screen.getByRole("article", { name: "read_file" })).toBeVisible();
+    expect(screen.getByRole("status", { name: "推理摘要状态" })).toHaveTextContent(
+      "推理摘要已开始生成。",
+    );
+
+    const disclosure = screen.getByRole("button", { name: "折叠推理摘要" });
+    await user.click(disclosure);
+    act(() => {
+      host.emit({
+        protocolVersion,
+        type: "extension/reasoning-delta",
+        requestId: "request-reasoning",
+        blockId: "reasoning-1",
+        text: " Continue.",
+      });
+      animationFrames[1]?.(0);
+    });
+
+    expect(screen.getByRole("button", { name: "展开推理摘要" })).toHaveFocus();
+    expect(screen.queryByText("Inspect contracts. Continue.")).not.toBeInTheDocument();
+  });
+
+  it("does not render reasoning UI when the Provider sends no retained summary", async () => {
+    const host = new FakeWebviewHost();
+    const user = userEvent.setup();
+    render(<App host={host} createRequestId={() => "request-no-reasoning"} />);
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "Answer normally.");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    act(() => {
+      host.emit({
+        protocolVersion,
+        type: "extension/text-delta",
+        requestId: "request-no-reasoning",
+        text: "Normal answer.",
+      });
+      animationFrames[0]?.(0);
+    });
+
+    expect(screen.getByText("Normal answer.")).toBeVisible();
+    expect(screen.queryByRole("region", { name: "推理摘要" })).not.toBeInTheDocument();
+  });
+
+  it("restores a completed reasoning summary collapsed without a live announcement", async () => {
+    const host = new FakeWebviewHost();
+    const ids = ["list-reasoning", "restore-reasoning"];
+    const user = userEvent.setup();
+    render(<App host={host} createRequestId={() => ids.shift() ?? "unexpected"} />);
+    await user.click(screen.getByRole("button", { name: "Sessions" }));
+    await user.click(screen.getByRole("button", { name: "Refresh" }));
+    act(() =>
+      host.emit({
+        protocolVersion,
+        type: "extension/session-list",
+        requestId: "list-reasoning",
+        sessions: [
+          {
+            sessionId: "session-reasoning",
+            status: "completed",
+            createdAt: "2026-07-31T00:00:00.000Z",
+          },
+        ],
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: "Restore" }));
+    act(() => {
+      host.emit({
+        protocolVersion,
+        type: "extension/reasoning-restored",
+        requestId: "restore-reasoning",
+        sessionId: "session-reasoning",
+        blocks: [
+          {
+            blockId: "reasoning-restored",
+            startSequence: 2,
+            endSequence: 4,
+            content: "Recovered summary",
+            state: "complete",
+            truncated: false,
+          },
+        ],
+        runTruncated: false,
+      });
+      host.emit({
+        protocolVersion,
+        type: "extension/session-restored",
+        requestId: "restore-reasoning",
+        session: {
+          sessionId: "session-reasoning",
+          status: "completed",
+          eventLogTailDamaged: false,
+          messages: [
+            {
+              messageId: "assistant-restored",
+              sessionId: "session-reasoning",
+              createdAt: "2026-07-31T00:00:01.000Z",
+              role: "assistant",
+              content: "Recovered answer",
+            },
+          ],
+        },
+      });
+    });
+
+    expect(screen.getByRole("button", { name: "展开推理摘要" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    expect(screen.queryByText("Recovered summary")).not.toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "推理摘要状态" })).toBeEmptyDOMElement();
   });
 
   it("populates composer draft when selecting an onboarding sample prompt (T1104)", async () => {
