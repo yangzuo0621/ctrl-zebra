@@ -56,6 +56,45 @@ This document defines the initial runtime boundaries for the CtrlZebra desktop V
 - The caller owns cancellation and passes an `AbortSignal` to `ModelGateway.stream`. An adapter passes that same signal to the underlying SDK operation, observes cancellation while consuming the stream, emits no later events, and preserves cancellation as distinct from provider failure.
 - Provider adapters do not decide session transitions, retry policy, tool approval or execution, persistence, or presentation. Those decisions remain with the owning Core runtime or host adapter introduced by their roadmap tasks.
 
+### Reasoning summary event boundary
+
+- A reasoning summary is optional, user-visible model output carried by a Provider's documented
+  reasoning stream events. It is not raw, hidden, or complete chain of thought. An adapter must not
+  create it from prompts, ordinary answer text, Tool activity, host inference, opaque encrypted
+  payloads, or a second model request.
+- Core extends `ModelEvent` with the closed Provider-neutral lifecycle
+  `reasoning.start → reasoning.delta* → reasoning.end`. Every event carries a non-empty opaque
+  `blockId` of at most 128 characters. An adapter maps any SDK association to a CtrlZebra-owned
+  identifier; raw SDK IDs and their semantics do not cross the Provider boundary.
+- Within one `ModelGateway.stream` invocation, a `blockId` starts exactly once, accepts deltas only
+  while open, and ends at most once. Blocks do not nest. More than one block may occur sequentially,
+  and reasoning events may interleave with text, Tool Call, Usage, and Finish events exactly where
+  the source stream placed them. A new model invocation after Tool use is a new step; its block IDs
+  cannot reopen or append to an earlier step.
+- Provider adapters preserve well-formed whitespace because it can carry formatting, but discard
+  zero-length deltas. They split an oversized source delta at Unicode code-point boundaries into
+  ordered normalized deltas. Each normalized delta is at most 8,192 Unicode code points and 32,768
+  UTF-8 bytes. Ill-formed Unicode, a delta for an unopened or ended block, a duplicate start or end,
+  a nested start, or Finish with an open block is a `malformed-response` Provider failure.
+- The Agent Runtime republishes the accepted lifecycle as
+  `agent.reasoning-start`, `agent.reasoning-delta`, and `agent.reasoning-end` with a run-scoped
+  CtrlZebra block ID. It preserves the relative order of every reasoning, text, Tool, Usage, and
+  Finish event and never inserts reasoning into the model message history used by a later Tool step.
+- A start/end pair with no retained text is a valid empty block. Runtime events may preserve its
+  ordering, but persistence recovery and the Webview do not create a visible card for it. Whitespace-
+  only retained text is not treated as an Agent's required final answer and does not satisfy the
+  existing non-empty answer rule.
+- If a stream fails or is cancelled while a block is open, no synthetic delta or end is emitted.
+  Already emitted text remains an explicitly partial block. Completion, failure, and cancellation
+  close the owning run for delivery purposes, so late reasoning events are ignored and cannot cause
+  persistence, protocol, Tool, retry, or UI side effects.
+- Reasoning output is user-observable. Once any reasoning start, non-empty reasoning delta, answer
+  delta, or Tool event has been emitted, Provider retry policy must not restart that stream and risk
+  duplicating visible content. A stream with no reasoning events follows the existing text and Tool
+  behavior without a placeholder, error, or capability assumption.
+- Reasoning support is detected only from actual events. It is not added to the version `1`
+  Provider capability declaration, and Core does not reject a request because reasoning is absent.
+
 ## Provider Configuration Boundary
 
 - `apps/extension` owns Provider configuration. It accepts VS Code configuration values as

@@ -9,6 +9,8 @@
 - VS Code Activity Bar 中的 Agent 侧边栏。
 - 创建本地会话并发送用户消息。
 - 使用一个模型供应商进行流式文本生成。
+- 当 Provider 正式流事件实际返回用户可见推理摘要时，在对话中以独立、可选且有界的“推理摘要”
+  展示；该内容不是模型原始、隐藏或完整思维链。
 - 取消正在进行的模型请求。
 - `list_files`、`read_file`、`search_files` 三个只读工具。
 - 模型发起 Tool Call 后，插件执行工具并继续模型循环。
@@ -25,6 +27,7 @@
 - MCP。
 - 浏览器自动化。
 - 图片生成或多模态文件解析。
+- 通过提示词要求、额外模型调用或 Host 推断生成、补写或重建模型思维过程。
 - 自定义 Modes。
 - Git 自动提交或自动创建 PR。
 - 无审批的终端命令执行。
@@ -102,6 +105,7 @@ vscode-agent/
 - Webview 到 Extension 的命令。
 - Extension 到 Webview 的事件。
 - Session、Message、Tool Call 的可序列化 DTO。
+- 推理摘要块、流事件、截断状态和恢复投影的严格可序列化 DTO。
 - Zod Schema 和由 Schema 推导的 TypeScript 类型。
 - 持久化格式版本号。
 
@@ -122,6 +126,7 @@ vscode-agent/
 - Context 构造、裁剪和摘要接口。
 - Checkpoint 数据模型。
 - 领域事件和错误分类。
+- Provider-neutral 推理摘要生命周期以及与正文、Tool 和终态保持源顺序的转发。
 
 约束：
 
@@ -134,6 +139,7 @@ vscode-agent/
 负责把第三方模型 SDK 转换为内部统一事件：
 
 - 文本增量。
+- Provider 正式返回的用户可见推理摘要增量。
 - Tool Call。
 - Finish Reason。
 - Token Usage。
@@ -170,6 +176,7 @@ vscode-agent/
 
 - 聊天消息列表。
 - 流式文本渲染。
+- 独立、可折叠的推理摘要展示。
 - Tool Call 状态卡片。
 - 审批界面。
 - 会话选择和设置。
@@ -230,6 +237,9 @@ export interface ModelGateway {
 
 export type ModelEvent =
   | { type: "text.delta"; text: string }
+  | { type: "reasoning.start"; blockId: string }
+  | { type: "reasoning.delta"; blockId: string; text: string }
+  | { type: "reasoning.end"; blockId: string }
   | { type: "tool.call"; call: ToolCall }
   | { type: "usage"; usage: TokenUsage }
   | { type: "finish"; reason: FinishReason };
@@ -243,7 +253,16 @@ export type ModelGatewayErrorCode =
   | "unknown";
 ```
 
-`ModelRequest` 只包含 Core 模型消息，不复用持久化 Chat Message DTO。Provider 失败通过带有稳定 `ModelGatewayErrorCode` 的 `ModelGatewayError` 抛出；取消保留调用方的取消原因，不转换为 Provider 失败。
+`ModelRequest` 只包含 Core 模型消息，不复用持久化 Chat Message DTO。Provider 失败通过带有稳定
+`ModelGatewayErrorCode` 的 `ModelGatewayError` 抛出；取消保留调用方的取消原因，不转换为
+Provider 失败。
+
+Reasoning 事件是可选的 Provider-neutral 内容事件，只在底层 Provider 正式流实际产生用户可见
+reasoning 文本时出现。`blockId` 是 CtrlZebra 自有的关联标识，不承载 Provider metadata；
+reasoning 文本不进入 `ModelRequest`、Tool 输入、最终回答或后续模型上下文。精确生命周期、资源
+上限、持久化和展示规则分别由 [Architecture](../architecture.md)、
+[Protocol](../protocol.md)、[Persistence](../persistence.md)、[Security](../security.md)、
+[UX](../ux.md) 和 [Webview](../webview.md) 共同约束。
 
 ### 6.2 工具接口
 
@@ -309,6 +328,7 @@ export interface ApprovalService {
 - Context Budget。
 - Session 状态转换。
 - Provider 事件标准化。
+- 推理摘要 start/delta/end 生命周期、交错顺序、资源边界和取消。
 
 要求：
 
@@ -323,6 +343,7 @@ export interface ApprovalService {
 
 - 消息列表。
 - 流式消息。
+- 推理摘要的折叠、截断、部分恢复和无内容降级。
 - Tool 卡片。
 - 审批按钮。
 - 错误和取消状态。
