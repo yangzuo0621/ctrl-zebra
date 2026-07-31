@@ -1,0 +1,129 @@
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { useState } from "react";
+import { describe, expect, it, vi } from "vitest";
+
+import type { DisplayReasoningBlock } from "./chat-store.js";
+import { ReasoningSummary } from "./reasoning-summary.js";
+
+const streamingBlock: DisplayReasoningBlock = {
+  blockId: "block-1",
+  content: "Inspect the current contracts.",
+  state: "streaming",
+  truncated: false,
+  expanded: true,
+};
+
+describe("ReasoningSummary", () => {
+  it("renders a labelled Provider-sourced region and toggles it from the keyboard", async () => {
+    const user = userEvent.setup();
+
+    function Harness() {
+      const [blocks, setBlocks] = useState<readonly DisplayReasoningBlock[]>([streamingBlock]);
+      return (
+        <ReasoningSummary
+          blocks={blocks}
+          runTruncated={false}
+          onToggle={(blockId) =>
+            setBlocks((current) =>
+              current.map((block) =>
+                block.blockId === blockId ? { ...block, expanded: !block.expanded } : block,
+              ),
+            )
+          }
+          onAnnounce={() => {}}
+        />
+      );
+    }
+
+    render(<Harness />);
+
+    expect(screen.getByRole("region", { name: "推理摘要" })).toBeVisible();
+    expect(screen.getByText("模型提供")).toBeVisible();
+    expect(screen.getByText("正在生成摘要")).toBeVisible();
+    const disclosure = screen.getByRole("button", { name: "折叠推理摘要" });
+    expect(disclosure).toHaveAttribute("aria-expanded", "true");
+
+    await user.tab();
+    expect(disclosure).toHaveFocus();
+    await user.keyboard("{Enter}");
+
+    expect(screen.getByRole("button", { name: "展开推理摘要" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    expect(screen.queryByText(streamingBlock.content)).not.toBeInTheDocument();
+  });
+
+  it("renders untrusted content as selectable plain text without activating markup", () => {
+    const content = '<img src=x onerror="alert(1)">\n```ts\nconst value = 1;\n```';
+    render(
+      <ReasoningSummary
+        blocks={[{ ...streamingBlock, content, state: "complete" }]}
+        runTruncated={false}
+        onToggle={() => {}}
+        onAnnounce={() => {}}
+      />,
+    );
+
+    const rendered = document.querySelector("pre");
+    expect(rendered).toBeVisible();
+    expect(rendered?.textContent).toBe(content);
+    expect(document.querySelector("img")).toBeNull();
+    expect(document.querySelector("a")).toBeNull();
+    expect(rendered?.tagName).toBe("PRE");
+  });
+
+  it("copies only the visible bounded block and reports success without moving focus", async () => {
+    const user = userEvent.setup();
+    const announce = vi.fn();
+    render(
+      <ReasoningSummary
+        blocks={[streamingBlock]}
+        runTruncated={false}
+        onToggle={() => {}}
+        onAnnounce={announce}
+      />,
+    );
+    const writeText = vi.spyOn(navigator.clipboard, "writeText");
+    const copy = screen.getByRole("button", { name: "复制摘要" });
+
+    await user.click(copy);
+
+    expect(writeText).toHaveBeenCalledWith(streamingBlock.content);
+    expect(announce).toHaveBeenCalledWith("推理摘要已复制。");
+    expect(copy).toHaveFocus();
+  });
+
+  it("labels multiple blocks, partial content, and block/run truncation visibly", () => {
+    render(
+      <ReasoningSummary
+        blocks={[
+          { ...streamingBlock, state: "complete", expanded: false },
+          {
+            ...streamingBlock,
+            blockId: "block-2",
+            content: "Recovered partial",
+            state: "partial",
+            truncated: true,
+            expanded: false,
+          },
+        ]}
+        runTruncated
+        onToggle={() => {}}
+        onAnnounce={() => {}}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "展开推理摘要 1" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "展开推理摘要 2" })).toBeVisible();
+    expect(screen.getByText("部分摘要 · 内容已截断")).toBeVisible();
+    expect(screen.getByText("部分推理摘要已因运行限制省略。")).toBeVisible();
+  });
+
+  it("renders nothing when no retained reasoning exists", () => {
+    render(<ReasoningSummary blocks={[]} runTruncated onToggle={() => {}} onAnnounce={() => {}} />);
+
+    expect(screen.queryByRole("region", { name: "推理摘要" })).not.toBeInTheDocument();
+  });
+});

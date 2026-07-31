@@ -18,6 +18,15 @@ on important work.
 CtrlZebra supports OpenAI, Google Gemini, and explicitly configured OpenAI-compatible endpoints.
 Provider usage, availability, pricing, and data handling remain subject to the provider you choose.
 
+## Reasoning summaries
+
+When the configured Provider and model actually return a documented, user-visible reasoning
+summary, CtrlZebra shows it in a separate, collapsible **推理摘要** region beside the answer. This
+content is a Provider-supplied summary, not raw, hidden, or complete chain of thought. Support
+depends on the Provider, model, endpoint, and request; runs without a returned summary continue
+normally and show no placeholder. Retained summaries are bounded, may be visibly truncated, and can
+be restored with their local Session.
+
 ## Install from VSIX
 
 1. Obtain a verified `ctrl-zebra-*.vsix` artifact.
@@ -97,6 +106,7 @@ CtrlZebra has no accounts, cloud sync, advertising, or telemetry backend. It sto
 
 - provider keys in VS Code SecretStorage;
 - Session messages and lifecycle events in VS Code extension storage;
+- bounded Provider-supplied reasoning summaries in the corresponding Session event log;
 - recovery Checkpoints, including pre-edit workspace text, in VS Code extension storage; and
 - bounded structured diagnostics in the local CtrlZebra VS Code log channel.
 

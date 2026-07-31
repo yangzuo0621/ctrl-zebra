@@ -9,6 +9,7 @@ import { CheckpointPanel } from "./checkpoint-panel.js";
 import { createCheckpointStore } from "./checkpoint-store.js";
 import { MarkdownMessage } from "./markdown-message.js";
 import { OnboardingCard } from "./onboarding-card.js";
+import { ReasoningSummary } from "./reasoning-summary.js";
 import { ToolCallCard } from "./tool-call-card.js";
 import { Button } from "./ui/button.js";
 import { getWebviewHost, type WebviewHost } from "./vscode-api.js";
@@ -57,6 +58,7 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
   const [userScrolledUp, setUserScrolledUp] = useState(false);
 
   const mainRef = useRef<HTMLDivElement>(null);
+  const suppressNextAutoFollow = useRef(false);
 
   const messages = useStore(store, (state) => state.messages);
   const status = useStore(store, (state) => state.status);
@@ -65,6 +67,7 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
   const selectedSessionId = useStore(store, (state) => state.selectedSessionId);
   const sessionError = useStore(store, (state) => state.sessionError);
   const runError = useStore(store, (state) => state.runError);
+  const reasoningAnnouncement = useStore(store, (state) => state.reasoningAnnouncement);
   const approval = useStore(approvalStore, (state) => state.current);
   const pendingDecision = useStore(approvalStore, (state) => state.pendingDecision);
 
@@ -83,6 +86,10 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
   // Scroll to bottom when new messages arrive unless user scrolled up
   // biome-ignore lint/correctness/useExhaustiveDependencies: scroll on message updates
   useEffect(() => {
+    if (suppressNextAutoFollow.current) {
+      suppressNextAutoFollow.current = false;
+      return;
+    }
     if (!userScrolledUp && mainRef.current) {
       mainRef.current.scrollTop = mainRef.current.scrollHeight;
     }
@@ -100,6 +107,11 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
       mainRef.current.scrollTop = mainRef.current.scrollHeight;
       setUserScrolledUp(false);
     }
+  };
+
+  const toggleReasoningBlock = (messageId: string, blockId: string) => {
+    suppressNextAutoFollow.current = true;
+    store.getState().toggleReasoningBlock(messageId, blockId);
   };
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -208,6 +220,12 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
                 key={message.id}
                 aria-label={message.role === "user" ? "Your message" : "Agent message"}
               >
+                <ReasoningSummary
+                  blocks={message.reasoningBlocks}
+                  runTruncated={message.reasoningRunTruncated}
+                  onToggle={(blockId) => toggleReasoningBlock(message.id, blockId)}
+                  onAnnounce={(announcement) => store.getState().announceReasoning(announcement)}
+                />
                 {message.toolCalls.map((toolCall) => (
                   <ToolCallCard
                     key={toolCall.call.id}
@@ -256,6 +274,16 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
       </main>
 
       <footer className={styles.footer}>
+        <p
+          className={styles.srOnly}
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          aria-label="推理摘要状态"
+        >
+          {reasoningAnnouncement}
+        </p>
+
         {runError === undefined ? null : (
           <p className={styles.runError} role="alert">
             {runError}
@@ -302,7 +330,7 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
           </div>
         </form>
 
-        <p className={styles.status} role="status">
+        <p className={styles.status} role="status" aria-label="Run status">
           {statusText[status]}
         </p>
       </footer>
