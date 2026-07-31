@@ -224,5 +224,5 @@
 [T1302：标准化 Provider reasoning 流并接入 Core Runtime](roadmap/phases/phase-13.md#t1302标准化-provider-reasoning-流并接入-core-runtime)
 以及
 [T1303：打通 Extension 协议、持久化与恢复](roadmap/phases/phase-13.md#t1303打通-extension-协议持久化与恢复)
-均已完成。T1303 通过 [#133](https://github.com/yangzuo0621/ctrl-zebra/pull/133) 完成实现与验证，
-等待 squash 合入 `main`；当前没有进行中任务，下一任务为 T1304。
+均已完成。T1303 已通过 [#133](https://github.com/yangzuo0621/ctrl-zebra/pull/133) squash 合入
+`main`；当前没有进行中任务，下一任务为 T1304。
