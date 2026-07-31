@@ -44,6 +44,10 @@ export {
   toolSuccessResultSchema,
 } from "@ctrl-zebra/protocol";
 export type {
+  AgentReasoningDeltaEvent,
+  AgentReasoningEndEvent,
+  AgentReasoningEvent,
+  AgentReasoningStartEvent,
   AgentRuntimeEvent,
   AgentRuntimeOptions,
   AgentTextDeltaEvent,
@@ -148,6 +152,7 @@ export type {
   ModelGatewayErrorCode,
   ModelMessage,
   ModelMessageRole,
+  ModelReasoningEvent,
   ModelRequest,
   ModelTextMessage,
   ModelToolCallMessage,
@@ -162,7 +167,12 @@ export type {
   ToolInputSchema,
   ToolInputStringSchema,
 } from "./model-gateway.js";
-export { ModelGatewayError } from "./model-gateway.js";
+export {
+  ModelGatewayError,
+  maxReasoningBlockIdCharacters,
+  maxReasoningDeltaCodePoints,
+  maxReasoningDeltaUtf8Bytes,
+} from "./model-gateway.js";
 export type { ProviderRetryDelay } from "./provider-retry-policy.js";
 export {
   defaultProviderRetryDelay,

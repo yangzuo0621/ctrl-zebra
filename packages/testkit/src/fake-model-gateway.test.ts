@@ -10,6 +10,9 @@ const request = {
 describe("FakeModelGateway", () => {
   it("streams its configured events in order", async () => {
     const events = [
+      { type: "reasoning.start", blockId: "reasoning-1" },
+      { type: "reasoning.delta", blockId: "reasoning-1", text: "I should inspect." },
+      { type: "reasoning.end", blockId: "reasoning-1" },
       { type: "text.delta", text: "I will look." },
       {
         type: "tool.call",
@@ -37,6 +40,16 @@ describe("FakeModelGateway", () => {
     const received = await Array.fromAsync(gateway.stream(request, new AbortController().signal));
 
     expect(received).toEqual([]);
+  });
+
+  it("throws a scripted failure for a model step", async () => {
+    const failure = new Error("scripted provider failure");
+    const gateway = new FakeModelGateway([failure]);
+
+    await expect(
+      Array.fromAsync(gateway.stream(request, new AbortController().signal)),
+    ).rejects.toBe(failure);
+    expect(gateway.requests).toEqual([request]);
   });
 
   it("stops before another event when cancelled", async () => {

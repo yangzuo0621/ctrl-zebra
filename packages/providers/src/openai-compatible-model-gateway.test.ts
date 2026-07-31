@@ -40,6 +40,9 @@ describe("OpenAI-Compatible ModelGateway", () => {
       { type: "start" },
       { type: "text-start", id: "text-1" },
       { type: "text-delta", id: "text-1", text: "Hel" },
+      { type: "reasoning-start", id: "compatible-reasoning" },
+      { type: "reasoning-delta", id: "compatible-reasoning", text: "Verify." },
+      { type: "reasoning-end", id: "compatible-reasoning" },
       {
         type: "tool-call",
         toolCallId: "call-1",
@@ -62,6 +65,9 @@ describe("OpenAI-Compatible ModelGateway", () => {
 
     await expect(collectEvents(gateway.stream(request, signal))).resolves.toEqual([
       { type: "text.delta", text: "Hel" },
+      { type: "reasoning.start", blockId: "reasoning-1" },
+      { type: "reasoning.delta", blockId: "reasoning-1", text: "Verify." },
+      { type: "reasoning.end", blockId: "reasoning-1" },
       {
         type: "tool.call",
         call: { id: "call-1", name: "lookup", input: { query: "zebra" } },

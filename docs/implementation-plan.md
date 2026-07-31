@@ -64,12 +64,12 @@
 **进度摘要**：
 
 - 总任务：89
-- 已完成：86
+- 已完成：87
 - 进行中：0
 - 受阻：0
-- 待开始：3
+- 待开始：2
 - 当前任务：无
-- 下一任务：T1302
+- 下一任务：T1303
 - 最后更新：2026-07-31
 
 | 阶段 | 任务 | 状态 | 完成 PR | 完成日期 |
@@ -160,7 +160,7 @@
 | 11 | T1108 | 已完成 | [#121](https://github.com/yangzuo0621/ctrl-zebra/pull/121) | 2026-07-27 |
 | 12 | T1201 | 已完成 | [#129](https://github.com/yangzuo0621/ctrl-zebra/pull/129) | 2026-07-29 |
 | 13 | T1301 | 已完成 | [#131](https://github.com/yangzuo0621/ctrl-zebra/pull/131) | 2026-07-31 |
-| 13 | T1302 | 待开始 | — | — |
+| 13 | T1302 | 已完成 | [#132](https://github.com/yangzuo0621/ctrl-zebra/pull/132) | 2026-07-31 |
 | 13 | T1303 | 待开始 | — | — |
 | 13 | T1304 | 待开始 | — | — |
 
@@ -220,5 +220,7 @@
 
 阶段 0–12 的 85 个任务以及
 [T1301：建立推理摘要的产品与跨边界契约](roadmap/phases/phase-13.md#t1301建立推理摘要的产品与跨边界契约)
-均已完成。T1301 的 docs-only 约束门禁通过 [#131](https://github.com/yangzuo0621/ctrl-zebra/pull/131)
-squash 合入 `main`；当前没有进行中任务，下一任务为 T1302。
+以及
+[T1302：标准化 Provider reasoning 流并接入 Core Runtime](roadmap/phases/phase-13.md#t1302标准化-provider-reasoning-流并接入-core-runtime)
+均已完成。T1302 通过 [#132](https://github.com/yangzuo0621/ctrl-zebra/pull/132) squash 合入
+`main`；当前没有进行中任务，下一任务为 T1303。

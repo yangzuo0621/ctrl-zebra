@@ -33,6 +33,30 @@ export interface AgentTextDeltaEvent extends DomainEvent {
   readonly text: string;
 }
 
+export interface AgentReasoningStartEvent extends DomainEvent {
+  readonly type: "agent.reasoning-start";
+  readonly sessionId: SessionId;
+  readonly blockId: string;
+}
+
+export interface AgentReasoningDeltaEvent extends DomainEvent {
+  readonly type: "agent.reasoning-delta";
+  readonly sessionId: SessionId;
+  readonly blockId: string;
+  readonly text: string;
+}
+
+export interface AgentReasoningEndEvent extends DomainEvent {
+  readonly type: "agent.reasoning-end";
+  readonly sessionId: SessionId;
+  readonly blockId: string;
+}
+
+export type AgentReasoningEvent =
+  | AgentReasoningStartEvent
+  | AgentReasoningDeltaEvent
+  | AgentReasoningEndEvent;
+
 interface AgentToolStateEventBase extends DomainEvent {
   readonly type: "agent.tool-state";
   readonly sessionId: SessionId;
@@ -52,6 +76,7 @@ export type AgentToolStateEvent =
 
 export type AgentRuntimeEvent =
   | AgentTextDeltaEvent
+  | AgentReasoningEvent
   | AgentToolStateEvent
   | AgentApprovalStateEvent
   | SessionStatusChangedEvent;
@@ -139,6 +164,7 @@ export class AgentRuntime {
       session.transitionTo("streaming");
       let toolSteps = 0;
       const repetitionDetector = new ToolRepetitionDetector(this.#toolRepetitionThreshold);
+      const reasoningIds = new RunReasoningIds();
 
       while (true) {
         const response = await this.#streamModel(
@@ -146,6 +172,9 @@ export class AgentRuntime {
           userMessage.sessionId,
           signal,
           offerTools,
+          reasoningIds,
+          toolSteps,
+          repetitionDetector,
         );
         if (response.toolCall === undefined) {
           if (!response.hasMeaningfulText) {
@@ -154,20 +183,6 @@ export class AgentRuntime {
           break;
         }
 
-        if (toolSteps >= this.#maxToolSteps) {
-          throw new MaxToolStepsExceededError(this.#maxToolSteps);
-        }
-
-        const repetition = repetitionDetector.observe(response.toolCall);
-        if (repetition.thresholdReached) {
-          throw new ToolRepetitionDetectedError(
-            response.toolCall.name,
-            repetition.consecutiveCount,
-            repetitionDetector.threshold,
-          );
-        }
-
-        this.#emitToolState(userMessage.sessionId, response.toolCall, "pending");
         const toolResult = await this.#executeTool(
           userMessage.sessionId,
           userMessage.messageId,
@@ -209,6 +224,9 @@ export class AgentRuntime {
     sessionId: SessionId,
     signal: AbortSignal,
     offerTools: boolean,
+    reasoningIds: RunReasoningIds,
+    toolSteps: number,
+    repetitionDetector: ToolRepetitionDetector,
   ): Promise<{ readonly toolCall?: ToolCall; readonly hasMeaningfulText: boolean }> {
     let toolCall: ToolCall | undefined;
     let hasMeaningfulText = false;
@@ -221,6 +239,8 @@ export class AgentRuntime {
             messages: [...messages],
             tools: toolDeclarations,
           };
+    const reasoningBlocks = new Map<string, string>();
+    let openReasoningBlock: string | undefined;
 
     for await (const event of this.#modelGateway.stream(request, signal)) {
       signal.throwIfAborted();
@@ -234,6 +254,40 @@ export class AgentRuntime {
           sessionId,
           text: event.text,
         });
+      } else if (event.type === "reasoning.start") {
+        if (openReasoningBlock !== undefined || reasoningBlocks.has(event.blockId)) {
+          throw new Error("ModelGateway emitted a malformed reasoning lifecycle.");
+        }
+        const runtimeBlockId = reasoningIds.next();
+        reasoningBlocks.set(event.blockId, runtimeBlockId);
+        openReasoningBlock = event.blockId;
+        this.#eventSink.emit({
+          type: "agent.reasoning-start",
+          sessionId,
+          blockId: runtimeBlockId,
+        });
+      } else if (event.type === "reasoning.delta") {
+        const runtimeBlockId = reasoningBlocks.get(event.blockId);
+        if (event.blockId !== openReasoningBlock || runtimeBlockId === undefined) {
+          throw new Error("ModelGateway emitted a malformed reasoning lifecycle.");
+        }
+        this.#eventSink.emit({
+          type: "agent.reasoning-delta",
+          sessionId,
+          blockId: runtimeBlockId,
+          text: event.text,
+        });
+      } else if (event.type === "reasoning.end") {
+        const runtimeBlockId = reasoningBlocks.get(event.blockId);
+        if (event.blockId !== openReasoningBlock || runtimeBlockId === undefined) {
+          throw new Error("ModelGateway emitted a malformed reasoning lifecycle.");
+        }
+        openReasoningBlock = undefined;
+        this.#eventSink.emit({
+          type: "agent.reasoning-end",
+          sessionId,
+          blockId: runtimeBlockId,
+        });
       } else if (event.type === "tool.call") {
         if (!offerTools) {
           throw new UnexpectedToolCallError(event.call.name);
@@ -241,12 +295,32 @@ export class AgentRuntime {
         if (toolCall !== undefined) {
           throw new Error("AgentRuntime supports only one Tool Call per model response.");
         }
+        if (toolSteps >= this.#maxToolSteps) {
+          throw new MaxToolStepsExceededError(this.#maxToolSteps);
+        }
+        const repetition = repetitionDetector.observe(event.call);
+        if (repetition.thresholdReached) {
+          throw new ToolRepetitionDetectedError(
+            event.call.name,
+            repetition.consecutiveCount,
+            repetitionDetector.threshold,
+          );
+        }
 
         toolCall = event.call;
+        this.#emitToolState(sessionId, event.call, "pending");
+      } else if (event.type === "finish") {
+        if (openReasoningBlock !== undefined) {
+          throw new Error("ModelGateway completed with an open reasoning block.");
+        }
+        break;
       }
     }
 
     signal.throwIfAborted();
+    if (openReasoningBlock !== undefined) {
+      throw new Error("ModelGateway completed with an open reasoning block.");
+    }
     return { ...(toolCall === undefined ? {} : { toolCall }), hasMeaningfulText };
   }
 
@@ -474,6 +548,16 @@ export class AgentRuntime {
       status: "error",
       result,
     });
+  }
+}
+
+class RunReasoningIds {
+  #nextBlock = 1;
+
+  next(): string {
+    const blockId = `reasoning-${this.#nextBlock}`;
+    this.#nextBlock += 1;
+    return blockId;
   }
 }
 

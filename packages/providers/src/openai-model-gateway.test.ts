@@ -38,14 +38,26 @@ describe("OpenAI ModelGateway", () => {
     setStreamParts([
       { type: "start" },
       { type: "text-start", id: "text-1" },
+      { type: "reasoning-start", id: "sdk-reasoning-1", providerMetadata: { secret: true } },
+      { type: "reasoning-delta", id: "sdk-reasoning-1", text: "Check " },
       { type: "text-delta", id: "text-1", text: "Hel" },
-      { type: "reasoning-delta", id: "reasoning-1", text: "hidden" },
+      { type: "reasoning-delta", id: "sdk-reasoning-1", text: "facts." },
+      {
+        type: "reasoning-end",
+        id: "sdk-reasoning-1",
+        providerMetadata: { openai: { encryptedContent: "opaque" } },
+      },
+      { type: "raw", rawValue: { encryptedReasoning: "opaque" } },
       {
         type: "tool-call",
         toolCallId: "call-1",
         toolName: "lookup",
         input: { query: "zebra" },
       },
+      { type: "reasoning-start", id: "sdk-reasoning-2" },
+      { type: "reasoning-delta", id: "sdk-reasoning-2", text: "" },
+      { type: "reasoning-delta", id: "sdk-reasoning-2", text: " " },
+      { type: "reasoning-end", id: "sdk-reasoning-2" },
       {
         type: "finish-step",
         finishReason: "tool-calls",
@@ -62,11 +74,18 @@ describe("OpenAI ModelGateway", () => {
     const gateway = createOpenAIModelGateway({ apiKey: "test-key", modelId: "gpt-test" });
 
     await expect(collectEvents(gateway.stream(request, signal))).resolves.toEqual([
+      { type: "reasoning.start", blockId: "reasoning-1" },
+      { type: "reasoning.delta", blockId: "reasoning-1", text: "Check " },
       { type: "text.delta", text: "Hel" },
+      { type: "reasoning.delta", blockId: "reasoning-1", text: "facts." },
+      { type: "reasoning.end", blockId: "reasoning-1" },
       {
         type: "tool.call",
         call: { id: "call-1", name: "lookup", input: { query: "zebra" } },
       },
+      { type: "reasoning.start", blockId: "reasoning-2" },
+      { type: "reasoning.delta", blockId: "reasoning-2", text: " " },
+      { type: "reasoning.end", blockId: "reasoning-2" },
       { type: "text.delta", text: "lo" },
       { type: "usage", usage: { inputTokens: 4, outputTokens: 2, totalTokens: 6 } },
       { type: "finish", reason: "stop" },
@@ -234,6 +253,46 @@ describe("OpenAI ModelGateway", () => {
     ]);
   });
 
+  it("closes delivery at finish and ignores late SDK reasoning events", async () => {
+    setStreamParts([
+      { type: "text-delta", id: "text-1", text: "done" },
+      { type: "finish", finishReason: "stop", totalUsage: {} },
+      { type: "reasoning-start", id: "late-reasoning" },
+      { type: "reasoning-delta", id: "late-reasoning", text: "late" },
+      { type: "reasoning-end", id: "late-reasoning" },
+    ]);
+    const gateway = createOpenAIModelGateway({ apiKey: "test-key", modelId: "gpt-test" });
+
+    await expect(
+      collectEvents(gateway.stream(request, new AbortController().signal)),
+    ).resolves.toEqual([
+      { type: "text.delta", text: "done" },
+      {
+        type: "usage",
+        usage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
+      },
+      { type: "finish", reason: "stop" },
+    ]);
+  });
+
+  it("preserves a valid empty reasoning block without inventing content", async () => {
+    setStreamParts([
+      { type: "reasoning-start", id: "empty-reasoning" },
+      { type: "reasoning-end", id: "empty-reasoning" },
+      { type: "text-delta", id: "text-1", text: "answer" },
+      { type: "finish", finishReason: "stop", totalUsage: {} },
+    ]);
+    const gateway = createOpenAIModelGateway({ apiKey: "test-key", modelId: "gpt-test" });
+
+    const events = await collectEvents(gateway.stream(request, new AbortController().signal));
+
+    expect(events.slice(0, 3)).toEqual([
+      { type: "reasoning.start", blockId: "reasoning-1" },
+      { type: "reasoning.end", blockId: "reasoning-1" },
+      { type: "text.delta", text: "answer" },
+    ]);
+  });
+
   it.each([
     [401, false, "authentication"],
     [403, false, "permission-denied"],
@@ -294,6 +353,79 @@ describe("OpenAI ModelGateway", () => {
   });
 
   it.each([
+    { parts: [{ type: "reasoning-delta", id: "missing", text: "delta" }] },
+    { parts: [{ type: "reasoning-start", id: "" }] },
+    { parts: [{ type: "reasoning-start", id: "reasoning-1" }] },
+    {
+      parts: [
+        { type: "reasoning-start", id: "reasoning-1" },
+        { type: "reasoning-start", id: "reasoning-2" },
+      ],
+    },
+    {
+      parts: [
+        { type: "reasoning-start", id: "reasoning-1" },
+        { type: "reasoning-end", id: "reasoning-2" },
+      ],
+    },
+    {
+      parts: [
+        { type: "reasoning-start", id: "reasoning-1" },
+        { type: "reasoning-end", id: "reasoning-1" },
+        { type: "reasoning-end", id: "reasoning-1" },
+      ],
+    },
+    {
+      parts: [
+        { type: "reasoning-start", id: "reasoning-1" },
+        { type: "finish", finishReason: "stop", totalUsage: {} },
+      ],
+    },
+    {
+      parts: [
+        { type: "reasoning-start", id: "reasoning-1" },
+        { type: "reasoning-end", id: "reasoning-1" },
+        { type: "reasoning-start", id: "reasoning-1" },
+      ],
+    },
+    {
+      parts: [
+        { type: "reasoning-start", id: "reasoning-1" },
+        { type: "reasoning-delta", id: "reasoning-1", text: "\ud800" },
+      ],
+    },
+  ])("rejects malformed reasoning lifecycle %#", async ({ parts }) => {
+    setStreamParts(parts);
+    const gateway = createOpenAIModelGateway({ apiKey: "test-key", modelId: "gpt-test" });
+
+    await expect(
+      collectEvents(gateway.stream(request, new AbortController().signal)),
+    ).rejects.toMatchObject({
+      code: "malformed-response",
+    });
+  });
+
+  it("splits oversized reasoning deltas at Unicode code-point and UTF-8 boundaries", async () => {
+    const text = "😀".repeat(8_193);
+    setStreamParts([
+      { type: "reasoning-start", id: "reasoning-1" },
+      { type: "reasoning-delta", id: "reasoning-1", text },
+      { type: "reasoning-end", id: "reasoning-1" },
+      { type: "finish", finishReason: "stop", totalUsage: {} },
+    ]);
+    const gateway = createOpenAIModelGateway({ apiKey: "test-key", modelId: "gpt-test" });
+
+    const events = await collectEvents(gateway.stream(request, new AbortController().signal));
+
+    expect(events.slice(0, 4)).toEqual([
+      { type: "reasoning.start", blockId: "reasoning-1" },
+      { type: "reasoning.delta", blockId: "reasoning-1", text: "😀".repeat(8_192) },
+      { type: "reasoning.delta", blockId: "reasoning-1", text: "😀" },
+      { type: "reasoning.end", blockId: "reasoning-1" },
+    ]);
+  });
+
+  it.each([
     { toolCallId: "call-1", toolName: "ReadFile", input: {} },
     { toolCallId: "call-1", toolName: "read_file", input: Number.NaN },
   ])("rejects a malformed SDK Tool Call %#", async (call) => {
@@ -309,7 +441,9 @@ describe("OpenAI ModelGateway", () => {
 
   it("forwards cancellation and emits no later events", async () => {
     setStreamParts([
-      { type: "text-delta", id: "text-1", text: "before" },
+      { type: "reasoning-start", id: "reasoning-1" },
+      { type: "reasoning-delta", id: "reasoning-1", text: "before" },
+      { type: "reasoning-end", id: "reasoning-1" },
       { type: "text-delta", id: "text-1", text: "after" },
     ]);
     const cancellation = new Error("cancelled by test");
@@ -320,12 +454,17 @@ describe("OpenAI ModelGateway", () => {
     const consume = async () => {
       for await (const event of gateway.stream(request, controller.signal)) {
         events.push(event);
-        controller.abort(cancellation);
+        if (event.type === "reasoning.delta") {
+          controller.abort(cancellation);
+        }
       }
     };
 
     await expect(consume()).rejects.toBe(cancellation);
-    expect(events).toEqual([{ type: "text.delta", text: "before" }]);
+    expect(events).toEqual([
+      { type: "reasoning.start", blockId: "reasoning-1" },
+      { type: "reasoning.delta", blockId: "reasoning-1", text: "before" },
+    ]);
     expect(sdkMocks.streamText).toHaveBeenCalledWith(
       expect.objectContaining({ abortSignal: controller.signal }),
     );

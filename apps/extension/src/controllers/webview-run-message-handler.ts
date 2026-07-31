@@ -180,6 +180,14 @@ export class WebviewRunMessageHandler {
       return;
     }
 
+    if (
+      event.type === "agent.reasoning-start" ||
+      event.type === "agent.reasoning-delta" ||
+      event.type === "agent.reasoning-end"
+    ) {
+      return;
+    }
+
     if (event.status === "preparing") {
       return;
     }

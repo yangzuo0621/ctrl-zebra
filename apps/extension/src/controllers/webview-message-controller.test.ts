@@ -264,7 +264,7 @@ describe("handleWebviewMessage", () => {
     expect(deliveryFailureCount).toBe(1);
   });
 
-  it("forwards ordered runtime deltas and terminal completion", async () => {
+  it("forwards supported runtime events while keeping reasoning internal", async () => {
     let messageListener: ((message: unknown) => void) | undefined;
     const postedMessages: unknown[] = [];
 
@@ -294,6 +294,22 @@ describe("handleWebviewMessage", () => {
             status: "streaming",
           });
           emit({ type: "agent.text-delta", sessionId: "session-1", text: "Hel" });
+          emit({
+            type: "agent.reasoning-start",
+            sessionId: "session-1",
+            blockId: "reasoning-1",
+          });
+          emit({
+            type: "agent.reasoning-delta",
+            sessionId: "session-1",
+            blockId: "reasoning-1",
+            text: "Check the workspace.",
+          });
+          emit({
+            type: "agent.reasoning-end",
+            sessionId: "session-1",
+            blockId: "reasoning-1",
+          });
           emit({
             type: "agent.tool-state",
             sessionId: "session-1",
