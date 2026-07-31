@@ -22,6 +22,80 @@ This document defines the Webview/Extension message boundary established before 
 - A direct response uses the same `requestId`. Consumers ignore responses that do not match an active request.
 - T0105 does not introduce timeouts, retries, cancellation, persistence, or restoration of in-flight requests. Those behaviors require later task contracts.
 
+## Reasoning Summary Messages
+
+Reasoning summaries use dedicated Extension-to-Webview messages. They never reuse
+`extension/text-delta`, and the Webview never sends reasoning content or lifecycle messages back to
+the Extension.
+
+- `extension/reasoning-start` contains only the envelope and `blockId`.
+- `extension/reasoning-delta` contains the envelope, the same `blockId`, and `text`.
+- `extension/reasoning-end` contains the envelope, the same `blockId`, and `truncated`.
+- `extension/reasoning-limit` is a strict union. Block-scoped variants contain `scope: "block"`,
+  `blockId`, and `reason: "code-points" | "utf8-bytes"`; run-scoped variants contain
+  `scope: "run"` and `reason: "code-points" | "utf8-bytes" | "block-count"`. It is emitted at
+  most once for each affected block and once for the run, respectively.
+
+`blockId` is a non-empty opaque CtrlZebra identifier of at most 128 characters. It correlates one
+start/delta/end lifecycle inside the active `requestId`; it is not a Provider ID and conveys no
+vendor, model, step, token, or security semantics. A consumer requires both the active `requestId`
+and block ID to match. It ignores duplicate starts or ends, deltas for unopened or ended blocks,
+events for another request, and every event received after a terminal run status.
+
+Live message delivery preserves the exact accepted Runtime event order relative to
+`extension/text-delta`, `extension/tool-state`, and run status messages. More than one reasoning
+block may occur in a run, including across Tool steps. An empty start/end lifecycle remains
+protocol-valid but does not create visible Webview content.
+
+Reasoning text is well-formed Unicode and each delta contains 1–8,192 Unicode code points and at
+most 32,768 UTF-8 bytes. The Extension collector also enforces these cumulative ceilings without
+first constructing the complete value:
+
+| Scope | Unicode code points | UTF-8 bytes | Blocks |
+|---|---:|---:|---:|
+| One block | 32,768 | 131,072 | — |
+| One run | 65,536 | 262,144 | 32 |
+
+When a delta crosses the remaining block or run budget, the Extension may send only the largest
+prefix that fits both ceilings, split on a Unicode code-point boundary, then emits the structured
+limit message and discards later reasoning text in that scope while continuing to consume lifecycle
+control events. A block end reports `truncated: true` when any of that block's text was omitted.
+After 32 accepted blocks, later starts, deltas, and ends are replaced by one run-scoped
+`block-count` limit indication. Truncation is a successful bounded display outcome, not a Provider
+or run error.
+
+Limit reporting is deterministic. UTF-8 bytes are measured from the exact well-formed string
+without a byte-order mark. If code-point and byte ceilings are reached by the same accepted prefix,
+the reason is `utf8-bytes`; if block and run ceilings are crossed by the same delta, the block marker
+is delivered first and the run marker second. Counters saturate at their ceilings and do not grow
+with discarded content.
+
+Session restoration does not add fields to the existing strict `extension/session-restored`
+message. For every successful restore, the Extension first sends one correlated
+`extension/reasoning-restored` message containing:
+
+- the restored `sessionId`;
+- at most 32 strict block records with `blockId`, positive `startSequence`, optional positive
+  `endSequence`, bounded non-empty `content`, `state: "complete" | "partial"`, and `truncated`;
+- `runTruncated`, which preserves a persisted run-level limit marker.
+
+Block records use the same per-block and aggregate ceilings as live delivery.
+`state: "complete"` requires a matching persisted end; cancellation, failure, interruption, tail
+damage, or an otherwise missing end produces `partial` and never causes a synthetic end. Sequence
+fields preserve the block's position in the ordered event log relative to answer and Tool events.
+The Webview stages this bounded message by `requestId` and `sessionId`; the immediately following
+matching `extension/session-restored` atomically commits both projections and completes the restore
+request. A session error, mismatch, Session switch, or disposal discards the staged reasoning.
+Sessions without retained reasoning use an empty `blocks` array and `runTruncated: false`, which
+creates no visible UI. Restoration never emits live start/delta/end messages, resumes a request, or
+asks the Webview to infer content from display order.
+
+These message types are additive protocol version `1` messages: existing message meanings and
+shapes do not change. A version `1` consumer that does not know them ignores them under the existing
+unknown-message rule and continues to render answer and Tool state. Provider metadata, SDK event
+names or enum values, opaque or encrypted reasoning, signatures, raw responses, and arbitrary
+metadata bags are forbidden.
+
 ## Runtime Validation and Unknown Messages
 
 - Boundary inputs are accepted as `unknown` and validated with the direction-specific Zod Schema before dispatch or state updates.

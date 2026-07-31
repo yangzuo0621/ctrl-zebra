@@ -36,6 +36,40 @@ This document defines the Webview security constraints established before T0104.
 - If a future feature must render formatted untrusted markup, it requires a narrowly configured, maintained sanitizer and tests for script elements, event-handler attributes, dangerous URLs, SVG, MathML, and mutation-based bypasses.
 - HTML attributes and CSP metadata assembled by the Extension are escaped before interpolation. Validation and sanitization complement CSP; CSP is not their replacement.
 
+## Reasoning Summary Boundary
+
+- Reasoning summaries are untrusted model output with the same confidentiality and injection risk
+  as answer text. The label “推理摘要” describes a Provider-supplied user-visible summary; it does
+  not make the content authoritative, safe to execute, or evidence of the model's hidden process.
+- Only text from a Provider's documented reasoning stream events is eligible. Ordinary answer text,
+  System Prompt output, Tool activity, host-generated explanations, raw chain of thought, signatures,
+  Provider metadata, SDK values, request/response bodies, and opaque or encrypted reasoning payloads
+  are rejected rather than displayed or persisted.
+- Reasoning text must be well-formed Unicode. Producers split normalized deltas to at most 8,192
+  Unicode code points and 32,768 UTF-8 bytes. The Extension collector retains at most 32,768 code
+  points and 131,072 bytes per block, 32 blocks per run, and 65,536 code points and 262,144 bytes
+  across the run. It counts while collecting, cuts only at code-point boundaries, and never builds
+  the unbounded block or run before applying the limit.
+- Limit exhaustion keeps only the largest prefix that fits every applicable ceiling, discards later
+  reasoning text in that scope, and records structured block/run truncation. The collector continues
+  only far enough to validate lifecycle and reach the normal run outcome; omitted content cannot be
+  recovered from logs, temporary files, diagnostics, raw response retention, or another model call.
+- The Extension forwards and persists only reasoning events associated with the exact active
+  request, Session, run, and open block. Duplicate, malformed, mismatched, late, or terminal-following
+  events cause no protocol, persistence, Tool, retry, or UI side effect. Cancellation stops
+  collection immediately and invalidates every open block for further delivery.
+- Reasoning is rendered only through React text interpolation or equivalent DOM text APIs. It never
+  reaches an HTML sink, a Markdown/HTML renderer, a command or URI parser, an approval request,
+  Tool input, workspace operation, diagnostic field, notification template, or executable surface.
+- Reasoning is excluded from System instructions, model request history, context summaries, retry
+  prompts, Tool Call/Result pairs, and subsequent turns. A user may copy it and later submit it as
+  ordinary user text, but the product does not perform that promotion automatically.
+- User-visible bounded reasoning may be stored in the versioned Session event log under the
+  persistence contract. It remains forbidden from `LogOutputChannel`, telemetry, snapshots, crash
+  reports, raw debug dumps, and test fixtures containing real model output. Logs may record only
+  existing allowlisted operational facts such as a stable event name, correlation IDs, and outcome;
+  they never record block text, Provider block IDs, truncation details, or content-derived values.
+
 ## Tool Input and Output
 
 - Model-supplied Tool Call IDs, names, and input are untrusted. The generic protocol Schema rejects

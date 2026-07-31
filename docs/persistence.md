@@ -65,6 +65,42 @@ The event payload is a strict object containing a stable dotted event `type` and
 `data`. T0601 defines the storage envelope only; later tasks define which domain event types are
 written and how they rebuild repository state.
 
+#### Reasoning summary events
+
+Persistence stores only the bounded, user-visible reasoning projection accepted by the Extension
+collector, never raw Provider events. The projection uses these additive version `1` event types:
+
+- `session.reasoning-start` with strict data `{ blockId }`;
+- `session.reasoning-delta` with strict data `{ blockId, text }`;
+- `session.reasoning-end` with strict data `{ blockId, truncated }`;
+- `session.reasoning-limit` with the same strict block- or run-scoped data defined for
+  `extension/reasoning-limit` in [Protocol](protocol.md).
+
+The block ID and text limits, maximum 32 blocks, 32,768-code-point/131,072-byte block ceilings, and
+65,536-code-point/262,144-byte run ceilings are part of the persisted event meaning. Collection
+applies those limits before constructing or appending records; each delta record is independently
+bounded to 8,192 code points and 32,768 UTF-8 bytes. Provider metadata, SDK IDs, raw responses,
+opaque or encrypted reasoning, and discarded overflow text are not persisted.
+
+These events retain their sequence among `agent.text-delta`, Tool, approval, usage, and status
+events. A start opens one block, deltas append only to that open block, and an end closes it. Empty
+blocks may remain in the event log to preserve source order but are omitted from the recovered
+display projection. A recognized reasoning event with invalid data, a duplicate or nested start, a
+delta or end without the matching open block, a duplicate end, a limit marker inconsistent with
+the collected bounds, or cumulative content beyond the limits makes the current-version session
+corrupt; recovery does not guess, reorder, or silently repair it.
+
+An open block at a terminal status, a final tail-damaged record, or a session normalized to
+`interrupted` is recoverable as a partial block. Recovery retains the bounded text already committed,
+sets its display state to `partial`, and does not append a synthetic end. A valid end produces
+`complete`; its `truncated` value and any limit marker survive recovery. The recovered
+`startSequence` and optional `endSequence` are the original event sequence values, so reasoning
+remains distinguishable and orderable relative to answer and Tool events.
+
+The existing `messages.jsonl` Chat Message schema is unchanged. Reasoning is not an assistant
+message, final answer, Tool message, context summary, or model-history item and is never copied into
+those records.
+
 ## Compatibility and migration
 
 - Readers select a decoder from the version directory and then require the manifest version to
@@ -78,6 +114,14 @@ written and how they rebuild repository state.
 - Migration must not modify the source session in place. The new session becomes visible only after
   all data files and its manifest have been committed successfully. Automatic migration is not part
   of T0601.
+- Reasoning events do not change the version `1` directory layout, manifest, JSONL envelope, Chat
+  Message schema, or meaning of an existing event. The event envelope intentionally admits later
+  dotted event types, so this is an additive version `1` extension rather than a structural or
+  semantic incompatibility. It does not require a `v2` directory or migration.
+- A version `1` session written before reasoning support contains none of these events and restores
+  with no reasoning blocks or placeholder. A legacy reader may ignore the new event types and still
+  recover its previously understood answer history. A current reader validates every recognized
+  reasoning event strictly; it never treats an unknown event as reasoning.
 
 ## Damage handling and writes
 
@@ -102,6 +146,9 @@ written and how they rebuild repository state.
   back as `interrupted`. `completed`, `cancelled`, `failed`, and `interrupted` remain unchanged.
 - Recovery may read history and update the manifest status only. It never resumes a model request,
   consumes an approval, executes a tool, or repeats any other persisted side effect.
+- Recovery may project committed reasoning events for display, including bounded partial blocks and
+  truncation state. It never resumes a reasoning stream, calls a Provider, completes an open block,
+  regenerates omitted text, inserts reasoning into model context, or emits live reasoning deltas.
 
 ## Checkpoint durability and recovery
 
@@ -159,6 +206,11 @@ files, logs, fixtures, and snapshots. Stable safe error categories may be persis
 allows it. Host adapters must redact before constructing persisted records; encryption is not a
 substitute for excluding secrets.
 
+Reasoning text is persisted conversation content and therefore remains untrusted and potentially
+sensitive. Only the bounded user-visible text is allowed; Provider metadata, signatures, encrypted
+reasoning, authorization material, raw request/response data, and hidden model state remain
+forbidden. Encryption does not make an otherwise forbidden reasoning payload acceptable.
+
 ## Test fixtures
 
 - Fixtures live under a directory named for the format, such as `fixtures/persistence/v1/`.
@@ -169,3 +221,7 @@ substitute for excluding secrets.
   fixture set instead of rewriting old fixtures.
 - Fixtures use deterministic IDs, timestamps, sequences, LF endings, and obviously fake content.
   They must never contain user data or real secrets.
+- Reasoning fixtures are added beside, rather than substituted for, the existing version `1`
+  fixtures. They include normal complete blocks, multiple/interleaved blocks, a bounded truncated
+  block, an interrupted partial block, a pre-reasoning session, tail damage, and a malformed
+  reasoning lifecycle.
