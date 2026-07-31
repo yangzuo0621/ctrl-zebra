@@ -7,6 +7,8 @@ import {
   type ModelGatewayErrorCode,
   type ModelMessage,
   type ModelRequest,
+  maxReasoningDeltaCodePoints,
+  maxReasoningDeltaUtf8Bytes,
   type TokenUsage,
   type ToolDeclaration,
   type ToolInputPropertySchema,
@@ -50,17 +52,22 @@ export function createAISDKModelGateway(model: LanguageModel): ModelGateway {
           model,
           ...(tools === undefined ? {} : { tools }),
         });
+        const reasoning = new ReasoningStreamNormalizer();
 
         for await (const value of result.stream) {
           signal.throwIfAborted();
 
-          for (const event of mapStreamPart(value, signal)) {
+          for (const event of mapStreamPart(value, signal, reasoning)) {
             signal.throwIfAborted();
             yield event;
+            if (event.type === "finish") {
+              return;
+            }
           }
         }
 
         signal.throwIfAborted();
+        reasoning.assertClosed();
       } catch (error) {
         if (signal.aborted) {
           throw signal.reason;
@@ -225,7 +232,11 @@ function toSdkJsonValue(value: JsonValue): SdkJsonValue {
   );
 }
 
-function mapStreamPart(value: unknown, signal: AbortSignal): readonly ModelEvent[] {
+function mapStreamPart(
+  value: unknown,
+  signal: AbortSignal,
+  reasoning: ReasoningStreamNormalizer,
+): Iterable<ModelEvent> {
   const part = readRecord(value);
   const type = readString(part, "type");
 
@@ -244,6 +255,7 @@ function mapStreamPart(value: unknown, signal: AbortSignal): readonly ModelEvent
         },
       ];
     case "finish": {
+      reasoning.assertClosed();
       const usage = readUsage(part.totalUsage);
       const reason = readFinishReason(part.finishReason);
       return [
@@ -256,12 +268,16 @@ function mapStreamPart(value: unknown, signal: AbortSignal): readonly ModelEvent
       throw new ModelGatewayError("unknown");
     case "error":
       throw new ModelGatewayError(classifyProviderError(part.error));
+    case "reasoning-start":
+      return reasoning.start(readString(part, "id"));
+    case "reasoning-delta":
+      return reasoning.delta(readString(part, "id"), readString(part, "text"));
+    case "reasoning-end":
+      return reasoning.end(readString(part, "id"));
     case "file":
     case "finish-step":
     case "raw":
-    case "reasoning-delta":
-    case "reasoning-end":
-    case "reasoning-start":
+    case "reasoning-file":
     case "source":
     case "start":
     case "start-step":
@@ -278,6 +294,135 @@ function mapStreamPart(value: unknown, signal: AbortSignal): readonly ModelEvent
     default:
       throw new ModelGatewayError("malformed-response");
   }
+}
+
+class ReasoningStreamNormalizer {
+  readonly #seenSourceIds = new Set<string>();
+  #openSourceId: string | undefined;
+  #openBlockId: string | undefined;
+  #nextBlock = 1;
+
+  start(sourceId: string): readonly ModelEvent[] {
+    if (
+      sourceId === "" ||
+      !isWellFormedUnicode(sourceId) ||
+      this.#openSourceId !== undefined ||
+      this.#seenSourceIds.has(sourceId)
+    ) {
+      throw new ModelGatewayError("malformed-response");
+    }
+
+    const blockId = `reasoning-${this.#nextBlock}`;
+    this.#nextBlock += 1;
+    this.#seenSourceIds.add(sourceId);
+    this.#openSourceId = sourceId;
+    this.#openBlockId = blockId;
+    return [{ type: "reasoning.start", blockId }];
+  }
+
+  delta(sourceId: string, text: string): Iterable<ModelEvent> {
+    const blockId = this.#readOpenBlock(sourceId);
+    if (!isWellFormedUnicode(text)) {
+      throw new ModelGatewayError("malformed-response");
+    }
+    if (text === "") {
+      return [];
+    }
+
+    return mapReasoningChunks(blockId, text);
+  }
+
+  end(sourceId: string): readonly ModelEvent[] {
+    const blockId = this.#readOpenBlock(sourceId);
+    this.#openSourceId = undefined;
+    this.#openBlockId = undefined;
+    return [{ type: "reasoning.end", blockId }];
+  }
+
+  assertClosed(): void {
+    if (this.#openSourceId !== undefined) {
+      throw new ModelGatewayError("malformed-response");
+    }
+  }
+
+  #readOpenBlock(sourceId: string): string {
+    if (
+      sourceId === "" ||
+      !isWellFormedUnicode(sourceId) ||
+      sourceId !== this.#openSourceId ||
+      this.#openBlockId === undefined
+    ) {
+      throw new ModelGatewayError("malformed-response");
+    }
+
+    return this.#openBlockId;
+  }
+}
+
+function* mapReasoningChunks(blockId: string, text: string): Iterable<ModelEvent> {
+  for (const chunk of splitReasoningDelta(text)) {
+    yield { type: "reasoning.delta", blockId, text: chunk };
+  }
+}
+
+function* splitReasoningDelta(text: string): Iterable<string> {
+  let chunkStart = 0;
+  let codePoints = 0;
+  let utf8Bytes = 0;
+
+  for (let index = 0; index < text.length; ) {
+    const codePoint = text.codePointAt(index);
+    if (codePoint === undefined) {
+      throw new ModelGatewayError("malformed-response");
+    }
+
+    const codeUnits = codePoint > 0xffff ? 2 : 1;
+    const bytes = utf8LengthOfCodePoint(codePoint);
+    if (
+      codePoints === maxReasoningDeltaCodePoints ||
+      utf8Bytes + bytes > maxReasoningDeltaUtf8Bytes
+    ) {
+      yield text.slice(chunkStart, index);
+      chunkStart = index;
+      codePoints = 0;
+      utf8Bytes = 0;
+    }
+
+    codePoints += 1;
+    utf8Bytes += bytes;
+    index += codeUnits;
+  }
+
+  yield text.slice(chunkStart);
+}
+
+function utf8LengthOfCodePoint(codePoint: number): number {
+  if (codePoint <= 0x7f) {
+    return 1;
+  }
+  if (codePoint <= 0x7ff) {
+    return 2;
+  }
+  if (codePoint <= 0xffff) {
+    return 3;
+  }
+  return 4;
+}
+
+function isWellFormedUnicode(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const codeUnit = value.charCodeAt(index);
+    if (codeUnit >= 0xd800 && codeUnit <= 0xdbff) {
+      const next = value.charCodeAt(index + 1);
+      if (next < 0xdc00 || next > 0xdfff) {
+        return false;
+      }
+      index += 1;
+    } else if (codeUnit >= 0xdc00 && codeUnit <= 0xdfff) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function parseToolCall(value: unknown) {

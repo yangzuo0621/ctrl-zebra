@@ -100,6 +100,28 @@ describe("RetryingModelGateway", () => {
     expect(delay.wait).not.toHaveBeenCalled();
   });
 
+  it.each([
+    { type: "reasoning.start", blockId: "reasoning-1" },
+    { type: "reasoning.delta", blockId: "reasoning-1", text: "partial" },
+    { type: "reasoning.end", blockId: "reasoning-1" },
+  ] as const)("does not retry after the reasoning event $type is observable", async (event) => {
+    const failure = new ModelGatewayError("unavailable");
+    const gateway: ModelGateway = {
+      stream: async function* () {
+        yield event;
+        throw failure;
+      },
+    };
+    const delay = recordingDelay();
+    const iterator = new RetryingModelGateway(gateway, delay)
+      .stream(request, signal())
+      [Symbol.asyncIterator]();
+
+    await expect(iterator.next()).resolves.toEqual({ value: event, done: false });
+    await expect(iterator.next()).rejects.toBe(failure);
+    expect(delay.wait).not.toHaveBeenCalled();
+  });
+
   it("does not retry an error outside the stable ModelGateway contract", async () => {
     const failure = new Error("internal Core failure");
     const gateway = scriptedGateway([failure]);

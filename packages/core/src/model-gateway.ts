@@ -85,8 +85,18 @@ export interface TokenUsage {
 
 export type FinishReason = "stop" | "tool-calls" | "length" | "content-filter" | "other";
 
+export const maxReasoningBlockIdCharacters = 128;
+export const maxReasoningDeltaCodePoints = 8_192;
+export const maxReasoningDeltaUtf8Bytes = 32_768;
+
+export type ModelReasoningEvent =
+  | { readonly type: "reasoning.start"; readonly blockId: string }
+  | { readonly type: "reasoning.delta"; readonly blockId: string; readonly text: string }
+  | { readonly type: "reasoning.end"; readonly blockId: string };
+
 export type ModelEvent =
   | { readonly type: "text.delta"; readonly text: string }
+  | ModelReasoningEvent
   | { readonly type: "tool.call"; readonly call: ToolCall }
   | { readonly type: "usage"; readonly usage: TokenUsage }
   | { readonly type: "finish"; readonly reason: FinishReason };

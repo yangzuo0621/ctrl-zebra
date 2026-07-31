@@ -41,6 +41,9 @@ describe("AgentRuntime", () => {
       { type: "usage", usage: { inputTokens: 3, outputTokens: 1, totalTokens: 4 } },
       { type: "text.delta", text: "lo" },
       { type: "finish", reason: "stop" },
+      { type: "reasoning.start", blockId: "late" },
+      { type: "reasoning.delta", blockId: "late", text: "late" },
+      { type: "reasoning.end", blockId: "late" },
     ]);
     const events: AgentRuntimeEvent[] = [];
     const runtime = new AgentRuntime(gateway, { emit: (event) => events.push(event) });
@@ -68,6 +71,49 @@ describe("AgentRuntime", () => {
         previousStatus: "streaming",
         status: "completed",
       },
+    ]);
+  });
+
+  it("publishes reasoning and text in source order with run-scoped block IDs", async () => {
+    const gateway = createModelGateway([
+      { type: "reasoning.start", blockId: "provider-block" },
+      { type: "reasoning.delta", blockId: "provider-block", text: "Check " },
+      { type: "text.delta", text: "Hel" },
+      { type: "reasoning.delta", blockId: "provider-block", text: "facts." },
+      { type: "reasoning.end", blockId: "provider-block" },
+      { type: "text.delta", text: "lo" },
+      { type: "finish", reason: "stop" },
+    ]);
+    const events: AgentRuntimeEvent[] = [];
+    const runtime = new AgentRuntime(gateway, { emit: (event) => events.push(event) });
+
+    await runtime.run(userMessage, new AbortController().signal);
+
+    expect(
+      events.filter(
+        (event) =>
+          event.type === "agent.reasoning-start" ||
+          event.type === "agent.reasoning-delta" ||
+          event.type === "agent.reasoning-end" ||
+          event.type === "agent.text-delta",
+      ),
+    ).toEqual([
+      { type: "agent.reasoning-start", sessionId: "session-1", blockId: "reasoning-1" },
+      {
+        type: "agent.reasoning-delta",
+        sessionId: "session-1",
+        blockId: "reasoning-1",
+        text: "Check ",
+      },
+      { type: "agent.text-delta", sessionId: "session-1", text: "Hel" },
+      {
+        type: "agent.reasoning-delta",
+        sessionId: "session-1",
+        blockId: "reasoning-1",
+        text: "facts.",
+      },
+      { type: "agent.reasoning-end", sessionId: "session-1", blockId: "reasoning-1" },
+      { type: "agent.text-delta", sessionId: "session-1", text: "lo" },
     ]);
   });
 
@@ -150,6 +196,9 @@ describe("AgentRuntime", () => {
   it("fails instead of completing when the model returns no usable text", async () => {
     const events: AgentRuntimeEvent[] = [];
     const gateway = createModelGateway([
+      { type: "reasoning.start", blockId: "reasoning-1" },
+      { type: "reasoning.delta", blockId: "reasoning-1", text: "  " },
+      { type: "reasoning.end", blockId: "reasoning-1" },
       { type: "text.delta", text: "  " },
       { type: "finish", reason: "stop" },
     ]);
@@ -197,13 +246,20 @@ describe("AgentRuntime", () => {
     const gateway = createScriptedModelGateway(
       [
         [
+          { type: "reasoning.start", blockId: "provider-block" },
+          { type: "reasoning.delta", blockId: "provider-block", text: "Need a lookup." },
           {
             type: "tool.call",
             call: { id: "call-1", name: "lookup_zebra", input: { query: "stripes" } },
           },
+          { type: "reasoning.delta", blockId: "provider-block", text: " Run it." },
+          { type: "reasoning.end", blockId: "provider-block" },
           { type: "finish", reason: "tool-calls" },
         ],
         [
+          { type: "reasoning.start", blockId: "provider-block" },
+          { type: "reasoning.delta", blockId: "provider-block", text: "Use the result." },
+          { type: "reasoning.end", blockId: "provider-block" },
           { type: "text.delta", text: "Zebras have stripes." },
           { type: "finish", reason: "stop" },
         ],
@@ -351,6 +407,18 @@ describe("AgentRuntime", () => {
         },
       },
     ]);
+    expect(
+      events
+        .filter((event) => event.type === "agent.reasoning-start")
+        .map((event) => event.blockId),
+    ).toEqual(["reasoning-1", "reasoning-2"]);
+    const firstPendingIndex = events.findIndex(
+      (event) => event.type === "agent.tool-state" && event.status === "pending",
+    );
+    const trailingReasoningIndex = events.findIndex(
+      (event) => event.type === "agent.reasoning-delta" && event.text === " Run it.",
+    );
+    expect(firstPendingIndex).toBeLessThan(trailingReasoningIndex);
     expect(events.at(-2)).toEqual({
       type: "agent.text-delta",
       sessionId: "session-1",
@@ -1178,13 +1246,19 @@ describe("AgentRuntime", () => {
     expect(receivedSignal).toBe(controller.signal);
   });
 
-  it("stops emitting text and marks the Session cancelled when cancelled mid-stream", async () => {
+  it("stops emitting reasoning and marks the Session cancelled when cancelled mid-stream", async () => {
     const cancellation = new Error("cancelled by test");
     const controller = new AbortController();
     const gateway: ModelGateway = {
       async *stream(_request, signal) {
-        yield { type: "text.delta", text: "before cancellation" };
+        yield { type: "reasoning.start", blockId: "provider-block" };
+        yield {
+          type: "reasoning.delta",
+          blockId: "provider-block",
+          text: "before cancellation",
+        };
         signal.throwIfAborted();
+        yield { type: "reasoning.end", blockId: "provider-block" };
         yield { type: "text.delta", text: "after cancellation" };
       },
     };
@@ -1192,7 +1266,7 @@ describe("AgentRuntime", () => {
     const runtime = new AgentRuntime(gateway, {
       emit(event) {
         events.push(event);
-        if (event.type === "agent.text-delta") {
+        if (event.type === "agent.reasoning-delta") {
           controller.abort(cancellation);
         }
       },
@@ -1214,8 +1288,14 @@ describe("AgentRuntime", () => {
         status: "streaming",
       },
       {
-        type: "agent.text-delta",
+        type: "agent.reasoning-start",
         sessionId: "session-1",
+        blockId: "reasoning-1",
+      },
+      {
+        type: "agent.reasoning-delta",
+        sessionId: "session-1",
+        blockId: "reasoning-1",
         text: "before cancellation",
       },
       {
@@ -1260,7 +1340,8 @@ describe("AgentRuntime", () => {
     const failure = new Error("model stream failed");
     const gateway: ModelGateway = {
       async *stream() {
-        yield { type: "text.delta", text: "partial" };
+        yield { type: "reasoning.start", blockId: "provider-block" };
+        yield { type: "reasoning.delta", blockId: "provider-block", text: "partial" };
         throw failure;
       },
     };
@@ -1281,7 +1362,17 @@ describe("AgentRuntime", () => {
         previousStatus: "preparing",
         status: "streaming",
       },
-      { type: "agent.text-delta", sessionId: "session-1", text: "partial" },
+      {
+        type: "agent.reasoning-start",
+        sessionId: "session-1",
+        blockId: "reasoning-1",
+      },
+      {
+        type: "agent.reasoning-delta",
+        sessionId: "session-1",
+        blockId: "reasoning-1",
+        text: "partial",
+      },
       {
         type: "session.status-changed",
         sessionId: "session-1",
