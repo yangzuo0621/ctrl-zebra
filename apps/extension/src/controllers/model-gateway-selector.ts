@@ -11,16 +11,26 @@ import {
   type ProviderId,
 } from "../adapters/provider-configuration.js";
 
-export interface ProviderGatewayFactoryInput {
-  readonly configuration: ProviderConfiguration;
-  readonly apiKey?: string;
-}
+type ProviderConfigurationById = {
+  readonly [Provider in ProviderId]: Extract<
+    ProviderConfiguration,
+    { readonly provider: Provider }
+  >;
+};
 
-export type ProviderGatewayFactory = (
-  input: ProviderGatewayFactoryInput,
+export type ProviderGatewayFactoryInput<Provider extends ProviderId> = {
+  readonly configuration: ProviderConfigurationById[Provider];
+} & (Provider extends "openai-compatible"
+  ? { readonly apiKey?: string }
+  : { readonly apiKey: string });
+
+export type ProviderGatewayFactory<Provider extends ProviderId> = (
+  input: ProviderGatewayFactoryInput<Provider>,
 ) => ModelGateway | Promise<ModelGateway>;
 
-export type ProviderGatewayFactories = Partial<Record<ProviderId, ProviderGatewayFactory>>;
+export type ProviderGatewayFactories = {
+  readonly [Provider in ProviderId]?: ProviderGatewayFactory<Provider>;
+};
 
 export class ProviderCapabilityMismatchError extends Error {
   constructor(readonly missingCapabilities: readonly ProviderCapability[]) {
@@ -63,19 +73,44 @@ export async function selectModelGateway({
     throw new ProviderCapabilityMismatchError(missingCapabilities);
   }
 
-  const factory = factories[configuration.provider];
-  if (factory === undefined) {
-    throw new ProviderAdapterUnavailableError(configuration.provider);
+  if (configuration.provider === "openai") {
+    const factory = requireProviderFactory(configuration.provider, factories.openai);
+    const apiKey = await readRequiredApiKey(configuration.provider, secrets);
+    return factory({ configuration, apiKey });
   }
 
-  const requiresApiKey =
-    configuration.provider !== "openai-compatible" || configuration.requiresApiKey;
-  const apiKey = requiresApiKey ? await secrets.read(configuration.provider) : undefined;
-  if (requiresApiKey && (apiKey === undefined || apiKey.length === 0)) {
-    throw new MissingProviderApiKeyError(configuration.provider);
+  if (configuration.provider === "gemini") {
+    const factory = requireProviderFactory(configuration.provider, factories.gemini);
+    const apiKey = await readRequiredApiKey(configuration.provider, secrets);
+    return factory({ configuration, apiKey });
   }
 
+  const factory = requireProviderFactory(configuration.provider, factories["openai-compatible"]);
+  const apiKey = configuration.requiresApiKey
+    ? await readRequiredApiKey(configuration.provider, secrets)
+    : undefined;
   return factory({ configuration, apiKey });
+}
+
+function requireProviderFactory<Provider extends ProviderId>(
+  provider: Provider,
+  factory: ProviderGatewayFactory<Provider> | undefined,
+): ProviderGatewayFactory<Provider> {
+  if (factory === undefined) {
+    throw new ProviderAdapterUnavailableError(provider);
+  }
+  return factory;
+}
+
+async function readRequiredApiKey(
+  provider: ProviderId,
+  secrets: ProviderApiKeySecretReader,
+): Promise<string> {
+  const apiKey = await secrets.read(provider);
+  if (apiKey === undefined || apiKey.length === 0) {
+    throw new MissingProviderApiKeyError(provider);
+  }
+  return apiKey;
 }
 
 export function getProviderSetupErrorMessage(error: unknown): string | undefined {

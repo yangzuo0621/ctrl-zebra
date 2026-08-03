@@ -1,8 +1,13 @@
 import type { ModelGateway } from "@ctrl-zebra/core";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import type { ProviderApiKeySecretReader } from "../adapters/api-key-secret-storage.js";
-import type { ProviderConfiguration } from "../adapters/provider-configuration.js";
+import type {
+  GeminiProviderConfiguration,
+  OpenAICompatibleProviderConfiguration,
+  OpenAIProviderConfiguration,
+  ProviderConfiguration,
+} from "../adapters/provider-configuration.js";
 import {
   getProviderSetupErrorMessage,
   MissingProviderApiKeyError,
@@ -48,6 +53,28 @@ function configuration(provider: ProviderConfiguration["provider"]): ProviderCon
 }
 
 describe("ModelGateway selector", () => {
+  it("narrows each keyed factory to its Provider configuration", () => {
+    const factories = {
+      openai: ({ configuration: selected, apiKey }) => {
+        expectTypeOf(selected).toEqualTypeOf<OpenAIProviderConfiguration>();
+        expectTypeOf(apiKey).toEqualTypeOf<string>();
+        return gateways.openai;
+      },
+      gemini: ({ configuration: selected, apiKey }) => {
+        expectTypeOf(selected).toEqualTypeOf<GeminiProviderConfiguration>();
+        expectTypeOf(apiKey).toEqualTypeOf<string>();
+        return gateways.gemini;
+      },
+      "openai-compatible": ({ configuration: selected, apiKey }) => {
+        expectTypeOf(selected).toEqualTypeOf<OpenAICompatibleProviderConfiguration>();
+        expectTypeOf(apiKey).toEqualTypeOf<string | undefined>();
+        return gateways["openai-compatible"];
+      },
+    } satisfies ProviderGatewayFactories;
+
+    expect(factories).toBeDefined();
+  });
+
   it.each([
     "openai",
     "gemini",
