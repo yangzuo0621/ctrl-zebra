@@ -180,10 +180,6 @@ export function activate(context: ExtensionContext): void {
         secrets,
         factories: {
           gemini: ({ configuration: geminiConfiguration, apiKey }) => {
-            if (geminiConfiguration.provider !== "gemini" || apiKey === undefined) {
-              throw new Error("Invalid internal Gemini Provider factory input.");
-            }
-
             return createGeminiModelGateway({
               apiKey,
               modelId: geminiConfiguration.modelId,
@@ -191,10 +187,6 @@ export function activate(context: ExtensionContext): void {
             });
           },
           "openai-compatible": ({ configuration: openAICompatibleConfiguration, apiKey }) => {
-            if (openAICompatibleConfiguration.provider !== "openai-compatible") {
-              throw new Error("Invalid internal OpenAI-Compatible Provider factory input.");
-            }
-
             return createOpenAICompatibleModelGateway({
               apiKey,
               baseURL: openAICompatibleConfiguration.endpoint,
@@ -202,10 +194,6 @@ export function activate(context: ExtensionContext): void {
             });
           },
           openai: ({ configuration: openAIConfiguration, apiKey }) => {
-            if (openAIConfiguration.provider !== "openai" || apiKey === undefined) {
-              throw new Error("Invalid internal OpenAI Provider factory input.");
-            }
-
             return createOpenAIModelGateway({
               apiKey,
               modelId: openAIConfiguration.modelId,
