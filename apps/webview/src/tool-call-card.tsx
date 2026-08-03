@@ -100,6 +100,15 @@ export function ToolCallCard({
 
       {isExpanded ? (
         <>
+          {toolCall.source?.kind === "mcp" ? (
+            <div className={styles.note}>
+              <p>External MCP Server: {toolCall.source.server.displayName}</p>
+              <p>Action: {toolCall.source.mcpToolName}</p>
+              <p>Risk: execution may have side effects unknown to CtrlZebra.</p>
+            </div>
+          ) : (
+            <p className={styles.note}>Source: built-in CtrlZebra Tool.</p>
+          )}
           {isAwaitingApproval ? (
             <ApprovalCard
               embedded

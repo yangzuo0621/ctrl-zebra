@@ -169,6 +169,7 @@ export class WebviewRunMessageHandler {
           type: "extension/tool-state",
           requestId: run.requestId,
           call: event.call,
+          source: event.source ?? { kind: "builtin" },
           status: event.status,
         });
       } else if (event.status === "success") {
@@ -177,6 +178,7 @@ export class WebviewRunMessageHandler {
           type: "extension/tool-state",
           requestId: run.requestId,
           call: event.call,
+          source: event.source ?? { kind: "builtin" },
           status: event.status,
           result: event.result,
         });
@@ -186,6 +188,7 @@ export class WebviewRunMessageHandler {
           type: "extension/tool-state",
           requestId: run.requestId,
           call: event.call,
+          source: event.source ?? { kind: "builtin" },
           status: "error",
           result: event.result,
         });

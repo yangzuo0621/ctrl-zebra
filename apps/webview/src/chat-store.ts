@@ -12,6 +12,7 @@ import {
   type ToolCall,
   type ToolErrorResult,
   type ToolStateMessage,
+  type ToolStateSourceDto,
   type ToolSuccessResult,
   takeReasoningTextPrefix,
 } from "@ctrl-zebra/protocol";
@@ -37,9 +38,23 @@ export interface DisplayMessage {
 }
 
 export type DisplayToolCall =
-  | { readonly call: ToolCall; readonly status: "pending" | "running" }
-  | { readonly call: ToolCall; readonly status: "success"; readonly result: ToolSuccessResult }
-  | { readonly call: ToolCall; readonly status: "error"; readonly result: ToolErrorResult };
+  | {
+      readonly call: ToolCall;
+      readonly source?: ToolStateSourceDto;
+      readonly status: "pending" | "running";
+    }
+  | {
+      readonly call: ToolCall;
+      readonly source?: ToolStateSourceDto;
+      readonly status: "success";
+      readonly result: ToolSuccessResult;
+    }
+  | {
+      readonly call: ToolCall;
+      readonly source?: ToolStateSourceDto;
+      readonly status: "error";
+      readonly result: ToolErrorResult;
+    };
 
 interface ChatState {
   readonly messages: readonly DisplayMessage[];
@@ -633,12 +648,17 @@ export function createChatStore({
 
 function toDisplayToolCall(message: ToolStateMessage): DisplayToolCall {
   if (message.status === "pending" || message.status === "running") {
-    return { call: message.call, status: message.status };
+    return { call: message.call, source: message.source, status: message.status };
   }
 
   if (message.status === "success") {
-    return { call: message.call, status: message.status, result: message.result };
+    return {
+      call: message.call,
+      source: message.source,
+      status: message.status,
+      result: message.result,
+    };
   }
 
-  return { call: message.call, status: "error", result: message.result };
+  return { call: message.call, source: message.source, status: "error", result: message.result };
 }

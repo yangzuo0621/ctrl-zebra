@@ -471,6 +471,7 @@ describe("App streaming chat", () => {
         type: "extension/tool-state",
         requestId: "request-tool",
         call,
+        source: { kind: "builtin" },
         status: "pending",
       });
     });
@@ -484,6 +485,7 @@ describe("App streaming chat", () => {
         type: "extension/tool-state",
         requestId: "request-tool",
         call,
+        source: { kind: "builtin" },
         status: "running",
       });
     });
@@ -497,6 +499,7 @@ describe("App streaming chat", () => {
         type: "extension/tool-state",
         requestId: "request-tool",
         call,
+        source: { kind: "builtin" },
         status: "success",
         result: {
           callId: "call-1",
@@ -586,6 +589,7 @@ describe("App streaming chat", () => {
         type: "extension/tool-state",
         requestId: "request-command",
         call,
+        source: { kind: "builtin" },
         status: "running",
       });
     });
@@ -657,6 +661,7 @@ describe("App streaming chat", () => {
         type: "extension/tool-state",
         requestId: "request-reasoning",
         call: { id: "call-1", name: "read_file", input: { path: "README.md" } },
+        source: { kind: "builtin" },
         status: "pending",
       });
       animationFrames[0]?.(0);

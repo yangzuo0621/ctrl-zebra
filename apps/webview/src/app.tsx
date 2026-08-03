@@ -8,6 +8,8 @@ import { createChatStore, type DisplayMessage } from "./chat-store.js";
 import { CheckpointPanel } from "./checkpoint-panel.js";
 import { createCheckpointStore } from "./checkpoint-store.js";
 import { MarkdownMessage } from "./markdown-message.js";
+import { McpPanel } from "./mcp-panel.js";
+import { createMcpStore } from "./mcp-store.js";
 import { OnboardingCard } from "./onboarding-card.js";
 import { ReasoningSummary } from "./reasoning-summary.js";
 import { ToolCallCard } from "./tool-call-card.js";
@@ -52,6 +54,9 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
   const [checkpointStore] = useState(() =>
     createCheckpointStore(host, createRequestId ?? (() => crypto.randomUUID())),
   );
+  const [mcpStore] = useState(() =>
+    createMcpStore(host, createRequestId ?? (() => crypto.randomUUID())),
+  );
   const [draft, setDraft] = useState("");
   const [showSessionsDrawer, setShowSessionsDrawer] = useState(false);
   const [isComposing, setIsComposing] = useState(false);
@@ -76,12 +81,14 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
       store.getState().receive(message);
       approvalStore.getState().receive(message);
       checkpointStore.getState().receive(message);
+      mcpStore.getState().receive(message);
     });
+    host.ping?.(createRequestId?.() ?? crypto.randomUUID());
     return () => {
       unsubscribe();
       store.getState().dispose();
     };
-  }, [approvalStore, checkpointStore, host, store]);
+  }, [approvalStore, checkpointStore, createRequestId, host, mcpStore, store]);
 
   // Scroll to bottom when new messages arrive unless user scrolled up
   // biome-ignore lint/correctness/useExhaustiveDependencies: scroll on message updates
@@ -199,6 +206,8 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
           <CheckpointPanel store={checkpointStore} />
         </section>
       ) : null}
+
+      <McpPanel store={mcpStore} />
 
       <main
         ref={mainRef}

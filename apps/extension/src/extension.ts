@@ -52,6 +52,7 @@ import { McpResourceActions } from "./controllers/mcp-resource-actions.js";
 import { registerMcpServerCommands } from "./controllers/mcp-server-commands.js";
 import { McpStartupApproval } from "./controllers/mcp-startup-approval.js";
 import { McpToolApprovalWorkflow } from "./controllers/mcp-tool-approval-workflow.js";
+import { McpWebviewActions } from "./controllers/mcp-webview-actions.js";
 import { selectModelGateway } from "./controllers/model-gateway-selector.js";
 import {
   createWorkspaceToolRegistryProvider,
@@ -248,6 +249,7 @@ export function activate(context: ExtensionContext): void {
                 tool.registryName,
                 {
                   serverId: mcpSnapshot.server.serverId,
+                  displayName: mcpSnapshot.server.displayName,
                   registryName: tool.registryName,
                   mcpToolName: tool.mcpToolName,
                   generation: mcpSnapshot.generation,
@@ -353,6 +355,13 @@ export function activate(context: ExtensionContext): void {
       },
       () => new McpResourceActions({ connection: mcpConnection, createId: randomUUID }),
       () => new McpPromptActions({ connection: mcpConnection, createId: randomUUID }),
+      () =>
+        new McpWebviewActions({
+          connection: mcpConnection,
+          openSettings: () => {
+            void commands.executeCommand("workbench.action.openSettings", mcpServerSettingSection);
+          },
+        }),
     ),
   );
 

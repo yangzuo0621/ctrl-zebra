@@ -199,6 +199,7 @@ describe("Webview protocol messages", () => {
       type: "extension/tool-state",
       requestId: "request-tool",
       call: { id: "call-1", name: "read_file", input: { path: "README.md" } },
+      source: { kind: "builtin" },
       status: "pending",
     },
     {
@@ -206,6 +207,7 @@ describe("Webview protocol messages", () => {
       type: "extension/tool-state",
       requestId: "request-tool",
       call: { id: "call-1", name: "read_file", input: { path: "README.md" } },
+      source: { kind: "builtin" },
       status: "running",
     },
     {
@@ -213,6 +215,7 @@ describe("Webview protocol messages", () => {
       type: "extension/tool-state",
       requestId: "request-tool",
       call: { id: "call-1", name: "read_file", input: { path: "README.md" } },
+      source: { kind: "builtin" },
       status: "success",
       result: {
         callId: "call-1",
@@ -227,6 +230,7 @@ describe("Webview protocol messages", () => {
       type: "extension/tool-state",
       requestId: "request-tool",
       call: { id: "call-1", name: "read_file", input: { path: "README.md" } },
+      source: { kind: "builtin" },
       status: "error",
       result: {
         callId: "call-1",

@@ -1,0 +1,98 @@
+.panel {
+  border-block: 1px solid var(--vscode-panel-border);
+  padding: 0.6rem 0.8rem;
+}
+.panel > summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.body {
+  display: grid;
+  gap: 0.8rem;
+  padding-block-start: 0.8rem;
+  overflow-wrap: anywhere;
+}
+.body section {
+  display: grid;
+  gap: 0.5rem;
+  border-block-start: 1px solid var(--vscode-panel-border);
+  padding-block-start: 0.7rem;
+}
+.body h2,
+.body h3,
+.body h4,
+.body p {
+  margin: 0;
+}
+.body label {
+  display: grid;
+  gap: 0.25rem;
+}
+.body input,
+.body select {
+  box-sizing: border-box;
+  inline-size: 100%;
+  min-inline-size: 0;
+  color: var(--vscode-input-foreground);
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border);
+  padding: 0.35rem;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.compactList,
+.cards {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+  padding-inline-start: 1.2rem;
+}
+.compactList li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.35rem;
+}
+.cards li {
+  display: grid;
+  gap: 0.2rem;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 4px;
+  padding: 0.55rem;
+}
+.preview {
+  display: grid;
+  gap: 0.45rem;
+  border-inline-start: 3px solid var(--vscode-focusBorder);
+  padding-inline-start: 0.6rem;
+}
+.preview pre {
+  max-block-size: 15rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: var(--vscode-textCodeBlock-background);
+  padding: 0.5rem;
+}
+.srOnly {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+@media (max-width: 300px) {
+  .panel {
+    padding-inline: 0.45rem;
+  }
+  .actions > * {
+    inline-size: 100%;
+  }
+}

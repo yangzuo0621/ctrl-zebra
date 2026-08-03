@@ -9,6 +9,7 @@ import type { ChatRunner } from "./chat-runner.js";
 import type { CheckpointActions } from "./checkpoint-actions.js";
 import { type McpPromptActions, McpPromptPreviewCancelledError } from "./mcp-prompt-actions.js";
 import { type McpResourceActions, McpResourceReadCancelledError } from "./mcp-resource-actions.js";
+import type { McpWebviewActions } from "./mcp-webview-actions.js";
 import type { SessionRecoveryActions } from "./session-recovery.js";
 import { WebviewCheckpointMessageHandler } from "./webview-checkpoint-message-handler.js";
 import { WebviewRunMessageHandler } from "./webview-run-message-handler.js";
@@ -61,6 +62,7 @@ export function bindWebviewMessageController(
   reportRunFailure: (error: unknown) => void = () => {},
   resourceActions?: McpResourceActions,
   promptActions?: McpPromptActions,
+  mcpActions?: McpWebviewActions,
 ): void {
   let disposed = false;
   const post = (message: ExtensionToWebviewMessage) => {
@@ -82,6 +84,7 @@ export function bindWebviewMessageController(
   );
   const sessionMessages = new WebviewSessionMessageHandler(post, sessionActions);
   const checkpointMessages = new WebviewCheckpointMessageHandler(post, checkpointActions);
+  mcpActions?.bind(post);
 
   const messageSubscription = channel.onDidReceiveMessage((message) => {
     const result = webviewToExtensionMessageSchema.safeParse(message);
@@ -93,6 +96,7 @@ export function bindWebviewMessageController(
     switch (data.type) {
       case "webview/ping":
         post(createPong(data.requestId));
+        mcpActions?.refresh(data.requestId);
         return;
       case "webview/submit":
         if (runMessages.canStart()) {
@@ -103,6 +107,17 @@ export function bindWebviewMessageController(
             promptActions?.takeConfirmations(),
           );
         }
+        return;
+      case "webview/mcp-connect":
+        void mcpActions?.connect(data.requestId).catch(reportRunFailure);
+        return;
+      case "webview/mcp-disconnect":
+        resourceActions?.invalidateLiveState();
+        promptActions?.invalidateLiveState();
+        void mcpActions?.disconnect(data.requestId).catch(reportRunFailure);
+        return;
+      case "webview/mcp-open-settings":
+        mcpActions?.openSettings();
         return;
       case "webview/mcp-prompt-preview":
         void promptActions
@@ -134,11 +149,23 @@ export function bindWebviewMessageController(
               type: "extension/mcp-prompt-preview",
               requestId: data.requestId,
               status: "confirmed",
+              previewId: data.previewId,
               confirmation,
             });
           }
         } catch (error) {
           postPromptError(post, data.requestId, error);
+        }
+        return;
+      case "webview/mcp-prompt-detach":
+        if (promptActions?.detach(data.previewId) === true) {
+          post({
+            protocolVersion,
+            type: "extension/mcp-prompt-preview",
+            requestId: data.requestId,
+            status: "detached",
+            previewId: data.previewId,
+          });
         }
         return;
       case "webview/mcp-prompt-cancel":
@@ -192,6 +219,17 @@ export function bindWebviewMessageController(
           postResourceError(post, data.requestId, error);
         }
         return;
+      case "webview/mcp-resource-detach":
+        if (resourceActions?.detach(data.snapshotId) === true) {
+          post({
+            protocolVersion,
+            type: "extension/mcp-resource-preview",
+            requestId: data.requestId,
+            status: "detached",
+            snapshotId: data.snapshotId,
+          });
+        }
+        return;
       case "webview/list-sessions":
         sessionMessages.list(data.requestId);
         return;
@@ -223,6 +261,7 @@ export function bindWebviewMessageController(
     checkpointMessages.dispose();
     resourceActions?.dispose();
     promptActions?.dispose();
+    mcpActions?.dispose();
     messageSubscription.dispose();
     disposalSubscription?.dispose();
     disposalSubscription = undefined;
