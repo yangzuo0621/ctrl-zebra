@@ -168,7 +168,7 @@
 
 ## 5. 阶段规格索引
 
-阶段 0–12 已完成，完整任务正文按阶段归档；阶段 13 已规划，等待领取 T1301。
+阶段 0–13 已完成，完整任务正文均已按阶段归档。
 
 | 阶段 | 状态 | 详细规格 |
 |---|---|---|
@@ -185,11 +185,11 @@
 | 10 | 已完成 | [阶段 10 归档](roadmap/archive/phase-10.md) |
 | 11 | 已完成 | [阶段 11 归档](roadmap/archive/phase-11.md) |
 | 12 | 已完成 | [阶段 12 归档](roadmap/archive/phase-12.md) |
-| 13 | 已规划 | [阶段 13：可解释的推理摘要展示](roadmap/phases/phase-13.md) |
+| 13 | 已完成 | [阶段 13 归档](roadmap/archive/phase-13.md) |
 
 ## 6. 后续能力候选顺序
 
-阶段 13 已选定为下一阶段。完成可解释的推理摘要展示后，建议按以下顺序评估后续能力：
+阶段 13 已完成。建议按以下顺序评估后续能力：
 
 1. 更多专用模型供应商，继续验证 Provider 边界。
 2. Plan/Act 模式，验证 Tool Policy 可配置性。
@@ -219,12 +219,12 @@
 ## 9. 当前执行点
 
 阶段 0–12 的 85 个任务以及
-[T1301：建立推理摘要的产品与跨边界契约](roadmap/phases/phase-13.md#t1301建立推理摘要的产品与跨边界契约)
+[T1301：建立推理摘要的产品与跨边界契约](roadmap/archive/phase-13.md#t1301建立推理摘要的产品与跨边界契约)
 以及
-[T1302：标准化 Provider reasoning 流并接入 Core Runtime](roadmap/phases/phase-13.md#t1302标准化-provider-reasoning-流并接入-core-runtime)
+[T1302：标准化 Provider reasoning 流并接入 Core Runtime](roadmap/archive/phase-13.md#t1302标准化-provider-reasoning-流并接入-core-runtime)
 以及
-[T1303：打通 Extension 协议、持久化与恢复](roadmap/phases/phase-13.md#t1303打通-extension-协议持久化与恢复)
+[T1303：打通 Extension 协议、持久化与恢复](roadmap/archive/phase-13.md#t1303打通-extension-协议持久化与恢复)
 以及
-[T1304：实现可访问的推理摘要 Webview 体验](roadmap/phases/phase-13.md#t1304实现可访问的推理摘要-webview-体验)
+[T1304：实现可访问的推理摘要 Webview 体验](roadmap/archive/phase-13.md#t1304实现可访问的推理摘要-webview-体验)
 均已完成。T1304 由 [#135](https://github.com/yangzuo0621/ctrl-zebra/pull/135) 交付；当前没有
 进行中任务，下一任务为无。
