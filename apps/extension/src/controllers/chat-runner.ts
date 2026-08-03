@@ -18,6 +18,7 @@ import {
   type McpResourceAttachment,
   type PersistedMcpToolSource,
   persistenceFormatVersion,
+  type ToolStateSourceDto,
   type UserMessage,
 } from "@ctrl-zebra/protocol";
 
@@ -34,7 +35,15 @@ type NonReasoningAgentRuntimeEvent = Exclude<
   }
 >;
 
-export type ChatRunnerEvent = NonReasoningAgentRuntimeEvent | CollectedReasoningEvent;
+type RuntimeToolStateEvent = Extract<
+  NonReasoningAgentRuntimeEvent,
+  { readonly type: "agent.tool-state" }
+>;
+type RuntimeMcpToolSource = PersistedMcpToolSource & { readonly displayName?: string };
+export type ChatRunnerEvent =
+  | Exclude<NonReasoningAgentRuntimeEvent, { readonly type: "agent.tool-state" }>
+  | (RuntimeToolStateEvent & { readonly source?: ToolStateSourceDto })
+  | CollectedReasoningEvent;
 
 export interface ChatRunner {
   run(
@@ -53,12 +62,12 @@ interface ChatRunnerDependencies {
   readonly now?: () => Date;
   readonly approvalWorkflow?: ToolApprovalWorkflow;
   readonly sessionRepository?: SessionRepository;
-  readonly mcpToolSources?: ReadonlyMap<string, PersistedMcpToolSource>;
+  readonly mcpToolSources?: ReadonlyMap<string, RuntimeMcpToolSource>;
 }
 
 interface SelectedToolRegistry {
   readonly registry: ToolRegistry;
-  readonly mcpToolSources?: ReadonlyMap<string, PersistedMcpToolSource>;
+  readonly mcpToolSources?: ReadonlyMap<string, RuntimeMcpToolSource>;
 }
 
 interface SelectingChatRunnerDependencies {
@@ -103,7 +112,13 @@ export function createChatRunner({
           modelGateway,
           {
             emit: (event) => {
-              for (const projected of projectRuntimeEvent(sessionId, signal, reasoning, event)) {
+              for (const projected of projectRuntimeEvent(
+                sessionId,
+                signal,
+                reasoning,
+                event,
+                mcpToolSources,
+              )) {
                 emit(projected);
               }
             },
@@ -187,7 +202,13 @@ export function createChatRunner({
         modelGateway,
         {
           emit: (event) => {
-            for (const projected of projectRuntimeEvent(sessionId, signal, reasoning, event)) {
+            for (const projected of projectRuntimeEvent(
+              sessionId,
+              signal,
+              reasoning,
+              event,
+              mcpToolSources,
+            )) {
               persist(projected);
             }
           },
@@ -215,6 +236,7 @@ function projectRuntimeEvent(
   signal: AbortSignal,
   reasoning: ReasoningCollector,
   event: AgentRuntimeEvent,
+  sources: ReadonlyMap<string, RuntimeMcpToolSource> | undefined,
 ): readonly ChatRunnerEvent[] {
   if (event.sessionId !== sessionId) {
     return [];
@@ -227,6 +249,26 @@ function projectRuntimeEvent(
     (event.status === "completed" || event.status === "cancelled" || event.status === "failed")
   ) {
     reasoning.close();
+  }
+  if (event.type === "agent.tool-state") {
+    const source = sources?.get(event.call.name);
+    return [
+      {
+        ...event,
+        source:
+          source === undefined
+            ? { kind: "builtin" }
+            : {
+                kind: "mcp",
+                server: {
+                  serverId: source.serverId,
+                  displayName: source.displayName ?? source.serverId,
+                },
+                generation: source.generation,
+                mcpToolName: source.mcpToolName,
+              },
+      },
+    ];
   }
   return [event];
 }
@@ -265,9 +307,10 @@ export function createSelectingChatRunner({
 
 function projectPersistedEvents(
   event: ChatRunnerEvent,
-  sources: ReadonlyMap<string, PersistedMcpToolSource> | undefined,
+  sources: ReadonlyMap<string, RuntimeMcpToolSource> | undefined,
 ): readonly { readonly type: string; readonly data: JsonValue }[] {
-  const { type, sessionId: _sessionId, ...data } = event;
+  const { type, sessionId: _sessionId, ...rawData } = event;
+  const data = event.type === "agent.tool-state" ? omitUiSource(rawData) : rawData;
   const events: { readonly type: string; readonly data: JsonValue }[] = [
     { type, data: jsonValueSchema.parse(data) },
   ];
@@ -281,13 +324,29 @@ function projectPersistedEvents(
   if (event.status === "pending") {
     events.push({
       type: "session.mcp-tool-call",
-      data: jsonValueSchema.parse({ call: event.call, source }),
+      data: jsonValueSchema.parse({ call: event.call, source: persistedSource(source) }),
     });
   } else if (event.status === "success" || event.status === "error") {
     events.push({
       type: "session.mcp-tool-result",
-      data: jsonValueSchema.parse({ result: event.result, source }),
+      data: jsonValueSchema.parse({ result: event.result, source: persistedSource(source) }),
     });
   }
   return events;
+}
+
+function omitUiSource<T extends object>({
+  source: _source,
+  ...value
+}: T & { readonly source?: unknown }) {
+  return value;
+}
+
+function persistedSource(source: RuntimeMcpToolSource): PersistedMcpToolSource {
+  return {
+    serverId: source.serverId,
+    registryName: source.registryName,
+    mcpToolName: source.mcpToolName,
+    generation: source.generation,
+  };
 }

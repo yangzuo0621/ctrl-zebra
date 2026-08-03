@@ -147,6 +147,10 @@ export class McpPromptActions {
     return confirmations;
   }
 
+  detach(previewId: string): boolean {
+    return this.#confirmations.delete(previewId);
+  }
+
   clearInput(): void {
     this.invalidateLiveState();
     this.#confirmations.clear();

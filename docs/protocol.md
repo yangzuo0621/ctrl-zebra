@@ -228,7 +228,10 @@ stderr, stack traces, and causes are forbidden.
 - Webview intents use `webview/mcp-connect`, `webview/mcp-disconnect`,
   `webview/mcp-resource-read`, `webview/mcp-resource-attach`,
   `webview/mcp-prompt-preview`, `webview/mcp-prompt-confirm`, and
-  `webview/mcp-prompt-cancel`. They carry only the active `serverId`, `generation` where a live
+  `webview/mcp-prompt-cancel`. T1408 additively defines `webview/mcp-open-settings`,
+  `webview/mcp-resource-detach`, and `webview/mcp-prompt-detach` so the user can open the exact
+  user-scoped setting or remove an immutable draft attachment before send. They carry only the
+  active `serverId`, `generation` where a live
   connection is required, bounded projected identities/arguments required by that action, and the
   normal envelope. They cannot carry configuration, command, cwd, risk, approval state, Tool
   schema, Resource content, Prompt result, or capability declarations.
@@ -244,6 +247,13 @@ stderr, stack traces, and causes are forbidden.
   Resource and Prompt intents additionally match the exact projected URI/template/Prompt identity;
   Prompt confirmation matches a Host-generated preview ID. Stale or mismatched messages are
   ignored without operation, persistence, or user-visible state mutation.
+
+The three T1408 intents are strict and do not broaden Server authority. Open-settings contains no
+Server data and asks the Extension to reveal `ctrlZebra.mcp.server` in user settings. Resource
+detach carries only the Host-generated `snapshotId`; Prompt detach carries only the Host-generated
+`previewId` retained for the confirmed draft projection. Detach removes only the matching current
+Composer attachment, performs no Server request, and cannot delete a Resource, revoke persisted
+history, cancel a Run, or affect another attachment.
 
 ### Tool projection and deterministic names
 

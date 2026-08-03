@@ -120,6 +120,10 @@ export class McpResourceActions {
     return attachments;
   }
 
+  detach(snapshotId: string): boolean {
+    return this.#attachments.delete(snapshotId);
+  }
+
   invalidateLiveState(): void {
     for (const controller of this.#reads) {
       controller.abort(new Error("MCP Resource state invalidated."));

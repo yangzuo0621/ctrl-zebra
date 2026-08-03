@@ -7,6 +7,11 @@ import {
 import { assistantMessageSchema, userMessageSchema } from "./chat-message.js";
 import { checkpointIdSchema, checkpointSummarySchema } from "./checkpoint.js";
 import {
+  mcpConnectionSchema,
+  mcpToolCatalogSchema,
+  toolStateSourceSchema,
+} from "./mcp-connection.js";
+import {
   mcpPromptArgumentsSchema,
   mcpPromptCatalogSchema,
   mcpPromptConfirmationSchema,
@@ -71,6 +76,29 @@ export const cancelMessageSchema = z.strictObject({
   type: z.literal("webview/cancel"),
 });
 
+export const mcpConnectMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("webview/mcp-connect"),
+});
+export const mcpDisconnectMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("webview/mcp-disconnect"),
+});
+export const mcpOpenSettingsMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("webview/mcp-open-settings"),
+});
+export const mcpConnectionMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("extension/mcp-connection"),
+  connection: mcpConnectionSchema,
+});
+export const mcpToolsMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("extension/mcp-tools"),
+  catalog: mcpToolCatalogSchema,
+});
+
 export const mcpResourceReadMessageSchema = z.strictObject({
   ...protocolEnvelopeSchema.shape,
   type: z.literal("webview/mcp-resource-read"),
@@ -84,6 +112,11 @@ export const mcpResourceAttachMessageSchema = z.strictObject({
   type: z.literal("webview/mcp-resource-attach"),
   serverId: mcpServerIdSchema,
   generation: mcpGenerationSchema,
+  snapshotId: mcpResourceSnapshotIdSchema,
+});
+export const mcpResourceDetachMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("webview/mcp-resource-detach"),
   snapshotId: mcpResourceSnapshotIdSchema,
 });
 
@@ -106,6 +139,12 @@ export const mcpResourcePreviewMessageSchema = z.discriminatedUnion("status", [
     type: z.literal("extension/mcp-resource-preview"),
     status: z.literal("attached"),
     attachment: mcpResourceAttachmentSchema,
+  }),
+  z.strictObject({
+    ...protocolEnvelopeSchema.shape,
+    type: z.literal("extension/mcp-resource-preview"),
+    status: z.literal("detached"),
+    snapshotId: mcpResourceSnapshotIdSchema,
   }),
   z.strictObject({
     ...protocolEnvelopeSchema.shape,
@@ -138,6 +177,11 @@ export const mcpPromptCancelMessageSchema = z.strictObject({
   generation: mcpGenerationSchema,
   previewId: mcpPromptPreviewIdSchema,
 });
+export const mcpPromptDetachMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("webview/mcp-prompt-detach"),
+  previewId: mcpPromptPreviewIdSchema,
+});
 export const mcpPromptsMessageSchema = z.strictObject({
   ...protocolEnvelopeSchema.shape,
   type: z.literal("extension/mcp-prompts"),
@@ -154,7 +198,14 @@ export const mcpPromptPreviewMessageSchema = z.discriminatedUnion("status", [
     ...protocolEnvelopeSchema.shape,
     type: z.literal("extension/mcp-prompt-preview"),
     status: z.literal("confirmed"),
+    previewId: mcpPromptPreviewIdSchema,
     confirmation: mcpPromptConfirmationSchema,
+  }),
+  z.strictObject({
+    ...protocolEnvelopeSchema.shape,
+    type: z.literal("extension/mcp-prompt-preview"),
+    status: z.literal("detached"),
+    previewId: mcpPromptPreviewIdSchema,
   }),
   z.strictObject({
     ...protocolEnvelopeSchema.shape,
@@ -299,6 +350,7 @@ const toolStateEnvelopeShape = {
   ...protocolEnvelopeSchema.shape,
   type: z.literal("extension/tool-state"),
   call: toolCallSchema,
+  source: toolStateSourceSchema,
 };
 
 export const pendingToolStateMessageSchema = z.strictObject({
@@ -386,11 +438,16 @@ export const webviewToExtensionMessageSchema = z.discriminatedUnion("type", [
   pingMessageSchema,
   submitMessageSchema,
   cancelMessageSchema,
+  mcpConnectMessageSchema,
+  mcpDisconnectMessageSchema,
+  mcpOpenSettingsMessageSchema,
   mcpResourceReadMessageSchema,
   mcpResourceAttachMessageSchema,
+  mcpResourceDetachMessageSchema,
   mcpPromptPreviewRequestMessageSchema,
   mcpPromptConfirmMessageSchema,
   mcpPromptCancelMessageSchema,
+  mcpPromptDetachMessageSchema,
   showApprovalDiffMessageSchema,
   approvalDecisionMessageSchema,
   listSessionsMessageSchema,
@@ -416,6 +473,8 @@ export const extensionToWebviewMessageSchema = z.union([
   checkpointListMessageSchema,
   checkpointRestoredMessageSchema,
   checkpointErrorMessageSchema,
+  mcpConnectionMessageSchema,
+  mcpToolsMessageSchema,
   mcpResourcesMessageSchema,
   mcpResourcePreviewMessageSchema,
   mcpPromptsMessageSchema,
@@ -427,13 +486,20 @@ export type PingMessage = z.infer<typeof pingMessageSchema>;
 export type PongMessage = z.infer<typeof pongMessageSchema>;
 export type SubmitMessage = z.infer<typeof submitMessageSchema>;
 export type CancelMessage = z.infer<typeof cancelMessageSchema>;
+export type McpConnectMessage = z.infer<typeof mcpConnectMessageSchema>;
+export type McpDisconnectMessage = z.infer<typeof mcpDisconnectMessageSchema>;
+export type McpOpenSettingsMessage = z.infer<typeof mcpOpenSettingsMessageSchema>;
+export type McpConnectionMessage = z.infer<typeof mcpConnectionMessageSchema>;
+export type McpToolsMessage = z.infer<typeof mcpToolsMessageSchema>;
 export type McpResourceReadMessage = z.infer<typeof mcpResourceReadMessageSchema>;
 export type McpResourceAttachMessage = z.infer<typeof mcpResourceAttachMessageSchema>;
+export type McpResourceDetachMessage = z.infer<typeof mcpResourceDetachMessageSchema>;
 export type McpResourcesMessage = z.infer<typeof mcpResourcesMessageSchema>;
 export type McpResourcePreviewMessage = z.infer<typeof mcpResourcePreviewMessageSchema>;
 export type McpPromptPreviewRequestMessage = z.infer<typeof mcpPromptPreviewRequestMessageSchema>;
 export type McpPromptConfirmMessage = z.infer<typeof mcpPromptConfirmMessageSchema>;
 export type McpPromptCancelMessage = z.infer<typeof mcpPromptCancelMessageSchema>;
+export type McpPromptDetachMessage = z.infer<typeof mcpPromptDetachMessageSchema>;
 export type McpPromptsMessage = z.infer<typeof mcpPromptsMessageSchema>;
 export type McpPromptPreviewMessage = z.infer<typeof mcpPromptPreviewMessageSchema>;
 export type ListSessionsMessage = z.infer<typeof listSessionsMessageSchema>;
