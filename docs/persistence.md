@@ -225,3 +225,70 @@ forbidden. Encryption does not make an otherwise forbidden reasoning payload acc
   fixtures. They include normal complete blocks, multiple/interleaved blocks, a bounded truncated
   block, an interrupted partial block, a pre-reasoning session, tail damage, and a malformed
   reasoning lifecycle.
+
+## MCP persistence projection
+
+The projection below is defined for the exact MCP `2026-07-28` stage 14 contract. MCP persistence
+records bounded provenance and conversation-visible outcomes, never a live Client,
+connection capability, or replayable authorization. The user-scoped Server configuration remains in
+VS Code configuration and is not copied into Session storage.
+
+### Additive version `1` events
+
+The existing extensible event envelope admits the following strict additive event types without
+changing the `v1` directory layout, manifest, Chat Message schema, or existing event meanings:
+
+- `session.mcp-tool-call` contains the existing bounded Tool Call identity and validated JSON input
+  plus strict source `{ serverId, registryName, mcpToolName, generation }`.
+- `session.mcp-tool-result` contains the existing normalized Tool Result plus the same source
+  identity. It stores only supported bounded text/structured content and the existing truncation
+  marker, never an SDK result, JSON-RPC error, raw Server error data, or unsupported content.
+- `session.mcp-resource-attached` contains `{ snapshotId, serverId, uri, mimeType, text,
+  truncated }` for the exact bounded immutable snapshot inserted into the Run context.
+- `session.mcp-prompt-confirmed` contains `{ serverId, promptName, projectedText }`, where
+  `projectedText` is the exact bounded ordinary user attachment—including the reviewed argument and
+  source-role provenance labels—sent to the current input flow. Ephemeral preview structure is not
+  duplicated in persistence.
+
+All objects are strict and use the identifier, entry, code-point, UTF-8, item, and serialized limits
+owned by [Protocol](protocol.md) and [Security](security.md). A Tool Call and matching Result remain
+one indivisible context and recovery unit. A Resource or Prompt event is written only when its
+snapshot or confirmed projection is actually attached to the Run; browsing, list refresh, read
+preview, Prompt preview, cancellation, or rejection creates no content event.
+
+Tool schemas, descriptors, annotations, list cursors, connection snapshots, raw Prompt templates,
+unconfirmed previews, Resource catalogs, process state, executable, arguments, cwd, environment,
+stdout, stderr, SDK/JSON-RPC values, Server error data, approvals, and credentials are forbidden.
+`displayName` is not persisted because `serverId` is the stable provenance identity and the current
+configuration label may change independently.
+
+### Compatibility and recovery
+
+- A pre-MCP version `1` Session contains none of these events and restores normally with no MCP
+  provenance or placeholder. Current readers validate every recognized MCP event strictly; invalid
+  source identity, mismatched Tool Call/Result provenance, unsupported content, excessive data, or
+  an impossible lifecycle makes the current-version Session corrupt rather than guessed or repaired.
+- The events are additive because the event envelope already admits later dotted types and no
+  existing record meaning changes. A legacy reader may ignore them and retain the history it already
+  understands. Any future change to their field meaning, role projection, identity mapping, or
+  replay semantics requires a new persisted-format decision and compatibility fixtures.
+- Recovery may display completed MCP Tool outcomes and reconstruct bounded Resource/Prompt ordinary
+  context provenance. Persisted generation, snapshot ID, or Tool identity
+  is historical evidence only and cannot match, authorize, or seed a new live connection.
+- Recovery never reads MCP configuration for side effects, starts or reconnects a Server, lists a
+  primitive, sends JSON-RPC, refreshes a snapshot, consumes an approval, repeats a Tool Call, reads a
+  Resource, gets a Prompt, or resubmits confirmed content. A live or incomplete MCP operation is
+  normalized through the existing Session recovery rule to `interrupted`; it has no ordinary Tool
+  Result and cannot resume.
+- A later explicit connection creates a new generation and new catalogs. It cannot replace text in
+  an already persisted Resource snapshot or Prompt projection, even if the same Server ID, URI, or
+  Prompt name now returns different content.
+
+### MCP fixtures
+
+Version `1` compatibility fixtures added by the implementation tasks must cover a complete Tool
+Call/Result pair, a truncated Resource snapshot, a confirmed multi-message Prompt projection, a
+pre-MCP Session, an interrupted call without a Result, mismatched Server provenance, unsupported
+content, limit overflow, and tail damage. They use deterministic fake Server identities and content
+and never start a Server or contain a developer configuration, command, path, environment, or real
+credential.

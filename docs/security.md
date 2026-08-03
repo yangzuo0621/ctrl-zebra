@@ -404,3 +404,143 @@ entry, not only the intermediate object.
 - Save success uses a credential-free confirmation. Input and storage failures use fixed,
   user-safe text and never include the submitted value, stored value, Secret name, or original
   backend error. The command does not initialize a Gemini client or make a network request.
+
+## Controlled MCP Security Boundary
+
+This boundary applies to the exact stage 14 MCP `2026-07-28` contract. MCP Servers, descriptors,
+schemas, annotations, content, results, notifications, stderr, logs, and
+errors are untrusted external process input. A local stdio transport is not a sandbox: the Server
+runs with the Extension user's operating-system authority and can have unknown local or network
+side effects independent of what it advertises.
+
+### User configuration and Server identity
+
+- The only version `1` source is the user-scoped VS Code setting `ctrlZebra.mcp.server`. The Host
+  reads its inspected global value as `unknown`; workspace, workspace-folder, language override,
+  Webview, model, Prompt, Resource, persistence, environment, and Server-provided values cannot
+  create, replace, or merge configuration.
+- The setting is either absent or one strict object:
+  `{ version: 1, serverId, displayName, command, args }`. Unknown fields are rejected. `serverId`
+  is lower `snake_case`, begins with a letter, and is at most 64 ASCII characters. `displayName`
+  is well-formed Unicode, non-empty, and at most 128 code points and 512 UTF-8 bytes. `command` is
+  non-empty, contains no NUL or newline, and is at most 4,096 UTF-8 bytes. `args` contains at most
+  64 strings; each is at most 4,096 bytes and the array is at most 32,768 serialized UTF-8 bytes.
+- Configuration has no cwd, environment, shell, transport, endpoint, headers, credential,
+  SecretStorage name, auto-start, retry, or capability fields. The canonical cwd is the exact
+  Extension-selected trusted workspace root at connect time. Version, identity, command, args, and
+  cwd form the effective immutable configuration for one connection attempt.
+- API keys, bearer tokens, passwords, authorization headers, cookies, proxy credentials, and other
+  secrets are forbidden in `command`, `args`, display values, or future ordinary settings. Stage 14
+  provides no MCP Secret injection. A Server that requires credentials is unsupported until a
+  separately approved SecretStorage contract exists.
+- `serverId` is the stable external identity used in approvals and persisted provenance. Changing
+  any effective configuration while connected does not mutate the live Server; it marks the
+  displayed configuration stale and requires explicit disconnect plus a new approved connect.
+
+### Startup and process containment
+
+- Server startup is a distinct `execute` operation, not `run_command` and not a Tool Call. It
+  requires a fresh single-use approval that displays and binds Server identity, complete executable,
+  ordered arguments, canonical selected-workspace cwd, the external-process warning, creation and
+  expiry times, and the current trusted-workspace decision. It uses the existing host-owned
+  five-minute approval lifetime; configuration or trust changes can invalidate it earlier.
+- The Extension revalidates configuration scope, Workspace Trust, approval, executable/arguments,
+  canonical cwd, and operation equality immediately before direct spawn. Shell interpretation,
+  string command lines, profile loading, variable/glob expansion, aliases, pipes, redirects,
+  command substitution, and model- or Server-selected executables are forbidden.
+- The process receives a new allowlisted environment rather than the Host environment. Version `1`
+  may copy only `PATH`; on Windows it may additionally copy `PATHEXT`, `SystemRoot`, `WINDIR`,
+  `TEMP`, and `TMP`, and on POSIX `TMPDIR`. Missing optional values are omitted. Names and values
+  are never shown, logged, persisted, sent to the Webview or model, or configurable by the Server.
+- Stdout is exclusively the MCP framed message channel. Non-protocol stdout is a malformed-message
+  failure, never a diagnostic log. Stderr is collected only into a bounded volatile diagnostic
+  status and is never copied verbatim to logs, errors, persistence, Webview, model context, or Tool
+  Results.
+- Disconnect, cancellation, timeout, Server exit, initialization failure, trust loss, or Extension
+  disposal closes the result gate before process cleanup. Cleanup closes stdin, aborts all owned
+  requests, terminates the complete process tree, waits a bounded interval, escalates through the
+  host process port when necessary, and confirms termination. `termination-unconfirmed` remains
+  distinct from successful disconnect and blocks reuse of that connection.
+
+### External Tool approval
+
+- Every MCP Tool is assigned trusted CtrlZebra risk `execute`, regardless of Server annotations,
+  name, description, input schema, or claims such as read-only, idempotent, open-world, or
+  destructive. The approval UI also states “external Server; local and network side effects are
+  unknown.” Server metadata can make this warning stricter but never remove or downgrade it.
+- Each call requires a new exact Approval Request binding Session ID, Run ID, Tool Call ID,
+  CtrlZebra registry name, Server ID, MCP Tool name, connection generation, the immutable compiled
+  schema identity, structurally validated JSON arguments, display projection, trusted risk,
+  creation time, and expiry time. No batch, Server-wide, Tool-wide, remembered, Session-wide, or
+  argument-prefix approval exists. The approval uses the existing five-minute host-owned lifetime.
+- Approval is invalidated by any configuration, identity, generation, Tool snapshot, schema,
+  argument, workspace trust, presentation, or connection-state change. Consumption is atomic and
+  permits exactly one `tools/call` request. A retry or changed call requires a new approval.
+- Arguments are validated against the current-generation Tool schema before approval construction
+  and immediately before consumption. Validation is not authorization. A Server error,
+  cancellation, disconnect, invalid or unsupported result, or lost response never creates a retry
+  grant or reusable approval.
+
+Resource reads and Prompt gets are not Core Tools and never masquerade as Tool approval. They occur
+only after an explicit user selection in the current connected generation. The UI identifies the
+external Server and requested URI or Prompt; returned content remains ordinary untrusted content
+and cannot authorize follow-up operations.
+
+### Operation security matrix
+
+| Operation | Required user action | Trust/approval | Persisted effect | Cancellation/close result |
+|---|---|---|---|---|
+| Read configuration | Open or change user setting | No Server action | Configuration remains VS Code-owned | No connection starts |
+| Connect/start Server | Select Connect and inspect startup | Trusted workspace plus exact five-minute single-use startup approval | No connection or approval persistence | Close gate and terminate tree |
+| List Tools/Resources/Prompts | Successful explicit connection | Current generation and advertised projected capability | Catalogs are not persisted | Discard partial/late snapshot |
+| Call MCP Tool | Agent proposes exact call; user decides inline | Trusted `execute` risk plus fresh exact five-minute single-use call approval | Bounded Call/Result provenance only | No late Result, retry, or side effect acceptance |
+| Read/attach Resource | User selects Read, then separately Attach | Current generation; no Tool approval or Workspace authority | Exact attached text snapshot only | No late preview/attachment |
+| Get/confirm Prompt | User requests Preview, then separately confirms | Current generation and exact preview; no Tool approval | Exact confirmed ordinary user projection only | Invalidate preview; no auto-send |
+| Disconnect/dispose | User disconnects or owning lifecycle ends | No approval required to reduce capability | No connection state persisted | Close gate, abort, terminate, confirm |
+| Session recovery | User restores existing Session | Never reads config for side effects or reconnects | Reads historical bounded projections only | No replay or resumed request |
+
+### Collection and content limits
+
+All limits are enforced incrementally before constructing the complete value. A more specific
+limit may reject or truncate earlier; none relaxes the existing 1,048,576-byte serialized Tool
+Result ceiling.
+
+| Scope | Version `1` hard limit |
+|---|---:|
+| One inbound or outbound JSON-RPC message | 1,048,576 UTF-8 bytes |
+| Retained stderr per connection | 65,536 UTF-8 bytes, prefix only |
+| One list operation | 100 pages and 1,000 entries |
+| One descriptor | 65,536 serialized UTF-8 bytes |
+| One complete list snapshot | 1,048,576 serialized UTF-8 bytes |
+| One Tool input or output schema | 65,536 bytes, depth 32, 4,096 nodes, 1,024 properties |
+| All schemas in one Tool snapshot | 524,288 serialized UTF-8 bytes |
+| Tool arguments before approval | 262,144 serialized UTF-8 bytes |
+| Normalized Tool text content | 262,144 code points and 524,288 UTF-8 bytes |
+| Normalized Tool structured content | 524,288 serialized UTF-8 bytes |
+| Resource/Template URI | 2,048 code points and 8,192 UTF-8 bytes |
+| One Resource read | 32 text items, 131,072 code points and 524,288 UTF-8 bytes total |
+| Prompt arguments | 32 entries; key 64 code points, value 4,096 code points, 65,536 bytes total |
+| One Prompt result | 32 text messages, 65,536 code points and 262,144 UTF-8 bytes total |
+
+List collectors reject duplicate cursors, a cursor that does not advance, limit overflow, duplicate
+identities, or a malformed page and retain no partial replacement snapshot. Resource text may keep
+the largest well-formed prefix only when the Protocol projection records `truncated: true`; Tool
+and Prompt data that exceed their applicable limit are rejected rather than silently omitted.
+
+Unsupported image, audio, Blob, embedded Resource, Resource Link, unknown content, task,
+`input_required`, progress, logging, completion, subscription, or experimental values produce
+stable unsupported errors. They
+are not fetched, stringified, rendered, persisted, remotely loaded, or passed to the model.
+
+### MCP diagnostics and secrets
+
+- MCP logging adds only bounded allowlisted facts: `event`, `component: "mcp"`, stable outcome or
+  error code, `serverId`, connection generation, and already-owned request/Tool correlation IDs.
+  Command, arguments, cwd, environment, descriptors, schemas, annotations, JSON-RPC content,
+  Resource/Prompt/Tool content, stdout, stderr, SDK errors, Server error data, and process details
+  are excluded.
+- Stable MCP errors are classified before logging or Webview projection. Raw SDK/JSON-RPC/process
+  errors and nested causes never cross the adapter. Redaction is defense in depth and cannot justify
+  accepting forbidden data.
+- MCP configuration and persisted provenance contain no credentials. SecretStorage values are never
+  injected into the Server process in stage 14, and Server output cannot name or request a Secret.

@@ -11,9 +11,10 @@ Templates）和 Prompts 三类主要 Server 原语。
 Tool、参数和外部副作用警告并逐次批准 → 收到有界结果 → 取消 Run 或断开服务器后不再接受
 迟到输出、上下文更新和副作用。
 
-本阶段以 MCP `2025-11-25` 规范作为设计和兼容性评审基线。每个涉及官方 SDK 或协议细节的
-实现任务开始前仍须通过 Context7 核对当前文档、稳定版本和勘误，并把采用的 SDK 与协议版本
-固定在依赖和测试证据中。
+本阶段以 MCP `2026-07-28` 规范作为设计和兼容性评审基线。首期只接受该精确协议版本，
+不自动降级到旧协议或接受未知未来版本。每个涉及官方 SDK 或协议细节的实现任务开始前仍须
+通过 Context7 核对当前文档、稳定版本和勘误，并把采用的 SDK 与协议版本固定在依赖和测试
+证据中。
 
 ## 2. 前置条件与固定范围
 
@@ -43,7 +44,8 @@ Tool、参数和外部副作用警告并逐次批准 → 收到有界结果 → 
 ### 2.3 本阶段明确排除
 
 - Streamable HTTP、旧 HTTP+SSE 回退、远程服务器、OAuth 和其他远程鉴权。
-- Sampling、Elicitation、Roots、Tasks 和服务器发起的未声明 Client 能力。
+- Sampling、Elicitation、Roots、Tasks、`input_required` 自动履行/手工续轮和服务器发起的未声明
+  Client 能力。
 - Resource subscription/updated 推送、自动刷新已附加上下文和后台预取。
 - 图片、音频、二进制 Blob、嵌入 Resource、Resource Link 或其他多模态内容。
 - MCP Server 托管、自动下载或安装、市场、推荐目录、工作区共享配置和云同步。
@@ -75,6 +77,12 @@ Tool、参数和外部副作用警告并逐次批准 → 收到有界结果 → 
    服从 URI、MIME、文本、条目、字节和 Context Budget 限额，不能成为 System 指令或授权来源。
 10. Prompts 是用户控制的模板。服务器返回的消息必须先有界校验并向用户预览；只有用户明确
     确认后才能进入当前输入流程，且不得携带隐藏 System 权限、自动副作用或持久授权。
+11. `2026-07-28` 规范或 SDK 中存在但未获阶段授权的能力保持未声明、未注册、不可达。Server
+    广告额外能力不构成授权；对未声明 Client 能力的请求使用稳定的“不支持”结果，不能触发
+    Host、Provider、Workspace、审批或持久化操作。
+12. SDK Client 必须将版本协商固定为 `2026-07-28` 并关闭 `input_required` 自动履行；不得通过
+    SDK 默认值、按调用选项或隐藏 handler 自动重试原请求、回传 opaque request state，或引入
+    Roots、Sampling、Elicitation 和 Tasks 的间接路径。
 
 ## 4. 任务顺序
 
@@ -106,8 +114,8 @@ Tool、参数和外部副作用警告并逐次批准 → 收到有界结果 → 
   键盘、窄侧栏、主题和 live-region 要求。
 - 按长期架构影响新增 ADR，记录至少“独立 MCP 包/Extension 内适配器”的取舍、为何首期选择
   stdio + 三类 Server 原语，以及未来增加 HTTP、Client 原语或多模态时的变更边界。
-- 决定并记录官方 TypeScript SDK 是否采用、固定版本策略、JSON Schema 校验策略，以及协议
-  `2025-11-25` 兼容矩阵。
+- 采用官方 `@modelcontextprotocol/client`，首个实现精确固定 `2.0.0`；记录升级策略、公开
+  Transport/validator 子路径、JSON Schema 校验策略，以及协议 `2026-07-28` 兼容矩阵。
 
 **测试**：文档链接检查；术语、能力和排除项一致性搜索；依赖图与安全矩阵人工审阅。
 
@@ -125,14 +133,16 @@ Tool、参数和外部副作用警告并逐次批准 → 收到有界结果 → 
 **产物**：
 
 - MCP Client 自有接口、稳定状态和错误分类；第三方 SDK/JSON-RPC 类型不越界。
+- 官方 Client 使用固定版本协商 `pin: "2026-07-28"` 并关闭 `input_required` 自动履行；生产
+  transport 包装 Extension 注入端口，不使用 SDK 自带的进程所有权。
 - 注入式 stdio transport/process port 与确定性的 fixture transport；生产进程创建仍由
   Extension Host adapter 拥有。
 - `initialize → initialized → operation → disconnect` 生命周期、协议/能力不兼容失败、请求取消、
   幂等 dispose、stderr 有界收集和迟到消息丢弃。
 - 不声明 Sampling、Elicitation、Roots、Tasks 或其他未实现 Client capability。
 
-**测试**：正常协商；版本/能力不兼容；畸形消息；并发请求关联；取消后无输出；Server 提前退出；
-初始化失败与 dispose 竞态；全部异步资源清理。
+**测试**：正常精确版本协商；旧版/未来版/能力不兼容；`input_required` 不自动履行；畸形消息；
+并发请求关联；取消后无输出；Server 提前退出；初始化失败与 dispose 竞态；全部异步资源清理。
 
 **不包含**：真实用户配置、Tool 发现/调用、Core Registry、Webview、自动重试和 HTTP transport。
 
@@ -199,7 +209,7 @@ Tool 定义，但不开放执行。
 
 **测试**：正常调用；参数无效；未知/已移除 Tool；连接世代改变；审批拒绝/过期/单次消费；
 Server Tool error；output schema 不匹配；不支持内容；超限；取消/断开竞态；重复调用门禁；
-内置 Tool 回归。
+`input_required` 无履行或重试；内置 Tool 回归。
 
 **不包含**：自动批准、批量授权、权限记忆、Server 控制风险、并行 Tool Calls、Tasks 和重试。
 
@@ -225,7 +235,7 @@ Server Tool error；output schema 不匹配；不支持内容；超限；取消/
 
 **测试**：空列表；多页；重复 cursor；模板参数缺失/多余；危险或过长 URI；不支持 MIME；
 无效 Unicode；多内容项；超限/截断；列表变更竞态；断开/取消；Prompt injection 文本保持普通
-不可信上下文；现有 Files budget 回归。
+不可信上下文；`input_required` 无履行或重试；现有 Files budget 回归。
 
 **不包含**：subscription/updated、自动刷新、后台预取、模型自主选取 Resource、二进制或多模态、
 把 MCP URI 映射为本地工作区授权。
@@ -249,7 +259,8 @@ Server Tool error；output schema 不匹配；不支持内容；超限；取消/
   决定的普通对话投影进入当前 Run 和持久化，不保留可执行模板能力。
 
 **测试**：空列表；多页；重复/畸形参数；缺失必填值；超限；未知内容类型；恶意指令文本；
-预览确认/取消；列表和连接世代竞态；断开后失效；键盘流程所需 store 行为。
+预览确认/取消；列表和连接世代竞态；断开后失效；`input_required` 无履行或重试；键盘流程所需
+store 行为。
 
 **不包含**：自动运行 Prompt、slash-command 公共兼容承诺、System 角色提升、Prompt 链、模板
 持久授权、自动 Tool/Resource 使用和多模态。

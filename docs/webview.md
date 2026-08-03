@@ -96,3 +96,55 @@ This document defines the React Webview constraints established before T0103. It
 - The Extension constructs the complete Webview HTML document and converts every local script or stylesheet URI with `webview.asWebviewUri`.
 - The Webview entry uses React's client `createRoot` API and contains no Extension activation side effects.
 - Content Security Policy, nonce generation, and minimal `localResourceRoots` are owned by T0104 and are intentionally not defined by this task.
+
+## MCP Rendering and State Boundary
+
+This boundary renders only the stage 14 MCP `2026-07-28` projection and does not negotiate protocol
+or capabilities in the browser.
+
+- One MCP feature store owns the current validated connection snapshot and generation-bound Tool,
+  Resource, Resource Template, Prompt, Resource preview, and Prompt preview snapshots. Components
+  receive immutable projections and callbacks; they do not parse JSON-RPC, compile Tool schemas,
+  join pages, decide capabilities, assign risk, validate external arguments, or own Server cleanup.
+- The store accepts only Protocol-validated messages matching the current Server identity,
+  generation, and active request. A complete catalog message atomically replaces its prior catalog.
+  Stale, duplicate, malformed, post-disconnect, or post-terminal updates are ignored and cannot
+  recreate controls or retained content.
+- Connection generation change or disconnect synchronously disables live actions and clears
+  catalogs, pending Tool availability, Resource previews, and unconfirmed Prompt previews. It does
+  not mutate immutable Resource or confirmed Prompt attachments already owned by the Composer or
+  persisted transcript.
+- MCP state is Extension-authoritative and is never placed in `getState`/`setState` as a reconnect
+  instruction. Webview restoration may retain only presentation choices such as an expanded catalog
+  section; it does not retain a connected flag, capability, approval, generation, preview, or Server
+  content as authoritative state.
+
+MCP descriptors, annotations, Tool results, Resources, and Prompts are rendered through React text
+interpolation. They never reach `dangerouslySetInnerHTML`, the answer Markdown renderer, command or
+URI handlers, image/media elements, `asWebviewUri`, dynamic styles, or remote fetch. Server icon and
+website fields are not part of the Protocol projection. Stage 14 adds no CSP source, connection,
+frame, media, image, font, or `localResourceRoots` expansion.
+
+The Server panel uses progressive disclosure and preserves chat and Composer priority. Connection
+state, configuration-stale state, capabilities, cleanup failure, and errors use semantic text in
+addition to visual tokens. Resource and Prompt catalogs use bounded semantic lists with stable keys
+from their projected identities; list replacement preserves focus only when the exact item remains,
+otherwise focus moves to the catalog heading with one deduplicated explanation.
+
+External Tool cards reuse the existing Tool and Inline Approval components through a strict source
+projection. An MCP source region shows Server, exact Tool name, fixed `execute` risk, and the unknown
+local/network side-effect warning. Pending approval still replaces raw parameter detail with the
+immutable approval presentation; MCP annotations never hide that region or change component policy.
+
+Resource previews and Prompt previews are separate labelled regions with explicit attach/confirm and
+cancel controls. Resource text uses a wrapping plain-text container with selectable preserved
+whitespace. Prompt messages show source roles as provenance labels but are not rendered as chat
+roles. Preview content is never a live region; only one status region announces discrete readiness,
+attachment, confirmation, invalidation, failure, and connection transitions.
+
+All MCP controls use semantic elements, visible focus, accessible names, and disabled-state reasons.
+Disclosure state uses `aria-expanded`; forms associate labels, required state, validation messages,
+and descriptions without relying on placeholders. Layout uses existing semantic tokens and VS Code
+variables, wraps long unbroken identities, and remains operable at approximately 300px width, 200%
+zoom, reduced motion, and light, dark, high-contrast, and high-contrast-light themes without
+horizontal page scrolling or color-only state.

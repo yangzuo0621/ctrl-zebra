@@ -216,3 +216,125 @@ This document defines the initial runtime boundaries for the CtrlZebra desktop V
 - An illegal transition fails with a domain error without changing state or emitting an event.
 - A legal transition commits the new status before synchronously emitting exactly one status-change
   event. Event-sink failures propagate and do not roll back the committed status.
+
+## Controlled MCP Client Boundary
+
+The long-term decision and rejected alternatives are recorded in
+[ADR 0001](adr/0001-controlled-mcp-client-boundary.md). MCP is an external protocol adapter, not a
+second Agent Runtime.
+
+### Package and dependency ownership
+
+- `packages/mcp-client` owns the MCP `2026-07-28` Client lifecycle, capability projection,
+  request correlation, pagination collectors, Server primitive normalization, and all imports from
+  the official MCP TypeScript SDK. Its public entry point exposes only CtrlZebra-owned interfaces,
+  strict plain values, stable errors, and injected ports.
+- The first implementation pins `@modelcontextprotocol/client` to exactly `2.0.0`. Floating ranges,
+  `latest`, SDK deep imports outside its documented public subpaths, and direct imports of
+  `@modelcontextprotocol/core` are forbidden. The package root publicly exports the `Client`,
+  `Transport`, JSON-RPC message types, and framing helpers required by a package-private adapter. A
+  documented `@modelcontextprotocol/client/validators/ajv` subpath supplies the T1404 validator;
+  other SDK subpaths are forbidden. A version change requires a compatibility review and committed
+  lockfile evidence before code changes.
+- `apps/extension` owns user configuration, Workspace Trust, selected-workspace cwd resolution,
+  approval workflows, process creation, stdin/stdout/stderr pipes, complete process-tree
+  termination, VS Code lifecycle integration, and mapping MCP values to Protocol DTOs and Core
+  contracts. It injects a byte-bounded stdio/process port; it does not expose a process or VS Code
+  object to `packages/mcp-client`.
+- `packages/core` continues to own the Tool Registry, Tool Executor, Approval Policy, Agent Loop,
+  context budgets, cancellation outcome, and Session state machine. It never imports an MCP package
+  or SDK type. MCP Tools enter Core only through the existing `AgentTool` and Tool Call/Result
+  contracts; Resources and Prompts enter only through explicit Host-controlled context inputs.
+- `packages/protocol` owns Webview DTOs and Schemas. `packages/mcp-client` does not make SDK schemas
+  wire contracts, and the Webview never sees JSON-RPC IDs, methods, SDK enums, capability objects,
+  transport values, or Server process details.
+- Production does not instantiate the SDK `StdioClientTransport` because that class spawns and
+  terminates its own child process, bypassing Extension-owned trust, approval, environment, and
+  process-tree confirmation. A package-private custom SDK `Transport` wraps the injected
+  Extension-owned stdio/process port; SDK types stop on the inside of that wrapper.
+
+The additional allowed dependency is:
+
+```text
+extension ─────────────→ mcp-client
+mcp-client ────────────→ core contracts (only for the T1404 Tool adapter)
+```
+
+`mcp-client` has no dependency on VS Code, React, Webview code, Extension adapters, persistence, or
+a concrete process implementation. A future HTTP transport, Client primitive, or multimodal
+projection requires a separately approved boundary; it is not added behind the existing stdio
+port.
+
+### Connection ownership and lifecycle
+
+- One Extension-owned `McpConnectionController` owns at most one configured Server connection and
+  one monotonically increasing connection generation. Concurrent connect callers for the same
+  validated configuration share one in-flight attempt; a different configuration cannot replace
+  it while it is live.
+- Activation, module import, Webview creation, Session recovery, model output, Tool discovery, and
+  background timers never initialize or reconnect MCP. The only initialization trigger is the
+  user's explicit connect operation after configuration, trust, cwd, and startup approval checks.
+- The lifecycle is `disconnected → connecting → connected → disconnecting → disconnected`, with
+  `connecting | connected | disconnecting → failed` for an unexpected process or protocol failure.
+  `failed` owns no usable Client and requires a new explicit connect action; there is no automatic
+  retry, health polling, silent restart, or Session-owned connection.
+- The connection controller is the single owner of the SDK Client, process port, request registry,
+  list snapshots, notification handlers, stderr collector, and cleanup promise. Initialization
+  publishes no capabilities until `initialize` and `initialized` complete and the exact protocol
+  version is accepted.
+- Disconnect, Server exit, failed initialization, cancellation of connection setup, Extension
+  disposal, or loss of Workspace Trust first closes the delivery gate and increments the
+  generation, then aborts requests, closes stdin, and awaits bounded process-tree cleanup. Cleanup
+  is idempotent; failure to confirm termination remains a distinct terminal error.
+- Every request, notification refresh, Tool definition, approval, Resource read, Prompt preview,
+  and result is bound to the current Server identity and generation. After the gate closes, late
+  responses, notifications, stderr, process events, and promise settlements are discarded before
+  Core, persistence, Protocol, or presentation side effects.
+
+### Protocol and capability negotiation
+
+- CtrlZebra constructs the SDK Client with
+  `versionNegotiation: { mode: { pin: "2026-07-28" } }` and accepts only that result. A Server
+  selecting an older version or an unknown future version fails initialization with
+  `protocol-incompatible`; SDK automatic legacy behavior is not a product compatibility promise.
+- The Client declares none of Roots, Sampling, Elicitation, Tasks, experimental capabilities, or
+  other Server-to-Client primitives. It installs no handler for them. A Server request for an
+  undeclared Client capability receives a bounded stable unsupported response and cannot reach
+  Core, the Provider, Workspace adapters, approval, or persistence.
+- SDK multi-round `input_required` auto-fulfilment is explicitly disabled with
+  `inputRequired: { autoFulfill: false }`; individual calls never opt into manual
+  `input_required`. Such a result is mapped to `capability-unsupported`, is never retried with
+  opaque request state, and cannot invoke a hidden Roots, Sampling, or Elicitation handler.
+- Server capabilities are untrusted availability claims. CtrlZebra projects only Tools,
+  Resources (including Resource Templates), and Prompts. Logging, completions, Tasks,
+  subscriptions, experimental capabilities, icons, and other advertised features are ignored for
+  availability and never grant an operation.
+- List-changed handlers are installed only when the corresponding projected Server capability
+  advertises them. Notifications schedule one serialized, generation-bound full refresh; they do
+  not patch the trusted snapshot from notification content.
+
+### SDK and JSON Schema isolation
+
+- SDK Clients, transports, JSON-RPC envelopes and IDs, errors, schemas, content objects,
+  capabilities, progress tokens, task values, and cancellation notifications are private to
+  `packages/mcp-client`. Boundary code accepts SDK output as `unknown`, applies hard collection
+  limits, and constructs new CtrlZebra values field by field.
+- Static CtrlZebra configuration, Protocol, persistence, and lifecycle objects continue to use
+  strict Zod schemas. Server-supplied Tool input/output schemas are JSON Schema and are not
+  translated into Zod or executed as code.
+- T1404 must wrap the pinned SDK's documented `AjvJsonSchemaValidator` export behind an injected
+  `ExternalJsonSchemaValidator` contract. A structural walker first accepts only JSON Schema Draft
+  2020-12 and the closed keyword set `$schema`, `$defs`, local `$ref`, `type`, `properties`,
+  `required`, `additionalProperties`, `items`, `prefixItems`, `minItems`, `maxItems`,
+  `uniqueItems`, `minProperties`, `maxProperties`, `minimum`, `maximum`, `exclusiveMinimum`,
+  `exclusiveMaximum`, `multipleOf`, `minLength`, `maxLength`, `enum`, `const`, `allOf`, `anyOf`,
+  `oneOf`, `not`, `title`, `description`, `default`, and `examples`. It rejects remote or cyclic
+  references, unknown dialects/keywords, `pattern`, `patternProperties`, `format`, content and
+  unevaluated keywords, custom formats/keywords, excessive bytes, nodes, depth, and properties.
+  Validation does not coerce types, insert defaults, remove properties, or return all errors.
+  Compiled validators are cached only for the immutable current-generation Tool snapshot and
+  disposed with it.
+- The same compiled input schema validates Tool arguments immediately before approval construction
+  and again before execution. An advertised output schema, when present, validates normalized
+  structured output. Validation proves shape only; it never proves safety, read-only behavior,
+  idempotence, or authorization.
