@@ -1,6 +1,7 @@
 import {
   type ApprovalDecisionIntent,
   type ExtensionToWebviewMessage,
+  type McpResourceAttachment,
   protocolVersion,
   type RunStatus,
 } from "@ctrl-zebra/protocol";
@@ -34,7 +35,11 @@ export class WebviewRunMessageHandler {
     private readonly reportRunFailure: (error: unknown) => void = () => {},
   ) {}
 
-  start(requestId: string, content: string): void {
+  start(
+    requestId: string,
+    content: string,
+    externalResources: readonly McpResourceAttachment[] = [],
+  ): void {
     if (this.#activeRun !== undefined) {
       return;
     }
@@ -49,7 +54,12 @@ export class WebviewRunMessageHandler {
     this.#postStatus(requestId, "preparing");
 
     void this.chatRunner
-      .run(content, run.abortController.signal, (event) => this.#handleRuntimeEvent(run, event))
+      .run(
+        content,
+        run.abortController.signal,
+        (event) => this.#handleRuntimeEvent(run, event),
+        externalResources,
+      )
       .then(
         () => {
           const status = run.abortController.signal.aborted ? "cancelled" : "completed";
@@ -76,6 +86,10 @@ export class WebviewRunMessageHandler {
           this.#activeRun = undefined;
         }
       });
+  }
+
+  canStart(): boolean {
+    return !this.#disposed && this.#activeRun === undefined;
   }
 
   cancel(requestId: string): void {

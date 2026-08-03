@@ -5,6 +5,7 @@ import {
   getSessionPersistencePaths,
   maxPersistedCheckpointIdBytes,
   maxPersistedSessionIdBytes,
+  persistedEventPayloadSchema,
   persistedEventRecordSchema,
   persistedMessageRecordSchema,
   persistenceFormatVersion,
@@ -21,6 +22,36 @@ describe("persistence format", () => {
     updatedAt: "2026-07-19T10:00:00+08:00",
     lastEventSequence: 0,
   } satisfies SessionManifest;
+
+  it("strictly validates bounded immutable MCP Resource attachments", () => {
+    expect(
+      persistedEventPayloadSchema.parse({
+        type: "session.mcp-resource-attached",
+        data: {
+          snapshotId: "snapshot-1",
+          serverId: "local_fixture",
+          uri: "memory://note",
+          mimeType: "text/plain",
+          text: "ordinary external context",
+          truncated: false,
+        },
+      }),
+    ).toBeDefined();
+    expect(
+      persistedEventPayloadSchema.safeParse({
+        type: "session.mcp-resource-attached",
+        data: {
+          snapshotId: "snapshot-1",
+          serverId: "local_fixture",
+          uri: "memory://note",
+          mimeType: "text/plain",
+          text: "x",
+          truncated: false,
+          generation: 3,
+        },
+      }).success,
+    ).toBe(false);
+  });
 
   it("parses the current manifest and JSONL record structures", () => {
     expect(sessionManifestSchema.parse(manifest)).toEqual(manifest);

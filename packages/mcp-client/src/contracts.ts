@@ -15,6 +15,11 @@ export const maxMcpToolTextItems = 500;
 export const maxMcpToolTextCodePoints = 262_144;
 export const maxMcpToolTextBytes = 524_288;
 export const maxMcpToolStructuredContentBytes = 524_288;
+export const maxMcpResourceUriCodePoints = 2_048;
+export const maxMcpResourceUriBytes = 8_192;
+export const maxMcpResourceItems = 32;
+export const maxMcpResourceCodePoints = 131_072;
+export const maxMcpResourceTextBytes = 524_288;
 
 export type McpClientErrorCode =
   | "connect-failed"
@@ -26,6 +31,8 @@ export type McpClientErrorCode =
   | "server-exited"
   | "disconnected"
   | "tool-unavailable"
+  | "resource-unavailable"
+  | "resource-unsupported"
   | "termination-unconfirmed"
   | "internal";
 
@@ -115,4 +122,9 @@ export interface McpToolDiscoveryContext {
 
 export interface McpToolArguments {
   readonly [key: string]: import("@ctrl-zebra/core").JsonValue;
+}
+
+export interface McpResourceDiscoveryContext {
+  readonly server: McpServerIdentity;
+  readonly generation: number;
 }

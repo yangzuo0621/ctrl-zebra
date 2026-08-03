@@ -2,6 +2,7 @@ import {
   type ApprovalRequest,
   type ApprovalStatus,
   jsonValueSchema,
+  type McpResourceAttachment,
   type SessionId,
   type SessionStatus,
   type ToolCall,
@@ -15,8 +16,10 @@ import {
 import { agentSystemInstruction, shouldOfferWorkspaceTools } from "./agent-behavior-policy.js";
 import { BasicApprovalPolicy } from "./approval-policy.js";
 import type { DomainEvent, EventSink } from "./events.js";
+import { projectExternalResourceContext } from "./external-resource-context.js";
 import type { ModelGateway, ModelMessage } from "./model-gateway.js";
 import { SessionStateMachine, type SessionStatusChangedEvent } from "./session-state-machine.js";
+import { allocateTokenBudget, maxModelContextWindowTokens } from "./token-budget.js";
 import type { ToolApprovalWorkflow } from "./tool-approval.js";
 import { InvalidToolInputError, parseToolInput } from "./tool-input-validation.js";
 import { limitToolOutput } from "./tool-output-limiter.js";
@@ -100,6 +103,8 @@ export interface AgentRuntimeOptions {
   readonly toolRepetitionThreshold?: number;
   readonly approvalPolicy?: BasicApprovalPolicy;
   readonly approvalWorkflow?: ToolApprovalWorkflow;
+  readonly externalResources?: readonly McpResourceAttachment[];
+  readonly contextWindowTokens?: number;
 }
 
 export class MaxToolStepsExceededError extends Error {
@@ -135,6 +140,8 @@ export class AgentRuntime {
   readonly #toolRepetitionThreshold: number;
   readonly #approvalPolicy: BasicApprovalPolicy;
   readonly #approvalWorkflow: ToolApprovalWorkflow | undefined;
+  readonly #externalResources: readonly McpResourceAttachment[];
+  readonly #filesTokenBudget: number;
 
   constructor(
     modelGateway: ModelGateway,
@@ -156,6 +163,10 @@ export class AgentRuntime {
     ).threshold;
     this.#approvalPolicy = options.approvalPolicy ?? new BasicApprovalPolicy();
     this.#approvalWorkflow = options.approvalWorkflow;
+    this.#externalResources = options.externalResources ?? [];
+    this.#filesTokenBudget = allocateTokenBudget(
+      options.contextWindowTokens ?? maxModelContextWindowTokens,
+    ).filesTokens;
   }
 
   async run(userMessage: UserMessage, signal: AbortSignal): Promise<void> {
@@ -164,7 +175,10 @@ export class AgentRuntime {
     try {
       session.transitionTo("preparing");
       signal.throwIfAborted();
-      const messages: ModelMessage[] = [{ role: "user", content: userMessage.content }];
+      const messages: ModelMessage[] = [
+        ...projectExternalResourceContext(this.#externalResources, this.#filesTokenBudget),
+        { role: "user", content: userMessage.content },
+      ];
       const offerTools = shouldOfferWorkspaceTools(userMessage.content);
       session.transitionTo("streaming");
       let toolSteps = 0;

@@ -3,10 +3,13 @@ import type {
   McpClientErrorCode,
   McpConnectedState,
   McpDisconnectOutcome,
+  McpResourceCatalogView,
+  McpResourceSelection,
+  McpResourceSnapshotView,
   McpStdioPort,
   McpToolSnapshotView,
 } from "@ctrl-zebra/mcp-client";
-import { McpToolDiscoveryError } from "@ctrl-zebra/mcp-client";
+import { McpResourceError, McpToolDiscoveryError } from "@ctrl-zebra/mcp-client";
 
 import {
   type McpServerConfiguration,
@@ -51,6 +54,18 @@ interface ControlledMcpClientPort {
     signal?: AbortSignal,
   ): Promise<McpToolSnapshotView>;
   getToolSnapshot(): McpToolSnapshotView | undefined;
+  discoverResources?(
+    context: {
+      readonly server: { readonly serverId: string; readonly displayName: string };
+      readonly generation: number;
+    },
+    signal?: AbortSignal,
+  ): Promise<McpResourceCatalogView>;
+  getResourceCatalog?(): McpResourceCatalogView | undefined;
+  readResource?(
+    selection: McpResourceSelection,
+    signal?: AbortSignal,
+  ): Promise<McpResourceSnapshotView>;
   disconnect(): Promise<McpDisconnectOutcome>;
   dispose(): Promise<McpDisconnectOutcome>;
 }
@@ -111,6 +126,28 @@ export class McpConnectionController {
 
   getToolSnapshot(): McpToolSnapshotView | undefined {
     return this.#client?.getToolSnapshot();
+  }
+
+  getResourceCatalog(): McpResourceCatalogView | undefined {
+    return this.#client?.getResourceCatalog?.();
+  }
+
+  async readResource(
+    serverId: string,
+    generation: number,
+    selection: McpResourceSelection,
+    signal?: AbortSignal,
+  ): Promise<McpResourceSnapshotView> {
+    const client = this.#client;
+    if (
+      client?.readResource === undefined ||
+      this.#snapshot.status !== "connected" ||
+      this.#snapshot.server?.serverId !== serverId ||
+      this.#snapshot.generation !== generation
+    ) {
+      throw new McpResourceError("resource-unavailable");
+    }
+    return client.readResource(selection, signal);
   }
 
   connect(signal?: AbortSignal): Promise<McpConnectionSnapshot> {
@@ -275,11 +312,19 @@ export class McpConnectionController {
           },
           signal,
         );
+        await this.#client.discoverResources?.(
+          { server: identity(operation.configuration), generation },
+          signal,
+        );
       } catch (error) {
         if (signal.aborted) {
           throw signal.reason;
         }
         if (error instanceof McpToolDiscoveryError) {
+          await this.#client.disconnect();
+          return this.#failAndNotify(error.code, operation.configuration);
+        }
+        if (error instanceof McpResourceError) {
           await this.#client.disconnect();
           return this.#failAndNotify(error.code, operation.configuration);
         }
@@ -445,6 +490,8 @@ const mcpHostErrorMessages = {
   "server-exited": "The MCP Server exited unexpectedly.",
   disconnected: "The MCP Server is disconnected.",
   "tool-unavailable": "The MCP Tool is unavailable for the current connection.",
+  "resource-unavailable": "The MCP Resource is unavailable for the current connection.",
+  "resource-unsupported": "The MCP Resource uses unsupported content.",
   "termination-unconfirmed": "The MCP Server process could not be confirmed as terminated.",
   internal: "The MCP connection failed unexpectedly.",
 } as const satisfies Record<McpHostErrorCode, string>;

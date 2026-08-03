@@ -9,6 +9,7 @@ export {
   type McpFailedState,
   type McpInactiveState,
   type McpProcessTermination,
+  type McpResourceDiscoveryContext,
   type McpServerCapabilities,
   type McpServerIdentity,
   type McpStderrSnapshot,
@@ -20,6 +21,11 @@ export {
   maxMcpListPages,
   maxMcpListSnapshotBytes,
   maxMcpMessageBytes,
+  maxMcpResourceCodePoints,
+  maxMcpResourceItems,
+  maxMcpResourceTextBytes,
+  maxMcpResourceUriBytes,
+  maxMcpResourceUriCodePoints,
   maxMcpStderrBytes,
   maxMcpToolArgumentsBytes,
   maxMcpToolSchemaBytes,
@@ -34,6 +40,20 @@ export {
   mcpProtocolVersion,
 } from "./contracts.js";
 export { ControlledMcpClient, McpToolDiscoveryError } from "./controlled-mcp-client.js";
+export type {
+  McpResourceCatalogView,
+  McpResourceDescriptor,
+  McpResourceSelection,
+  McpResourceSnapshotView,
+  McpResourceTemplateArgument,
+  McpResourceTemplateDescriptor,
+} from "./mcp-resource.js";
+export {
+  createMcpResourceCatalog,
+  McpResourceError,
+  normalizeMcpResourceResult,
+  resolveMcpResourceSelection,
+} from "./mcp-resource.js";
 export type {
   McpToolApprovalPreparation,
   NormalizedMcpToolResult,

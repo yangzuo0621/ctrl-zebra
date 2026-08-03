@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { ProviderConfigurationError } from "../adapters/provider-configuration.js";
 import type { ChatRunnerEvent } from "./chat-runner.js";
+import { McpResourceActions } from "./mcp-resource-actions.js";
 import {
   bindWebviewMessageController,
   handleWebviewMessage,
@@ -34,6 +35,100 @@ describe("handleWebviewMessage", () => {
     { protocolVersion, type: "webview/unknown", requestId: "request-1" },
   ])("ignores invalid or unknown input %#", (message) => {
     expect(handleWebviewMessage(message)).toBeUndefined();
+  });
+
+  it("routes Resource read, attach, and the immutable attachment into the next run", async () => {
+    let messageListener: ((message: unknown) => void) | undefined;
+    const postedMessages: unknown[] = [];
+    const runs: unknown[][] = [];
+    const connectionState = {
+      generation: 2,
+      status: "connected" as const,
+      server: { serverId: "local_fixture", displayName: "Local fixture" },
+      configurationStale: false,
+    };
+    const resourceActions = new McpResourceActions({
+      connection: {
+        getState: () => connectionState,
+        readResource: async () => ({
+          server: connectionState.server,
+          generation: 2,
+          uri: "memory://note",
+          mimeType: "text/plain",
+          items: [{ text: "ordinary context" }],
+          truncated: false,
+        }),
+      },
+      createId: () => "snapshot-1",
+    });
+    bindWebviewMessageController(
+      {
+        onDidReceiveMessage(listener) {
+          messageListener = listener;
+          return { dispose() {} };
+        },
+        postMessage(message) {
+          postedMessages.push(message);
+          return Promise.resolve(true);
+        },
+      },
+      { onDidDispose: () => ({ dispose() {} }) },
+      () => {},
+      {
+        async run(...args) {
+          runs.push(args);
+        },
+      },
+      undefined,
+      undefined,
+      undefined,
+      () => {},
+      resourceActions,
+    );
+
+    messageListener?.({
+      protocolVersion,
+      type: "webview/mcp-resource-read",
+      requestId: "read-1",
+      serverId: "local_fixture",
+      generation: 2,
+      selection: { kind: "resource", uri: "memory://note" },
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(postedMessages).toContainEqual(
+      expect.objectContaining({
+        type: "extension/mcp-resource-preview",
+        requestId: "read-1",
+        status: "ready",
+        snapshotId: "snapshot-1",
+      }),
+    );
+
+    messageListener?.({
+      protocolVersion,
+      type: "webview/mcp-resource-attach",
+      requestId: "attach-1",
+      serverId: "local_fixture",
+      generation: 2,
+      snapshotId: "snapshot-1",
+    });
+    messageListener?.({
+      protocolVersion,
+      type: "webview/submit",
+      requestId: "run-1",
+      content: "Use the note.",
+    });
+    expect(runs[0]?.[3]).toEqual([
+      {
+        snapshotId: "snapshot-1",
+        serverId: "local_fixture",
+        uri: "memory://note",
+        mimeType: "text/plain",
+        text: "ordinary context",
+        truncated: false,
+      },
+    ]);
   });
 
   it("posts responses until the Webview view is disposed", async () => {

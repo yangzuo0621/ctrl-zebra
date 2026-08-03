@@ -5,7 +5,7 @@ import type {
   McpProcessTermination,
   McpStdioPortHandlers,
 } from "@ctrl-zebra/mcp-client";
-import { McpToolDiscoveryError } from "@ctrl-zebra/mcp-client";
+import { McpResourceError, McpToolDiscoveryError } from "@ctrl-zebra/mcp-client";
 import { describe, expect, it, vi } from "vitest";
 
 import type { McpServerConfiguration } from "../adapters/mcp-server-configuration.js";
@@ -84,6 +84,13 @@ describe("MCP connection controller", () => {
       },
       expect.any(AbortSignal),
     );
+    expect(harness.client.discoverResources).toHaveBeenCalledWith(
+      {
+        server: { serverId: "local_fixture", displayName: "Local fixture" },
+        generation: 1,
+      },
+      expect.any(AbortSignal),
+    );
     expect(result.status).toBe("connected");
   });
 
@@ -95,6 +102,20 @@ describe("MCP connection controller", () => {
     await expect(controller.connect()).resolves.toMatchObject({
       status: "failed",
       error: { code: "invalid-schema" },
+    });
+    expect(harness.client.disconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails and closes the connection when initial Resource discovery is rejected", async () => {
+    const harness = createHarness();
+    harness.client.discoverResources.mockRejectedValueOnce(
+      new McpResourceError("malformed-message"),
+    );
+    const controller = new McpConnectionController(harness.values);
+
+    await expect(controller.connect()).resolves.toMatchObject({
+      status: "failed",
+      error: { code: "malformed-message" },
     });
     expect(harness.client.disconnect).toHaveBeenCalledTimes(1);
   });
@@ -332,6 +353,14 @@ function createHarness() {
       }),
     ),
     getToolSnapshot: vi.fn(() => undefined),
+    discoverResources: vi.fn(
+      async (context: {
+        server: { serverId: string; displayName: string };
+        generation: number;
+      }) => ({ ...context, resources: [], templates: [] }),
+    ),
+    getResourceCatalog: vi.fn(() => undefined),
+    readResource: vi.fn(),
     disconnect: vi.fn(async (): Promise<McpDisconnectOutcome> => ({ kind: "disconnected" })),
     dispose: vi.fn(async (): Promise<McpDisconnectOutcome> => ({ kind: "disconnected" })),
   };
