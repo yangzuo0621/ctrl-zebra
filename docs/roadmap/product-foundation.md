@@ -1,6 +1,8 @@
 # CtrlZebra 产品与技术基础规格
 
-本文档保存第一阶段的产品范围、技术基线、模块边界、核心接口草案、测试分层和完成定义。任务顺序与状态以 [实施计划索引](../implementation-plan.md) 为准。
+本文档保存第一阶段的产品范围、技术基线、模块边界、核心接口草案、测试分层和完成定义，
+并记录第一阶段完成后经过路线图批准的范围扩展。任务顺序与状态以
+[实施计划索引](../implementation-plan.md) 为准。
 
 ## 1. 第一阶段产品范围
 
@@ -24,7 +26,7 @@
 ### 1.2 第一阶段明确不做
 
 - 多 Agent 或子 Agent。
-- MCP。
+- 第一阶段内不实现 MCP；第一阶段完成后的阶段 14 授权范围见 1.3。
 - 浏览器自动化。
 - 图片生成或多模态文件解析。
 - 通过提示词要求、额外模型调用或 Host 推断生成、补写或重建模型思维过程。
@@ -36,6 +38,31 @@
 - SQLite、向量数据库或代码语义索引。
 
 这些能力必须在基础 Agent Loop、审批、取消和会话恢复稳定后再评估。
+
+### 1.3 阶段 14 授权扩展：MCP Client
+
+阶段 14 在已完成的基础 Agent Loop、审批、取消和会话恢复之上，引入受限的 MCP Client
+能力。首期产品范围仅包括：
+
+- 桌面 VS Code Extension 作为 MCP Host，为用户显式配置的首期单一服务器拥有一个独立
+  MCP Client 连接。
+- 以 MCP `2025-11-25` 规范作为设计与兼容性评审基线；实现任务开始时仍须通过
+  Context7 核对当前官方 SDK 和勘误，不以未固定的 `latest` 隐式改变协议行为。
+- 仅支持由用户显式配置并连接的本地 `stdio` MCP Server，以及服务器声明的 MCP Tools、
+  MCP Resources（含 Resource Templates）和 MCP Prompts 三类主要 Server 原语。
+- 发现、分页列举、变更通知和调用 MCP Tools，并将其适配到现有 Core Tool Registry、Agent
+  Loop、取消、结果限额、审批和展示边界；以应用/用户控制方式读取 Resources 并加入有界上下文，
+  以用户主动选择方式获取 Prompts 并加入对话输入。
+- 服务器进程和每次外部 Tool 调用均受 Extension-owned 生命周期、Workspace Trust、
+  明确用户授权和安全清理约束；模型、工作区内容和 Webview 不能创建或扩大服务器配置。
+
+阶段 14 不授权 Streamable HTTP、旧 HTTP+SSE 回退、远程服务器鉴权、OAuth、Sampling、
+Elicitation、Roots、Tasks、MCP Server 托管、服务器市场、自动安装、工作区共享配置或多模态
+内容。后续增加这些能力必须重新经过路线图和对应权威文档的变更控制。
+
+阶段 14 的具体模块边界、配置格式、Tool 命名、风险归类、协议 DTO 和用户体验由 T1401
+的独立 docs-only 约束门禁确定；本节只授权产品范围，不提前把尚未评审的实现草案变成公共
+契约。
 
 ## 2. 技术基线
 
