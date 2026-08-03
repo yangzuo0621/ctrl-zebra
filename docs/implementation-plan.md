@@ -64,11 +64,11 @@
 **进度摘要**：
 
 - 总任务：98
-- 已完成：89
-- 进行中：1
+- 已完成：90
+- 进行中：0
 - 受阻：0
 - 待开始：8
-- 当前任务：T1401
+- 当前任务：无
 - 下一任务：T1402
 - 最后更新：2026-08-03
 
@@ -163,7 +163,7 @@
 | 13 | T1302 | 已完成 | [#132](https://github.com/yangzuo0621/ctrl-zebra/pull/132) | 2026-07-31 |
 | 13 | T1303 | 已完成 | [#133](https://github.com/yangzuo0621/ctrl-zebra/pull/133) | 2026-07-31 |
 | 13 | T1304 | 已完成 | [#135](https://github.com/yangzuo0621/ctrl-zebra/pull/135) | 2026-07-31 |
-| 14 | T1401 | 进行中 | — | — |
+| 14 | T1401 | 已完成 | [#141](https://github.com/yangzuo0621/ctrl-zebra/pull/141) | 2026-08-03 |
 | 14 | T1402 | 待开始 | — | — |
 | 14 | T1403 | 待开始 | — | — |
 | 14 | T1404 | 待开始 | — | — |
@@ -239,4 +239,5 @@
 [T1304：实现可访问的推理摘要 Webview 体验](roadmap/archive/phase-13.md#t1304实现可访问的推理摘要-webview-体验)
 均已完成。T1304 由 [#135](https://github.com/yangzuo0621/ctrl-zebra/pull/135) 交付。阶段 14
 已规划为[受控的 MCP Client 与三类 Server 原语](roadmap/phases/phase-14.md)，包含 T1401–T1409；
-当前任务为 T1401，下一任务为 T1402。
+T1401 由 [#141](https://github.com/yangzuo0621/ctrl-zebra/pull/141) 交付；当前没有进行中任务，
+下一任务为 T1402。
