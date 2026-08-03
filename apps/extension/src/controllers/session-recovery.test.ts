@@ -1,4 +1,8 @@
-import { InMemorySessionRepository, type SessionRepository } from "@ctrl-zebra/core";
+import {
+  InconsistentSessionRecordError,
+  InMemorySessionRepository,
+  type SessionRepository,
+} from "@ctrl-zebra/core";
 import { type PersistedEventRecord, persistenceFormatVersion } from "@ctrl-zebra/protocol";
 import { describe, expect, it } from "vitest";
 
@@ -85,6 +89,33 @@ describe("Session recovery", () => {
     ).toEqual(["session-new", "session-a", "session-b"]);
   });
 
+  it("reports an unavailable recovery when an interrupted status cannot be persisted", async () => {
+    const actions = createSessionRecoveryActions(async () => ({
+      async list() {
+        return [
+          {
+            sessionId: "session-streaming",
+            status: "streaming",
+            createdAt: "2026-07-19T10:00:00.000Z",
+          },
+        ];
+      },
+      async update() {
+        throw new Error("raw storage failure");
+      },
+      async get() {
+        return undefined;
+      },
+      async create() {},
+      async appendEvent() {},
+    }));
+
+    await expect(actions.list()).rejects.toMatchObject({
+      name: "SessionRecoveryError",
+      code: "unavailable",
+    });
+  });
+
   it("reconstructs user and assistant messages from ordered events", async () => {
     const repository = new InMemorySessionRepository();
     await repository.create(manifest("session-1", "2026-07-19T10:00:00.000Z"));
@@ -127,7 +158,7 @@ describe("Session recovery", () => {
   it("isolates a corrupt Session behind a safe recovery error", async () => {
     const actions = createSessionRecoveryActions(async () => ({
       async get() {
-        throw new Error("raw storage failure");
+        throw new InconsistentSessionRecordError("damaged");
       },
       async list() {
         return [];
@@ -142,6 +173,25 @@ describe("Session recovery", () => {
       name: "SessionRecoveryError",
       code: "corrupt",
       message: new SessionRecoveryError("corrupt").message,
+    });
+  });
+
+  it("distinguishes unavailable Session storage from corrupt persisted data", async () => {
+    const actions = createSessionRecoveryActions(async () => ({
+      async get() {
+        throw new Error("raw storage failure");
+      },
+      async list() {
+        return [];
+      },
+      async create() {},
+      async update() {},
+      async appendEvent() {},
+    }));
+
+    await expect(actions.restore("unavailable")).rejects.toMatchObject({
+      name: "SessionRecoveryError",
+      code: "unavailable",
     });
   });
 
