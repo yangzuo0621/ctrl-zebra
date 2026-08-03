@@ -100,6 +100,24 @@ describe("structured logger", () => {
 
     expect(channel.dispose).toHaveBeenCalledOnce();
   });
+
+  it("retains only allowlisted bounded MCP identity and generation facts", () => {
+    expect(
+      formatStructuredLogEntry({
+        event: "mcp_connection_failed",
+        component: "mcp",
+        outcome: "failure",
+        errorCode: "server-exited",
+        serverId: "local_fixture",
+        generation: 2,
+        command: "forbidden executable",
+        args: ["forbidden argument"],
+        stderr: "forbidden stderr",
+      }),
+    ).toBe(
+      '{"event":"mcp_connection_failed","component":"mcp","outcome":"failure","errorCode":"server-exited","serverId":"local_fixture","generation":2}',
+    );
+  });
 });
 
 function createChannel() {

@@ -32,6 +32,9 @@ importers:
       '@ctrl-zebra/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@ctrl-zebra/mcp-client':
+        specifier: workspace:*
+        version: link:../../packages/mcp-client
       '@ctrl-zebra/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol

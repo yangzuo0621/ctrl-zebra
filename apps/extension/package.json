@@ -61,6 +61,16 @@
         "command": "ctrlZebra.saveGeminiApiKey",
         "title": "Save Gemini API Key",
         "category": "CtrlZebra"
+      },
+      {
+        "command": "ctrlZebra.connectMcpServer",
+        "title": "Connect MCP Server",
+        "category": "CtrlZebra"
+      },
+      {
+        "command": "ctrlZebra.disconnectMcpServer",
+        "title": "Disconnect MCP Server",
+        "category": "CtrlZebra"
       }
     ],
     "configuration": {
@@ -109,6 +119,58 @@
           "uniqueItems": true,
           "scope": "machine",
           "markdownDescription": "Capabilities explicitly declared by an OpenAI-compatible endpoint. Dedicated providers use their adapter declarations."
+        },
+        "ctrlZebra.mcp.server": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "default": null,
+          "scope": "machine",
+          "additionalProperties": false,
+          "required": [
+            "version",
+            "serverId",
+            "displayName",
+            "command",
+            "args"
+          ],
+          "properties": {
+            "version": {
+              "type": "number",
+              "enum": [
+                1
+              ],
+              "description": "The CtrlZebra MCP Server configuration version."
+            },
+            "serverId": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}$",
+              "description": "A stable lower snake_case identity for this Server."
+            },
+            "displayName": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "The bounded user-facing Server name."
+            },
+            "command": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096,
+              "description": "The exact local executable. Shell command lines are not supported."
+            },
+            "args": {
+              "type": "array",
+              "maxItems": 64,
+              "items": {
+                "type": "string",
+                "maxLength": 4096
+              },
+              "description": "The ordered executable arguments. Credentials are not supported."
+            }
+          },
+          "markdownDescription": "One optional local stdio MCP Server. CtrlZebra starts it only after an explicit Connect command, trusted-workspace check, and exact startup approval. Do not place credentials in this setting."
         }
       }
     },
@@ -144,6 +206,7 @@
   "dependencies": {
     "@ctrl-zebra/builtin-tools": "workspace:*",
     "@ctrl-zebra/core": "workspace:*",
+    "@ctrl-zebra/mcp-client": "workspace:*",
     "@ctrl-zebra/protocol": "workspace:*",
     "@ctrl-zebra/providers": "workspace:*"
   }
