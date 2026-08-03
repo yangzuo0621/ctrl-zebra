@@ -2,7 +2,7 @@
   "name": "ctrl-zebra",
   "displayName": "CtrlZebra",
   "description": "A workspace agent for VS Code.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "ctrl-zebra",
   "license": "MIT",
   "categories": [
