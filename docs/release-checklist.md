@@ -72,7 +72,7 @@ capability outside Stage 14.
 - [x] The VSIX smoke test exercises the installed MCP configuration and disconnect gates. Independent
   archive inspection confirms the artifact contains no fixture Server, MCP configuration, raw MCP
   log, credential, cache or unreviewed executable.
-- [ ] `pnpm install --frozen-lockfile`, `pnpm check`, `pnpm typecheck`, `pnpm test`, and `pnpm build`
+- [x] `pnpm install --frozen-lockfile`, `pnpm check`, `pnpm typecheck`, `pnpm test`, and `pnpm build`
   pass on the candidate; the exact clean, pushed commit passes `pnpm package:vsix` and
   `pnpm smoke:vsix -- <artifact>`.
 - [x] Manual trusted and untrusted workspace paths verify connection/startup approval, Tools,

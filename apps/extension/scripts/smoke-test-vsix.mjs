@@ -37,7 +37,10 @@ const extensionsDirectory = join(profileRoot, "extensions");
 const userDataDirectory = join(profileRoot, "user-data");
 
 try {
-  const vscodeExecutablePath = await downloadAndUnzipVSCode(vscodeVersion);
+  const vscodeExecutablePath = await downloadAndUnzipVSCode({
+    version: vscodeVersion,
+    cachePath: join(extensionRoot, ".vscode-test"),
+  });
   await runVsCodeCli(vscodeExecutablePath, [
     "--install-extension",
     artifactPath,
