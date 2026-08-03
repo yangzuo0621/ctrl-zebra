@@ -1,12 +1,13 @@
+import { McpResourceError } from "@ctrl-zebra/mcp-client";
 import {
   type ApprovalDecisionIntent,
   type ExtensionToWebviewMessage,
   protocolVersion,
   webviewToExtensionMessageSchema,
 } from "@ctrl-zebra/protocol";
-
 import type { ChatRunner } from "./chat-runner.js";
 import type { CheckpointActions } from "./checkpoint-actions.js";
+import { type McpResourceActions, McpResourceReadCancelledError } from "./mcp-resource-actions.js";
 import type { SessionRecoveryActions } from "./session-recovery.js";
 import { WebviewCheckpointMessageHandler } from "./webview-checkpoint-message-handler.js";
 import { WebviewRunMessageHandler } from "./webview-run-message-handler.js";
@@ -57,6 +58,7 @@ export function bindWebviewMessageController(
   sessionActions?: SessionRecoveryActions,
   checkpointActions?: CheckpointActions,
   reportRunFailure: (error: unknown) => void = () => {},
+  resourceActions?: McpResourceActions,
 ): void {
   let disposed = false;
   const post = (message: ExtensionToWebviewMessage) => {
@@ -91,7 +93,49 @@ export function bindWebviewMessageController(
         post(createPong(data.requestId));
         return;
       case "webview/submit":
-        runMessages.start(data.requestId, data.content);
+        if (runMessages.canStart()) {
+          runMessages.start(data.requestId, data.content, resourceActions?.takeAttachments());
+        }
+        return;
+      case "webview/mcp-resource-read":
+        void resourceActions
+          ?.read(data.serverId, data.generation, data.selection)
+          .then(({ snapshotId, snapshot }) => {
+            post({
+              protocolVersion,
+              type: "extension/mcp-resource-preview",
+              requestId: data.requestId,
+              status: "ready",
+              snapshotId,
+              snapshot,
+            });
+          })
+          .catch((error: unknown) => {
+            if (error instanceof McpResourceReadCancelledError) {
+              return;
+            }
+            postResourceError(post, data.requestId, error);
+          });
+        return;
+      case "webview/mcp-resource-attach":
+        try {
+          const attachment = resourceActions?.attach(
+            data.serverId,
+            data.generation,
+            data.snapshotId,
+          );
+          if (attachment !== undefined) {
+            post({
+              protocolVersion,
+              type: "extension/mcp-resource-preview",
+              requestId: data.requestId,
+              status: "attached",
+              attachment,
+            });
+          }
+        } catch (error) {
+          postResourceError(post, data.requestId, error);
+        }
         return;
       case "webview/list-sessions":
         sessionMessages.list(data.requestId);
@@ -121,8 +165,37 @@ export function bindWebviewMessageController(
     disposed = true;
     runMessages.dispose();
     checkpointMessages.dispose();
+    resourceActions?.dispose();
     messageSubscription.dispose();
     disposalSubscription?.dispose();
     disposalSubscription = undefined;
+  });
+}
+
+function postResourceError(
+  post: (message: ExtensionToWebviewMessage) => void,
+  requestId: string,
+  error: unknown,
+): void {
+  const code =
+    error instanceof McpResourceError &&
+    (error.code === "resource-unavailable" ||
+      error.code === "resource-unsupported" ||
+      error.code === "limit-exceeded")
+      ? error.code
+      : "internal";
+  const messages = {
+    "resource-unavailable": "The MCP Resource is unavailable for the current connection.",
+    "resource-unsupported": "The MCP Resource uses unsupported content.",
+    "limit-exceeded": "The MCP Resource exceeded a bounded content limit.",
+    internal: "The MCP Resource operation failed unexpectedly.",
+  } as const;
+  post({
+    protocolVersion,
+    type: "extension/mcp-resource-preview",
+    requestId,
+    status: "error",
+    code,
+    message: messages[code],
   });
 }

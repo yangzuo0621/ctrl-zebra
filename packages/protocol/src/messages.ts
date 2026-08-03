@@ -8,6 +8,15 @@ import {
 import { assistantMessageSchema, userMessageSchema } from "./chat-message.js";
 import { checkpointIdSchema, checkpointSummarySchema } from "./checkpoint.js";
 import {
+  mcpGenerationSchema,
+  mcpResourceAttachmentSchema,
+  mcpResourceCatalogSchema,
+  mcpResourceSelectionSchema,
+  mcpResourceSnapshotIdSchema,
+  mcpResourceSnapshotSchema,
+  mcpServerIdSchema,
+} from "./mcp-resource.js";
+import {
   reasoningBlockLimitDataSchema,
   reasoningBlockStartDataSchema,
   reasoningDeltaDataSchema,
@@ -54,6 +63,51 @@ export const cancelMessageSchema = z.strictObject({
   ...protocolEnvelopeSchema.shape,
   type: z.literal("webview/cancel"),
 });
+
+export const mcpResourceReadMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("webview/mcp-resource-read"),
+  serverId: mcpServerIdSchema,
+  generation: mcpGenerationSchema,
+  selection: mcpResourceSelectionSchema,
+});
+
+export const mcpResourceAttachMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("webview/mcp-resource-attach"),
+  serverId: mcpServerIdSchema,
+  generation: mcpGenerationSchema,
+  snapshotId: mcpResourceSnapshotIdSchema,
+});
+
+export const mcpResourcesMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("extension/mcp-resources"),
+  catalog: mcpResourceCatalogSchema,
+});
+
+export const mcpResourcePreviewMessageSchema = z.discriminatedUnion("status", [
+  z.strictObject({
+    ...protocolEnvelopeSchema.shape,
+    type: z.literal("extension/mcp-resource-preview"),
+    status: z.literal("ready"),
+    snapshotId: mcpResourceSnapshotIdSchema,
+    snapshot: mcpResourceSnapshotSchema,
+  }),
+  z.strictObject({
+    ...protocolEnvelopeSchema.shape,
+    type: z.literal("extension/mcp-resource-preview"),
+    status: z.literal("attached"),
+    attachment: mcpResourceAttachmentSchema,
+  }),
+  z.strictObject({
+    ...protocolEnvelopeSchema.shape,
+    type: z.literal("extension/mcp-resource-preview"),
+    status: z.literal("error"),
+    code: z.enum(["resource-unavailable", "resource-unsupported", "limit-exceeded", "internal"]),
+    message: z.string().min(1).max(1_024),
+  }),
+]);
 
 export const listSessionsMessageSchema = z.strictObject({
   ...protocolEnvelopeSchema.shape,
@@ -270,6 +324,8 @@ export const webviewToExtensionMessageSchema = z.discriminatedUnion("type", [
   pingMessageSchema,
   submitMessageSchema,
   cancelMessageSchema,
+  mcpResourceReadMessageSchema,
+  mcpResourceAttachMessageSchema,
   showApprovalDiffMessageSchema,
   approvalDecisionMessageSchema,
   listSessionsMessageSchema,
@@ -295,6 +351,8 @@ export const extensionToWebviewMessageSchema = z.union([
   checkpointListMessageSchema,
   checkpointRestoredMessageSchema,
   checkpointErrorMessageSchema,
+  mcpResourcesMessageSchema,
+  mcpResourcePreviewMessageSchema,
 ]);
 
 export type ProtocolEnvelope = z.infer<typeof protocolEnvelopeSchema>;
@@ -302,6 +360,10 @@ export type PingMessage = z.infer<typeof pingMessageSchema>;
 export type PongMessage = z.infer<typeof pongMessageSchema>;
 export type SubmitMessage = z.infer<typeof submitMessageSchema>;
 export type CancelMessage = z.infer<typeof cancelMessageSchema>;
+export type McpResourceReadMessage = z.infer<typeof mcpResourceReadMessageSchema>;
+export type McpResourceAttachMessage = z.infer<typeof mcpResourceAttachMessageSchema>;
+export type McpResourcesMessage = z.infer<typeof mcpResourcesMessageSchema>;
+export type McpResourcePreviewMessage = z.infer<typeof mcpResourcePreviewMessageSchema>;
 export type ListSessionsMessage = z.infer<typeof listSessionsMessageSchema>;
 export type RestoreSessionMessage = z.infer<typeof restoreSessionMessageSchema>;
 export type ListCheckpointsMessage = z.infer<typeof listCheckpointsMessageSchema>;

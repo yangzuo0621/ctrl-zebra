@@ -47,6 +47,7 @@ import { CommandApprovalWorkflow } from "./controllers/command-approval-workflow
 import { FileEditApprovalWorkflow } from "./controllers/file-edit-approval-workflow.js";
 import { registerGeminiApiKeyCommand } from "./controllers/gemini-api-key-command.js";
 import { McpConnectionController } from "./controllers/mcp-connection-controller.js";
+import { McpResourceActions } from "./controllers/mcp-resource-actions.js";
 import { registerMcpServerCommands } from "./controllers/mcp-server-commands.js";
 import { McpStartupApproval } from "./controllers/mcp-startup-approval.js";
 import { McpToolApprovalWorkflow } from "./controllers/mcp-tool-approval-workflow.js";
@@ -349,6 +350,7 @@ export function activate(context: ExtensionContext): void {
       (error) => {
         logger.error(getRunFailureLogEntry(error));
       },
+      () => new McpResourceActions({ connection: mcpConnection, createId: randomUUID }),
     ),
   );
 

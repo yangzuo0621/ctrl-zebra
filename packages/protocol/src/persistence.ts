@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { chatMessageSchema } from "./chat-message.js";
 import { checkpointIdSchema } from "./checkpoint.js";
+import { mcpResourceAttachmentSchema } from "./mcp-resource.js";
 import {
   reasoningBlockStartDataSchema,
   reasoningDeltaDataSchema,
@@ -128,6 +129,11 @@ export const persistedMcpToolEventPayloadSchema = z
     }
   });
 
+export const persistedMcpResourceEventPayloadSchema = z.strictObject({
+  type: z.literal("session.mcp-resource-attached"),
+  data: mcpResourceAttachmentSchema,
+});
+
 const persistedReasoningEventTypes = new Set([
   "session.reasoning-start",
   "session.reasoning-delta",
@@ -135,6 +141,7 @@ const persistedReasoningEventTypes = new Set([
   "session.reasoning-limit",
 ]);
 const persistedMcpToolEventTypes = new Set(["session.mcp-tool-call", "session.mcp-tool-result"]);
+const persistedMcpResourceEventTypes = new Set(["session.mcp-resource-attached"]);
 
 export const persistedEventPayloadSchema = genericPersistedEventPayloadSchema.superRefine(
   (payload, context) => {
@@ -145,6 +152,15 @@ export const persistedEventPayloadSchema = genericPersistedEventPayloadSchema.su
       context.addIssue({
         code: "custom",
         message: "Persisted reasoning events must match their strict version 1 schema.",
+      });
+    }
+    if (
+      persistedMcpResourceEventTypes.has(payload.type) &&
+      !persistedMcpResourceEventPayloadSchema.safeParse(payload).success
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Persisted MCP Resource events must match their strict version 1 schema.",
       });
     }
     if (
@@ -171,6 +187,9 @@ export type PersistedEventPayload = z.infer<typeof persistedEventPayloadSchema>;
 export type PersistedReasoningEventPayload = z.infer<typeof persistedReasoningEventPayloadSchema>;
 export type PersistedMcpToolSource = z.infer<typeof persistedMcpToolSourceSchema>;
 export type PersistedMcpToolEventPayload = z.infer<typeof persistedMcpToolEventPayloadSchema>;
+export type PersistedMcpResourceEventPayload = z.infer<
+  typeof persistedMcpResourceEventPayloadSchema
+>;
 export type PersistedEventRecord = z.infer<typeof persistedEventRecordSchema>;
 
 export interface SessionPersistencePaths {

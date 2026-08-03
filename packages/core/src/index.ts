@@ -134,6 +134,11 @@ export {
   maxEventRecords,
 } from "./event-store.js";
 export type { DomainEvent, EventSink } from "./events.js";
+export {
+  ExternalResourceContextBudgetError,
+  maxExternalResourceAttachments,
+  projectExternalResourceContext,
+} from "./external-resource-context.js";
 export type { ModelMessageTokenCounter, PrunedModelHistory } from "./history-pruner.js";
 export {
   InvalidHistoryBudgetError,

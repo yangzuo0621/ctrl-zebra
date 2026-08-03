@@ -3,14 +3,18 @@ import { randomUUID } from "node:crypto";
 import {
   AgentRuntime,
   type AgentRuntimeEvent,
+  allocateTokenBudget,
   type JsonValue,
   type ModelGateway,
+  maxModelContextWindowTokens,
+  projectExternalResourceContext,
   type SessionRepository,
   type ToolApprovalWorkflow,
   ToolRegistry,
 } from "@ctrl-zebra/core";
 import {
   jsonValueSchema,
+  type McpResourceAttachment,
   type PersistedMcpToolSource,
   persistenceFormatVersion,
   type UserMessage,
@@ -32,7 +36,12 @@ type NonReasoningAgentRuntimeEvent = Exclude<
 export type ChatRunnerEvent = NonReasoningAgentRuntimeEvent | CollectedReasoningEvent;
 
 export interface ChatRunner {
-  run(content: string, signal: AbortSignal, emit: (event: ChatRunnerEvent) => void): Promise<void>;
+  run(
+    content: string,
+    signal: AbortSignal,
+    emit: (event: ChatRunnerEvent) => void,
+    externalResources?: readonly McpResourceAttachment[],
+  ): Promise<void>;
 }
 
 interface ChatRunnerDependencies {
@@ -71,8 +80,12 @@ export function createChatRunner({
   mcpToolSources,
 }: ChatRunnerDependencies): ChatRunner {
   return {
-    async run(content, signal, emit) {
+    async run(content, signal, emit, externalResources = []) {
       signal.throwIfAborted();
+      projectExternalResourceContext(
+        externalResources,
+        allocateTokenBudget(maxModelContextWindowTokens).filesTokens,
+      );
       const sessionId = createId();
       const userMessage: UserMessage = {
         messageId: createId(),
@@ -95,6 +108,7 @@ export function createChatRunner({
           toolRegistry,
           {
             approvalWorkflow,
+            externalResources,
           },
         );
         try {
@@ -122,6 +136,17 @@ export function createChatRunner({
           data: jsonValueSchema.parse({ ...userMessage }),
         },
       });
+      for (const attachment of externalResources) {
+        sequence += 1;
+        await sessionRepository.appendEvent(sessionId, {
+          sequence,
+          recordedAt: userMessage.createdAt,
+          event: {
+            type: "session.mcp-resource-attached",
+            data: jsonValueSchema.parse(attachment),
+          },
+        });
+      }
       let persistence = Promise.resolve();
       const persist = (event: ChatRunnerEvent) => {
         emit(event);
@@ -155,6 +180,7 @@ export function createChatRunner({
         toolRegistry,
         {
           approvalWorkflow,
+          externalResources,
         },
       );
 
@@ -198,7 +224,7 @@ export function createSelectingChatRunner({
   selectSessionRepository,
 }: SelectingChatRunnerDependencies): ChatRunner {
   return {
-    async run(content, signal, emit) {
+    async run(content, signal, emit, externalResources = []) {
       signal.throwIfAborted();
       const sessionRepository = await selectSessionRepository?.();
       signal.throwIfAborted();
@@ -216,7 +242,7 @@ export function createSelectingChatRunner({
         approvalWorkflow,
         sessionRepository,
         mcpToolSources: selection.mcpToolSources,
-      }).run(content, signal, emit);
+      }).run(content, signal, emit, externalResources);
     },
   };
 }

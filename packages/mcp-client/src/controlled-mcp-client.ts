@@ -15,6 +15,7 @@ import {
   type McpConnectionState,
   type McpConnectOutcome,
   type McpDisconnectOutcome,
+  type McpResourceDiscoveryContext,
   type McpServerCapabilities,
   type McpStderrSnapshot,
   type McpStdioPort,
@@ -24,6 +25,15 @@ import {
   mcpProtocolVersion,
 } from "./contracts.js";
 import { createMcpClientError } from "./errors.js";
+import {
+  createMcpResourceCatalog,
+  type McpResourceCatalogView,
+  McpResourceError,
+  type McpResourceSelection,
+  type McpResourceSnapshotView,
+  normalizeMcpResourceResult,
+  resolveMcpResourceSelection,
+} from "./mcp-resource.js";
 import { createExternalJsonSchemaValidator } from "./mcp-tool-schema.js";
 import {
   createMcpToolSnapshot,
@@ -58,6 +68,11 @@ export class ControlledMcpClient {
   private toolRefreshRequested = false;
   private toolController: AbortController | undefined;
   private readonly toolValidator = createExternalJsonSchemaValidator();
+  private resourceContext: McpResourceDiscoveryContext | undefined;
+  private resourceCatalog: McpResourceCatalogView | undefined;
+  private resourceRefreshPromise: Promise<McpResourceCatalogView> | undefined;
+  private resourceRefreshRequested = false;
+  private resourceController: AbortController | undefined;
 
   constructor(port: McpStdioPort, options: ControlledMcpClientOptions = {}) {
     this.sdkClient = new Client(
@@ -79,6 +94,19 @@ export class ControlledMcpClient {
         await this.requestToolRefresh();
       } catch {
         // A rejected refresh retains the last complete current-generation snapshot.
+      }
+    });
+    this.sdkClient.setNotificationHandler("notifications/resources/list_changed", async () => {
+      if (
+        this.connectedState?.capabilities.resourcesListChanged !== true ||
+        this.resourceContext === undefined
+      ) {
+        return;
+      }
+      try {
+        await this.requestResourceRefresh();
+      } catch {
+        // A rejected refresh retains the last complete current-generation catalog.
       }
     });
   }
@@ -104,6 +132,80 @@ export class ControlledMcpClient {
 
   getToolSnapshot(): McpToolSnapshotView | undefined {
     return this.toolSnapshot?.view;
+  }
+
+  getResourceCatalog(): McpResourceCatalogView | undefined {
+    return this.resourceCatalog;
+  }
+
+  discoverResources(
+    context: McpResourceDiscoveryContext,
+    signal?: AbortSignal,
+  ): Promise<McpResourceCatalogView> {
+    if (this.status !== "connected" || this.connectedState === undefined) {
+      return Promise.reject(new McpResourceError("resource-unavailable"));
+    }
+    if (!Number.isSafeInteger(context.generation) || context.generation <= 0) {
+      return Promise.reject(new McpResourceError("malformed-message"));
+    }
+    if (
+      this.resourceContext === undefined ||
+      this.resourceContext.generation !== context.generation ||
+      this.resourceContext.server.serverId !== context.server.serverId
+    ) {
+      this.clearResourceCatalog();
+      this.resourceContext = context;
+      this.resourceController = new AbortController();
+    }
+    return this.requestResourceRefresh(signal);
+  }
+
+  async readResource(
+    selection: McpResourceSelection,
+    signal?: AbortSignal,
+  ): Promise<McpResourceSnapshotView> {
+    const context = this.resourceContext;
+    const catalog = this.resourceCatalog;
+    const controller = this.resourceController;
+    if (
+      this.status !== "connected" ||
+      context === undefined ||
+      catalog === undefined ||
+      controller === undefined ||
+      controller.signal.aborted
+    ) {
+      throw new McpResourceError("resource-unavailable");
+    }
+    const combinedSignal =
+      signal === undefined ? controller.signal : AbortSignal.any([controller.signal, signal]);
+    combinedSignal.throwIfAborted();
+    const uri = resolveMcpResourceSelection(catalog, selection);
+    try {
+      const value: unknown = await this.sdkClient.request(
+        { method: "resources/read", params: { uri } },
+        { signal: combinedSignal },
+      );
+      combinedSignal.throwIfAborted();
+      if (
+        this.status !== "connected" ||
+        context !== this.resourceContext ||
+        catalog !== this.resourceCatalog ||
+        controller !== this.resourceController
+      ) {
+        throw new McpResourceError("resource-unavailable");
+      }
+      return normalizeMcpResourceResult(context, uri, value);
+    } catch (error) {
+      if (combinedSignal.aborted || error instanceof McpResourceError) throw error;
+      if (
+        error instanceof SdkError &&
+        (error.code === SdkErrorCode.UnsupportedResultType ||
+          error.code === SdkErrorCode.CapabilityNotSupported)
+      ) {
+        throw new McpResourceError("resource-unsupported");
+      }
+      throw new McpResourceError("resource-unavailable");
+    }
   }
 
   discoverTools(
@@ -151,6 +253,7 @@ export class ControlledMcpClient {
 
   async disconnect(): Promise<McpDisconnectOutcome> {
     this.clearToolSnapshot();
+    this.clearResourceCatalog();
     if (this.status === "disconnected" && !this.consumed) {
       return { kind: "disconnected" };
     }
@@ -253,6 +356,7 @@ export class ControlledMcpClient {
     }
 
     this.clearToolSnapshot();
+    this.clearResourceCatalog();
     this.setFailure(code);
   }
 
@@ -411,6 +515,88 @@ export class ControlledMcpClient {
     }
   }
 
+  private requestResourceRefresh(signal?: AbortSignal): Promise<McpResourceCatalogView> {
+    this.resourceRefreshRequested = true;
+    if (this.resourceRefreshPromise !== undefined) return this.resourceRefreshPromise;
+    const refresh = this.runResourceRefreshes(signal).finally(() => {
+      if (this.resourceRefreshPromise === refresh) this.resourceRefreshPromise = undefined;
+    });
+    this.resourceRefreshPromise = refresh;
+    return refresh;
+  }
+
+  private async runResourceRefreshes(signal?: AbortSignal): Promise<McpResourceCatalogView> {
+    let latest = this.resourceCatalog;
+    do {
+      this.resourceRefreshRequested = false;
+      latest = await this.refreshResourcesOnce(signal);
+    } while (this.resourceRefreshRequested);
+    if (latest === undefined) throw new McpResourceError("resource-unavailable");
+    return latest;
+  }
+
+  private async refreshResourcesOnce(signal?: AbortSignal): Promise<McpResourceCatalogView> {
+    const context = this.resourceContext;
+    const controller = this.resourceController;
+    if (context === undefined || controller === undefined || this.status !== "connected") {
+      throw new McpResourceError("resource-unavailable");
+    }
+    const combinedSignal =
+      signal === undefined ? controller.signal : AbortSignal.any([controller.signal, signal]);
+    combinedSignal.throwIfAborted();
+    const resources =
+      this.connectedState?.capabilities.resources === true
+        ? await this.collectResourceList("resources/list", "resources", combinedSignal)
+        : [];
+    const templates =
+      this.connectedState?.capabilities.resourceTemplates === true
+        ? await this.collectResourceList(
+            "resources/templates/list",
+            "resourceTemplates",
+            combinedSignal,
+          )
+        : [];
+    combinedSignal.throwIfAborted();
+    if (context !== this.resourceContext || this.status !== "connected") {
+      throw new McpResourceError("resource-unavailable");
+    }
+    const replacement = createMcpResourceCatalog(context, resources, templates);
+    this.resourceCatalog = replacement;
+    return replacement;
+  }
+
+  private async collectResourceList(
+    method: "resources/list" | "resources/templates/list",
+    field: "resources" | "resourceTemplates",
+    signal: AbortSignal,
+  ): Promise<unknown[]> {
+    const values: unknown[] = [];
+    const cursors = new Set<string>();
+    let cursor: string | undefined;
+    for (let pageNumber = 1; pageNumber <= maxMcpListPages; pageNumber += 1) {
+      signal.throwIfAborted();
+      const page: unknown = await this.sdkClient.request(
+        { method, params: cursor === undefined ? {} : { cursor } },
+        { signal },
+      );
+      const record = readPage(page);
+      const pageValues = record[field];
+      if (!Array.isArray(pageValues)) throw new McpResourceError("malformed-message");
+      if (values.length + pageValues.length > maxMcpListEntries) {
+        throw new McpResourceError("limit-exceeded");
+      }
+      values.push(...pageValues);
+      const nextCursor = record.nextCursor;
+      if (nextCursor === undefined) return values;
+      if (typeof nextCursor !== "string" || nextCursor === "" || cursors.has(nextCursor)) {
+        throw new McpResourceError("malformed-message");
+      }
+      cursors.add(nextCursor);
+      cursor = nextCursor;
+    }
+    throw new McpResourceError("limit-exceeded");
+  }
+
   private clearToolSnapshot(): void {
     this.toolController?.abort(new Error("MCP Tool snapshot connection generation ended."));
     this.toolController = undefined;
@@ -418,6 +604,14 @@ export class ControlledMcpClient {
     this.toolRefreshRequested = false;
     this.toolSnapshot?.revoke();
     this.toolSnapshot = undefined;
+  }
+
+  private clearResourceCatalog(): void {
+    this.resourceController?.abort(new Error("MCP Resource catalog connection generation ended."));
+    this.resourceController = undefined;
+    this.resourceContext = undefined;
+    this.resourceRefreshRequested = false;
+    this.resourceCatalog = undefined;
   }
 }
 
