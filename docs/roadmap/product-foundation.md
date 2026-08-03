@@ -46,8 +46,9 @@
 
 - 桌面 VS Code Extension 作为 MCP Host，为用户显式配置的首期单一服务器拥有一个独立
   MCP Client 连接。
-- 以 MCP `2025-11-25` 规范作为设计与兼容性评审基线；实现任务开始时仍须通过
-  Context7 核对当前官方 SDK 和勘误，不以未固定的 `latest` 隐式改变协议行为。
+- 以 MCP `2026-07-28` 规范作为设计与兼容性评审基线；首期只接受该精确协议版本，
+  不自动降级到旧协议或接受未知未来版本。实现任务开始时仍须通过 Context7 核对当前官方
+  SDK 和勘误，不以未固定的 `latest` 隐式改变协议行为。
 - 仅支持由用户显式配置并连接的本地 `stdio` MCP Server，以及服务器声明的 MCP Tools、
   MCP Resources（含 Resource Templates）和 MCP Prompts 三类主要 Server 原语。
 - 发现、分页列举、变更通知和调用 MCP Tools，并将其适配到现有 Core Tool Registry、Agent
@@ -57,8 +58,10 @@
   明确用户授权和安全清理约束；模型、工作区内容和 Webview 不能创建或扩大服务器配置。
 
 阶段 14 不授权 Streamable HTTP、旧 HTTP+SSE 回退、远程服务器鉴权、OAuth、Sampling、
-Elicitation、Roots、Tasks、MCP Server 托管、服务器市场、自动安装、工作区共享配置或多模态
-内容。后续增加这些能力必须重新经过路线图和对应权威文档的变更控制。
+Elicitation、Roots、Tasks、`input_required` 自动履行或手工续轮、MCP Server 托管、服务器市场、
+自动安装、工作区共享配置或多模态内容。SDK 或 Server 在 `2026-07-28` 下提供这些能力不代表
+CtrlZebra 声明、注册或处理它们；
+后续增加这些能力必须重新经过路线图和对应权威文档的变更控制。
 
 阶段 14 的具体模块边界、配置格式、Tool 命名、风险归类、协议 DTO 和用户体验由 T1401
 的独立 docs-only 约束门禁确定；本节只授权产品范围，不提前把尚未评审的实现草案变成公共
@@ -75,6 +78,8 @@ Elicitation、Roots、Tasks、MCP Server 托管、服务器市场、自动安装
 | Webview 状态 | Zustand |
 | 样式 | CSS Modules + VS Code CSS Variables |
 | 运行时校验 | Zod |
+| MCP Client | 官方 `@modelcontextprotocol/client` v2；首个实现精确固定 `2.0.0`，隔离在 `packages/mcp-client` |
+| 外部 Tool JSON Schema | 同一固定 SDK 的公开 Ajv validator，经闭合集关键字与结构限额后编译 |
 | 模型标准化层 | Vercel AI SDK 7，外包一层自有接口 |
 | 单元测试 | Vitest |
 | UI 测试 | Testing Library + jsdom |
@@ -115,6 +120,7 @@ vscode-agent/
 │  ├─ core/
 │  ├─ providers/
 │  ├─ builtin-tools/
+│  ├─ mcp-client/
 │  └─ testkit/
 ├─ scripts/
 ├─ package.json
@@ -227,13 +233,32 @@ vscode-agent/
 
 测试中禁止依赖真实模型 API。
 
+### 4.8 `packages/mcp-client`
+
+负责隔离官方 MCP SDK 并提供 Host-independent 的受控 Client 边界：
+
+- MCP `2026-07-28` 精确版本协商和三类获授权 Server 原语。
+- 请求关联、取消、分页、列表变更刷新、限额和稳定错误归一化。
+- 通过注入的 stdio/process port 管理协议生命周期，不直接创建真实进程。
+- 将 MCP Tool 适配为现有 Core Tool contracts，但不拥有 Registry、审批或 Agent Loop。
+
+约束：
+
+- 官方 MCP SDK、JSON-RPC、transport、capability、schema 和 error 类型不得越过包的公共入口。
+- 不依赖 VS Code、Extension adapters、React、Webview 或 persistence。
+- 不声明或处理 Roots、Sampling、Elicitation、Tasks、`input_required` 续轮、HTTP、OAuth、实验
+  或多模态能力。
+- 真实配置、Workspace Trust、spawn、最小环境和完整进程树清理仍由 `apps/extension` 拥有。
+
 ## 5. 依赖规则
 
 ```text
 webview ───────────────→ protocol
 extension ─────────────→ protocol + core + providers + builtin-tools
+extension ─────────────→ mcp-client
 providers ─────────────→ core contracts
 builtin-tools ─────────→ core contracts + protocol DTO
+mcp-client ────────────→ core contracts (仅外部 Tool 适配)
 core ──────────────────→ protocol
 testkit ───────────────→ core contracts + protocol
 ```
@@ -246,6 +271,9 @@ core → webview
 webview → core implementation
 providers → extension
 builtin-tools → vscode
+core → mcp-client
+mcp-client → vscode
+mcp-client → extension
 ```
 
 依赖规则应通过 lint 规则、路径约定或专门的架构测试保护。

@@ -163,3 +163,154 @@ metadata bags are forbidden.
 - `packages/protocol` owns Schemas, inferred types, protocol constants, and public message names. It has no dependency on React, VS Code, Node.js host APIs, or model SDKs.
 - The Extension Controller owns validated dispatch and response construction. VS Code adapters own `onDidReceiveMessage`, `postMessage`, failure reporting, and Disposable lifetimes.
 - One Webview-local adapter owns the single `acquireVsCodeApi()` call and validates Extension messages before notifying presentation code.
+
+## MCP Cross-Boundary Contract
+
+MCP Protocol and SDK values terminate before this boundary. The DTOs below are CtrlZebra-owned,
+strict, JSON-serializable projections planned as additive protocol version `1` messages. They never
+contain JSON-RPC IDs or methods, SDK types or enum values, process handles, executable or environment
+values, raw capability objects, arbitrary metadata, Server error data, or unbounded content.
+
+### Shared identity, status, and errors
+
+`McpServerIdentityDto` is the strict object `{ serverId, displayName }`. `serverId` is the configured
+lower `snake_case` identity and `displayName` is its bounded user label. It does not contain command,
+arguments, cwd, configuration scope, credentials, or transport details.
+
+`McpConnectionDto` is the strict object:
+
+```text
+{
+  server: McpServerIdentityDto,
+  generation: positive safe integer,
+  status: "disconnected" | "connecting" | "connected" | "disconnecting" | "failed",
+  protocolVersion?: "2026-07-28",
+  capabilities: {
+    tools: boolean,
+    toolsListChanged: boolean,
+    resources: boolean,
+    resourceTemplates: boolean,
+    resourcesListChanged: boolean,
+    prompts: boolean,
+    promptsListChanged: boolean
+  },
+  configurationStale: boolean,
+  error?: McpErrorDto
+}
+```
+
+`protocolVersion` exists only in `connected`; projected capabilities are all false before a
+successful initialization. Extra advertised Server capabilities are absent rather than copied into
+an open map. The Schema refines this object by status: `connected` requires the exact protocol
+version and forbids `error`; `failed` requires `error`, omits the protocol version, and has all
+capabilities false; all other states omit both protocol version and error and expose no usable
+capability. `generation` is an opaque freshness fence for consumers, not authorization.
+
+`McpErrorDto` contains only `{ code, message }`. `message` is a fixed user-safe string of at most
+1,024 code points. The stable closed code set is:
+
+```text
+configuration-invalid | workspace-untrusted | approval-denied | approval-expired |
+approval-invalidated | spawn-failed | initialize-failed | protocol-incompatible |
+capability-unsupported | malformed-message | invalid-schema | limit-exceeded |
+server-exited | disconnected | termination-unconfirmed | tool-unavailable |
+tool-invalid-input | tool-failed | tool-invalid-output | resource-unavailable |
+resource-unsupported | prompt-unavailable | prompt-unsupported | internal
+```
+
+Cancellation is represented by the owning connection, request, or Run status and is never an MCP
+error code. Raw JSON-RPC numeric codes, messages, `data`, SDK errors, process exit details, stdout,
+stderr, stack traces, and causes are forbidden.
+
+### Message directions and correlation
+
+- Webview intents use `webview/mcp-connect`, `webview/mcp-disconnect`,
+  `webview/mcp-resource-read`, `webview/mcp-resource-attach`,
+  `webview/mcp-prompt-preview`, `webview/mcp-prompt-confirm`, and
+  `webview/mcp-prompt-cancel`. They carry only the active `serverId`, `generation` where a live
+  connection is required, bounded projected identities/arguments required by that action, and the
+  normal envelope. They cannot carry configuration, command, cwd, risk, approval state, Tool
+  schema, Resource content, Prompt result, or capability declarations.
+- Extension state uses `extension/mcp-connection`, `extension/mcp-tools`,
+  `extension/mcp-resources`, `extension/mcp-prompts`, `extension/mcp-resource-preview`, and
+  `extension/mcp-prompt-preview`. A snapshot atomically replaces the matching Server/generation
+  view; it is never interpreted as an incremental patch.
+- MCP Tool Calls continue to use the existing Core Tool Call/Result correlation. Their Webview
+  projection adds a strict `source` object to the Tool-state contract only when the originating
+  registered Tool is external: `{ kind: "mcp", server, generation, mcpToolName }`. Built-in Tools
+  retain `{ kind: "builtin" }`. No generic Server metadata bag is allowed.
+- Every live intent and response must match the active `requestId`, `serverId`, and generation.
+  Resource and Prompt intents additionally match the exact projected URI/template/Prompt identity;
+  Prompt confirmation matches a Host-generated preview ID. Stale or mismatched messages are
+  ignored without operation, persistence, or user-visible state mutation.
+
+### Tool projection and deterministic names
+
+`McpToolDescriptorDto` contains only `{ registryName, mcpToolName, title?, description? }` plus the
+shared Server identity and generation. Names are non-empty and bounded; title and description are
+plain untrusted text. Input/output schemas and annotations stay outside the Webview protocol.
+
+The Registry mapping is deterministic and independent of list order:
+
+1. Compute SHA-256 over the UTF-8 sequence `serverId`, one NUL byte, and the exact MCP Tool name;
+   retain the first 12 lowercase hexadecimal characters.
+2. Convert the MCP Tool name to a lowercase ASCII slug by retaining `[a-z0-9]`, replacing each run
+   of other characters with one underscore, trimming underscores, and using `tool` when empty.
+3. Retain at most 47 slug characters and publish `mcp_<slug>_<hash>`, which satisfies the existing
+   64-character lower `snake_case` Tool contract and always begins with a letter.
+
+The exact MCP name remains the external identity and is never recovered from the slug. The Registry
+reserves the `mcp_` prefix for this mapping. A duplicate external identity, a hash collision, or a
+collision with any registered name rejects the complete incoming snapshot; no order-dependent
+suffix or partial registration is allowed. A rename is removal plus addition. Tool calls and
+approvals bind both names, Server ID, generation, and immutable schema identity.
+
+### Resource and Resource Template projections
+
+`McpResourceDescriptorDto` is the strict bounded projection `{ server, generation, uri, name,
+title?, description?, mimeType? }`. `McpResourceTemplateDescriptorDto` replaces `uri` with
+`uriTemplate` and adds at most 32 strict argument descriptors `{ name, description?, required }`.
+The Host derives template argument names deterministically from the validated URI Template rather
+than accepting a second Server-provided argument schema; every variable is required for version `1`.
+Server icons, annotations, sizes, arbitrary metadata, and Workspace URI authority are excluded.
+
+`McpResourceSnapshotDto` is created only by an explicit successful read and contains `{ server,
+generation, uri, mimeType, items, truncated }`. It contains 1–32 strict items `{ text }`, within the
+Security aggregate limits. `uri` remains an external MCP identifier; it is never converted to a
+workspace URI or link action. Only well-formed Unicode text with an explicitly supported textual
+MIME projection is admitted. Blob, image, audio, embedded Resource, Resource Link, unknown content,
+and nested SDK values are rejected.
+
+Attachment creates a new immutable context projection `{ snapshotId, serverId, uri, mimeType,
+text, truncated }`. `snapshotId` is Host-generated and opaque. It represents the exact bounded text
+already read; list refresh or disconnect cannot mutate it. The projection is ordinary untrusted
+user context, never System, Tool, approval, Workspace authorization, HTML, Markdown, or a live URI.
+
+### Prompt projection and confirmation
+
+`McpPromptDescriptorDto` contains `{ server, generation, name, title?, description?, arguments }`.
+It has at most 32 strict arguments `{ name, description?, required }`; Server-provided defaults,
+schemas, icons, metadata, or executable actions are excluded. Submitted values use a strict object
+with exactly the advertised argument names and the Security key/value/aggregate limits.
+
+`McpPromptPreviewDto` contains `{ previewId, server, generation, promptName, arguments, messages }`.
+It has 1–32 bounded text messages `{ sourceRole: "user" | "assistant", text }`. MCP roles are shown
+as provenance only and do not become trusted model roles. Unsupported roles or non-text content
+reject the whole preview.
+
+Confirmation consumes the exact current preview once and projects all messages into one ordinary
+user-controlled input attachment with Server, Prompt, argument, and source-role labels. It never
+creates a System or Assistant message, sends automatically, calls a Tool, reads a Resource, grants
+approval, or retains template capability. Cancellation, disconnect, generation change, Prompt list
+replacement, Session switch, send, or disposal invalidates an unconfirmed preview.
+
+### Validation and bounds
+
+All MCP message objects use strict Zod schemas, take input as `unknown`, reject unknown fields, and
+enforce the limits in [Security](security.md) while collecting. List snapshots contain at most
+1,000 descriptors and must fit the one-mebibyte serialized ceiling. Strings must be well-formed
+Unicode and are measured both by Unicode code points and UTF-8 bytes where Security defines both.
+
+An invalid descriptor, duplicate identity, malformed cursor chain, unsupported content item, or
+limit breach rejects the complete operation. The Extension never asks the Webview to validate an
+SDK object, infer a capability, choose risk, join partial pages, or repair malformed content.
