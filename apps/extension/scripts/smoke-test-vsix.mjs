@@ -78,7 +78,11 @@ try {
 
   const logPath = await findFile(userDataDirectory, "CtrlZebra.log");
   const log = await readFile(logPath, "utf8");
-  for (const event of ["extension_activated", "agent_view_first_displayed"]) {
+  for (const event of [
+    "extension_activated",
+    "mcp_connection_failed",
+    "agent_view_first_displayed",
+  ]) {
     if (!log.includes(`"event":"${event}"`)) {
       throw new Error(`Installed-extension smoke log is missing ${event}.`);
     }

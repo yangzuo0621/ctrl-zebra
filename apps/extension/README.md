@@ -71,6 +71,42 @@ The endpoint and model must match the local service. Declaring `tool-calling` do
 capability to a model; the selected service and model must actually support the OpenAI-compatible
 tool-call format.
 
+## Local MCP Server
+
+CtrlZebra can connect to one explicitly configured local `stdio` MCP Server. The Server runs with
+your operating-system authority and may access local files or networks independently of CtrlZebra,
+so configure only an executable you trust. CtrlZebra does not download, install, authenticate, or
+start a Server automatically.
+
+Configure the exact executable and ordered arguments in machine-scoped settings. Shell command
+lines, environment overrides, credentials, and workspace-scoped MCP configuration are rejected:
+
+```json
+{
+  "ctrlZebra.mcp.server": {
+    "version": 1,
+    "serverId": "local_docs",
+    "displayName": "Local docs",
+    "command": "/absolute/path/to/the-server",
+    "args": ["--stdio"]
+  }
+}
+```
+
+Open one trusted workspace, review the exact executable, arguments, and canonical working directory,
+then run **CtrlZebra: Connect MCP Server** or select **Connect** in the Agent view. After connection:
+
+- **Tools** are available to the model, but every call has trusted `execute` risk and requires a new
+  exact single-use approval showing the Server, Tool, arguments, and external-side-effect warning.
+- **Resources** and **Resource Templates** are read only after you select them. Previewed bounded text
+  enters model context only after you select **Attach**.
+- **Prompts** are fetched only after you select one and provide its required arguments. They remain
+  ordinary untrusted text and enter the input flow only after preview and confirmation.
+
+Use **CtrlZebra: Disconnect MCP Server** when finished. Disconnecting, cancelling a Run, losing
+workspace trust, or closing the Extension Host invalidates live catalogs and pending operations;
+CtrlZebra never reconnects or resumes them from a saved Session.
+
 ## Configuration
 
 All settings have machine scope.
@@ -81,6 +117,7 @@ All settings have machine scope.
 | `ctrlZebra.provider.model` | empty | Required exact model ID. Surrounding whitespace is rejected. |
 | `ctrlZebra.provider.endpoint` | empty | Optional override for OpenAI/Gemini; required for OpenAI-compatible. Remote URLs must use HTTPS. Plain HTTP is allowed only for `localhost`, `127.0.0.0/8`, or `::1`. User info, query strings, and fragments are rejected. |
 | `ctrlZebra.provider.capabilities` | `["text-streaming"]` | Used only by OpenAI-compatible endpoints. Values are `text-streaming` and `tool-calling`, without duplicates. CtrlZebra currently requires both to start an Agent run. |
+| `ctrlZebra.mcp.server` | `null` | One local stdio Server object with `version: 1`, stable lower-snake-case `serverId`, bounded `displayName`, exact `command`, and ordered `args`. Credentials and shell command lines are forbidden. A trusted single-folder workspace and fresh startup approval are required. |
 
 OpenAI and Gemini always use their adapter-declared text-streaming and tool-calling capabilities.
 Remote providers require a corresponding API key. This release exposes a user-facing save command
@@ -95,6 +132,8 @@ CtrlZebra provides these tools within the single selected workspace:
   it. A Checkpoint is committed before the workspace write.
 - `run_command` displays the executable, ordered arguments, canonical working directory, and timeout.
   It uses direct process spawn with shell interpretation disabled and requires a fresh approval.
+- Every MCP Tool is treated as an external `execute` operation even if its Server claims it is
+  read-only or idempotent. Server metadata never lowers the approval requirement.
 
 Paths are canonicalized and constrained to the selected workspace. File edits and commands are
 disabled when the workspace is untrusted. Approval is single-use; a changed operation or retry
@@ -110,6 +149,12 @@ CtrlZebra has no accounts, cloud sync, advertising, or telemetry backend. It sto
 - recovery Checkpoints, including pre-edit workspace text, in VS Code extension storage; and
 - bounded structured diagnostics in the local CtrlZebra VS Code log channel.
 
+MCP configuration remains in VS Code machine settings and is not copied into Sessions. Live Server
+catalogs, raw protocol messages, stderr, and process details are not persisted. Attached Resource
+text, confirmed Prompt text, and bounded Tool outcomes can become conversation context and may be
+sent to the configured model provider. The external Server itself runs outside CtrlZebra's privacy
+boundary and may perform local or network activity under its own behavior.
+
 When you send a request, the configured model provider receives the prompt, relevant conversation
 context, tool definitions, and tool results. Tool results can contain workspace source text. File
 writes and commands remain local unless the approved command itself communicates externally.
@@ -124,8 +169,14 @@ Read the full [Privacy Notice](PRIVACY.md) and [security contract](docs/security
 - Gemini is the only remote provider with a user-facing API-key save command. OpenAI and authenticated
   remote OpenAI-compatible onboarding are not complete in this build.
 - Provider and model configuration is manual; there is no model discovery or account sign-in.
-- A model can request only the five built-in workspace tools. There is no MCP, browser automation,
-  sub-agent/multi-agent execution, Git commit/PR automation, or cloud service integration.
+- MCP supports exactly one user-configured local stdio Server and exact protocol version
+  `2026-07-28`. There is no HTTP transport, OAuth, credential injection, multi-server operation,
+  automatic install, automatic connection, retry, or restart recovery.
+- MCP supports Tools, bounded text Resources/Resource Templates, and bounded text Prompts only.
+  Sampling, Elicitation, Roots, Tasks, subscriptions, binary or multimodal content, and
+  `input_required` continuation are unsupported.
+- There is no browser automation, sub-agent/multi-agent execution, Git commit/PR automation, or
+  cloud service integration.
 - Sessions interrupted by an Extension Host restart are restored as `interrupted`; model requests,
   approvals, and tools are never resumed automatically.
 - Session and Checkpoint retention has no automatic pruning policy or in-product delete control.
@@ -135,6 +186,22 @@ Read the full [Privacy Notice](PRIVACY.md) and [security contract](docs/security
   and may be rejected or truncated.
 - The extension is not published automatically by this repository workflow. VSIX generation is
   local and Marketplace publication remains a separate release action.
+
+## MCP troubleshooting
+
+- **Configure one valid MCP Server**: check that the setting is machine-scoped, contains no unknown
+  fields, uses an absolute or otherwise directly executable command, and separates every argument.
+- **Workspace must be trusted**: open exactly one local folder and grant VS Code Workspace Trust;
+  MCP process startup is disabled in untrusted, empty, remote-only, or multi-root windows.
+- **Protocol or capability failure**: update the Server to exact MCP `2026-07-28`. CtrlZebra does not
+  negotiate down to an older version or enable undeclared Client capabilities.
+- **Server exited or malformed output**: disconnect, inspect the Server outside CtrlZebra without
+  sharing secrets, correct its stdout protocol behavior, then reconnect explicitly. CtrlZebra never
+  treats stderr or raw protocol data as user-visible content.
+- **Configuration changed**: disconnect the current generation before reconnecting. A live Server is
+  never silently reconfigured or restarted.
+- **Cancellation or restart**: retry from a new explicit user action. Pending Tools, Resource reads,
+  Prompt previews, approvals, and catalogs are intentionally not resumed.
 
 ## Development
 

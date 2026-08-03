@@ -119,6 +119,23 @@ describe("MCP Resource projection", () => {
     });
   });
 
+  it("validates and discards SDK cache metadata", () => {
+    expect(
+      normalizeMcpResourceResult(context, "memory://cache", {
+        ttlMs: 0,
+        cacheScope: "private",
+        contents: [{ uri: "memory://cache", mimeType: "text/plain", text: "cached" }],
+      }),
+    ).toMatchObject({ uri: "memory://cache", items: [{ text: "cached" }] });
+    expect(() =>
+      normalizeMcpResourceResult(context, "memory://cache", {
+        ttlMs: -1,
+        cacheScope: "shared",
+        contents: [{ uri: "memory://cache", mimeType: "text/plain", text: "cached" }],
+      }),
+    ).toThrow(McpResourceError);
+  });
+
   it("keeps the largest well-formed text prefix and marks truncation", () => {
     const snapshot = normalizeMcpResourceResult(context, "memory://large", {
       contents: [

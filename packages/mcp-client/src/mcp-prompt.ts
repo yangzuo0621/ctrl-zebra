@@ -15,7 +15,7 @@ import {
 
 const promptKeys = new Set(["_meta", "arguments", "description", "icons", "name", "title"]);
 const argumentKeys = new Set(["description", "name", "required", "title"]);
-const resultKeys = new Set(["_meta", "description", "messages"]);
+const resultKeys = new Set(["_meta", "ttlMs", "cacheScope", "description", "messages"]);
 const messageKeys = new Set(["content", "role"]);
 const contentKeys = new Set(["_meta", "annotations", "text", "type"]);
 
@@ -159,6 +159,15 @@ export function normalizeMcpPromptResult(
   const record = readRecord(value);
   if (record.status === "input_required") throw new McpPromptError("prompt-unsupported");
   if (Object.keys(record).some((key) => !resultKeys.has(key))) {
+    throw new McpPromptError("malformed-message");
+  }
+  if (
+    (record.ttlMs !== undefined &&
+      (!Number.isSafeInteger(record.ttlMs) || (record.ttlMs as number) < 0)) ||
+    (record.cacheScope !== undefined &&
+      record.cacheScope !== "public" &&
+      record.cacheScope !== "private")
+  ) {
     throw new McpPromptError("malformed-message");
   }
   if (!Array.isArray(record.messages) || record.messages.length === 0) {

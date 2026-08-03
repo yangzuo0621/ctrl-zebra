@@ -65,11 +65,11 @@
 
 - 总任务：98
 - 已完成：97
-- 进行中：0
+- 进行中：1
 - 受阻：0
-- 待开始：1
-- 当前任务：无
-- 下一任务：T1409
+- 待开始：0
+- 当前任务：T1409
+- 下一任务：无
 - 最后更新：2026-08-03
 
 | 阶段 | 任务 | 状态 | 完成 PR | 完成日期 |
@@ -171,7 +171,7 @@
 | 14 | T1406 | 已完成 | [#147](https://github.com/yangzuo0621/ctrl-zebra/pull/147) | 2026-08-03 |
 | 14 | T1407 | 已完成 | [#148](https://github.com/yangzuo0621/ctrl-zebra/pull/148) | 2026-08-03 |
 | 14 | T1408 | 已完成 | [#149](https://github.com/yangzuo0621/ctrl-zebra/pull/149) | 2026-08-03 |
-| 14 | T1409 | 待开始 | — | — |
+| 14 | T1409 | 进行中 | — | — |
 
 ---
 
@@ -246,4 +246,4 @@ T1401 由 [#141](https://github.com/yangzuo0621/ctrl-zebra/pull/141) 交付；T1
 [#146](https://github.com/yangzuo0621/ctrl-zebra/pull/146) 交付；T1406 由
 [#147](https://github.com/yangzuo0621/ctrl-zebra/pull/147) 交付；T1407 由
 [#148](https://github.com/yangzuo0621/ctrl-zebra/pull/148) 交付；T1408 由
-[#149](https://github.com/yangzuo0621/ctrl-zebra/pull/149) 交付；当前无进行中任务，下一任务为 T1409。
+[#149](https://github.com/yangzuo0621/ctrl-zebra/pull/149) 交付；T1409 正在执行。

@@ -3,23 +3,24 @@ import { fileURLToPath } from "node:url";
 import { runTests } from "@vscode/test-electron";
 
 const extensionDevelopmentPath = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const repositoryRoot = resolve(extensionDevelopmentPath, "..", "..");
 const extensionTestsPath = resolve(extensionDevelopmentPath, "dist", "test", "suite", "index.cjs");
 const ollamaSmokeModel = process.env.CTRL_ZEBRA_OLLAMA_SMOKE_MODEL;
-const launchArgs = ["--disable-extensions", "--skip-welcome", "--skip-release-notes"];
-const ollamaSmokeEnvironment =
-  ollamaSmokeModel === undefined
-    ? {}
-    : { extensionTestsEnv: { CTRL_ZEBRA_OLLAMA_SMOKE_MODEL: ollamaSmokeModel } };
-
-if (ollamaSmokeModel !== undefined) {
-  launchArgs.unshift(resolve(extensionDevelopmentPath, "..", ".."));
-}
+const launchArgs = [
+  repositoryRoot,
+  "--disable-extensions",
+  "--skip-welcome",
+  "--skip-release-notes",
+];
+const extensionTestsEnv = {
+  ...(ollamaSmokeModel === undefined ? {} : { CTRL_ZEBRA_OLLAMA_SMOKE_MODEL: ollamaSmokeModel }),
+};
 
 try {
   await runTests({
     extensionDevelopmentPath,
     extensionTestsPath,
-    ...ollamaSmokeEnvironment,
+    extensionTestsEnv,
     launchArgs,
     version: "1.125.0",
   });
