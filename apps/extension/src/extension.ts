@@ -3,6 +3,7 @@ import { realpath } from "node:fs/promises";
 import { performance } from "node:perf_hooks";
 import { env, memoryUsage, platform } from "node:process";
 
+import { ControlledMcpClient } from "@ctrl-zebra/mcp-client";
 import {
   createGeminiModelGateway,
   createOpenAICompatibleModelGateway,
@@ -18,6 +19,12 @@ import { createLocalWorkspaceUriCanonicalizer } from "./adapters/canonicalize-lo
 import { createVsCodeCheckpointRestorer } from "./adapters/create-vscode-checkpoint-restorer.js";
 import { createVsCodeDiffPresenter } from "./adapters/create-vscode-diff-presenter.js";
 import { createVsCodeWorkspaceEditApplier } from "./adapters/create-vscode-workspace-edit-applier.js";
+import {
+  mcpServerSettingName,
+  mcpServerSettingSection,
+  readMcpServerConfiguration,
+} from "./adapters/mcp-server-configuration.js";
+import { NodeMcpStdioPort, selectMcpServerEnvironment } from "./adapters/mcp-stdio-port.js";
 import { PerformanceBaselineRecorder } from "./adapters/performance-baseline.js";
 import { readProviderConfiguration } from "./adapters/provider-configuration.js";
 import { SpawnCommandRunner } from "./adapters/spawn-command-runner.js";
@@ -38,6 +45,9 @@ import { createCheckpointActions } from "./controllers/checkpoint-actions.js";
 import { CommandApprovalWorkflow } from "./controllers/command-approval-workflow.js";
 import { FileEditApprovalWorkflow } from "./controllers/file-edit-approval-workflow.js";
 import { registerGeminiApiKeyCommand } from "./controllers/gemini-api-key-command.js";
+import { McpConnectionController } from "./controllers/mcp-connection-controller.js";
+import { registerMcpServerCommands } from "./controllers/mcp-server-commands.js";
+import { McpStartupApproval } from "./controllers/mcp-startup-approval.js";
 import { selectModelGateway } from "./controllers/model-gateway-selector.js";
 import {
   createWorkspaceToolRegistryProvider,
@@ -67,6 +77,47 @@ export function activate(context: ExtensionContext): void {
     selectWorkspaceRoot(workspace.workspaceFolders?.map((folder) => folder.uri) ?? []);
   const createCurrentScope = () => new WorkspaceScope(getSelectedRoot(), canonicalize);
   const workspaceTrust = createWorkspaceTrustPolicy(() => workspace.isTrusted);
+  const mcpStartupApproval = new McpStartupApproval({
+    now: () => new Date(),
+    showWarningMessage: (message, options, item) =>
+      window.showWarningMessage(message, options, item),
+  });
+  const mcpConnection = new McpConnectionController({
+    readConfiguration() {
+      const settings = workspace.getConfiguration(mcpServerSettingSection);
+      return readMcpServerConfiguration({
+        inspect: (setting: string) => settings.inspect<unknown>(setting),
+      });
+    },
+    async bindWorkspace(signal) {
+      workspaceTrust.requireTrusted();
+      const canonicalRoot = await canonicalize(getSelectedRoot(), signal);
+      signal.throwIfAborted();
+      workspaceTrust.requireTrusted();
+      if (canonicalRoot.scheme !== "file") {
+        throw new Error("MCP Server startup requires a canonical local workspace.");
+      }
+      return { cwdUri: canonicalRoot.toString(), cwdPath: canonicalRoot.fsPath };
+    },
+    workspaceTrust,
+    environment: selectMcpServerEnvironment(env, platform),
+    requestStartupApproval: (operation, signal) => mcpStartupApproval.request(operation, signal),
+    createPort: (operation, onFailure) => new NodeMcpStdioPort(operation, { onFailure }),
+    createClient: (port) => new ControlledMcpClient(port),
+    notifyInformation: (message) => {
+      void window.showInformationMessage(message);
+    },
+    notifyError: (message) => {
+      void window.showErrorMessage(message);
+    },
+    log: (entry) => {
+      if (entry.outcome === "failure") {
+        logger.error(entry);
+      } else {
+        logger.info(entry);
+      }
+    },
+  });
   const diffPresenter = createVsCodeDiffPresenter();
   const hashText = (text: string) => createHash("sha256").update(text, "utf8").digest("hex");
   const selectCheckpointStore = createWorkspaceCheckpointStoreProvider(
@@ -210,6 +261,29 @@ export function activate(context: ExtensionContext): void {
     workspaceTools,
     diffPresenter,
     approvalWorkflow,
+    {
+      dispose() {
+        void mcpConnection.dispose().catch(() => {
+          logger.error({
+            event: "mcp_dispose_failed",
+            component: "mcp",
+            outcome: "failure",
+            errorCode: "internal",
+          });
+        });
+      },
+    },
+    workspace.onDidChangeConfiguration((event) => {
+      if (event.affectsConfiguration(`${mcpServerSettingSection}.${mcpServerSettingName}`)) {
+        mcpConnection.markConfigurationStale();
+      }
+    }),
+    workspace.onDidChangeWorkspaceFolders(() => mcpConnection.markConfigurationStale()),
+    workspace.onDidGrantWorkspaceTrust(() => mcpConnection.handleWorkspaceTrustChange()),
+    registerMcpServerCommands({
+      controller: mcpConnection,
+      registerCommand: (commandId, handler) => commands.registerCommand(commandId, handler),
+    }),
     registerGeminiApiKeyCommand({
       storage: createGeminiApiKeySecretStorage(context.secrets),
       registerCommand: (commandId, handler) => commands.registerCommand(commandId, handler),
