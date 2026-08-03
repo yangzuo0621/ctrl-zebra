@@ -30,7 +30,7 @@ Tool、参数和外部副作用警告并逐次批准 → 收到有界结果 → 
 ### 2.2 本阶段包含
 
 - 一个本地 `stdio` MCP Server 的用户级显式配置、连接、断开和状态反馈。
-- MCP 初始化、协议版本与能力协商、正常操作、取消和关闭生命周期。
+- MCP 连接发现、协议版本与能力协商、正常操作、取消和关闭生命周期。
 - `tools/list` 的完整分页、可选 `notifications/tools/list_changed` 刷新和 `tools/call`。
 - MCP Tool 到 CtrlZebra Tool 契约的受控适配、确定性命名和冲突处理。
 - 每次 MCP Tool Call 的严格参数校验、逐操作审批、取消、结果归一化和资源限额。
@@ -125,7 +125,7 @@ Tool、参数和外部副作用警告并逐次批准 → 收到有界结果 → 
 
 ### T1402：实现 MCP Client 契约与可测试的 stdio 生命周期
 
-**目标**：按照 T1401 的模块决策建立 MCP Client 边界，实现初始化、能力协商、请求关联、取消、
+**目标**：按照 T1401 的模块决策建立 MCP Client 边界，实现连接发现、能力协商、请求关联、取消、
 关闭和故障清理，不接入 Agent Tool Registry。
 
 **前置条件**：T1401 已完成；采用的 SDK、协议版本和依赖方向已固定。
@@ -137,12 +137,12 @@ Tool、参数和外部副作用警告并逐次批准 → 收到有界结果 → 
   transport 包装 Extension 注入端口，不使用 SDK 自带的进程所有权。
 - 注入式 stdio transport/process port 与确定性的 fixture transport；生产进程创建仍由
   Extension Host adapter 拥有。
-- `initialize → initialized → operation → disconnect` 生命周期、协议/能力不兼容失败、请求取消、
-  幂等 dispose、stderr 有界收集和迟到消息丢弃。
+- `server/discover → connected → operation → disconnect` 生命周期、协议/能力不兼容失败、请求
+  取消、幂等 dispose、stderr 有界收集和迟到消息丢弃。
 - 不声明 Sampling、Elicitation、Roots、Tasks 或其他未实现 Client capability。
 
 **测试**：正常精确版本协商；旧版/未来版/能力不兼容；`input_required` 不自动履行；畸形消息；
-并发请求关联；取消后无输出；Server 提前退出；初始化失败与 dispose 竞态；全部异步资源清理。
+并发请求关联；取消后无输出；Server 提前退出；连接协商失败与 dispose 竞态；全部异步资源清理。
 
 **不包含**：真实用户配置、Tool 发现/调用、Core Registry、Webview、自动重试和 HTTP transport。
 

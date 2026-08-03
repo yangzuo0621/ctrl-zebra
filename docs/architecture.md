@@ -272,18 +272,19 @@ port.
   validated configuration share one in-flight attempt; a different configuration cannot replace
   it while it is live.
 - Activation, module import, Webview creation, Session recovery, model output, Tool discovery, and
-  background timers never initialize or reconnect MCP. The only initialization trigger is the
+  background timers never connect or reconnect MCP. The only connection trigger is the
   user's explicit connect operation after configuration, trust, cwd, and startup approval checks.
 - The lifecycle is `disconnected → connecting → connected → disconnecting → disconnected`, with
   `connecting | connected | disconnecting → failed` for an unexpected process or protocol failure.
   `failed` owns no usable Client and requires a new explicit connect action; there is no automatic
   retry, health polling, silent restart, or Session-owned connection.
 - The connection controller is the single owner of the SDK Client, process port, request registry,
-  list snapshots, notification handlers, stderr collector, and cleanup promise. Initialization
-  publishes no capabilities until `initialize` and `initialized` complete and the exact protocol
-  version is accepted.
-- Disconnect, Server exit, failed initialization, cancellation of connection setup, Extension
-  disposal, or loss of Workspace Trust first closes the delivery gate and increments the
+  list snapshots, notification handlers, stderr collector, and cleanup promise. For the pinned
+  modern `2026-07-28` era, the SDK completes `server/discover` instead of the legacy
+  `initialize` / `notifications/initialized` exchange. The controller publishes no capabilities
+  until discovery completes and the exact protocol version is accepted.
+- Disconnect, Server exit, failed connection negotiation, cancellation of connection setup,
+  Extension disposal, or loss of Workspace Trust first closes the delivery gate and increments the
   generation, then aborts requests, closes stdin, and awaits bounded process-tree cleanup. Cleanup
   is idempotent; failure to confirm termination remains a distinct terminal error.
 - Every request, notification refresh, Tool definition, approval, Resource read, Prompt preview,
@@ -295,7 +296,7 @@ port.
 
 - CtrlZebra constructs the SDK Client with
   `versionNegotiation: { mode: { pin: "2026-07-28" } }` and accepts only that result. A Server
-  selecting an older version or an unknown future version fails initialization with
+  selecting an older version or an unknown future version fails connection negotiation with
   `protocol-incompatible`; SDK automatic legacy behavior is not a product compatibility promise.
 - The Client declares none of Roots, Sampling, Elicitation, Tasks, experimental capabilities, or
   other Server-to-Client primitives. It installs no handler for them. A Server request for an

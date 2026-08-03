@@ -456,11 +456,12 @@ side effects independent of what it advertises.
   failure, never a diagnostic log. Stderr is collected only into a bounded volatile diagnostic
   status and is never copied verbatim to logs, errors, persistence, Webview, model context, or Tool
   Results.
-- Disconnect, cancellation, timeout, Server exit, initialization failure, trust loss, or Extension
-  disposal closes the result gate before process cleanup. Cleanup closes stdin, aborts all owned
-  requests, terminates the complete process tree, waits a bounded interval, escalates through the
-  host process port when necessary, and confirms termination. `termination-unconfirmed` remains
-  distinct from successful disconnect and blocks reuse of that connection.
+- Disconnect, cancellation, timeout, Server exit, connection-negotiation failure, trust loss, or
+  Extension disposal closes the result gate before process cleanup. Cleanup closes stdin, aborts
+  all owned requests, terminates the complete process tree, waits a bounded interval, escalates
+  through the host process port when necessary, and confirms termination.
+  `termination-unconfirmed` remains distinct from successful disconnect and blocks reuse of that
+  connection.
 
 ### External Tool approval
 

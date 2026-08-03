@@ -27,7 +27,7 @@ Templates), and Prompts.
 ### Protocol and SDK
 
 - CtrlZebra targets and accepts only protocol version `2026-07-28` in stage 14. Older versions and
-  unknown future versions fail initialization rather than automatically changing behavior.
+  unknown future versions fail connection negotiation rather than automatically changing behavior.
 - The implementation adopts the official `@modelcontextprotocol/client` package and initially pins
   it to exactly `2.0.0`, with its transitive `@modelcontextprotocol/core` remaining private to the
   SDK. Dependency declarations use no caret, tilde, or `latest` tag.
@@ -62,6 +62,11 @@ One Extension controller owns at most one connection and one generation. The SDK
 explicitly starts and disconnects it. Activation, restore, model output, list notifications, and
 background work cannot connect or retry. Closing a generation shuts the result gate before abort
 and cleanup, so late data has no Core, persistence, Protocol, or UI effect.
+
+The pinned modern era connects through `server/discover`. It does not send the legacy
+`initialize` / `notifications/initialized` exchange, which the SDK reserves for pre-`2026-07-28`
+protocols. Capabilities remain unavailable until discovery completes and the exact pinned version
+is accepted.
 
 ### Capabilities and content
 
@@ -162,6 +167,18 @@ interfaces decided here.
 - Future Streamable HTTP/OAuth, Client primitives, Tasks, multimodal content, multiple Servers, or
   protocol upgrades must add their own security, Protocol, persistence, UX, testing, and lifecycle
   decisions rather than extending this contract implicitly.
+
+## T1402 pre-implementation correction
+
+The original T1401 wording described the T1402 lifecycle as
+`initialize → initialized → operation → disconnect`. Inspection of the pinned stable
+`@modelcontextprotocol/client` `2.0.0` package and current official SDK documentation confirmed that
+the `2026-07-28` modern method registry removes `initialize` and `notifications/initialized`; pinned
+version negotiation uses `server/discover` instead. The lifecycle contract is therefore corrected
+to `server/discover → connected → operation → disconnect`, and the unimplemented stable error name
+`initialize-failed` is corrected to `connect-failed`. This is a factual compatibility correction;
+it does not change the accepted SDK version, protocol version, capability scope, transport, or
+security boundary.
 
 ## Reviewed primary references
 
