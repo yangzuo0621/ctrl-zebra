@@ -64,11 +64,11 @@
 **进度摘要**：
 
 - 总任务：98
-- 已完成：91
-- 进行中：1
+- 已完成：92
+- 进行中：0
 - 受阻：0
 - 待开始：6
-- 当前任务：T1403
+- 当前任务：无
 - 下一任务：T1404
 - 最后更新：2026-08-03
 
@@ -165,7 +165,7 @@
 | 13 | T1304 | 已完成 | [#135](https://github.com/yangzuo0621/ctrl-zebra/pull/135) | 2026-07-31 |
 | 14 | T1401 | 已完成 | [#141](https://github.com/yangzuo0621/ctrl-zebra/pull/141) | 2026-08-03 |
 | 14 | T1402 | 已完成 | [#143](https://github.com/yangzuo0621/ctrl-zebra/pull/143) | 2026-08-03 |
-| 14 | T1403 | 进行中 | — | — |
+| 14 | T1403 | 已完成 | [#144](https://github.com/yangzuo0621/ctrl-zebra/pull/144) | 2026-08-03 |
 | 14 | T1404 | 待开始 | — | — |
 | 14 | T1405 | 待开始 | — | — |
 | 14 | T1406 | 待开始 | — | — |
@@ -240,4 +240,5 @@
 均已完成。T1304 由 [#135](https://github.com/yangzuo0621/ctrl-zebra/pull/135) 交付。阶段 14
 已规划为[受控的 MCP Client 与三类 Server 原语](roadmap/phases/phase-14.md)，包含 T1401–T1409；
 T1401 由 [#141](https://github.com/yangzuo0621/ctrl-zebra/pull/141) 交付；T1402 由
-[#143](https://github.com/yangzuo0621/ctrl-zebra/pull/143) 交付；当前任务为 T1403，下一任务为 T1404。
+[#143](https://github.com/yangzuo0621/ctrl-zebra/pull/143) 交付；T1403 由
+[#144](https://github.com/yangzuo0621/ctrl-zebra/pull/144) 交付；当前没有进行中任务，下一任务为 T1404。
