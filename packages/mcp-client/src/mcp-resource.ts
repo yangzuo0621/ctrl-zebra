@@ -214,7 +214,16 @@ export function normalizeMcpResourceResult(
   value: unknown,
 ): McpResourceSnapshotView {
   const result = readRecord(value);
-  if (Object.keys(result).some((key) => key !== "_meta" && key !== "contents")) {
+  if (
+    Object.keys(result).some(
+      (key) => key !== "_meta" && key !== "ttlMs" && key !== "cacheScope" && key !== "contents",
+    ) ||
+    (result.ttlMs !== undefined &&
+      (!Number.isSafeInteger(result.ttlMs) || (result.ttlMs as number) < 0)) ||
+    (result.cacheScope !== undefined &&
+      result.cacheScope !== "public" &&
+      result.cacheScope !== "private")
+  ) {
     throw new McpResourceError("malformed-message");
   }
   if (!Array.isArray(result.contents) || result.contents.length === 0) {

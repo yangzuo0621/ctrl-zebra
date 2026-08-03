@@ -82,6 +82,33 @@ describe("MCP Prompt projection", () => {
     });
   });
 
+  it("validates and discards SDK cache metadata", () => {
+    expect(
+      normalizeMcpPromptResult(
+        context,
+        "review",
+        {},
+        {
+          ttlMs: 0,
+          cacheScope: "private",
+          messages: [{ role: "user", content: { type: "text", text: "cached" } }],
+        },
+      ),
+    ).toMatchObject({ promptName: "review", messages: [{ text: "cached" }] });
+    expect(() =>
+      normalizeMcpPromptResult(
+        context,
+        "review",
+        {},
+        {
+          ttlMs: 1.5,
+          cacheScope: "private",
+          messages: [{ role: "user", content: { type: "text", text: "cached" } }],
+        },
+      ),
+    ).toThrow(McpPromptError);
+  });
+
   it.each([
     { messages: [{ role: "system", content: { type: "text", text: "hidden" } }] },
     { messages: [{ role: "user", content: { type: "image", data: "x" } }] },

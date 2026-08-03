@@ -38,6 +38,8 @@ The verifier rejects the package if any entry contains or represents:
 - source files, tests, fixtures, snapshots, coverage, caches, or `.vscode-test` state;
 - source maps, lockfiles, workspace configuration, Git metadata, CI files, or build tooling;
 - `.env` files, credentials, API keys, authentication material, logs, or local editor state;
+- MCP fixture Servers, user or developer MCP configuration, raw MCP logs or transcripts, captured
+  stderr, caches, credentials, and executable files not already reviewed as declared package media;
 - `node_modules`, nested archives, or files outside the documented allowlist; or
 - absolute paths, parent-directory segments, backslashes, or duplicate archive paths.
 

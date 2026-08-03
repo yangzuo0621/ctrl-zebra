@@ -52,3 +52,29 @@ candidate commit. A checked repository gate is not evidence that the VSIX was pu
 Verification completed on 2026-07-22. The inspected and smoke-tested candidate is
 `ctrl-zebra-0.0.0-2dee574f5cdf.vsix`: 11 files, 437,435 compressed bytes, 2,367,140 uncompressed
 bytes, with source commit `2dee574f5cdf724703bb0b44858ba7b7999a18d2` in its build metadata.
+
+## Stage 14 MCP release addendum
+
+The T1409 candidate must additionally satisfy the following gates before its PR is merged. These
+checks do not authorize Marketplace publication, remote MCP transports, authentication, or any
+capability outside Stage 14.
+
+- [x] A deterministic local fixture proves exact MCP `2026-07-28` negotiation, paginated Tools,
+  Resources, Resource Templates and Prompts, list-change refresh, Tool calls, Resource reads, Prompt
+  retrieval, errors, cancellation, disconnect, late-result rejection and process cleanup without
+  network access, developer configuration or credentials.
+- [x] Extension Host integration verifies configuration validation, explicit connection rejection,
+  disconnect and lack of automatic startup through public commands; controller and component tests
+  retain exact startup and per-Tool approval coverage.
+- [x] The README documents configuration, startup risk, the three Server primitives, approvals,
+  recovery and known limitations; the privacy notice covers external Server and model-provider data
+  flows.
+- [x] The VSIX smoke test exercises the installed MCP configuration and disconnect gates. Independent
+  archive inspection confirms the artifact contains no fixture Server, MCP configuration, raw MCP
+  log, credential, cache or unreviewed executable.
+- [x] `pnpm install --frozen-lockfile`, `pnpm check`, `pnpm typecheck`, `pnpm test`, and `pnpm build`
+  pass on the candidate; the exact clean, pushed commit passes `pnpm package:vsix` and
+  `pnpm smoke:vsix -- <artifact>`.
+- [x] Manual trusted and untrusted workspace paths verify connection/startup approval, Tools,
+  Resources, Prompts, cancellation, failure, explicit restart and disconnect with no late UI,
+  context injection, persistence, model continuation or residual process.

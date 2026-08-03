@@ -1,6 +1,6 @@
 # CtrlZebra Privacy Notice
 
-Effective date: 2026-07-22
+Effective date: 2026-08-03
 
 This notice describes the data behavior of the Phase 1 CtrlZebra desktop VS Code extension. It does
 not replace the privacy terms of Visual Studio Code, the operating system, a model provider, or a
@@ -31,6 +31,9 @@ The Extension Host stores data using VS Code-owned facilities on the user's mach
   event categories, outcomes, durations, process RSS samples, and correlation identifiers; they
   exclude prompts, responses, file contents, command output, paths, credentials, and raw third-party
   errors.
+- The optional MCP Server configuration remains in VS Code machine settings. Live MCP catalogs,
+  executable details, environment values, raw protocol messages, stderr, Server errors, and process
+  handles are not copied into Session storage, Webview state, model context, or logs.
 
 CtrlZebra currently has no automatic Session or Checkpoint retention period, pruning policy, or
 in-product delete control. Data remains subject to VS Code's extension-storage lifecycle and any
@@ -45,6 +48,8 @@ Code settings. Depending on the conversation, this can include:
 - tool definitions and bounded tool results;
 - model responses needed to continue a tool loop; and
 - workspace source text returned by an approved read operation or other tool result.
+- bounded text from an MCP Resource that the user explicitly previews and attaches, a Prompt that
+  the user explicitly previews and confirms, and results from individually approved MCP Tool calls.
 
 The provider may process and retain this data under its own terms and privacy policy. CtrlZebra does
 not proxy provider traffic or receive a copy. Users are responsible for selecting an appropriate
@@ -59,6 +64,14 @@ commands require a trusted workspace and a fresh operation-bound approval. An ap
 locally with a minimal environment allowlist and shell interpretation disabled. The command itself
 may transmit data if its executable and arguments request network or external-system access;
 CtrlZebra does not add a second consent or privacy layer beyond the exact command approval.
+
+An explicitly configured local MCP Server is a separate external process running with the user's
+operating-system authority. It may independently access local files, network services, or other
+data according to its own implementation. CtrlZebra starts it only in a trusted single-folder
+workspace after an exact startup approval, supplies only a minimal environment allowlist, and does
+not inject credentials. Every MCP Tool call requires a separate exact single-use approval, but
+Resource reads and Prompt retrieval are user-selected context operations rather than operating-system
+sandbox controls. Users must review the Server software and any privacy terms before configuring it.
 
 ## Security and disclosure
 
