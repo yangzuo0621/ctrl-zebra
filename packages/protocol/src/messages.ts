@@ -1,5 +1,4 @@
 import { z } from "zod";
-
 import {
   approvalRequestIdSchema,
   approvalRequestSchema,
@@ -7,6 +6,14 @@ import {
 } from "./approval.js";
 import { assistantMessageSchema, userMessageSchema } from "./chat-message.js";
 import { checkpointIdSchema, checkpointSummarySchema } from "./checkpoint.js";
+import {
+  mcpPromptArgumentsSchema,
+  mcpPromptCatalogSchema,
+  mcpPromptConfirmationSchema,
+  mcpPromptNameSchema,
+  mcpPromptPreviewIdSchema,
+  mcpPromptPreviewSchema,
+} from "./mcp-prompt.js";
 import {
   mcpGenerationSchema,
   mcpResourceAttachmentSchema,
@@ -105,6 +112,61 @@ export const mcpResourcePreviewMessageSchema = z.discriminatedUnion("status", [
     type: z.literal("extension/mcp-resource-preview"),
     status: z.literal("error"),
     code: z.enum(["resource-unavailable", "resource-unsupported", "limit-exceeded", "internal"]),
+    message: z.string().min(1).max(1_024),
+  }),
+]);
+
+export const mcpPromptPreviewRequestMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("webview/mcp-prompt-preview"),
+  serverId: mcpServerIdSchema,
+  generation: mcpGenerationSchema,
+  promptName: mcpPromptNameSchema,
+  arguments: mcpPromptArgumentsSchema,
+});
+export const mcpPromptConfirmMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("webview/mcp-prompt-confirm"),
+  serverId: mcpServerIdSchema,
+  generation: mcpGenerationSchema,
+  previewId: mcpPromptPreviewIdSchema,
+});
+export const mcpPromptCancelMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("webview/mcp-prompt-cancel"),
+  serverId: mcpServerIdSchema,
+  generation: mcpGenerationSchema,
+  previewId: mcpPromptPreviewIdSchema,
+});
+export const mcpPromptsMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("extension/mcp-prompts"),
+  catalog: mcpPromptCatalogSchema,
+});
+export const mcpPromptPreviewMessageSchema = z.discriminatedUnion("status", [
+  z.strictObject({
+    ...protocolEnvelopeSchema.shape,
+    type: z.literal("extension/mcp-prompt-preview"),
+    status: z.literal("ready"),
+    preview: mcpPromptPreviewSchema,
+  }),
+  z.strictObject({
+    ...protocolEnvelopeSchema.shape,
+    type: z.literal("extension/mcp-prompt-preview"),
+    status: z.literal("confirmed"),
+    confirmation: mcpPromptConfirmationSchema,
+  }),
+  z.strictObject({
+    ...protocolEnvelopeSchema.shape,
+    type: z.literal("extension/mcp-prompt-preview"),
+    status: z.literal("cancelled"),
+    previewId: mcpPromptPreviewIdSchema,
+  }),
+  z.strictObject({
+    ...protocolEnvelopeSchema.shape,
+    type: z.literal("extension/mcp-prompt-preview"),
+    status: z.literal("error"),
+    code: z.enum(["prompt-unavailable", "prompt-unsupported", "limit-exceeded", "internal"]),
     message: z.string().min(1).max(1_024),
   }),
 ]);
@@ -326,6 +388,9 @@ export const webviewToExtensionMessageSchema = z.discriminatedUnion("type", [
   cancelMessageSchema,
   mcpResourceReadMessageSchema,
   mcpResourceAttachMessageSchema,
+  mcpPromptPreviewRequestMessageSchema,
+  mcpPromptConfirmMessageSchema,
+  mcpPromptCancelMessageSchema,
   showApprovalDiffMessageSchema,
   approvalDecisionMessageSchema,
   listSessionsMessageSchema,
@@ -353,6 +418,8 @@ export const extensionToWebviewMessageSchema = z.union([
   checkpointErrorMessageSchema,
   mcpResourcesMessageSchema,
   mcpResourcePreviewMessageSchema,
+  mcpPromptsMessageSchema,
+  mcpPromptPreviewMessageSchema,
 ]);
 
 export type ProtocolEnvelope = z.infer<typeof protocolEnvelopeSchema>;
@@ -364,6 +431,11 @@ export type McpResourceReadMessage = z.infer<typeof mcpResourceReadMessageSchema
 export type McpResourceAttachMessage = z.infer<typeof mcpResourceAttachMessageSchema>;
 export type McpResourcesMessage = z.infer<typeof mcpResourcesMessageSchema>;
 export type McpResourcePreviewMessage = z.infer<typeof mcpResourcePreviewMessageSchema>;
+export type McpPromptPreviewRequestMessage = z.infer<typeof mcpPromptPreviewRequestMessageSchema>;
+export type McpPromptConfirmMessage = z.infer<typeof mcpPromptConfirmMessageSchema>;
+export type McpPromptCancelMessage = z.infer<typeof mcpPromptCancelMessageSchema>;
+export type McpPromptsMessage = z.infer<typeof mcpPromptsMessageSchema>;
+export type McpPromptPreviewMessage = z.infer<typeof mcpPromptPreviewMessageSchema>;
 export type ListSessionsMessage = z.infer<typeof listSessionsMessageSchema>;
 export type RestoreSessionMessage = z.infer<typeof restoreSessionMessageSchema>;
 export type ListCheckpointsMessage = z.infer<typeof listCheckpointsMessageSchema>;

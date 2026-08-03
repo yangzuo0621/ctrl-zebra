@@ -137,6 +137,8 @@ export type { DomainEvent, EventSink } from "./events.js";
 export {
   ExternalResourceContextBudgetError,
   maxExternalResourceAttachments,
+  projectExternalMcpContext,
+  projectExternalPromptContext,
   projectExternalResourceContext,
 } from "./external-resource-context.js";
 export type { ModelMessageTokenCounter, PrunedModelHistory } from "./history-pruner.js";

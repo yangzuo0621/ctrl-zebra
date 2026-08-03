@@ -20,6 +20,13 @@ export const maxMcpResourceUriBytes = 8_192;
 export const maxMcpResourceItems = 32;
 export const maxMcpResourceCodePoints = 131_072;
 export const maxMcpResourceTextBytes = 524_288;
+export const maxMcpPromptArguments = 32;
+export const maxMcpPromptArgumentNameCodePoints = 64;
+export const maxMcpPromptArgumentValueCodePoints = 4_096;
+export const maxMcpPromptArgumentsBytes = 65_536;
+export const maxMcpPromptMessages = 32;
+export const maxMcpPromptCodePoints = 65_536;
+export const maxMcpPromptTextBytes = 262_144;
 
 export type McpClientErrorCode =
   | "connect-failed"
@@ -33,6 +40,8 @@ export type McpClientErrorCode =
   | "tool-unavailable"
   | "resource-unavailable"
   | "resource-unsupported"
+  | "prompt-unavailable"
+  | "prompt-unsupported"
   | "termination-unconfirmed"
   | "internal";
 
@@ -125,6 +134,11 @@ export interface McpToolArguments {
 }
 
 export interface McpResourceDiscoveryContext {
+  readonly server: McpServerIdentity;
+  readonly generation: number;
+}
+
+export interface McpPromptDiscoveryContext {
   readonly server: McpServerIdentity;
   readonly generation: number;
 }

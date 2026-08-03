@@ -3,13 +3,15 @@ import type {
   McpClientErrorCode,
   McpConnectedState,
   McpDisconnectOutcome,
+  McpPromptCatalogView,
+  McpPromptResultView,
   McpResourceCatalogView,
   McpResourceSelection,
   McpResourceSnapshotView,
   McpStdioPort,
   McpToolSnapshotView,
 } from "@ctrl-zebra/mcp-client";
-import { McpResourceError, McpToolDiscoveryError } from "@ctrl-zebra/mcp-client";
+import { McpPromptError, McpResourceError, McpToolDiscoveryError } from "@ctrl-zebra/mcp-client";
 
 import {
   type McpServerConfiguration,
@@ -66,6 +68,19 @@ interface ControlledMcpClientPort {
     selection: McpResourceSelection,
     signal?: AbortSignal,
   ): Promise<McpResourceSnapshotView>;
+  discoverPrompts?(
+    context: {
+      readonly server: { readonly serverId: string; readonly displayName: string };
+      readonly generation: number;
+    },
+    signal?: AbortSignal,
+  ): Promise<McpPromptCatalogView>;
+  getPromptCatalog?(): McpPromptCatalogView | undefined;
+  getPrompt?(
+    promptName: string,
+    argumentsValue: Readonly<Record<string, string>>,
+    signal?: AbortSignal,
+  ): Promise<McpPromptResultView>;
   disconnect(): Promise<McpDisconnectOutcome>;
   dispose(): Promise<McpDisconnectOutcome>;
 }
@@ -130,6 +145,29 @@ export class McpConnectionController {
 
   getResourceCatalog(): McpResourceCatalogView | undefined {
     return this.#client?.getResourceCatalog?.();
+  }
+
+  getPromptCatalog(): McpPromptCatalogView | undefined {
+    return this.#client?.getPromptCatalog?.();
+  }
+
+  async getPrompt(
+    serverId: string,
+    generation: number,
+    promptName: string,
+    argumentsValue: Readonly<Record<string, string>>,
+    signal?: AbortSignal,
+  ): Promise<McpPromptResultView> {
+    const client = this.#client;
+    if (
+      client?.getPrompt === undefined ||
+      this.#snapshot.status !== "connected" ||
+      this.#snapshot.server?.serverId !== serverId ||
+      this.#snapshot.generation !== generation
+    ) {
+      throw new McpPromptError("prompt-unavailable");
+    }
+    return client.getPrompt(promptName, argumentsValue, signal);
   }
 
   async readResource(
@@ -316,6 +354,10 @@ export class McpConnectionController {
           { server: identity(operation.configuration), generation },
           signal,
         );
+        await this.#client.discoverPrompts?.(
+          { server: identity(operation.configuration), generation },
+          signal,
+        );
       } catch (error) {
         if (signal.aborted) {
           throw signal.reason;
@@ -325,6 +367,10 @@ export class McpConnectionController {
           return this.#failAndNotify(error.code, operation.configuration);
         }
         if (error instanceof McpResourceError) {
+          await this.#client.disconnect();
+          return this.#failAndNotify(error.code, operation.configuration);
+        }
+        if (error instanceof McpPromptError) {
           await this.#client.disconnect();
           return this.#failAndNotify(error.code, operation.configuration);
         }
@@ -492,6 +538,8 @@ const mcpHostErrorMessages = {
   "tool-unavailable": "The MCP Tool is unavailable for the current connection.",
   "resource-unavailable": "The MCP Resource is unavailable for the current connection.",
   "resource-unsupported": "The MCP Resource uses unsupported content.",
+  "prompt-unavailable": "The MCP Prompt is unavailable for the current connection.",
+  "prompt-unsupported": "The MCP Prompt uses unsupported content.",
   "termination-unconfirmed": "The MCP Server process could not be confirmed as terminated.",
   internal: "The MCP connection failed unexpectedly.",
 } as const satisfies Record<McpHostErrorCode, string>;

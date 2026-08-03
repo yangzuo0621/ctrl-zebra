@@ -11,6 +11,7 @@ import {
 
 import type { ChatRunner } from "./controllers/chat-runner.js";
 import type { CheckpointActions } from "./controllers/checkpoint-actions.js";
+import type { McpPromptActions } from "./controllers/mcp-prompt-actions.js";
 import type { McpResourceActions } from "./controllers/mcp-resource-actions.js";
 import type { SessionRecoveryActions } from "./controllers/session-recovery.js";
 import {
@@ -87,6 +88,7 @@ class AgentViewProvider implements WebviewViewProvider {
     private readonly reportDisplay: () => void = () => {},
     private readonly reportRunFailure: (error: unknown) => void = () => {},
     private readonly createResourceActions?: () => McpResourceActions,
+    private readonly createPromptActions?: () => McpPromptActions,
   ) {}
 
   resolveWebviewView(webviewView: WebviewView): void {
@@ -104,6 +106,7 @@ class AgentViewProvider implements WebviewViewProvider {
       this.checkpointActions,
       this.reportRunFailure,
       this.createResourceActions?.(),
+      this.createPromptActions?.(),
     );
     this.reportDisplay();
   }
@@ -120,6 +123,7 @@ export function registerAgentView(
   reportDisplay?: () => void,
   reportRunFailure?: (error: unknown) => void,
   createResourceActions?: () => McpResourceActions,
+  createPromptActions?: () => McpPromptActions,
 ): Disposable {
   return registrar(
     agentViewId,
@@ -133,6 +137,7 @@ export function registerAgentView(
       reportDisplay,
       reportRunFailure,
       createResourceActions,
+      createPromptActions,
     ),
   );
 }

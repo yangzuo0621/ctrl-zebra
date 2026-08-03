@@ -1,6 +1,7 @@
 import {
   type ApprovalDecisionIntent,
   type ExtensionToWebviewMessage,
+  type McpPromptConfirmation,
   type McpResourceAttachment,
   protocolVersion,
   type RunStatus,
@@ -39,6 +40,7 @@ export class WebviewRunMessageHandler {
     requestId: string,
     content: string,
     externalResources: readonly McpResourceAttachment[] = [],
+    externalPrompts: readonly McpPromptConfirmation[] = [],
   ): void {
     if (this.#activeRun !== undefined) {
       return;
@@ -59,6 +61,7 @@ export class WebviewRunMessageHandler {
         run.abortController.signal,
         (event) => this.#handleRuntimeEvent(run, event),
         externalResources,
+        externalPrompts,
       )
       .then(
         () => {

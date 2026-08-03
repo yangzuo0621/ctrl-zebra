@@ -7,13 +7,14 @@ import {
   type JsonValue,
   type ModelGateway,
   maxModelContextWindowTokens,
-  projectExternalResourceContext,
+  projectExternalMcpContext,
   type SessionRepository,
   type ToolApprovalWorkflow,
   ToolRegistry,
 } from "@ctrl-zebra/core";
 import {
   jsonValueSchema,
+  type McpPromptConfirmation,
   type McpResourceAttachment,
   type PersistedMcpToolSource,
   persistenceFormatVersion,
@@ -41,6 +42,7 @@ export interface ChatRunner {
     signal: AbortSignal,
     emit: (event: ChatRunnerEvent) => void,
     externalResources?: readonly McpResourceAttachment[],
+    externalPrompts?: readonly McpPromptConfirmation[],
   ): Promise<void>;
 }
 
@@ -80,10 +82,11 @@ export function createChatRunner({
   mcpToolSources,
 }: ChatRunnerDependencies): ChatRunner {
   return {
-    async run(content, signal, emit, externalResources = []) {
+    async run(content, signal, emit, externalResources = [], externalPrompts = []) {
       signal.throwIfAborted();
-      projectExternalResourceContext(
+      projectExternalMcpContext(
         externalResources,
+        externalPrompts,
         allocateTokenBudget(maxModelContextWindowTokens).filesTokens,
       );
       const sessionId = createId();
@@ -109,6 +112,7 @@ export function createChatRunner({
           {
             approvalWorkflow,
             externalResources,
+            externalPrompts,
           },
         );
         try {
@@ -147,6 +151,17 @@ export function createChatRunner({
           },
         });
       }
+      for (const confirmation of externalPrompts) {
+        sequence += 1;
+        await sessionRepository.appendEvent(sessionId, {
+          sequence,
+          recordedAt: userMessage.createdAt,
+          event: {
+            type: "session.mcp-prompt-confirmed",
+            data: jsonValueSchema.parse(confirmation),
+          },
+        });
+      }
       let persistence = Promise.resolve();
       const persist = (event: ChatRunnerEvent) => {
         emit(event);
@@ -181,6 +196,7 @@ export function createChatRunner({
         {
           approvalWorkflow,
           externalResources,
+          externalPrompts,
         },
       );
 
@@ -224,7 +240,7 @@ export function createSelectingChatRunner({
   selectSessionRepository,
 }: SelectingChatRunnerDependencies): ChatRunner {
   return {
-    async run(content, signal, emit, externalResources = []) {
+    async run(content, signal, emit, externalResources = [], externalPrompts = []) {
       signal.throwIfAborted();
       const sessionRepository = await selectSessionRepository?.();
       signal.throwIfAborted();
@@ -242,7 +258,7 @@ export function createSelectingChatRunner({
         approvalWorkflow,
         sessionRepository,
         mcpToolSources: selection.mcpToolSources,
-      }).run(content, signal, emit, externalResources);
+      }).run(content, signal, emit, externalResources, externalPrompts);
     },
   };
 }

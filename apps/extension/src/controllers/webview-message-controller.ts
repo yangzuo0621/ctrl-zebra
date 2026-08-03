@@ -1,4 +1,4 @@
-import { McpResourceError } from "@ctrl-zebra/mcp-client";
+import { McpPromptError, McpResourceError } from "@ctrl-zebra/mcp-client";
 import {
   type ApprovalDecisionIntent,
   type ExtensionToWebviewMessage,
@@ -7,6 +7,7 @@ import {
 } from "@ctrl-zebra/protocol";
 import type { ChatRunner } from "./chat-runner.js";
 import type { CheckpointActions } from "./checkpoint-actions.js";
+import { type McpPromptActions, McpPromptPreviewCancelledError } from "./mcp-prompt-actions.js";
 import { type McpResourceActions, McpResourceReadCancelledError } from "./mcp-resource-actions.js";
 import type { SessionRecoveryActions } from "./session-recovery.js";
 import { WebviewCheckpointMessageHandler } from "./webview-checkpoint-message-handler.js";
@@ -59,6 +60,7 @@ export function bindWebviewMessageController(
   checkpointActions?: CheckpointActions,
   reportRunFailure: (error: unknown) => void = () => {},
   resourceActions?: McpResourceActions,
+  promptActions?: McpPromptActions,
 ): void {
   let disposed = false;
   const post = (message: ExtensionToWebviewMessage) => {
@@ -94,7 +96,60 @@ export function bindWebviewMessageController(
         return;
       case "webview/submit":
         if (runMessages.canStart()) {
-          runMessages.start(data.requestId, data.content, resourceActions?.takeAttachments());
+          runMessages.start(
+            data.requestId,
+            data.content,
+            resourceActions?.takeAttachments(),
+            promptActions?.takeConfirmations(),
+          );
+        }
+        return;
+      case "webview/mcp-prompt-preview":
+        void promptActions
+          ?.preview(data.serverId, data.generation, data.promptName, data.arguments)
+          .then((preview) => {
+            post({
+              protocolVersion,
+              type: "extension/mcp-prompt-preview",
+              requestId: data.requestId,
+              status: "ready",
+              preview,
+            });
+          })
+          .catch((error: unknown) => {
+            if (error instanceof McpPromptPreviewCancelledError) return;
+            postPromptError(post, data.requestId, error);
+          });
+        return;
+      case "webview/mcp-prompt-confirm":
+        try {
+          const confirmation = promptActions?.confirm(
+            data.serverId,
+            data.generation,
+            data.previewId,
+          );
+          if (confirmation !== undefined) {
+            post({
+              protocolVersion,
+              type: "extension/mcp-prompt-preview",
+              requestId: data.requestId,
+              status: "confirmed",
+              confirmation,
+            });
+          }
+        } catch (error) {
+          postPromptError(post, data.requestId, error);
+        }
+        return;
+      case "webview/mcp-prompt-cancel":
+        if (promptActions?.cancel(data.serverId, data.generation, data.previewId) === true) {
+          post({
+            protocolVersion,
+            type: "extension/mcp-prompt-preview",
+            requestId: data.requestId,
+            status: "cancelled",
+            previewId: data.previewId,
+          });
         }
         return;
       case "webview/mcp-resource-read":
@@ -141,6 +196,7 @@ export function bindWebviewMessageController(
         sessionMessages.list(data.requestId);
         return;
       case "webview/restore-session":
+        promptActions?.clearInput();
         sessionMessages.restore(data.requestId, data.sessionId);
         return;
       case "webview/list-checkpoints":
@@ -166,9 +222,38 @@ export function bindWebviewMessageController(
     runMessages.dispose();
     checkpointMessages.dispose();
     resourceActions?.dispose();
+    promptActions?.dispose();
     messageSubscription.dispose();
     disposalSubscription?.dispose();
     disposalSubscription = undefined;
+  });
+}
+
+function postPromptError(
+  post: (message: ExtensionToWebviewMessage) => void,
+  requestId: string,
+  error: unknown,
+): void {
+  const code =
+    error instanceof McpPromptError &&
+    (error.code === "prompt-unavailable" ||
+      error.code === "prompt-unsupported" ||
+      error.code === "limit-exceeded")
+      ? error.code
+      : "internal";
+  const messages = {
+    "prompt-unavailable": "The MCP Prompt is unavailable for the current connection.",
+    "prompt-unsupported": "The MCP Prompt uses unsupported content.",
+    "limit-exceeded": "The MCP Prompt exceeded a bounded content limit.",
+    internal: "The MCP Prompt operation failed unexpectedly.",
+  } as const;
+  post({
+    protocolVersion,
+    type: "extension/mcp-prompt-preview",
+    requestId,
+    status: "error",
+    code,
+    message: messages[code],
   });
 }
 
