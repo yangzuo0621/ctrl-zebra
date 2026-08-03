@@ -200,18 +200,19 @@ arguments, cwd, configuration scope, credentials, or transport details.
 ```
 
 `protocolVersion` exists only in `connected`; projected capabilities are all false before a
-successful initialization. Extra advertised Server capabilities are absent rather than copied into
-an open map. The Schema refines this object by status: `connected` requires the exact protocol
-version and forbids `error`; `failed` requires `error`, omits the protocol version, and has all
-capabilities false; all other states omit both protocol version and error and expose no usable
-capability. `generation` is an opaque freshness fence for consumers, not authorization.
+successful modern `server/discover` exchange. Extra advertised Server capabilities are absent
+rather than copied into an open map. The Schema refines this object by status: `connected` requires
+the exact protocol version and forbids `error`; `failed` requires `error`, omits the protocol
+version, and has all capabilities false; all other states omit both protocol version and error and
+expose no usable capability. `generation` is an opaque freshness fence for consumers, not
+authorization.
 
 `McpErrorDto` contains only `{ code, message }`. `message` is a fixed user-safe string of at most
 1,024 code points. The stable closed code set is:
 
 ```text
 configuration-invalid | workspace-untrusted | approval-denied | approval-expired |
-approval-invalidated | spawn-failed | initialize-failed | protocol-incompatible |
+approval-invalidated | spawn-failed | connect-failed | protocol-incompatible |
 capability-unsupported | malformed-message | invalid-schema | limit-exceeded |
 server-exited | disconnected | termination-unconfirmed | tool-unavailable |
 tool-invalid-input | tool-failed | tool-invalid-output | resource-unavailable |
