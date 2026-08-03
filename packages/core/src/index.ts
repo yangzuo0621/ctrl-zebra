@@ -1,5 +1,6 @@
 export type {
   ApprovalDecision,
+  ApprovalMcpSource,
   ApprovalPresentation,
   ApprovalRequest,
   ApprovalRequestId,
@@ -19,6 +20,7 @@ export type {
 } from "@ctrl-zebra/protocol";
 export {
   approvalDecisionSchema,
+  approvalMcpSourceSchema,
   approvalPresentationSchema,
   approvalRequestIdSchema,
   approvalRequestSchema,
@@ -27,6 +29,7 @@ export {
   approvalScopeSchema,
   approvalStatusSchema,
   jsonValueSchema,
+  maxApprovalMcpToolNameCharacters,
   maxApprovalPresentationSummaryCharacters,
   maxApprovalPresentationTitleCharacters,
   maxApprovalResources,
@@ -230,7 +233,12 @@ export {
   maxToolOutputLines,
 } from "./tool-output-limiter.js";
 export type { AgentTool, ToolExecutionContext, ToolExecutionOutput } from "./tool-registry.js";
-export { DuplicateToolRegistrationError, ToolRegistry } from "./tool-registry.js";
+export {
+  DuplicateToolRegistrationError,
+  ToolExecutionError,
+  ToolRegistry,
+  ToolUnavailableError,
+} from "./tool-registry.js";
 export type { ToolRepetitionObservation } from "./tool-repetition-detector.js";
 export {
   defaultToolRepetitionThreshold,

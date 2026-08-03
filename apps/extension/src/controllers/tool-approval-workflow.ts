@@ -26,16 +26,14 @@ export class ToolApprovalWorkflowRouter implements ToolApprovalWorkflow {
   constructor(
     private readonly fileEdits: FileEditApprovalWorkflowOwner,
     private readonly commands: ApprovalWorkflowOwner,
+    private readonly mcpTools?: ApprovalWorkflowOwner,
   ) {}
 
   async create(
     prepared: PreparedToolApproval,
     signal: AbortSignal,
   ): Promise<ToolApprovalOperation> {
-    const owner =
-      prepared.risk === "execute" && prepared.call.name === runCommandToolName
-        ? this.commands
-        : this.fileEdits;
+    const owner = this.selectOwner(prepared);
     const operation = await owner.create(prepared, signal);
     signal.throwIfAborted();
     const approvalId = operation.request.id;
@@ -92,6 +90,23 @@ export class ToolApprovalWorkflowRouter implements ToolApprovalWorkflow {
     this.#owners.clear();
     this.fileEdits.dispose();
     this.commands.dispose();
+    this.mcpTools?.dispose();
+  }
+
+  #selectMcpOwner(): ApprovalWorkflowOwner {
+    if (this.mcpTools === undefined) {
+      throw new Error("MCP Tool approval workflow is unavailable.");
+    }
+    return this.mcpTools;
+  }
+
+  private selectOwner(prepared: PreparedToolApproval): ApprovalWorkflowOwner {
+    if (prepared.call.name.startsWith("mcp_")) {
+      return this.#selectMcpOwner();
+    }
+    return prepared.risk === "execute" && prepared.call.name === runCommandToolName
+      ? this.commands
+      : this.fileEdits;
   }
 
   #release(approvalId: string, owned: OwnedApproval): void {

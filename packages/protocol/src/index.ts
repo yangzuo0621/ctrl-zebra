@@ -1,5 +1,6 @@
 export type {
   ApprovalDecision,
+  ApprovalMcpSource,
   ApprovalPresentation,
   ApprovalRequest,
   ApprovalRequestId,
@@ -10,6 +11,7 @@ export type {
 } from "./approval.js";
 export {
   approvalDecisionSchema,
+  approvalMcpSourceSchema,
   approvalPresentationSchema,
   approvalRequestIdSchema,
   approvalRequestSchema,
@@ -17,6 +19,7 @@ export {
   approvalResourceSchema,
   approvalScopeSchema,
   approvalStatusSchema,
+  maxApprovalMcpToolNameCharacters,
   maxApprovalPresentationSummaryCharacters,
   maxApprovalPresentationTitleCharacters,
   maxApprovalResources,
@@ -139,6 +142,8 @@ export type {
   CheckpointPersistencePaths,
   PersistedEventPayload,
   PersistedEventRecord,
+  PersistedMcpToolEventPayload,
+  PersistedMcpToolSource,
   PersistedMessageRecord,
   PersistedReasoningEventPayload,
   SessionManifest,
@@ -152,6 +157,8 @@ export {
   persistedCheckpointIdSchema,
   persistedEventPayloadSchema,
   persistedEventRecordSchema,
+  persistedMcpToolEventPayloadSchema,
+  persistedMcpToolSourceSchema,
   persistedMessageRecordSchema,
   persistedReasoningEventPayloadSchema,
   persistedSessionIdSchema,

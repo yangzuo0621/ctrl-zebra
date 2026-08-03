@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { checkpointRunIdSchema } from "./run-id.js";
 import { sessionIdSchema } from "./session.js";
 import { toolCallSchema, toolRiskSchema } from "./tool.js";
 
@@ -7,6 +8,16 @@ export const maxApprovalPresentationTitleCharacters = 256;
 export const maxApprovalPresentationSummaryCharacters = 4_096;
 export const maxApprovalUriCharacters = 4_096;
 export const maxApprovalResources = 128;
+export const maxApprovalMcpToolNameCharacters = 65_536;
+
+export const approvalMcpSourceSchema = z.strictObject({
+  kind: z.literal("mcp"),
+  serverId: z.string().regex(/^[a-z][a-z0-9_]{0,63}$/),
+  registryName: z.string().regex(/^[a-z][a-z0-9_]{0,63}$/),
+  mcpToolName: z.string().min(1).max(maxApprovalMcpToolNameCharacters),
+  generation: z.number().int().positive(),
+  schemaId: z.string().regex(/^[a-f0-9]{64}$/),
+});
 
 export const approvalRequestIdSchema = z.string().min(1).max(128);
 
@@ -27,13 +38,32 @@ export const approvalResourceSchema = z.strictObject({
   revision: approvalResourceRevisionSchema.optional(),
 });
 
-export const approvalScopeSchema = z.strictObject({
-  sessionId: sessionIdSchema,
-  call: toolCallSchema,
-  risk: toolRiskSchema,
-  workspaceRootUri: z.string().min(1).max(maxApprovalUriCharacters).optional(),
-  resources: z.array(approvalResourceSchema).max(maxApprovalResources),
-});
+export const approvalScopeSchema = z
+  .strictObject({
+    sessionId: sessionIdSchema,
+    runId: checkpointRunIdSchema.optional(),
+    call: toolCallSchema,
+    risk: toolRiskSchema,
+    source: approvalMcpSourceSchema.optional(),
+    workspaceRootUri: z.string().min(1).max(maxApprovalUriCharacters).optional(),
+    resources: z.array(approvalResourceSchema).max(maxApprovalResources),
+  })
+  .superRefine((scope, context) => {
+    if (scope.source !== undefined && scope.runId === undefined) {
+      context.addIssue({
+        code: "custom",
+        path: ["runId"],
+        message: "MCP Tool approvals must bind the owning Run.",
+      });
+    }
+    if (scope.source !== undefined && scope.source.registryName !== scope.call.name) {
+      context.addIssue({
+        code: "custom",
+        path: ["source", "registryName"],
+        message: "MCP approval source must match the Tool Call name.",
+      });
+    }
+  });
 
 export const approvalPresentationSchema = z.strictObject({
   title: z.string().min(1).max(maxApprovalPresentationTitleCharacters),
@@ -88,6 +118,7 @@ export const approvalStatusSchema = z.enum([
 ]);
 
 export type ApprovalRequestId = z.infer<typeof approvalRequestIdSchema>;
+export type ApprovalMcpSource = z.infer<typeof approvalMcpSourceSchema>;
 export type ApprovalResourceRevision = z.infer<typeof approvalResourceRevisionSchema>;
 export type ApprovalResource = z.infer<typeof approvalResourceSchema>;
 export type ApprovalScope = z.infer<typeof approvalScopeSchema>;

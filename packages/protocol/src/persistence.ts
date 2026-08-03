@@ -9,7 +9,7 @@ import {
   reasoningLimitDataSchema,
 } from "./reasoning.js";
 import { sessionIdSchema, sessionStatusSchema } from "./session.js";
-import { jsonValueSchema } from "./tool.js";
+import { jsonValueSchema, toolCallSchema, toolNameSchema, toolResultSchema } from "./tool.js";
 
 export const persistenceFormatVersion = 1 as const;
 export const persistenceSessionsDirectory = "sessions" as const;
@@ -98,12 +98,43 @@ export const persistedReasoningEventPayloadSchema = z.discriminatedUnion("type",
   }),
 ]);
 
+export const persistedMcpToolSourceSchema = z.strictObject({
+  serverId: z.string().regex(/^[a-z][a-z0-9_]{0,63}$/),
+  registryName: toolNameSchema,
+  mcpToolName: z.string().min(1).max(65_536),
+  generation: z.number().int().positive(),
+});
+
+export const persistedMcpToolEventPayloadSchema = z
+  .discriminatedUnion("type", [
+    z.strictObject({
+      type: z.literal("session.mcp-tool-call"),
+      data: z.strictObject({ call: toolCallSchema, source: persistedMcpToolSourceSchema }),
+    }),
+    z.strictObject({
+      type: z.literal("session.mcp-tool-result"),
+      data: z.strictObject({ result: toolResultSchema, source: persistedMcpToolSourceSchema }),
+    }),
+  ])
+  .superRefine((payload, context) => {
+    const toolName =
+      payload.type === "session.mcp-tool-call" ? payload.data.call.name : payload.data.result.name;
+    if (payload.data.source.registryName !== toolName) {
+      context.addIssue({
+        code: "custom",
+        path: ["data", "source", "registryName"],
+        message: "Persisted MCP source must match the correlated Tool name.",
+      });
+    }
+  });
+
 const persistedReasoningEventTypes = new Set([
   "session.reasoning-start",
   "session.reasoning-delta",
   "session.reasoning-end",
   "session.reasoning-limit",
 ]);
+const persistedMcpToolEventTypes = new Set(["session.mcp-tool-call", "session.mcp-tool-result"]);
 
 export const persistedEventPayloadSchema = genericPersistedEventPayloadSchema.superRefine(
   (payload, context) => {
@@ -114,6 +145,15 @@ export const persistedEventPayloadSchema = genericPersistedEventPayloadSchema.su
       context.addIssue({
         code: "custom",
         message: "Persisted reasoning events must match their strict version 1 schema.",
+      });
+    }
+    if (
+      persistedMcpToolEventTypes.has(payload.type) &&
+      !persistedMcpToolEventPayloadSchema.safeParse(payload).success
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Persisted MCP Tool events must match their strict version 1 schema.",
       });
     }
   },
@@ -129,6 +169,8 @@ export type SessionManifest = z.infer<typeof sessionManifestSchema>;
 export type PersistedMessageRecord = z.infer<typeof persistedMessageRecordSchema>;
 export type PersistedEventPayload = z.infer<typeof persistedEventPayloadSchema>;
 export type PersistedReasoningEventPayload = z.infer<typeof persistedReasoningEventPayloadSchema>;
+export type PersistedMcpToolSource = z.infer<typeof persistedMcpToolSourceSchema>;
+export type PersistedMcpToolEventPayload = z.infer<typeof persistedMcpToolEventPayloadSchema>;
 export type PersistedEventRecord = z.infer<typeof persistedEventRecordSchema>;
 
 export interface SessionPersistencePaths {

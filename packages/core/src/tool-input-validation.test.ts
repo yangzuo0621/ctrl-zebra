@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { InvalidToolInputError, parseToolInput } from "./tool-input-validation.js";
-import type { AgentTool } from "./tool-registry.js";
+import { type AgentTool, ToolUnavailableError } from "./tool-registry.js";
 
 interface ReadFileInput {
   readonly path: string;
@@ -80,6 +80,16 @@ describe("parseToolInput", () => {
 
     expect(captured).toEqual(new InvalidToolInputError("read_file"));
     expect(captured).not.toHaveProperty("cause");
+  });
+
+  it("preserves a revoked dynamic Tool as a distinct unavailable outcome", () => {
+    const tool = createReadFileTool();
+    const unavailable = new ToolUnavailableError();
+    tool.parseInput = () => {
+      throw unavailable;
+    };
+
+    expect(() => parseToolInput(tool, { path: "README.md" })).toThrow(unavailable);
   });
 });
 

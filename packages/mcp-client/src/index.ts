@@ -21,14 +21,28 @@ export {
   maxMcpListSnapshotBytes,
   maxMcpMessageBytes,
   maxMcpStderrBytes,
+  maxMcpToolArgumentsBytes,
   maxMcpToolSchemaBytes,
   maxMcpToolSchemaDepth,
   maxMcpToolSchemaNodes,
   maxMcpToolSchemaProperties,
   maxMcpToolSnapshotSchemaBytes,
+  maxMcpToolStructuredContentBytes,
+  maxMcpToolTextBytes,
+  maxMcpToolTextCodePoints,
+  maxMcpToolTextItems,
   mcpProtocolVersion,
 } from "./contracts.js";
 export { ControlledMcpClient, McpToolDiscoveryError } from "./controlled-mcp-client.js";
+export type {
+  McpToolApprovalPreparation,
+  NormalizedMcpToolResult,
+} from "./mcp-tool-call.js";
+export {
+  normalizeMcpToolResult,
+  parseMcpToolApprovalPreparation,
+  parseMcpToolArguments,
+} from "./mcp-tool-call.js";
 export { createMcpRegistryName } from "./mcp-tool-name.js";
 export type {
   CompiledExternalJsonSchema,

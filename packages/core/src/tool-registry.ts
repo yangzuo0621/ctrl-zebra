@@ -1,4 +1,4 @@
-import type { ToolName, ToolRisk } from "@ctrl-zebra/protocol";
+import type { ToolErrorCode, ToolName, ToolRisk } from "@ctrl-zebra/protocol";
 
 import type { AgentToolInputSchema, ToolDeclaration } from "./model-gateway.js";
 
@@ -22,6 +22,23 @@ export interface AgentTool<Input = unknown, Output = unknown> {
     input: Input,
     context: ToolExecutionContext,
   ): Promise<ToolExecutionOutput<unknown>>;
+}
+
+export class ToolUnavailableError extends Error {
+  constructor() {
+    super("The Tool is no longer available.");
+    this.name = "ToolUnavailableError";
+  }
+}
+
+export class ToolExecutionError extends Error {
+  constructor(
+    readonly code: Extract<ToolErrorCode, "failed" | "invalid-output">,
+    message: string,
+  ) {
+    super(message);
+    this.name = "ToolExecutionError";
+  }
 }
 
 export class DuplicateToolRegistrationError extends Error {

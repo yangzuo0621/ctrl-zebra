@@ -42,12 +42,14 @@ import { WorkspaceScope, WorkspaceScopeError } from "./adapters/workspace-scope.
 import { registerAgentView } from "./agent-view.js";
 import { createSelectingChatRunner } from "./controllers/chat-runner.js";
 import { createCheckpointActions } from "./controllers/checkpoint-actions.js";
+import { combineToolRegistries } from "./controllers/combine-tool-registries.js";
 import { CommandApprovalWorkflow } from "./controllers/command-approval-workflow.js";
 import { FileEditApprovalWorkflow } from "./controllers/file-edit-approval-workflow.js";
 import { registerGeminiApiKeyCommand } from "./controllers/gemini-api-key-command.js";
 import { McpConnectionController } from "./controllers/mcp-connection-controller.js";
 import { registerMcpServerCommands } from "./controllers/mcp-server-commands.js";
 import { McpStartupApproval } from "./controllers/mcp-startup-approval.js";
+import { McpToolApprovalWorkflow } from "./controllers/mcp-tool-approval-workflow.js";
 import { selectModelGateway } from "./controllers/model-gateway-selector.js";
 import {
   createWorkspaceToolRegistryProvider,
@@ -201,9 +203,16 @@ export function activate(context: ExtensionContext): void {
     bindCwd: (cwd, signal) => commandExecutor.bindCwd(cwd, signal),
     workspaceTrust,
   });
+  const mcpToolApprovalWorkflow = new McpToolApprovalWorkflow({
+    createId: randomUUID,
+    now: () => new Date(),
+    workspaceTrust,
+    getToolSnapshot: () => mcpConnection.getToolSnapshot(),
+  });
   const approvalWorkflow = new ToolApprovalWorkflowRouter(
     fileEditApprovalWorkflow,
     commandApprovalWorkflow,
+    mcpToolApprovalWorkflow,
   );
   const workspaceTools = createWorkspaceToolRegistryProvider({
     getWorkspaceRoots: () => workspace.workspaceFolders?.map((folder) => folder.uri) ?? [],
@@ -224,7 +233,27 @@ export function activate(context: ExtensionContext): void {
   );
   const chatRunner = createSelectingChatRunner({
     selectSessionRepository,
-    selectToolRegistry: (signal) => workspaceTools.get(signal),
+    async selectToolRegistry(signal) {
+      const workspaceRegistry = await workspaceTools.get(signal);
+      signal.throwIfAborted();
+      const mcpSnapshot = mcpConnection.getToolSnapshot();
+      return mcpSnapshot === undefined
+        ? workspaceRegistry
+        : {
+            registry: combineToolRegistries(workspaceRegistry, mcpSnapshot.registry),
+            mcpToolSources: new Map(
+              mcpSnapshot.tools.map((tool) => [
+                tool.registryName,
+                {
+                  serverId: mcpSnapshot.server.serverId,
+                  registryName: tool.registryName,
+                  mcpToolName: tool.mcpToolName,
+                  generation: mcpSnapshot.generation,
+                },
+              ]),
+            ),
+          };
+    },
     approvalWorkflow,
     async selectModelGateway() {
       const settings = workspace.getConfiguration("ctrlZebra.provider");

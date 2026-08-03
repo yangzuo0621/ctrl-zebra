@@ -3,12 +3,18 @@ import { randomUUID } from "node:crypto";
 import {
   AgentRuntime,
   type AgentRuntimeEvent,
+  type JsonValue,
   type ModelGateway,
   type SessionRepository,
   type ToolApprovalWorkflow,
   ToolRegistry,
 } from "@ctrl-zebra/core";
-import { jsonValueSchema, persistenceFormatVersion, type UserMessage } from "@ctrl-zebra/protocol";
+import {
+  jsonValueSchema,
+  type PersistedMcpToolSource,
+  persistenceFormatVersion,
+  type UserMessage,
+} from "@ctrl-zebra/protocol";
 
 import {
   type CollectedReasoningEvent,
@@ -36,11 +42,19 @@ interface ChatRunnerDependencies {
   readonly now?: () => Date;
   readonly approvalWorkflow?: ToolApprovalWorkflow;
   readonly sessionRepository?: SessionRepository;
+  readonly mcpToolSources?: ReadonlyMap<string, PersistedMcpToolSource>;
+}
+
+interface SelectedToolRegistry {
+  readonly registry: ToolRegistry;
+  readonly mcpToolSources?: ReadonlyMap<string, PersistedMcpToolSource>;
 }
 
 interface SelectingChatRunnerDependencies {
   readonly selectModelGateway: () => Promise<ModelGateway>;
-  readonly selectToolRegistry?: (signal: AbortSignal) => Promise<ToolRegistry>;
+  readonly selectToolRegistry?: (
+    signal: AbortSignal,
+  ) => Promise<ToolRegistry | SelectedToolRegistry>;
   readonly createId?: () => string;
   readonly now?: () => Date;
   readonly approvalWorkflow?: ToolApprovalWorkflow;
@@ -54,6 +68,7 @@ export function createChatRunner({
   now = () => new Date(),
   approvalWorkflow,
   sessionRepository,
+  mcpToolSources,
 }: ChatRunnerDependencies): ChatRunner {
   return {
     async run(content, signal, emit) {
@@ -110,23 +125,23 @@ export function createChatRunner({
       let persistence = Promise.resolve();
       const persist = (event: ChatRunnerEvent) => {
         emit(event);
-        sequence += 1;
-        const eventSequence = sequence;
-        const recordedAt = now().toISOString();
-        const { type, sessionId: _sessionId, ...data } = event;
-        persistence = persistence
-          .then(() =>
+        for (const persistedEvent of projectPersistedEvents(event, mcpToolSources)) {
+          sequence += 1;
+          const eventSequence = sequence;
+          const recordedAt = now().toISOString();
+          persistence = persistence.then(() =>
             sessionRepository.appendEvent(sessionId, {
               sequence: eventSequence,
               recordedAt,
-              event: { type, data: jsonValueSchema.parse(data) },
+              event: persistedEvent,
             }),
-          )
-          .then(() =>
-            event.type === "session.status-changed"
-              ? sessionRepository.update(sessionId, { status: event.status, updatedAt: recordedAt })
-              : undefined,
           );
+          if (event.type === "session.status-changed") {
+            persistence = persistence.then(() =>
+              sessionRepository.update(sessionId, { status: event.status, updatedAt: recordedAt }),
+            );
+          }
+        }
       };
       const runtime = new AgentRuntime(
         modelGateway,
@@ -187,19 +202,50 @@ export function createSelectingChatRunner({
       signal.throwIfAborted();
       const sessionRepository = await selectSessionRepository?.();
       signal.throwIfAborted();
-      const toolRegistry = await selectToolRegistry(signal);
+      const selected = await selectToolRegistry(signal);
+      const selection = selected instanceof ToolRegistry ? { registry: selected } : selected;
       signal.throwIfAborted();
       const modelGateway = await selectModelGateway();
       signal.throwIfAborted();
 
       await createChatRunner({
         modelGateway,
-        toolRegistry,
+        toolRegistry: selection.registry,
         createId,
         now,
         approvalWorkflow,
         sessionRepository,
+        mcpToolSources: selection.mcpToolSources,
       }).run(content, signal, emit);
     },
   };
+}
+
+function projectPersistedEvents(
+  event: ChatRunnerEvent,
+  sources: ReadonlyMap<string, PersistedMcpToolSource> | undefined,
+): readonly { readonly type: string; readonly data: JsonValue }[] {
+  const { type, sessionId: _sessionId, ...data } = event;
+  const events: { readonly type: string; readonly data: JsonValue }[] = [
+    { type, data: jsonValueSchema.parse(data) },
+  ];
+  if (event.type !== "agent.tool-state") {
+    return events;
+  }
+  const source = sources?.get(event.call.name);
+  if (source === undefined) {
+    return events;
+  }
+  if (event.status === "pending") {
+    events.push({
+      type: "session.mcp-tool-call",
+      data: jsonValueSchema.parse({ call: event.call, source }),
+    });
+  } else if (event.status === "success" || event.status === "error") {
+    events.push({
+      type: "session.mcp-tool-result",
+      data: jsonValueSchema.parse({ result: event.result, source }),
+    });
+  }
+  return events;
 }

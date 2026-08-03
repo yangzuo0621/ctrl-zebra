@@ -21,6 +21,23 @@ describe("ToolApprovalWorkflowRouter", () => {
     expect(commands.create).toHaveBeenCalledOnce();
   });
 
+  it("routes reserved MCP Registry names only to the MCP workflow", async () => {
+    const fileEdits = createWorkflow(createOperation("file-approval"));
+    const commands = createWorkflow(createOperation("command-approval"));
+    const mcpTools = createWorkflow(createOperation("mcp-approval"));
+    const router = new ToolApprovalWorkflowRouter(
+      fileEdits.values,
+      commands.values,
+      mcpTools.values,
+    );
+
+    await router.create(prepared("execute", "mcp_run_123456789abc"), new AbortController().signal);
+
+    expect(mcpTools.create).toHaveBeenCalledOnce();
+    expect(fileEdits.create).not.toHaveBeenCalled();
+    expect(commands.create).not.toHaveBeenCalled();
+  });
+
   it("routes UI actions only to the workflow that owns the approval", async () => {
     const fileEdits = createWorkflow(createOperation("file-approval"));
     const commands = createWorkflow(createOperation("command-approval"));

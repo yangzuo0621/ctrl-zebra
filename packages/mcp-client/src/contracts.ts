@@ -10,6 +10,11 @@ export const maxMcpToolSnapshotSchemaBytes = 524_288;
 export const maxMcpToolSchemaDepth = 32;
 export const maxMcpToolSchemaNodes = 4_096;
 export const maxMcpToolSchemaProperties = 1_024;
+export const maxMcpToolArgumentsBytes = 262_144;
+export const maxMcpToolTextItems = 500;
+export const maxMcpToolTextCodePoints = 262_144;
+export const maxMcpToolTextBytes = 524_288;
+export const maxMcpToolStructuredContentBytes = 524_288;
 
 export type McpClientErrorCode =
   | "connect-failed"
@@ -106,4 +111,8 @@ export interface McpToolDiscoveryContext {
   readonly server: McpServerIdentity;
   readonly generation: number;
   readonly reservedToolNames?: readonly string[];
+}
+
+export interface McpToolArguments {
+  readonly [key: string]: import("@ctrl-zebra/core").JsonValue;
 }

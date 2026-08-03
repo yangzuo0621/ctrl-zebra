@@ -53,6 +53,64 @@ describe("persistence format", () => {
     expect(getSessionPersistencePaths("🦓").directory.at(-1)).toBe("f09fa693");
   });
 
+  it("strictly validates bounded MCP Tool Call and Result provenance", () => {
+    const source = {
+      serverId: "local_fixture",
+      registryName: "mcp_calculate_123456789abc",
+      mcpToolName: "calculate",
+      generation: 2,
+    } as const;
+    const call = {
+      sequence: 1,
+      recordedAt: manifest.createdAt,
+      event: {
+        type: "session.mcp-tool-call",
+        data: {
+          call: { id: "call-1", name: source.registryName, input: { count: 2 } },
+          source,
+        },
+      },
+    };
+    const result = {
+      sequence: 2,
+      recordedAt: manifest.createdAt,
+      event: {
+        type: "session.mcp-tool-result",
+        data: {
+          result: {
+            callId: "call-1",
+            name: source.registryName,
+            status: "success",
+            output: { content: [{ type: "text", text: "done" }] },
+            truncated: false,
+          },
+          source,
+        },
+      },
+    };
+
+    expect(persistedEventRecordSchema.parse(call)).toEqual(call);
+    expect(persistedEventRecordSchema.parse(result)).toEqual(result);
+    expect(
+      persistedEventRecordSchema.safeParse({
+        ...call,
+        event: { ...call.event, data: { ...call.event.data, source: { ...source, extra: true } } },
+      }).success,
+    ).toBe(false);
+    expect(
+      persistedEventRecordSchema.safeParse({
+        ...call,
+        event: {
+          ...call.event,
+          data: {
+            ...call.event.data,
+            source: { ...source, registryName: "mcp_other_123456789abc" },
+          },
+        },
+      }).success,
+    ).toBe(false);
+  });
+
   it("generates a portable versioned Checkpoint path", () => {
     expect(getCheckpointPersistencePaths("checkpoint-1")).toEqual({
       directory: ["checkpoints", "v1"],

@@ -20,7 +20,12 @@ import { SessionStateMachine, type SessionStatusChangedEvent } from "./session-s
 import type { ToolApprovalWorkflow } from "./tool-approval.js";
 import { InvalidToolInputError, parseToolInput } from "./tool-input-validation.js";
 import { limitToolOutput } from "./tool-output-limiter.js";
-import { type ToolExecutionOutput, ToolRegistry } from "./tool-registry.js";
+import {
+  ToolExecutionError,
+  type ToolExecutionOutput,
+  ToolRegistry,
+  ToolUnavailableError,
+} from "./tool-registry.js";
 import {
   defaultToolRepetitionThreshold,
   ToolRepetitionDetectedError,
@@ -340,6 +345,13 @@ export class AgentRuntime {
     try {
       input = parseToolInput(tool, toolCall.input);
     } catch (error) {
+      if (error instanceof ToolUnavailableError) {
+        return createToolErrorResult(
+          toolCall,
+          "unknown-tool",
+          `Tool "${toolCall.name}" is no longer available.`,
+        );
+      }
       if (error instanceof InvalidToolInputError) {
         return createToolErrorResult(toolCall, error.code, error.message);
       }
@@ -401,8 +413,15 @@ export class AgentRuntime {
     let prepared: ToolExecutionOutput<unknown>;
     try {
       prepared = await tool.prepareApproval(input, { signal });
-    } catch {
+    } catch (error) {
       signal.throwIfAborted();
+      if (error instanceof ToolUnavailableError) {
+        return createToolErrorResult(
+          toolCall,
+          "unknown-tool",
+          `Tool "${toolCall.name}" is no longer available.`,
+        );
+      }
       return createToolErrorResult(
         toolCall,
         "failed",
@@ -478,8 +497,18 @@ export class AgentRuntime {
     let execution: ToolExecutionOutput<unknown>;
     try {
       execution = await tool.execute(input, { signal });
-    } catch {
+    } catch (error) {
       signal.throwIfAborted();
+      if (error instanceof ToolUnavailableError) {
+        return createToolErrorResult(
+          toolCall,
+          "unknown-tool",
+          `Tool "${toolCall.name}" is no longer available.`,
+        );
+      }
+      if (error instanceof ToolExecutionError) {
+        return createToolErrorResult(toolCall, error.code, error.message);
+      }
       return createToolErrorResult(
         toolCall,
         "failed",
