@@ -1,9 +1,11 @@
+import { ToolRegistry } from "@ctrl-zebra/core";
 import type {
   McpConnectOutcome,
   McpDisconnectOutcome,
   McpProcessTermination,
   McpStdioPortHandlers,
 } from "@ctrl-zebra/mcp-client";
+import { McpToolDiscoveryError } from "@ctrl-zebra/mcp-client";
 import { describe, expect, it, vi } from "vitest";
 
 import type { McpServerConfiguration } from "../adapters/mcp-server-configuration.js";
@@ -66,6 +68,35 @@ describe("MCP connection controller", () => {
     expect(harness.notifyInformation).toHaveBeenCalledWith(
       "Connected to MCP Server “Local fixture”.",
     );
+  });
+
+  it("publishes connected state only after the complete Tool snapshot is accepted", async () => {
+    const harness = createHarness();
+    const controller = new McpConnectionController(harness.values);
+
+    const result = await controller.connect();
+
+    expect(harness.client.discoverTools).toHaveBeenCalledWith(
+      {
+        server: { serverId: "local_fixture", displayName: "Local fixture" },
+        generation: 1,
+        reservedToolNames: undefined,
+      },
+      expect.any(AbortSignal),
+    );
+    expect(result.status).toBe("connected");
+  });
+
+  it("fails and closes the connection when initial Tool discovery is rejected", async () => {
+    const harness = createHarness();
+    harness.client.discoverTools.mockRejectedValueOnce(new McpToolDiscoveryError("invalid-schema"));
+    const controller = new McpConnectionController(harness.values);
+
+    await expect(controller.connect()).resolves.toMatchObject({
+      status: "failed",
+      error: { code: "invalid-schema" },
+    });
+    expect(harness.client.disconnect).toHaveBeenCalledTimes(1);
   });
 
   it("merges concurrent connection requests before approval and process creation", async () => {
@@ -289,6 +320,18 @@ function createHarness() {
   const client = {
     getState: vi.fn(() => connectedOutcome.connection),
     connect: vi.fn(async (): Promise<McpConnectOutcome> => connectedOutcome),
+    discoverTools: vi.fn(
+      async (context: {
+        server: { serverId: string; displayName: string };
+        generation: number;
+      }) => ({
+        server: context.server,
+        generation: context.generation,
+        tools: [],
+        registry: new ToolRegistry(),
+      }),
+    ),
+    getToolSnapshot: vi.fn(() => undefined),
     disconnect: vi.fn(async (): Promise<McpDisconnectOutcome> => ({ kind: "disconnected" })),
     dispose: vi.fn(async (): Promise<McpDisconnectOutcome> => ({ kind: "disconnected" })),
   };

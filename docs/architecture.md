@@ -323,6 +323,11 @@ port.
 - Static CtrlZebra configuration, Protocol, persistence, and lifecycle objects continue to use
   strict Zod schemas. Server-supplied Tool input/output schemas are JSON Schema and are not
   translated into Zod or executed as code.
+- The Core Tool declaration contract distinguishes the existing statically typed built-in schema
+  from a CtrlZebra-owned `external_json_schema_2020_12` wrapper. Only the MCP boundary may create
+  that wrapper, and only after the complete schema has passed the structural and compiled
+  validation below. Provider adapters unwrap the already-validated plain JSON value without
+  narrowing it to the built-in schema subset; SDK JSON Schema types never enter Core.
 - T1404 must wrap the pinned SDK's documented `AjvJsonSchemaValidator` export behind an injected
   `ExternalJsonSchemaValidator` contract. A structural walker first accepts only JSON Schema Draft
   2020-12 and the closed keyword set `$schema`, `$defs`, local `$ref`, `type`, `properties`,

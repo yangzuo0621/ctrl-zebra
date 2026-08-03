@@ -92,6 +92,12 @@ then applies byte, node, depth, property, and local-reference limits. Remote/cyc
 patterns, formats, custom behavior, data coercion/defaulting/removal, and unknown keywords are
 forbidden. Compiled validators live only with the current immutable Tool snapshot.
 
+Core represents the result with a CtrlZebra-owned `external_json_schema_2020_12` Tool input-schema
+wrapper, distinct from the existing statically typed built-in Tool schema. The MCP adapter is the
+only producer and may construct it only after the complete snapshot passes validation. Provider
+adapters unwrap the bounded plain JSON value without translating it into, or silently narrowing it
+to, the built-in schema subset; no MCP SDK or Ajv type crosses the package boundary.
+
 Every MCP Tool is a trusted CtrlZebra `execute`-risk Tool with an additional unknown local/network
 side-effect warning. Server annotations cannot lower it. Each invocation uses a fresh single-use
 approval bound to Server identity, generation, both Tool names, schema identity, validated arguments,
@@ -155,8 +161,10 @@ interfaces decided here.
 
 - T1402 can test lifecycle and protocol behavior without VS Code or a real child process, while the
   production Extension retains the actual process and trust boundary.
-- Core and existing built-in Tools keep their contracts and control flow. MCP cannot mutate Session
-  state, approve itself, continue the model loop, or bypass cancellation and budgets.
+- Existing built-in Tools keep their schema representation and control flow. Core's declaration
+  contract adds one explicit external-schema variant so valid MCP Draft 2020-12 constraints are not
+  silently lost. MCP still cannot mutate Session state, approve itself, continue the model loop, or
+  bypass cancellation and budgets.
 - Exact-version support deliberately rejects some otherwise compatible Servers. Expanding the
   matrix is an explicit product decision with fixtures rather than an accidental SDK fallback.
 - The SDK package may contain dependencies used by excluded transports. Later implementation and

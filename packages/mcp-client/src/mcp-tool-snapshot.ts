@@ -1,0 +1,301 @@
+import { createHash } from "node:crypto";
+
+import {
+  type AgentTool,
+  type ExternalToolInputSchema,
+  type JsonValue,
+  type ToolName,
+  ToolRegistry,
+} from "@ctrl-zebra/core";
+
+import {
+  type McpServerIdentity,
+  maxMcpDescriptorBytes,
+  maxMcpListEntries,
+  maxMcpListSnapshotBytes,
+  maxMcpToolSnapshotSchemaBytes,
+} from "./contracts.js";
+import { createMcpRegistryName } from "./mcp-tool-name.js";
+import {
+  type CompiledExternalJsonSchema,
+  type ExternalJsonSchemaValidator,
+  McpToolSchemaError,
+  validateMcpToolSchema,
+} from "./mcp-tool-schema.js";
+
+const descriptorKeys = new Set([
+  "_meta",
+  "annotations",
+  "description",
+  "execution",
+  "icons",
+  "inputSchema",
+  "name",
+  "outputSchema",
+  "title",
+]);
+
+export interface McpToolDescriptor {
+  readonly registryName: ToolName;
+  readonly mcpToolName: string;
+  readonly title?: string;
+  readonly description?: string;
+  readonly schemaId: string;
+}
+
+export interface McpToolSnapshotView {
+  readonly server: McpServerIdentity;
+  readonly generation: number;
+  readonly tools: readonly McpToolDescriptor[];
+  readonly registry: ToolRegistry;
+}
+
+export class McpToolSnapshot {
+  readonly view: McpToolSnapshotView;
+  readonly #outputValidators: ReadonlyMap<ToolName, CompiledExternalJsonSchema>;
+  #active = true;
+
+  constructor(
+    view: Omit<McpToolSnapshotView, "registry">,
+    tools: readonly AgentTool[],
+    outputValidators: ReadonlyMap<ToolName, CompiledExternalJsonSchema>,
+  ) {
+    const registry = new ToolRegistry();
+    for (const tool of tools) {
+      registry.register(tool);
+    }
+    this.view = { ...view, registry };
+    this.#outputValidators = outputValidators;
+  }
+
+  revoke(): void {
+    this.#active = false;
+  }
+
+  isActive(): boolean {
+    return this.#active;
+  }
+
+  validateOutput(name: ToolName, value: unknown): boolean | undefined {
+    if (!this.#active) {
+      return false;
+    }
+    return this.#outputValidators.get(name)?.validate(value);
+  }
+}
+
+export class McpToolSnapshotError extends Error {
+  constructor(readonly code: "invalid-schema" | "limit-exceeded" | "malformed-message") {
+    super("MCP Tool snapshot could not be accepted.");
+    this.name = "McpToolSnapshotError";
+  }
+}
+
+export function createMcpToolSnapshot(
+  server: McpServerIdentity,
+  generation: number,
+  values: readonly unknown[],
+  reservedToolNames: ReadonlySet<string>,
+  validator: ExternalJsonSchemaValidator,
+): McpToolSnapshot {
+  if (values.length > maxMcpListEntries) {
+    throw new McpToolSnapshotError("limit-exceeded");
+  }
+
+  const descriptors: McpToolDescriptor[] = [];
+  const tools: AgentTool[] = [];
+  const identities = new Set<string>();
+  const registryNames = new Set<string>();
+  const outputValidators = new Map<ToolName, CompiledExternalJsonSchema>();
+  let schemaBytes = 0;
+  let snapshotBytes = 2;
+  let snapshot: McpToolSnapshot | undefined;
+
+  for (const value of values) {
+    const serialized = serializeBounded(value, maxMcpDescriptorBytes);
+    snapshotBytes += utf8Bytes(serialized) + (descriptors.length === 0 ? 0 : 1);
+    if (snapshotBytes > maxMcpListSnapshotBytes) {
+      throw new McpToolSnapshotError("limit-exceeded");
+    }
+    const record = readDescriptor(value);
+    const name = readText(record.name, false);
+    if (identities.has(name)) {
+      throw new McpToolSnapshotError("malformed-message");
+    }
+    identities.add(name);
+
+    const registryName = createMcpRegistryName(server.serverId, name);
+    if (registryNames.has(registryName) || reservedToolNames.has(registryName)) {
+      throw new McpToolSnapshotError("malformed-message");
+    }
+    registryNames.add(registryName);
+
+    let inputSchema: Readonly<Record<string, JsonValue>>;
+    let outputSchema: Readonly<Record<string, JsonValue>> | undefined;
+    try {
+      inputSchema = validateMcpToolSchema(record.inputSchema);
+      outputSchema =
+        record.outputSchema === undefined ? undefined : validateMcpToolSchema(record.outputSchema);
+    } catch (error) {
+      if (error instanceof McpToolSchemaError) {
+        throw new McpToolSnapshotError("invalid-schema");
+      }
+      throw error;
+    }
+    schemaBytes += utf8Bytes(JSON.stringify(inputSchema));
+    if (outputSchema !== undefined) {
+      schemaBytes += utf8Bytes(JSON.stringify(outputSchema));
+    }
+    if (schemaBytes > maxMcpToolSnapshotSchemaBytes) {
+      throw new McpToolSnapshotError("limit-exceeded");
+    }
+
+    const compiledInput = compile(validator, inputSchema);
+    if (outputSchema !== undefined) {
+      outputValidators.set(registryName, compile(validator, outputSchema));
+    }
+    const schemaId = createHash("sha256")
+      .update(JSON.stringify({ inputSchema, outputSchema }), "utf8")
+      .digest("hex");
+    const descriptor: McpToolDescriptor = {
+      registryName,
+      mcpToolName: name,
+      ...(record.title === undefined ? {} : { title: readText(record.title, true) }),
+      ...(record.description === undefined
+        ? {}
+        : { description: readText(record.description, true) }),
+      schemaId,
+    };
+    descriptors.push(descriptor);
+    tools.push(
+      createExternalTool(descriptor, server, compiledInput, () => snapshot?.isActive() === true),
+    );
+  }
+
+  snapshot = new McpToolSnapshot(
+    { server, generation, tools: descriptors },
+    tools,
+    outputValidators,
+  );
+  return snapshot;
+}
+
+function createExternalTool(
+  descriptor: McpToolDescriptor,
+  server: McpServerIdentity,
+  compiledInput: CompiledExternalJsonSchema,
+  isActive: () => boolean,
+): AgentTool<unknown, never> {
+  const inputSchema: ExternalToolInputSchema = {
+    kind: "external_json_schema_2020_12",
+    jsonSchema: compiledInput.schema,
+  };
+  return {
+    name: descriptor.registryName,
+    description:
+      descriptor.description ??
+      `External MCP Tool “${descriptor.mcpToolName}” from “${server.displayName}”.`,
+    inputSchema,
+    risk: "execute",
+    parseInput(value) {
+      if (!isActive() || !compiledInput.validate(value)) {
+        throw new McpToolUnavailableError();
+      }
+      return value;
+    },
+    async execute() {
+      throw new McpToolExecutionUnavailableError();
+    },
+  };
+}
+
+export class McpToolUnavailableError extends Error {
+  constructor() {
+    super("The MCP Tool is not available for this connection generation.");
+    this.name = "McpToolUnavailableError";
+  }
+}
+
+export class McpToolExecutionUnavailableError extends Error {
+  constructor() {
+    super("MCP Tool execution is not enabled by T1404.");
+    this.name = "McpToolExecutionUnavailableError";
+  }
+}
+
+function compile(
+  validator: ExternalJsonSchemaValidator,
+  schema: Readonly<Record<string, JsonValue>>,
+): CompiledExternalJsonSchema {
+  try {
+    return validator.compile(schema);
+  } catch {
+    throw new McpToolSnapshotError("invalid-schema");
+  }
+}
+
+function readDescriptor(value: unknown): Readonly<Record<string, unknown>> {
+  const record = readRecord(value);
+  if (Object.keys(record).some((key) => !descriptorKeys.has(key))) {
+    throw new McpToolSnapshotError("malformed-message");
+  }
+  if (record.execution !== undefined) {
+    throw new McpToolSnapshotError("malformed-message");
+  }
+  return record;
+}
+
+function readRecord(value: unknown): Readonly<Record<string, unknown>> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new McpToolSnapshotError("malformed-message");
+  }
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) {
+    throw new McpToolSnapshotError("malformed-message");
+  }
+  return value as Readonly<Record<string, unknown>>;
+}
+
+function readText(value: unknown, allowEmpty: boolean): string {
+  if (
+    typeof value !== "string" ||
+    (!allowEmpty && value.length === 0) ||
+    !isWellFormedUnicode(value)
+  ) {
+    throw new McpToolSnapshotError("malformed-message");
+  }
+  return value;
+}
+
+function serializeBounded(value: unknown, maximumBytes: number): string {
+  let serialized: string | undefined;
+  try {
+    serialized = JSON.stringify(value);
+  } catch {
+    throw new McpToolSnapshotError("malformed-message");
+  }
+  if (serialized === undefined || utf8Bytes(serialized) > maximumBytes) {
+    throw new McpToolSnapshotError("limit-exceeded");
+  }
+  return serialized;
+}
+
+function utf8Bytes(value: string): number {
+  return new TextEncoder().encode(value).byteLength;
+}
+
+function isWellFormedUnicode(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const codeUnit = value.charCodeAt(index);
+    if (codeUnit >= 0xd800 && codeUnit <= 0xdbff) {
+      const next = value.charCodeAt(index + 1);
+      if (next < 0xdc00 || next > 0xdfff) {
+        return false;
+      }
+      index += 1;
+    } else if (codeUnit >= 0xdc00 && codeUnit <= 0xdfff) {
+      return false;
+    }
+  }
+  return true;
+}

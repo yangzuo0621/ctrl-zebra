@@ -1,6 +1,6 @@
 import type { ToolName, ToolRisk } from "@ctrl-zebra/protocol";
 
-import type { ToolDeclaration, ToolInputSchema } from "./model-gateway.js";
+import type { AgentToolInputSchema, ToolDeclaration } from "./model-gateway.js";
 
 export interface ToolExecutionContext {
   readonly signal: AbortSignal;
@@ -14,7 +14,7 @@ export interface ToolExecutionOutput<Output> {
 export interface AgentTool<Input = unknown, Output = unknown> {
   readonly name: ToolName;
   readonly description: string;
-  readonly inputSchema: ToolInputSchema;
+  readonly inputSchema: AgentToolInputSchema;
   readonly risk: ToolRisk;
   parseInput(value: unknown): Input;
   execute(input: Input, context: ToolExecutionContext): Promise<ToolExecutionOutput<Output>>;
