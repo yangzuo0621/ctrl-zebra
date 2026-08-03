@@ -4,7 +4,9 @@ import type {
   McpConnectedState,
   McpDisconnectOutcome,
   McpStdioPort,
+  McpToolSnapshotView,
 } from "@ctrl-zebra/mcp-client";
+import { McpToolDiscoveryError } from "@ctrl-zebra/mcp-client";
 
 import {
   type McpServerConfiguration,
@@ -44,6 +46,11 @@ export interface McpConnectionSnapshot {
 interface ControlledMcpClientPort {
   getState(): ReturnType<ControlledMcpClient["getState"]>;
   connect(signal?: AbortSignal): ReturnType<ControlledMcpClient["connect"]>;
+  discoverTools(
+    context: Parameters<ControlledMcpClient["discoverTools"]>[0],
+    signal?: AbortSignal,
+  ): Promise<McpToolSnapshotView>;
+  getToolSnapshot(): McpToolSnapshotView | undefined;
   disconnect(): Promise<McpDisconnectOutcome>;
   dispose(): Promise<McpDisconnectOutcome>;
 }
@@ -74,6 +81,7 @@ interface McpConnectionControllerDependencies {
   readonly notifyInformation: (message: string) => void;
   readonly notifyError: (message: string) => void;
   readonly log: (entry: Readonly<Record<string, unknown>>) => void;
+  readonly getReservedToolNames?: () => readonly string[];
 }
 
 const emptySnapshot: McpConnectionSnapshot = {
@@ -99,6 +107,10 @@ export class McpConnectionController {
 
   getState(): McpConnectionSnapshot {
     return this.#snapshot;
+  }
+
+  getToolSnapshot(): McpToolSnapshotView | undefined {
+    return this.#client?.getToolSnapshot();
   }
 
   connect(signal?: AbortSignal): Promise<McpConnectionSnapshot> {
@@ -250,6 +262,29 @@ export class McpConnectionController {
         return this.#failAndNotify(code, operation.configuration);
       }
 
+      const stateAfterDiscovery = this.getState();
+      if (stateAfterDiscovery.status === "failed") {
+        return stateAfterDiscovery;
+      }
+      try {
+        await this.#client.discoverTools(
+          {
+            server: identity(operation.configuration),
+            generation,
+            reservedToolNames: this.#dependencies.getReservedToolNames?.(),
+          },
+          signal,
+        );
+      } catch (error) {
+        if (signal.aborted) {
+          throw signal.reason;
+        }
+        if (error instanceof McpToolDiscoveryError) {
+          await this.#client.disconnect();
+          return this.#failAndNotify(error.code, operation.configuration);
+        }
+        throw error;
+      }
       if (this.#snapshot.status === "failed") {
         return this.#snapshot;
       }
@@ -405,9 +440,11 @@ const mcpHostErrorMessages = {
   "protocol-incompatible": "The MCP Server does not support the required protocol version.",
   "capability-unsupported": "The MCP Server requested an unsupported capability.",
   "malformed-message": "The MCP Server sent a malformed message.",
+  "invalid-schema": "The MCP Server supplied an invalid or unsupported Tool schema.",
   "limit-exceeded": "The MCP Server exceeded a resource limit.",
   "server-exited": "The MCP Server exited unexpectedly.",
   disconnected: "The MCP Server is disconnected.",
+  "tool-unavailable": "The MCP Tool is unavailable for the current connection.",
   "termination-unconfirmed": "The MCP Server process could not be confirmed as terminated.",
   internal: "The MCP connection failed unexpectedly.",
 } as const satisfies Record<McpHostErrorCode, string>;

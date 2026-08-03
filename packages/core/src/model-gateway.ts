@@ -1,4 +1,4 @@
-import type { ToolCall, ToolName, ToolResult } from "@ctrl-zebra/protocol";
+import type { JsonValue, ToolCall, ToolName, ToolResult } from "@ctrl-zebra/protocol";
 
 export type { ToolCall } from "@ctrl-zebra/protocol";
 
@@ -65,10 +65,18 @@ export interface ToolInputSchema {
   readonly additionalProperties: false;
 }
 
+/** A boundary-validated Draft 2020-12 schema retained without SDK-specific types. */
+export interface ExternalToolInputSchema {
+  readonly kind: "external_json_schema_2020_12";
+  readonly jsonSchema: Readonly<Record<string, JsonValue>>;
+}
+
+export type AgentToolInputSchema = ToolInputSchema | ExternalToolInputSchema;
+
 export interface ToolDeclaration {
   readonly name: ToolName;
   readonly description: string;
-  readonly inputSchema: ToolInputSchema;
+  readonly inputSchema: AgentToolInputSchema;
 }
 
 export interface ModelRequest {

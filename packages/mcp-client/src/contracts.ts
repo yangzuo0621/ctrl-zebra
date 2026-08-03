@@ -1,15 +1,26 @@
 export const mcpProtocolVersion = "2026-07-28" as const;
 export const maxMcpMessageBytes = 1_048_576;
 export const maxMcpStderrBytes = 65_536;
+export const maxMcpListPages = 100;
+export const maxMcpListEntries = 1_000;
+export const maxMcpDescriptorBytes = 65_536;
+export const maxMcpListSnapshotBytes = 1_048_576;
+export const maxMcpToolSchemaBytes = 65_536;
+export const maxMcpToolSnapshotSchemaBytes = 524_288;
+export const maxMcpToolSchemaDepth = 32;
+export const maxMcpToolSchemaNodes = 4_096;
+export const maxMcpToolSchemaProperties = 1_024;
 
 export type McpClientErrorCode =
   | "connect-failed"
   | "protocol-incompatible"
   | "capability-unsupported"
   | "malformed-message"
+  | "invalid-schema"
   | "limit-exceeded"
   | "server-exited"
   | "disconnected"
+  | "tool-unavailable"
   | "termination-unconfirmed"
   | "internal";
 
@@ -84,4 +95,15 @@ export interface McpStdioPort {
 export interface ControlledMcpClientOptions {
   readonly clientName?: string;
   readonly clientVersion?: string;
+}
+
+export interface McpServerIdentity {
+  readonly serverId: string;
+  readonly displayName: string;
+}
+
+export interface McpToolDiscoveryContext {
+  readonly server: McpServerIdentity;
+  readonly generation: number;
+  readonly reservedToolNames?: readonly string[];
 }

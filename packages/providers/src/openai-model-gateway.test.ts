@@ -192,6 +192,40 @@ describe("OpenAI ModelGateway", () => {
     ).toEqual(nestedToolRequest.tools?.[0]?.inputSchema);
   });
 
+  it("passes a boundary-validated external Draft 2020-12 Tool schema without narrowing it", async () => {
+    setStreamParts([{ type: "finish", finishReason: "stop", totalUsage: {} }]);
+    const gateway = createOpenAIModelGateway({ apiKey: "test-key", modelId: "gpt-test" });
+    const externalSchema = {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      type: "object",
+      properties: { value: { anyOf: [{ type: "string" }, { type: "integer" }] } },
+      required: ["value"],
+      additionalProperties: false,
+    } as const;
+    const externalRequest: ModelRequest = {
+      messages: request.messages,
+      tools: [
+        {
+          name: "mcp_external_000000000000",
+          description: "External tool.",
+          inputSchema: {
+            kind: "external_json_schema_2020_12",
+            jsonSchema: externalSchema,
+          },
+        },
+      ],
+    };
+
+    await collectEvents(gateway.stream(externalRequest, new AbortController().signal));
+
+    expect(
+      readSdkToolJsonSchema(
+        sdkMocks.streamText.mock.calls[0]?.[0]?.tools,
+        "mcp_external_000000000000",
+      ),
+    ).toEqual(externalSchema);
+  });
+
   it("passes a validated custom endpoint to the SDK provider", () => {
     createOpenAIModelGateway({
       apiKey: "test-key",

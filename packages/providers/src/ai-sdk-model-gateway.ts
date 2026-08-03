@@ -1,4 +1,5 @@
 import {
+  type AgentToolInputSchema,
   type FinishReason,
   type JsonValue,
   type ModelEvent,
@@ -12,7 +13,6 @@ import {
   type TokenUsage,
   type ToolDeclaration,
   type ToolInputPropertySchema,
-  type ToolInputSchema,
   type ToolResult,
   toolCallSchema,
 } from "@ctrl-zebra/core";
@@ -99,7 +99,13 @@ function toSdkTools(declarations: readonly ToolDeclaration[] | undefined): ToolS
   );
 }
 
-function toSdkInputSchema(schema: ToolInputSchema): JSONSchema7 {
+function toSdkInputSchema(schema: AgentToolInputSchema): JSONSchema7 {
+  if ("kind" in schema) {
+    // AI SDK still types this boundary as Draft 7, while providers accept a plain JSON Schema.
+    // The MCP boundary has already restricted this value to the approved Draft 2020-12 subset.
+    return JSON.parse(JSON.stringify(schema.jsonSchema)) as JSONSchema7;
+  }
+
   return {
     type: "object",
     properties: Object.fromEntries(

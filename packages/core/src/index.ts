@@ -146,6 +146,8 @@ export type {
 } from "./manifest-store.js";
 export { AtomicManifestStore, InvalidSessionManifestError } from "./manifest-store.js";
 export type {
+  AgentToolInputSchema,
+  ExternalToolInputSchema,
   FinishReason,
   ModelEvent,
   ModelGateway,

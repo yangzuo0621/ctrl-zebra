@@ -104,6 +104,13 @@ export function activate(context: ExtensionContext): void {
     requestStartupApproval: (operation, signal) => mcpStartupApproval.request(operation, signal),
     createPort: (operation, onFailure) => new NodeMcpStdioPort(operation, { onFailure }),
     createClient: (port) => new ControlledMcpClient(port),
+    getReservedToolNames: () => [
+      "list_files",
+      "propose_file_edit",
+      "read_file",
+      "run_command",
+      "search_files",
+    ],
     notifyInformation: (message) => {
       void window.showInformationMessage(message);
     },
