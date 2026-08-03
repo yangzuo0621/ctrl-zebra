@@ -1,4 +1,12 @@
-import type { SessionRecord, SessionRepository } from "@ctrl-zebra/core";
+import {
+  CorruptEventLogError,
+  EventLogLimitExceededError,
+  InconsistentSessionRecordError,
+  InvalidSessionManifestError,
+  SessionNotFoundError,
+  type SessionRecord,
+  type SessionRepository,
+} from "@ctrl-zebra/core";
 import {
   assistantMessageSchema,
   type JsonValue,
@@ -42,27 +50,29 @@ export function createSessionRecoveryActions(
 ): SessionRecoveryActions {
   return {
     async list() {
-      const repository = await selectRepository();
-      const sessions = await repository.list();
-      const normalized: SessionSummary[] = [];
-      for (const session of sessions) {
-        if (isRecoverableStatus(session.status)) {
-          try {
+      try {
+        const repository = await selectRepository();
+        const sessions = await repository.list();
+        const normalized: SessionSummary[] = [];
+        for (const session of sessions) {
+          if (isRecoverableStatus(session.status)) {
             await repository.update(session.sessionId, {
               status: "interrupted",
               updatedAt: now().toISOString(),
             });
             normalized.push({ ...session, status: "interrupted" });
-          } catch {}
-        } else {
-          normalized.push(session);
+          } else {
+            normalized.push(session);
+          }
         }
+        return normalized.sort(
+          (left, right) =>
+            right.createdAt.localeCompare(left.createdAt) ||
+            left.sessionId.localeCompare(right.sessionId),
+        );
+      } catch (error) {
+        throw toSessionRecoveryError(error);
       }
-      return normalized.sort(
-        (left, right) =>
-          right.createdAt.localeCompare(left.createdAt) ||
-          left.sessionId.localeCompare(right.sessionId),
-      );
     },
     async restore(sessionId) {
       let repository: SessionRepository;
@@ -70,8 +80,8 @@ export function createSessionRecoveryActions(
       try {
         repository = await selectRepository();
         record = await repository.get(sessionId);
-      } catch {
-        throw new SessionRecoveryError("corrupt");
+      } catch (error) {
+        throw toSessionRecoveryError(error);
       }
       if (record === undefined) {
         throw new SessionRecoveryError("not-found");
@@ -85,8 +95,8 @@ export function createSessionRecoveryActions(
             status,
             updatedAt: now().toISOString(),
           });
-        } catch {
-          throw new SessionRecoveryError("corrupt");
+        } catch (error) {
+          throw toSessionRecoveryError(error);
         }
       }
 
@@ -340,6 +350,24 @@ function isRecoverableStatus(status: SessionSummary["status"]): boolean {
     status === "awaiting_approval" ||
     status === "executing_tool"
   );
+}
+
+function toSessionRecoveryError(error: unknown): SessionRecoveryError {
+  if (error instanceof SessionRecoveryError) {
+    return error;
+  }
+  if (error instanceof SessionNotFoundError) {
+    return new SessionRecoveryError("not-found");
+  }
+  if (
+    error instanceof InvalidSessionManifestError ||
+    error instanceof CorruptEventLogError ||
+    error instanceof EventLogLimitExceededError ||
+    error instanceof InconsistentSessionRecordError
+  ) {
+    return new SessionRecoveryError("corrupt");
+  }
+  return new SessionRecoveryError("unavailable");
 }
 
 function isJsonObject(value: JsonValue): value is { readonly [key: string]: JsonValue } {
