@@ -1,3 +1,4 @@
+import { ToolExecutionError, ToolUnavailableError } from "@ctrl-zebra/core";
 import {
   Client,
   SdkError,
@@ -315,6 +316,8 @@ export class ControlledMcpClient {
         values,
         new Set(context.reservedToolNames ?? []),
         this.toolValidator,
+        (name, argumentsValue, runSignal) =>
+          this.callTool(context, controller, name, argumentsValue, runSignal),
       );
       this.toolSnapshot?.revoke();
       this.toolSnapshot = replacement;
@@ -357,6 +360,55 @@ export class ControlledMcpClient {
       cursor = nextCursor;
     }
     throw new McpToolDiscoveryError("limit-exceeded");
+  }
+
+  private async callTool(
+    context: McpToolDiscoveryContext,
+    controller: AbortController,
+    name: string,
+    argumentsValue: Readonly<Record<string, import("@ctrl-zebra/core").JsonValue>>,
+    runSignal: AbortSignal,
+  ): Promise<unknown> {
+    if (
+      this.status !== "connected" ||
+      this.toolContext !== context ||
+      this.toolController !== controller ||
+      controller.signal.aborted
+    ) {
+      throw new ToolUnavailableError();
+    }
+    const signal = AbortSignal.any([controller.signal, runSignal]);
+    signal.throwIfAborted();
+    try {
+      const result = await this.sdkClient.callTool({ name, arguments: argumentsValue }, { signal });
+      signal.throwIfAborted();
+      if (
+        this.status !== "connected" ||
+        this.toolContext !== context ||
+        this.toolController !== controller
+      ) {
+        throw new ToolUnavailableError();
+      }
+      return result;
+    } catch (error) {
+      if (signal.aborted) {
+        throw signal.reason;
+      }
+      if (error instanceof ToolUnavailableError) {
+        throw error;
+      }
+      if (
+        error instanceof SdkError &&
+        (error.code === SdkErrorCode.UnsupportedResultType ||
+          error.code === SdkErrorCode.CapabilityNotSupported)
+      ) {
+        throw new ToolExecutionError(
+          "failed",
+          "The external MCP Tool requested an unsupported capability.",
+        );
+      }
+      throw new ToolExecutionError("failed", "The external MCP Tool call failed.");
+    }
   }
 
   private clearToolSnapshot(): void {

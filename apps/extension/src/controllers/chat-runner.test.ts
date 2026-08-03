@@ -309,6 +309,103 @@ describe("createChatRunner", () => {
       text: "README.md",
     });
   });
+
+  it("persists one bounded MCP Call/Result pair with immutable source provenance", async () => {
+    const toolName = "mcp_calculate_123456789abc";
+    let step = 0;
+    const registry = new ToolRegistry();
+    registry.register({
+      name: toolName,
+      description: "Calculate.",
+      inputSchema: {
+        type: "object",
+        properties: { count: { type: "integer", description: "Count." } },
+        required: ["count"],
+        additionalProperties: false,
+      },
+      risk: "read",
+      parseInput: (value) => value,
+      execute: async () => ({
+        output: { content: [{ type: "text", text: "done" }], structuredContent: { total: 4 } },
+        truncated: false,
+      }),
+    });
+    const repository = new InMemorySessionRepository();
+    const ids = ["session-mcp", "message-mcp"];
+    const runner = createChatRunner({
+      modelGateway: {
+        async *stream() {
+          if (step === 0) {
+            step += 1;
+            yield {
+              type: "tool.call",
+              call: { id: "call-1", name: toolName, input: { count: 2 } },
+            } as const;
+            yield { type: "finish", reason: "tool-calls" } as const;
+            return;
+          }
+          yield { type: "text.delta", text: "Complete" } as const;
+          yield { type: "finish", reason: "stop" } as const;
+        },
+      },
+      toolRegistry: registry,
+      mcpToolSources: new Map([
+        [
+          toolName,
+          {
+            serverId: "local_fixture",
+            registryName: toolName,
+            mcpToolName: "calculate",
+            generation: 3,
+          },
+        ],
+      ]),
+      createId: () => ids.shift() ?? "unexpected-id",
+      now: () => new Date("2026-08-03T00:00:00.000Z"),
+      sessionRepository: repository,
+    });
+
+    await runner.run("Calculate.", new AbortController().signal, () => {});
+
+    const events = (await repository.get("session-mcp"))?.events
+      .map(({ event }) => event)
+      .filter(({ type }) => type.startsWith("session.mcp-tool-"));
+    expect(events).toEqual([
+      {
+        type: "session.mcp-tool-call",
+        data: {
+          call: { id: "call-1", name: toolName, input: { count: 2 } },
+          source: {
+            serverId: "local_fixture",
+            registryName: toolName,
+            mcpToolName: "calculate",
+            generation: 3,
+          },
+        },
+      },
+      {
+        type: "session.mcp-tool-result",
+        data: {
+          result: {
+            callId: "call-1",
+            name: toolName,
+            status: "success",
+            output: {
+              content: [{ type: "text", text: "done" }],
+              structuredContent: { total: 4 },
+            },
+            truncated: false,
+          },
+          source: {
+            serverId: "local_fixture",
+            registryName: toolName,
+            mcpToolName: "calculate",
+            generation: 3,
+          },
+        },
+      },
+    ]);
+  });
 });
 
 describe("createSelectingChatRunner", () => {

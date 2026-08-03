@@ -14,8 +14,10 @@ import {
   type PreparedToolApproval,
   type ToolApprovalOperation,
   type ToolApprovalWorkflow,
+  ToolExecutionError,
   ToolRegistry,
   ToolRepetitionDetectedError,
+  ToolUnavailableError,
   UnexpectedToolCallError,
 } from "./index.js";
 
@@ -1334,6 +1336,51 @@ describe("AgentRuntime", () => {
         status: "cancelled",
       },
     ]);
+  });
+
+  it.each([
+    [
+      new ToolExecutionError("invalid-output", "External Tool output is invalid."),
+      "invalid-output",
+    ],
+    [new ToolUnavailableError(), "unknown-tool"],
+  ] as const)("maps a controlled Tool boundary failure to %s", async (failure, expectedCode) => {
+    const requests: ModelRequest[] = [];
+    const gateway = createScriptedModelGateway(
+      [
+        [
+          { type: "tool.call", call: { id: "call-1", name: "list_files", input: {} } },
+          { type: "finish", reason: "tool-calls" },
+        ],
+        [
+          { type: "text.delta", text: "Handled." },
+          { type: "finish", reason: "stop" },
+        ],
+      ],
+      requests,
+    );
+    const registry = new ToolRegistry();
+    registry.register({
+      name: "list_files",
+      description: "List files.",
+      inputSchema: emptyInputSchema,
+      risk: "read",
+      parseInput() {
+        if (failure instanceof ToolUnavailableError) throw failure;
+        return {};
+      },
+      async execute() {
+        throw failure;
+      },
+    });
+    const runtime = new AgentRuntime(gateway, { emit() {} }, registry);
+
+    await runtime.run({ ...userMessage, content: "List files." }, new AbortController().signal);
+
+    expect(requests[1]?.messages.at(-1)).toMatchObject({
+      role: "tool",
+      result: { status: "error", error: { code: expectedCode } },
+    });
   });
 
   it("marks the Session failed and propagates a model failure", async () => {

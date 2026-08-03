@@ -1,14 +1,19 @@
 import { z } from "zod";
 
 import { maxApprovalUriCharacters } from "./approval.js";
+import { checkpointRunIdSchema } from "./run-id.js";
 import { sessionIdSchema } from "./session.js";
 
+export type { CheckpointRunId } from "./run-id.js";
+export {
+  checkpointRunIdSchema,
+  maxCheckpointRunIdCharacters,
+} from "./run-id.js";
+
 export const maxCheckpointIdCharacters = 128;
-export const maxCheckpointRunIdCharacters = 128;
 export const maxCheckpointFiles = 128;
 
 export const checkpointIdSchema = z.string().min(1).max(maxCheckpointIdCharacters);
-export const checkpointRunIdSchema = z.string().min(1).max(maxCheckpointRunIdCharacters);
 export const checkpointHashSchema = z.string().regex(/^[a-f0-9]{64}$/);
 
 export const checkpointFileSchema = z.strictObject({
@@ -56,7 +61,6 @@ export const checkpointSummarySchema = z.strictObject({
 });
 
 export type CheckpointId = z.infer<typeof checkpointIdSchema>;
-export type CheckpointRunId = z.infer<typeof checkpointRunIdSchema>;
 export type CheckpointHash = z.infer<typeof checkpointHashSchema>;
 export type CheckpointFile = z.infer<typeof checkpointFileSchema>;
 export type Checkpoint = z.infer<typeof checkpointSchema>;

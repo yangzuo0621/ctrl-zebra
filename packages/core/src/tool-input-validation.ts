@@ -1,5 +1,5 @@
 import type { ToolName } from "@ctrl-zebra/protocol";
-import type { AgentTool } from "./tool-registry.js";
+import { type AgentTool, ToolUnavailableError } from "./tool-registry.js";
 
 export class InvalidToolInputError extends Error {
   readonly code = "invalid-input" as const;
@@ -16,7 +16,10 @@ export function parseToolInput<Input>(
 ): Input {
   try {
     return tool.parseInput(value);
-  } catch {
+  } catch (error) {
+    if (error instanceof ToolUnavailableError) {
+      throw error;
+    }
     throw new InvalidToolInputError(tool.name);
   }
 }

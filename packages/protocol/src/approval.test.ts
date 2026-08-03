@@ -45,6 +45,44 @@ describe("Approval DTO", () => {
     ).toEqual(validRequest);
   });
 
+  it("requires an MCP approval to bind the Run and exact Registry identity", () => {
+    const request = {
+      ...validRequest,
+      scope: {
+        sessionId: "session-1",
+        runId: "run-1",
+        call: { id: "call-1", name: "mcp_run_123456789abc", input: { value: 1 } },
+        risk: "execute",
+        source: {
+          kind: "mcp",
+          serverId: "local_fixture",
+          registryName: "mcp_run_123456789abc",
+          mcpToolName: "run",
+          generation: 2,
+          schemaId: "a".repeat(64),
+        },
+        resources: [],
+      },
+    };
+
+    expect(approvalRequestSchema.safeParse(request).success).toBe(true);
+    expect(
+      approvalRequestSchema.safeParse({
+        ...request,
+        scope: { ...request.scope, runId: undefined },
+      }).success,
+    ).toBe(false);
+    expect(
+      approvalRequestSchema.safeParse({
+        ...request,
+        scope: {
+          ...request.scope,
+          source: { ...request.scope.source, registryName: "mcp_other_123456789abc" },
+        },
+      }).success,
+    ).toBe(false);
+  });
+
   it.each([
     { ...validRequest, id: "" },
     { ...validRequest, id: "x".repeat(129) },

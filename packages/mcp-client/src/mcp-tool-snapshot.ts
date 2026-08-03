@@ -6,6 +6,7 @@ import {
   type JsonValue,
   type ToolName,
   ToolRegistry,
+  ToolUnavailableError,
 } from "@ctrl-zebra/core";
 
 import {
@@ -15,6 +16,11 @@ import {
   maxMcpListSnapshotBytes,
   maxMcpToolSnapshotSchemaBytes,
 } from "./contracts.js";
+import {
+  type McpToolApprovalPreparation,
+  normalizeMcpToolResult,
+  parseMcpToolArguments,
+} from "./mcp-tool-call.js";
 import { createMcpRegistryName } from "./mcp-tool-name.js";
 import {
   type CompiledExternalJsonSchema,
@@ -97,6 +103,11 @@ export function createMcpToolSnapshot(
   values: readonly unknown[],
   reservedToolNames: ReadonlySet<string>,
   validator: ExternalJsonSchemaValidator,
+  callTool?: (
+    mcpToolName: string,
+    argumentsValue: Readonly<Record<string, JsonValue>>,
+    signal: AbortSignal,
+  ) => Promise<unknown>,
 ): McpToolSnapshot {
   if (values.length > maxMcpListEntries) {
     throw new McpToolSnapshotError("limit-exceeded");
@@ -168,7 +179,15 @@ export function createMcpToolSnapshot(
     };
     descriptors.push(descriptor);
     tools.push(
-      createExternalTool(descriptor, server, compiledInput, () => snapshot?.isActive() === true),
+      createExternalTool(
+        descriptor,
+        server,
+        generation,
+        compiledInput,
+        outputValidators.get(registryName),
+        () => snapshot?.isActive() === true,
+        callTool,
+      ),
     );
   }
 
@@ -183,9 +202,19 @@ export function createMcpToolSnapshot(
 function createExternalTool(
   descriptor: McpToolDescriptor,
   server: McpServerIdentity,
+  generation: number,
   compiledInput: CompiledExternalJsonSchema,
+  compiledOutput: CompiledExternalJsonSchema | undefined,
   isActive: () => boolean,
-): AgentTool<unknown, never> {
+  callTool?: (
+    mcpToolName: string,
+    argumentsValue: Readonly<Record<string, JsonValue>>,
+    signal: AbortSignal,
+  ) => Promise<unknown>,
+): AgentTool<
+  Readonly<Record<string, JsonValue>>,
+  import("./mcp-tool-call.js").NormalizedMcpToolResult
+> {
   const inputSchema: ExternalToolInputSchema = {
     kind: "external_json_schema_2020_12",
     jsonSchema: compiledInput.schema,
@@ -198,28 +227,62 @@ function createExternalTool(
     inputSchema,
     risk: "execute",
     parseInput(value) {
-      if (!isActive() || !compiledInput.validate(value)) {
+      if (!isActive()) {
         throw new McpToolUnavailableError();
       }
-      return value;
+      const argumentsValue = parseMcpToolArguments(value);
+      if (!compiledInput.validate(argumentsValue)) {
+        throw new Error("MCP Tool arguments do not match the current input schema.");
+      }
+      return argumentsValue;
     },
-    async execute() {
-      throw new McpToolExecutionUnavailableError();
+    async prepareApproval(argumentsValue) {
+      if (!isActive() || !compiledInput.validate(argumentsValue)) {
+        throw new McpToolUnavailableError();
+      }
+      const preparation: McpToolApprovalPreparation = {
+        kind: "mcp-tool-call",
+        server,
+        generation,
+        registryName: descriptor.registryName,
+        mcpToolName: descriptor.mcpToolName,
+        schemaId: descriptor.schemaId,
+        arguments: argumentsValue,
+      };
+      return { output: preparation, truncated: false };
+    },
+    async execute(argumentsValue, { signal }) {
+      if (!isActive() || !compiledInput.validate(argumentsValue)) {
+        throw new McpToolUnavailableError();
+      }
+      if (callTool === undefined) {
+        throw new McpToolExecutionUnavailableError();
+      }
+      signal.throwIfAborted();
+      const result = await callTool(descriptor.mcpToolName, argumentsValue, signal);
+      signal.throwIfAborted();
+      if (!isActive()) {
+        throw new ToolUnavailableError();
+      }
+      return {
+        output: normalizeMcpToolResult(result, compiledOutput),
+        truncated: false,
+      };
     },
   };
-}
-
-export class McpToolUnavailableError extends Error {
-  constructor() {
-    super("The MCP Tool is not available for this connection generation.");
-    this.name = "McpToolUnavailableError";
-  }
 }
 
 export class McpToolExecutionUnavailableError extends Error {
   constructor() {
     super("MCP Tool execution is not enabled by T1404.");
     this.name = "McpToolExecutionUnavailableError";
+  }
+}
+
+export class McpToolUnavailableError extends ToolUnavailableError {
+  constructor() {
+    super();
+    this.name = "McpToolUnavailableError";
   }
 }
 
@@ -289,7 +352,7 @@ function isWellFormedUnicode(value: string): boolean {
     const codeUnit = value.charCodeAt(index);
     if (codeUnit >= 0xd800 && codeUnit <= 0xdbff) {
       const next = value.charCodeAt(index + 1);
-      if (next < 0xdc00 || next > 0xdfff) {
+      if (!(next >= 0xdc00 && next <= 0xdfff)) {
         return false;
       }
       index += 1;

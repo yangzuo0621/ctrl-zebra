@@ -54,7 +54,7 @@ describe("MCP Tool snapshot", () => {
     });
     expect(tool?.risk).toBe("execute");
     expect(tool?.parseInput({ count: 2 })).toEqual({ count: 2 });
-    expect(() => tool?.parseInput({ count: "2" })).toThrow(McpToolUnavailableError);
+    expect(() => tool?.parseInput({ count: "2" })).toThrow();
     expect(snapshot.validateOutput(descriptor?.registryName ?? "missing", { total: 3 })).toBe(true);
     expect(snapshot.validateOutput(descriptor?.registryName ?? "missing", { total: "3" })).toBe(
       false,

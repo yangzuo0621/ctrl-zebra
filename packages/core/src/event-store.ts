@@ -114,6 +114,7 @@ export class JsonlEventStore implements EventStore {
     }
 
     const records: PersistedEventRecord[] = [];
+    const pendingMcpCalls = new Map<string, Readonly<Record<string, unknown>>>();
     for (const [index, line] of lines.entries()) {
       const result = parseRecord(line.text);
       if (result === undefined) {
@@ -127,11 +128,55 @@ export class JsonlEventStore implements EventStore {
       if (result.sequence !== expectedSequence) {
         throw new CorruptEventLogError("invalid-sequence", line.lineNumber);
       }
+      if (!acceptMcpToolEvent(result, pendingMcpCalls)) {
+        throw new CorruptEventLogError("invalid-record", line.lineNumber);
+      }
       records.push(result);
     }
 
     return { records, tailDamaged: false };
   }
+}
+
+function acceptMcpToolEvent(
+  record: PersistedEventRecord,
+  pending: Map<string, Readonly<Record<string, unknown>>>,
+): boolean {
+  if (record.event.type === "session.mcp-tool-call") {
+    const data = record.event.data as Readonly<Record<string, unknown>>;
+    const call = data.call as Readonly<Record<string, unknown>>;
+    const source = data.source as Readonly<Record<string, unknown>>;
+    if (source.registryName !== call.name || typeof call.id !== "string" || pending.has(call.id)) {
+      return false;
+    }
+    pending.set(call.id, { name: call.name, source });
+    return true;
+  }
+  if (record.event.type !== "session.mcp-tool-result") {
+    return true;
+  }
+  const data = record.event.data as Readonly<Record<string, unknown>>;
+  const result = data.result as Readonly<Record<string, unknown>>;
+  const source = data.source as Readonly<Record<string, unknown>>;
+  const callId = result.callId;
+  if (typeof callId !== "string") {
+    return false;
+  }
+  const call = pending.get(callId);
+  const callSource = call?.source as Readonly<Record<string, unknown>> | undefined;
+  if (
+    call === undefined ||
+    callSource === undefined ||
+    call.name !== result.name ||
+    callSource.serverId !== source.serverId ||
+    callSource.registryName !== source.registryName ||
+    callSource.mcpToolName !== source.mcpToolName ||
+    callSource.generation !== source.generation
+  ) {
+    return false;
+  }
+  pending.delete(callId);
+  return true;
 }
 
 function parseRecord(line: string): PersistedEventRecord | undefined {

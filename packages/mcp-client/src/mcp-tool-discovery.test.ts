@@ -169,6 +169,144 @@ describe("ControlledMcpClient Tool discovery", () => {
 
     expect(client.getToolSnapshot()).toBeUndefined();
   });
+
+  it("calls a current-generation Tool with validated arguments and normalizes its result", async () => {
+    const port = new FixtureStdioPort((message, fixture) => {
+      if (message.method === "server/discover") fixture.emitJson(discoveryResult(message));
+      if (message.method === "tools/list") {
+        fixture.emitJson(
+          toolResponse(message, [
+            {
+              name: "calculate",
+              inputSchema: {
+                type: "object",
+                properties: { count: { type: "integer" } },
+                required: ["count"],
+                additionalProperties: false,
+              },
+              outputSchema: {
+                type: "object",
+                properties: { total: { type: "integer" } },
+                required: ["total"],
+                additionalProperties: false,
+              },
+            },
+          ]),
+        );
+      }
+      if (message.method === "tools/call") {
+        fixture.emitJson({
+          jsonrpc: "2.0",
+          id: jsonRpcId(message),
+          result: {
+            resultType: "complete",
+            content: [{ type: "text", text: "calculated" }],
+            structuredContent: { total: 6 },
+          },
+        });
+      }
+    });
+    const client = new ControlledMcpClient(port);
+    await client.connect();
+    const snapshot = await client.discoverTools(context);
+    const descriptor = snapshot.tools[0];
+    const tool =
+      descriptor === undefined ? undefined : snapshot.registry.get(descriptor.registryName);
+
+    await expect(
+      tool?.execute({ count: 2 }, { signal: new AbortController().signal }),
+    ).resolves.toEqual({
+      output: {
+        content: [{ type: "text", text: "calculated" }],
+        structuredContent: { total: 6 },
+      },
+      truncated: false,
+    });
+    expect(port.messages.filter(isMethod("tools/call"))).toHaveLength(1);
+    expect(readParams(port.messages.find(isMethod("tools/call")) ?? {})).toMatchObject({
+      name: "calculate",
+      arguments: { count: 2 },
+    });
+    await client.disconnect();
+  });
+
+  it("cancels tools/call on Run cancellation and accepts no late result", async () => {
+    const port = toolServer((_message) => toolPage([{ name: "held", inputSchema: emptySchema }]));
+    const client = new ControlledMcpClient(port);
+    await client.connect();
+    const snapshot = await client.discoverTools(context);
+    const descriptor = snapshot.tools[0];
+    const tool =
+      descriptor === undefined ? undefined : snapshot.registry.get(descriptor.registryName);
+    const controller = new AbortController();
+    const execution = tool?.execute({}, { signal: controller.signal });
+    const call = await port.waitForMessage(isMethod("tools/call"));
+
+    const cancellation = new Error("run cancelled");
+    controller.abort(cancellation);
+    await expect(execution).rejects.toBe(cancellation);
+    port.emitJson({
+      jsonrpc: "2.0",
+      id: jsonRpcId(call),
+      result: { content: [{ type: "text", text: "late" }] },
+    });
+    expect(client.getToolSnapshot()).toBe(snapshot);
+    await client.disconnect();
+  });
+
+  it("does not fulfill or retry input_required Tool results", async () => {
+    const port = new FixtureStdioPort((message, fixture) => {
+      if (message.method === "server/discover") fixture.emitJson(discoveryResult(message));
+      if (message.method === "tools/list") {
+        fixture.emitJson(
+          toolResponse(message, [{ name: "interactive", inputSchema: emptySchema }]),
+        );
+      }
+      if (message.method === "tools/call") {
+        fixture.emitJson({
+          jsonrpc: "2.0",
+          id: jsonRpcId(message),
+          result: { resultType: "input_required", requestState: "must-not-return" },
+        });
+      }
+    });
+    const client = new ControlledMcpClient(port);
+    await client.connect();
+    const snapshot = await client.discoverTools(context);
+    const descriptor = snapshot.tools[0];
+    const tool =
+      descriptor === undefined ? undefined : snapshot.registry.get(descriptor.registryName);
+
+    await expect(tool?.execute({}, { signal: new AbortController().signal })).rejects.toMatchObject(
+      {
+        code: "failed",
+      },
+    );
+    expect(port.messages.filter(isMethod("tools/call"))).toHaveLength(1);
+    expect(JSON.stringify(port.messages)).not.toContain("inputResponses");
+    await client.disconnect();
+  });
+
+  it("revokes and cancels an in-flight Tool call before disconnect cleanup", async () => {
+    const port = toolServer((_message) => toolPage([{ name: "held", inputSchema: emptySchema }]));
+    const client = new ControlledMcpClient(port);
+    await client.connect();
+    const snapshot = await client.discoverTools(context);
+    const descriptor = snapshot.tools[0];
+    const tool =
+      descriptor === undefined ? undefined : snapshot.registry.get(descriptor.registryName);
+    const execution = tool?.execute({}, { signal: new AbortController().signal });
+    const call = await port.waitForMessage(isMethod("tools/call"));
+
+    await client.disconnect();
+    await expect(execution).rejects.toBeDefined();
+    port.emitJson({
+      jsonrpc: "2.0",
+      id: jsonRpcId(call),
+      result: { resultType: "complete", content: [{ type: "text", text: "late" }] },
+    });
+    expect(client.getToolSnapshot()).toBeUndefined();
+  });
 });
 
 function toolServer(

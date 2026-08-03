@@ -130,7 +130,87 @@ describe("JsonlEventStore", () => {
     ).rejects.toBeInstanceOf(EventLogLimitExceededError);
     expect(storage.appended).toEqual([]);
   });
+
+  it("accepts a complete MCP Tool pair and permits an interrupted call without a Result", async () => {
+    const storage = new FakeEventStorage();
+    storage.content = `${JSON.stringify(mcpCall(1))}\n${JSON.stringify(mcpResult(2))}\n`;
+    const store = new JsonlEventStore(storage);
+
+    await expect(store.read(sessionId)).resolves.toMatchObject({ tailDamaged: false });
+    storage.content = `${JSON.stringify(mcpCall(1))}\n`;
+    await expect(store.read(sessionId)).resolves.toMatchObject({ tailDamaged: false });
+  });
+
+  it.each([
+    [mcpResult(1), "orphan Result"],
+    [
+      {
+        ...mcpResult(2),
+        event: {
+          ...mcpResult(2).event,
+          data: {
+            ...mcpResult(2).event.data,
+            source: { ...mcpSource, generation: 4 },
+          },
+        },
+      },
+      "mismatched generation",
+    ],
+  ])("rejects an MCP Tool pair with %s", async (badResult) => {
+    const storage = new FakeEventStorage();
+    storage.content =
+      badResult.sequence === 1
+        ? `${JSON.stringify(badResult)}\n`
+        : `${JSON.stringify(mcpCall(1))}\n${JSON.stringify(badResult)}\n`;
+    const store = new JsonlEventStore(storage);
+
+    await expect(store.read(sessionId)).rejects.toMatchObject({
+      name: "CorruptEventLogError",
+      reason: "invalid-record",
+    });
+  });
 });
+
+const mcpSource = {
+  serverId: "local_fixture",
+  registryName: "mcp_run_123456789abc",
+  mcpToolName: "run",
+  generation: 3,
+} as const;
+
+function mcpCall(sequence: number): PersistedEventRecord {
+  return {
+    sequence,
+    recordedAt: "2026-08-03T00:00:00.000Z",
+    event: {
+      type: "session.mcp-tool-call",
+      data: {
+        call: { id: "call-1", name: mcpSource.registryName, input: {} },
+        source: mcpSource,
+      },
+    },
+  };
+}
+
+function mcpResult(sequence: number): PersistedEventRecord {
+  return {
+    sequence,
+    recordedAt: "2026-08-03T00:00:00.000Z",
+    event: {
+      type: "session.mcp-tool-result",
+      data: {
+        result: {
+          callId: "call-1",
+          name: mcpSource.registryName,
+          status: "success",
+          output: { content: [] },
+          truncated: false,
+        },
+        source: mcpSource,
+      },
+    },
+  };
+}
 
 class FakeEventStorage implements EventStorage {
   content: string | undefined;
