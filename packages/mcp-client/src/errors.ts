@@ -12,6 +12,8 @@ const errorMessages = {
   "tool-unavailable": "The MCP Tool is unavailable for the current connection.",
   "resource-unavailable": "The MCP Resource is unavailable for the current connection.",
   "resource-unsupported": "The MCP Resource uses unsupported content.",
+  "prompt-unavailable": "The MCP Prompt is unavailable for the current connection.",
+  "prompt-unsupported": "The MCP Prompt uses unsupported content.",
   "termination-unconfirmed": "The MCP Server process could not be confirmed as terminated.",
   internal: "The MCP connection failed unexpectedly.",
 } as const satisfies Record<McpClientErrorCode, string>;

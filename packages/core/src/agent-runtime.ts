@@ -2,6 +2,7 @@ import {
   type ApprovalRequest,
   type ApprovalStatus,
   jsonValueSchema,
+  type McpPromptConfirmation,
   type McpResourceAttachment,
   type SessionId,
   type SessionStatus,
@@ -16,7 +17,7 @@ import {
 import { agentSystemInstruction, shouldOfferWorkspaceTools } from "./agent-behavior-policy.js";
 import { BasicApprovalPolicy } from "./approval-policy.js";
 import type { DomainEvent, EventSink } from "./events.js";
-import { projectExternalResourceContext } from "./external-resource-context.js";
+import { projectExternalMcpContext } from "./external-resource-context.js";
 import type { ModelGateway, ModelMessage } from "./model-gateway.js";
 import { SessionStateMachine, type SessionStatusChangedEvent } from "./session-state-machine.js";
 import { allocateTokenBudget, maxModelContextWindowTokens } from "./token-budget.js";
@@ -104,6 +105,7 @@ export interface AgentRuntimeOptions {
   readonly approvalPolicy?: BasicApprovalPolicy;
   readonly approvalWorkflow?: ToolApprovalWorkflow;
   readonly externalResources?: readonly McpResourceAttachment[];
+  readonly externalPrompts?: readonly McpPromptConfirmation[];
   readonly contextWindowTokens?: number;
 }
 
@@ -141,6 +143,7 @@ export class AgentRuntime {
   readonly #approvalPolicy: BasicApprovalPolicy;
   readonly #approvalWorkflow: ToolApprovalWorkflow | undefined;
   readonly #externalResources: readonly McpResourceAttachment[];
+  readonly #externalPrompts: readonly McpPromptConfirmation[];
   readonly #filesTokenBudget: number;
 
   constructor(
@@ -164,6 +167,7 @@ export class AgentRuntime {
     this.#approvalPolicy = options.approvalPolicy ?? new BasicApprovalPolicy();
     this.#approvalWorkflow = options.approvalWorkflow;
     this.#externalResources = options.externalResources ?? [];
+    this.#externalPrompts = options.externalPrompts ?? [];
     this.#filesTokenBudget = allocateTokenBudget(
       options.contextWindowTokens ?? maxModelContextWindowTokens,
     ).filesTokens;
@@ -176,7 +180,11 @@ export class AgentRuntime {
       session.transitionTo("preparing");
       signal.throwIfAborted();
       const messages: ModelMessage[] = [
-        ...projectExternalResourceContext(this.#externalResources, this.#filesTokenBudget),
+        ...projectExternalMcpContext(
+          this.#externalResources,
+          this.#externalPrompts,
+          this.#filesTokenBudget,
+        ),
         { role: "user", content: userMessage.content },
       ];
       const offerTools = shouldOfferWorkspaceTools(userMessage.content);

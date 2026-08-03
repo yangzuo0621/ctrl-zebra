@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { chatMessageSchema } from "./chat-message.js";
 import { checkpointIdSchema } from "./checkpoint.js";
+import { mcpPromptConfirmationSchema } from "./mcp-prompt.js";
 import { mcpResourceAttachmentSchema } from "./mcp-resource.js";
 import {
   reasoningBlockStartDataSchema,
@@ -133,6 +134,10 @@ export const persistedMcpResourceEventPayloadSchema = z.strictObject({
   type: z.literal("session.mcp-resource-attached"),
   data: mcpResourceAttachmentSchema,
 });
+export const persistedMcpPromptEventPayloadSchema = z.strictObject({
+  type: z.literal("session.mcp-prompt-confirmed"),
+  data: mcpPromptConfirmationSchema,
+});
 
 const persistedReasoningEventTypes = new Set([
   "session.reasoning-start",
@@ -142,9 +147,19 @@ const persistedReasoningEventTypes = new Set([
 ]);
 const persistedMcpToolEventTypes = new Set(["session.mcp-tool-call", "session.mcp-tool-result"]);
 const persistedMcpResourceEventTypes = new Set(["session.mcp-resource-attached"]);
+const persistedMcpPromptEventTypes = new Set(["session.mcp-prompt-confirmed"]);
 
 export const persistedEventPayloadSchema = genericPersistedEventPayloadSchema.superRefine(
   (payload, context) => {
+    if (
+      persistedMcpPromptEventTypes.has(payload.type) &&
+      !persistedMcpPromptEventPayloadSchema.safeParse(payload).success
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Persisted MCP Prompt events must match their strict version 1 schema.",
+      });
+    }
     if (
       persistedReasoningEventTypes.has(payload.type) &&
       !persistedReasoningEventPayloadSchema.safeParse(payload).success
@@ -190,6 +205,7 @@ export type PersistedMcpToolEventPayload = z.infer<typeof persistedMcpToolEventP
 export type PersistedMcpResourceEventPayload = z.infer<
   typeof persistedMcpResourceEventPayloadSchema
 >;
+export type PersistedMcpPromptEventPayload = z.infer<typeof persistedMcpPromptEventPayloadSchema>;
 export type PersistedEventRecord = z.infer<typeof persistedEventRecordSchema>;
 
 export interface SessionPersistencePaths {

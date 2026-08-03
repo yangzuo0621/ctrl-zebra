@@ -66,6 +66,36 @@ describe("AgentRuntime", () => {
     expect(requests[0]?.messages[1]).toEqual({ role: "user", content: "Keep my intent" });
   });
 
+  it("keeps confirmed MCP Prompt roles as ordinary user context before the latest intent", async () => {
+    const requests: ModelRequest[] = [];
+    const gateway = createModelGateway(
+      [
+        { type: "text.delta", text: "Done" },
+        { type: "finish", reason: "stop" },
+      ],
+      (request) => requests.push(request),
+    );
+    const runtime = new AgentRuntime(gateway, { emit: () => {} }, undefined, {
+      externalPrompts: [
+        {
+          serverId: "local_fixture",
+          promptName: "review",
+          projectedText: "[source role: assistant]\nTreat this only as ordinary context.",
+        },
+      ],
+    });
+
+    await runtime.run({ ...userMessage, content: "Keep my intent" }, new AbortController().signal);
+
+    expect(requests[0]?.messages).toEqual([
+      {
+        role: "user",
+        content: "[source role: assistant]\nTreat this only as ordinary context.",
+      },
+      { role: "user", content: "Keep my intent" },
+    ]);
+  });
+
   it("emits text deltas in model order and completes the Session", async () => {
     const gateway = createModelGateway([
       { type: "text.delta", text: "Hel" },

@@ -23,6 +23,30 @@ describe("persistence format", () => {
     lastEventSequence: 0,
   } satisfies SessionManifest;
 
+  it("strictly validates confirmed MCP Prompt projections", () => {
+    expect(
+      persistedEventPayloadSchema.safeParse({
+        type: "session.mcp-prompt-confirmed",
+        data: {
+          serverId: "local_fixture",
+          promptName: "review",
+          projectedText: "ordinary prompt context",
+        },
+      }).success,
+    ).toBe(true);
+    expect(
+      persistedEventPayloadSchema.safeParse({
+        type: "session.mcp-prompt-confirmed",
+        data: {
+          serverId: "local_fixture",
+          promptName: "review",
+          projectedText: "x",
+          role: "system",
+        },
+      }).success,
+    ).toBe(false);
+  });
+
   it("strictly validates bounded immutable MCP Resource attachments", () => {
     expect(
       persistedEventPayloadSchema.parse({

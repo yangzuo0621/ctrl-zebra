@@ -5,7 +5,7 @@ import type {
   McpProcessTermination,
   McpStdioPortHandlers,
 } from "@ctrl-zebra/mcp-client";
-import { McpResourceError, McpToolDiscoveryError } from "@ctrl-zebra/mcp-client";
+import { McpPromptError, McpResourceError, McpToolDiscoveryError } from "@ctrl-zebra/mcp-client";
 import { describe, expect, it, vi } from "vitest";
 
 import type { McpServerConfiguration } from "../adapters/mcp-server-configuration.js";
@@ -91,6 +91,13 @@ describe("MCP connection controller", () => {
       },
       expect.any(AbortSignal),
     );
+    expect(harness.client.discoverPrompts).toHaveBeenCalledWith(
+      {
+        server: { serverId: "local_fixture", displayName: "Local fixture" },
+        generation: 1,
+      },
+      expect.any(AbortSignal),
+    );
     expect(result.status).toBe("connected");
   });
 
@@ -111,6 +118,18 @@ describe("MCP connection controller", () => {
     harness.client.discoverResources.mockRejectedValueOnce(
       new McpResourceError("malformed-message"),
     );
+    const controller = new McpConnectionController(harness.values);
+
+    await expect(controller.connect()).resolves.toMatchObject({
+      status: "failed",
+      error: { code: "malformed-message" },
+    });
+    expect(harness.client.disconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails and closes the connection when initial Prompt discovery is rejected", async () => {
+    const harness = createHarness();
+    harness.client.discoverPrompts.mockRejectedValueOnce(new McpPromptError("malformed-message"));
     const controller = new McpConnectionController(harness.values);
 
     await expect(controller.connect()).resolves.toMatchObject({
@@ -361,6 +380,14 @@ function createHarness() {
     ),
     getResourceCatalog: vi.fn(() => undefined),
     readResource: vi.fn(),
+    discoverPrompts: vi.fn(
+      async (context: {
+        server: { serverId: string; displayName: string };
+        generation: number;
+      }) => ({ ...context, prompts: [] }),
+    ),
+    getPromptCatalog: vi.fn(() => undefined),
+    getPrompt: vi.fn(),
     disconnect: vi.fn(async (): Promise<McpDisconnectOutcome> => ({ kind: "disconnected" })),
     dispose: vi.fn(async (): Promise<McpDisconnectOutcome> => ({ kind: "disconnected" })),
   };
