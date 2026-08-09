@@ -227,7 +227,7 @@
 
 ## 5. 阶段规格索引
 
-阶段 0–14 已完成；阶段 0–13 的完整任务正文已按阶段归档。阶段 15–22 已规划，等待依次开始。
+阶段 0–14 已完成，完整任务正文均已按阶段归档。阶段 15–22 已规划，等待依次开始。
 
 | 阶段 | 状态 | 详细规格 |
 |---|---|---|
@@ -245,7 +245,7 @@
 | 11 | 已完成 | [阶段 11 归档](roadmap/archive/phase-11.md) |
 | 12 | 已完成 | [阶段 12 归档](roadmap/archive/phase-12.md) |
 | 13 | 已完成 | [阶段 13 归档](roadmap/archive/phase-13.md) |
-| 14 | 已完成 | [阶段 14：受控的 MCP Client 与三类 Server 原语](roadmap/phases/phase-14.md) |
+| 14 | 已完成 | [阶段 14 归档](roadmap/archive/phase-14.md) |
 | 15 | 已规划 | [阶段 15：多轮对话与上下文生命周期](roadmap/phases/phase-15.md) |
 | 16 | 已规划 | [阶段 16：Provider 上手体验](roadmap/phases/phase-16.md) |
 | 17 | 已规划 | [阶段 17：界面一致性与内容呈现](roadmap/phases/phase-17.md) |
@@ -271,7 +271,7 @@
 6. 跨会话记忆；必须先具备会话删除、保留策略和可见、可编辑、可删除的记忆投影。
 7. Git 状态感知和提交辅助；不包含自动提交或自动创建 PR。
 8. MCP 远程传输与授权扩展：Streamable HTTP + OAuth；详细记录见
-   [阶段 14 后续扩展](roadmap/phases/phase-14.md#7-后续扩展记录)。
+   [阶段 14 后续扩展](roadmap/archive/phase-14.md#7-后续扩展记录)。
 9. 更多专用模型供应商，继续验证 Provider 边界。
 10. 多 Agent；只有评测证明收益后才可规划，首个版本只允许只读子 Agent。
 
@@ -309,7 +309,7 @@
 以及
 [T1304：实现可访问的推理摘要 Webview 体验](roadmap/archive/phase-13.md#t1304实现可访问的推理摘要-webview-体验)
 均已完成。T1304 由 [#135](https://github.com/yangzuo0621/ctrl-zebra/pull/135) 交付。阶段 14
-已完成[受控的 MCP Client 与三类 Server 原语](roadmap/phases/phase-14.md)，包含 T1401–T1409；
+已完成[受控的 MCP Client 与三类 Server 原语](roadmap/archive/phase-14.md)，包含 T1401–T1409；
 T1401 由 [#141](https://github.com/yangzuo0621/ctrl-zebra/pull/141) 交付；T1402 由
 [#143](https://github.com/yangzuo0621/ctrl-zebra/pull/143) 交付；T1403 由
 [#144](https://github.com/yangzuo0621/ctrl-zebra/pull/144) 交付；T1404 由
