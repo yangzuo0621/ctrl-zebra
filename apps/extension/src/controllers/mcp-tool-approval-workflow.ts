@@ -98,6 +98,7 @@ export class McpToolApprovalWorkflow implements ToolApprovalWorkflow {
       request,
       requestDecision: (decisionSignal) => this.#lifecycle.requestDecision(record, decisionSignal),
       consume: (consumptionSignal) => this.#consume(record, consumptionSignal),
+      invalidate: () => this.#lifecycle.invalidate(record),
     };
   }
 

@@ -98,6 +98,72 @@ describe("ApprovalLifecycle", () => {
     expect(disposed.status).toBe("cancelled");
     expect(lifecycle.get(disposed.request.id)).toBeUndefined();
   });
+
+  it("continues disposing records when a decision settled before the dispose microtask", async () => {
+    const lifecycle = createLifecycle();
+    const decided = createRecord("decided-before-dispose");
+    const stillPending = createRecord("still-pending");
+    lifecycle.register(decided);
+    lifecycle.register(stillPending);
+
+    const decidedWait = lifecycle.requestDecision(decided, new AbortController().signal);
+    const pendingWait = lifecycle.requestDecision(stillPending, new AbortController().signal);
+    lifecycle.decide(decided.request.id, "approved");
+    lifecycle.dispose();
+
+    await expect(decidedWait).rejects.toThrow("approval request was invalidated");
+    await expect(pendingWait).rejects.toThrow("Approval workflow disposed.");
+    expect(decided.status).toBe("cancelled");
+    expect(stillPending.status).toBe("cancelled");
+    expect(lifecycle.get(decided.request.id)).toBeUndefined();
+    expect(lifecycle.get(stillPending.request.id)).toBeUndefined();
+    lifecycle.register(createRecord(decided.request.id));
+    lifecycle.register(createRecord(stillPending.request.id));
+  });
+
+  it("invalidates unconsumed records before a decision wait and remains idempotent", () => {
+    const lifecycle = createLifecycle();
+    const record = createRecord("invalidated-before-wait");
+    lifecycle.register(record);
+
+    lifecycle.invalidate(record);
+    lifecycle.invalidate(record);
+
+    expect(record.status).toBe("invalidated");
+    expect(lifecycle.get(record.request.id)).toBeUndefined();
+    expect(() => lifecycle.decide(record.request.id, "approved")).not.toThrow();
+    lifecycle.register(createRecord(record.request.id));
+  });
+
+  it("invalidates an approved unconsumed record and releases it", async () => {
+    const lifecycle = createLifecycle();
+    const record = createRecord("invalidated-after-decision");
+    lifecycle.register(record);
+    const decision = lifecycle.requestDecision(record, new AbortController().signal);
+    lifecycle.decide(record.request.id, "approved");
+    await expect(decision).resolves.toMatchObject({ decision: "approved" });
+
+    lifecycle.invalidate(record);
+
+    expect(record.status).toBe("invalidated");
+    expect(lifecycle.get(record.request.id)).toBeUndefined();
+    expect(() => lifecycle.validateConsumption(record, new AbortController().signal)).toThrow(
+      "not available",
+    );
+  });
+
+  it("settles an active decision wait when invalidated", async () => {
+    const lifecycle = createLifecycle();
+    const record = createRecord("invalidated-during-wait");
+    lifecycle.register(record);
+    const decision = lifecycle.requestDecision(record, new AbortController().signal);
+
+    lifecycle.invalidate(record);
+
+    await expect(decision).rejects.toThrow("approval request was invalidated");
+    expect(record.status).toBe("invalidated");
+    expect(lifecycle.get(record.request.id)).toBeUndefined();
+  });
 });
 
 function createLifecycle(): ApprovalLifecycle<ApprovalLifecycleRecord> {

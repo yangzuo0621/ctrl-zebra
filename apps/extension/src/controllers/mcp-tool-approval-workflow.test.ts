@@ -103,6 +103,18 @@ describe("McpToolApprovalWorkflow", () => {
       ),
     ).rejects.toThrow("does not match the proposed call");
   });
+
+  it("invalidates a created operation before a decision and releases its registration", async () => {
+    const fixture = createFixture();
+    const operation = await fixture.workflow.create(prepared(), new AbortController().signal);
+
+    operation.invalidate();
+    operation.invalidate();
+    fixture.workflow.decide(operation.request.id, "approved");
+
+    await expect(operation.consume(new AbortController().signal)).rejects.toThrow("not available");
+    expect(() => fixture.workflow.decide(operation.request.id, "approved")).not.toThrow();
+  });
 });
 
 function createFixture() {

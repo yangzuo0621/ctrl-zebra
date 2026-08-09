@@ -41,6 +41,7 @@ describe("FileEditApprovalWorkflow", () => {
     await expect(operation.consume(signal)).rejects.toThrow("not available");
     expect(operation.request.scope).toEqual({
       sessionId: "session-1",
+      runId: "run-1",
       call: prepared.call,
       risk: "write",
       workspaceRootUri: "file:///workspace",
@@ -163,6 +164,19 @@ describe("FileEditApprovalWorkflow", () => {
       "Trust this workspace",
     );
     expect(dependencies.bindPlan).not.toHaveBeenCalled();
+  });
+
+  it("invalidates a created operation before a decision and releases its registration", async () => {
+    const dependencies = createDependencies();
+    const workflow = new FileEditApprovalWorkflow(dependencies.values);
+    const operation = await workflow.create(prepared, new AbortController().signal);
+
+    operation.invalidate();
+    operation.invalidate();
+    workflow.decide(operation.request.id, "approved");
+
+    await expect(operation.consume(new AbortController().signal)).rejects.toThrow("not available");
+    expect(() => workflow.decide(operation.request.id, "approved")).not.toThrow();
   });
 });
 

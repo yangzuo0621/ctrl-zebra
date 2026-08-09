@@ -41,6 +41,7 @@ describe("CommandApprovalWorkflow", () => {
     await expect(operation.consume(signal)).rejects.toThrow("not available");
     expect(operation.request.scope).toEqual({
       sessionId: prepared.sessionId,
+      runId: prepared.runId,
       call: prepared.call,
       risk: "execute",
       workspaceRootUri: "file:///workspace",
@@ -196,6 +197,19 @@ describe("CommandApprovalWorkflow", () => {
       "Trust this workspace",
     );
     expect(dependencies.bindCwd).not.toHaveBeenCalled();
+  });
+
+  it("invalidates a created operation before a decision and releases its registration", async () => {
+    const dependencies = createDependencies();
+    const workflow = new CommandApprovalWorkflow(dependencies.values);
+    const operation = await workflow.create(prepared, new AbortController().signal);
+
+    operation.invalidate();
+    operation.invalidate();
+    workflow.decide(operation.request.id, "approved");
+
+    await expect(operation.consume(new AbortController().signal)).rejects.toThrow("not available");
+    expect(() => workflow.decide(operation.request.id, "approved")).not.toThrow();
   });
 });
 

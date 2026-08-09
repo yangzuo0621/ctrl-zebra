@@ -1,4 +1,4 @@
-import { CancellableApprovalService } from "@ctrl-zebra/core";
+import { ApprovalRequestNotPendingError, CancellableApprovalService } from "@ctrl-zebra/core";
 import type { ApprovalDecisionIntent, ApprovalRequest, ApprovalStatus } from "@ctrl-zebra/protocol";
 
 export interface ApprovalLifecycleRecord {
@@ -45,14 +45,50 @@ export class ApprovalLifecycle<Record extends ApprovalLifecycleRecord> {
   }
 
   dispose(): void {
-    for (const record of this.#records.values()) {
-      this.#clearExpiration(record);
-      if (record.status === "pending" && record.signal !== undefined) {
-        record.status = "cancelled";
-        this.#service.cancel(record.request.id, new Error("Approval workflow disposed."));
+    let firstError: unknown;
+    for (const record of [...this.#records.values()]) {
+      try {
+        this.#clearExpiration(record);
+        if (record.status === "pending" && record.signal !== undefined) {
+          record.status = "cancelled";
+          try {
+            this.#service.cancel(record.request.id, new Error("Approval workflow disposed."));
+          } catch (error) {
+            if (!(error instanceof ApprovalRequestNotPendingError)) {
+              throw error;
+            }
+          }
+        } else {
+          this.invalidate(record);
+        }
+      } catch (error) {
+        firstError ??= error;
+      } finally {
+        this.#release(record);
       }
     }
     this.#records.clear();
+    if (firstError !== undefined) {
+      throw firstError;
+    }
+  }
+
+  invalidate(record: Record): void {
+    if (record.status === "pending") {
+      record.status = "invalidated";
+      if (record.signal !== undefined) {
+        try {
+          this.#service.cancel(record.request.id, new ApprovalInvalidatedError());
+        } catch (error) {
+          if (!(error instanceof ApprovalRequestNotPendingError)) {
+            throw error;
+          }
+        }
+      }
+    } else if (record.status === "approved") {
+      record.status = "invalidated";
+    }
+    this.#release(record);
   }
 
   async requestDecision(record: Record, signal: AbortSignal) {
@@ -72,6 +108,9 @@ export class ApprovalLifecycle<Record extends ApprovalLifecycleRecord> {
     record.expiration = setTimeout(() => this.#expire(record), remaining);
     try {
       const value = await decision;
+      if (record.status !== "pending") {
+        throw new ApprovalInvalidatedError();
+      }
       record.status = value.decision;
       if (value.decision === "denied") {
         this.#release(record);
@@ -117,6 +156,9 @@ export class ApprovalLifecycle<Record extends ApprovalLifecycleRecord> {
   }
 
   finish(record: Record, status: "consumed" | "expired" | "invalidated"): void {
+    if (record.status !== "pending" && record.status !== "approved") {
+      return;
+    }
     record.status = status;
     this.#release(record);
   }
@@ -156,6 +198,13 @@ class ApprovalExpiredError extends Error {
   constructor() {
     super("The approval request expired.");
     this.name = "ApprovalExpiredError";
+  }
+}
+
+class ApprovalInvalidatedError extends Error {
+  constructor() {
+    super("The approval request was invalidated.");
+    this.name = "ApprovalInvalidatedError";
   }
 }
 

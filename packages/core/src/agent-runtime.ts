@@ -1,6 +1,9 @@
 import {
   type ApprovalRequest,
   type ApprovalStatus,
+  approvalRequestSchema,
+  type CheckpointRunId,
+  type JsonValue,
   jsonValueSchema,
   type McpPromptConfirmation,
   type McpResourceAttachment,
@@ -11,6 +14,7 @@ import {
   type ToolErrorResult,
   type ToolResult,
   type ToolSuccessResult,
+  toolCallSchema,
   toolResultSchema,
   type UserMessage,
 } from "@ctrl-zebra/protocol";
@@ -18,10 +22,15 @@ import { agentSystemInstruction, shouldOfferWorkspaceTools } from "./agent-behav
 import { BasicApprovalPolicy } from "./approval-policy.js";
 import type { DomainEvent, EventSink } from "./events.js";
 import { projectExternalMcpContext } from "./external-resource-context.js";
+import {
+  InvalidModelHistoryError,
+  type ModelMessageTokenCounter,
+  pruneModelHistory,
+} from "./history-pruner.js";
 import type { ModelGateway, ModelMessage } from "./model-gateway.js";
 import { SessionStateMachine, type SessionStatusChangedEvent } from "./session-state-machine.js";
 import { allocateTokenBudget, maxModelContextWindowTokens } from "./token-budget.js";
-import type { ToolApprovalWorkflow } from "./tool-approval.js";
+import type { ToolApprovalOperation, ToolApprovalWorkflow } from "./tool-approval.js";
 import { InvalidToolInputError, parseToolInput } from "./tool-input-validation.js";
 import { limitToolOutput } from "./tool-output-limiter.js";
 import {
@@ -99,14 +108,39 @@ export interface AgentApprovalStateEvent extends DomainEvent {
 
 export const defaultMaxToolSteps = 8;
 
+export interface ModelHistoryProvider {
+  load(
+    sessionId: SessionId,
+    signal: AbortSignal,
+  ): readonly ModelMessage[] | Promise<readonly ModelMessage[]>;
+}
+
+export class SessionIdentityMismatchError extends Error {
+  constructor(
+    readonly expectedSessionId: SessionId,
+    readonly actualSessionId: SessionId,
+  ) {
+    super("Agent Runtime cannot switch Sessions while it owns a Session.");
+    this.name = "SessionIdentityMismatchError";
+  }
+}
+
 export interface AgentRuntimeOptions {
   readonly maxToolSteps?: number;
   readonly toolRepetitionThreshold?: number;
   readonly approvalPolicy?: BasicApprovalPolicy;
   readonly approvalWorkflow?: ToolApprovalWorkflow;
+  readonly contextWindowTokens?: number;
+  readonly history?: readonly ModelMessage[];
+  readonly historyProvider?: ModelHistoryProvider;
+  readonly tokenCounter?: ModelMessageTokenCounter;
+  readonly initialSessionStatus?: SessionStatus;
+  readonly createRunId?: () => CheckpointRunId;
+}
+
+export interface AgentRuntimeRunOptions {
   readonly externalResources?: readonly McpResourceAttachment[];
   readonly externalPrompts?: readonly McpPromptConfirmation[];
-  readonly contextWindowTokens?: number;
 }
 
 export class MaxToolStepsExceededError extends Error {
@@ -134,6 +168,30 @@ export class UnexpectedToolCallError extends Error {
   }
 }
 
+class InvalidToolApprovalError extends Error {
+  constructor() {
+    super("Tool approval request is not bound to the current Session, Run, and Tool Call.");
+    this.name = "InvalidToolApprovalError";
+  }
+}
+
+let nextDefaultRunId = 0;
+
+const maxHistoryMessageCharacters = 1_000_000;
+const maxHistoryMessages = 10_000;
+
+const defaultModelMessageTokenCounter: ModelMessageTokenCounter = {
+  count(message) {
+    const serialized = JSON.stringify(message);
+    return serialized === undefined ? 0 : [...serialized].length;
+  },
+};
+
+function createDefaultRunId(): CheckpointRunId {
+  nextDefaultRunId += 1;
+  return `run-${nextDefaultRunId}`;
+}
+
 export class AgentRuntime {
   readonly #modelGateway: ModelGateway;
   readonly #eventSink: EventSink<AgentRuntimeEvent>;
@@ -142,9 +200,15 @@ export class AgentRuntime {
   readonly #toolRepetitionThreshold: number;
   readonly #approvalPolicy: BasicApprovalPolicy;
   readonly #approvalWorkflow: ToolApprovalWorkflow | undefined;
-  readonly #externalResources: readonly McpResourceAttachment[];
-  readonly #externalPrompts: readonly McpPromptConfirmation[];
   readonly #filesTokenBudget: number;
+  readonly #history: readonly ModelMessage[];
+  readonly #historyProvider: ModelHistoryProvider | undefined;
+  readonly #tokenCounter: ModelMessageTokenCounter;
+  readonly #historyTokenBudget: number;
+  readonly #initialSessionStatus: SessionStatus;
+  readonly #createRunId: () => CheckpointRunId;
+  #session: SessionStateMachine | undefined;
+  #sessionId: SessionId | undefined;
 
   constructor(
     modelGateway: ModelGateway,
@@ -166,29 +230,38 @@ export class AgentRuntime {
     ).threshold;
     this.#approvalPolicy = options.approvalPolicy ?? new BasicApprovalPolicy();
     this.#approvalWorkflow = options.approvalWorkflow;
-    this.#externalResources = options.externalResources ?? [];
-    this.#externalPrompts = options.externalPrompts ?? [];
-    this.#filesTokenBudget = allocateTokenBudget(
+    const tokenBudget = allocateTokenBudget(
       options.contextWindowTokens ?? maxModelContextWindowTokens,
-    ).filesTokens;
+    );
+    this.#filesTokenBudget = tokenBudget.filesTokens;
+    this.#historyTokenBudget = tokenBudget.historyTokens;
+    this.#history = options.history ?? [];
+    this.#historyProvider = options.historyProvider;
+    this.#tokenCounter = options.tokenCounter ?? defaultModelMessageTokenCounter;
+    this.#initialSessionStatus = options.initialSessionStatus ?? "idle";
+    this.#createRunId = options.createRunId ?? createDefaultRunId;
   }
 
-  async run(userMessage: UserMessage, signal: AbortSignal): Promise<void> {
-    const session = new SessionStateMachine(userMessage.sessionId, "idle", this.#eventSink);
+  async run(
+    userMessage: UserMessage,
+    signal: AbortSignal,
+    runOptions: AgentRuntimeRunOptions = {},
+  ): Promise<void> {
+    const session = this.#getSession(userMessage.sessionId);
+    const runOwner = {};
 
     try {
-      session.transitionTo("preparing");
+      session.beginRun(runOwner);
       signal.throwIfAborted();
-      const messages: ModelMessage[] = [
-        ...projectExternalMcpContext(
-          this.#externalResources,
-          this.#externalPrompts,
-          this.#filesTokenBudget,
-        ),
-        { role: "user", content: userMessage.content },
-      ];
+      const runId = this.#createRunId();
+      signal.throwIfAborted();
+      const history = await this.#loadHistory(userMessage.sessionId, signal);
+      signal.throwIfAborted();
+      const messages = this.#prepareMessages(history, userMessage.content, signal, runOptions);
+      signal.throwIfAborted();
       const offerTools = shouldOfferWorkspaceTools(userMessage.content);
       session.transitionTo("streaming");
+      signal.throwIfAborted();
       let toolSteps = 0;
       const repetitionDetector = new ToolRepetitionDetector(this.#toolRepetitionThreshold);
       const reasoningIds = new RunReasoningIds();
@@ -212,12 +285,14 @@ export class AgentRuntime {
 
         const toolResult = await this.#executeTool(
           userMessage.sessionId,
-          userMessage.messageId,
+          runId,
           response.toolCall,
           signal,
           session,
         );
+        signal.throwIfAborted();
         this.#emitToolResult(userMessage.sessionId, response.toolCall, toolResult);
+        signal.throwIfAborted();
         messages.push(
           { role: "assistant", toolCall: response.toolCall },
           { role: "tool", result: toolResult },
@@ -226,12 +301,17 @@ export class AgentRuntime {
         signal.throwIfAborted();
         if (session.status === "executing_tool") {
           session.transitionTo("streaming");
+          signal.throwIfAborted();
         }
       }
 
       signal.throwIfAborted();
       session.transitionTo("completed");
     } catch (error) {
+      if (!session.ownsRun(runOwner)) {
+        throw error;
+      }
+
       if (isCancellation(error, signal)) {
         if (isActiveStatus(session.status)) {
           session.transitionTo("cancelled");
@@ -244,6 +324,57 @@ export class AgentRuntime {
       }
       throw error;
     }
+  }
+
+  #getSession(sessionId: SessionId): SessionStateMachine {
+    if (this.#session === undefined) {
+      this.#sessionId = sessionId;
+      this.#session = new SessionStateMachine(
+        sessionId,
+        this.#initialSessionStatus,
+        this.#eventSink,
+      );
+      return this.#session;
+    }
+    if (this.#sessionId !== sessionId) {
+      throw new SessionIdentityMismatchError(this.#sessionId ?? sessionId, sessionId);
+    }
+    return this.#session;
+  }
+
+  async #loadHistory(sessionId: SessionId, signal: AbortSignal): Promise<readonly ModelMessage[]> {
+    signal.throwIfAborted();
+    const history =
+      this.#historyProvider === undefined
+        ? this.#history
+        : await this.#historyProvider.load(sessionId, signal);
+    signal.throwIfAborted();
+    return validateModelHistory(history);
+  }
+
+  #prepareMessages(
+    history: readonly ModelMessage[],
+    content: string,
+    signal: AbortSignal,
+    runOptions: AgentRuntimeRunOptions,
+  ): ModelMessage[] {
+    signal.throwIfAborted();
+    const withLatestUser: readonly ModelMessage[] = [...history, { role: "user", content }];
+    const pruned = pruneModelHistory(withLatestUser, this.#historyTokenBudget, this.#tokenCounter);
+    signal.throwIfAborted();
+
+    const latestUser = withLatestUser.at(-1);
+    if (latestUser === undefined || latestUser.role !== "user") {
+      throw new InvalidModelHistoryError();
+    }
+    const retainedHistory = pruned.messages.slice(0, -1);
+    const externalContext = projectExternalMcpContext(
+      runOptions.externalResources ?? [],
+      runOptions.externalPrompts ?? [],
+      this.#filesTokenBudget,
+    );
+    signal.throwIfAborted();
+    return [...retainedHistory, ...externalContext, latestUser];
   }
 
   async #streamModel(
@@ -281,6 +412,7 @@ export class AgentRuntime {
           sessionId,
           text: event.text,
         });
+        signal.throwIfAborted();
       } else if (event.type === "reasoning.start") {
         if (openReasoningBlock !== undefined || reasoningBlocks.has(event.blockId)) {
           throw new Error("ModelGateway emitted a malformed reasoning lifecycle.");
@@ -293,6 +425,7 @@ export class AgentRuntime {
           sessionId,
           blockId: runtimeBlockId,
         });
+        signal.throwIfAborted();
       } else if (event.type === "reasoning.delta") {
         const runtimeBlockId = reasoningBlocks.get(event.blockId);
         if (event.blockId !== openReasoningBlock || runtimeBlockId === undefined) {
@@ -304,6 +437,7 @@ export class AgentRuntime {
           blockId: runtimeBlockId,
           text: event.text,
         });
+        signal.throwIfAborted();
       } else if (event.type === "reasoning.end") {
         const runtimeBlockId = reasoningBlocks.get(event.blockId);
         if (event.blockId !== openReasoningBlock || runtimeBlockId === undefined) {
@@ -315,6 +449,7 @@ export class AgentRuntime {
           sessionId,
           blockId: runtimeBlockId,
         });
+        signal.throwIfAborted();
       } else if (event.type === "tool.call") {
         if (!offerTools) {
           throw new UnexpectedToolCallError(event.call.name);
@@ -336,6 +471,7 @@ export class AgentRuntime {
 
         toolCall = event.call;
         this.#emitToolState(sessionId, event.call, "pending");
+        signal.throwIfAborted();
       } else if (event.type === "finish") {
         if (openReasoningBlock !== undefined) {
           throw new Error("ModelGateway completed with an open reasoning block.");
@@ -353,7 +489,7 @@ export class AgentRuntime {
 
   async #executeTool(
     sessionId: SessionId,
-    runId: string,
+    runId: CheckpointRunId,
     toolCall: ToolCall,
     signal: AbortSignal,
     session: SessionStateMachine,
@@ -383,7 +519,9 @@ export class AgentRuntime {
 
     signal.throwIfAborted();
     session.transitionTo("executing_tool");
+    signal.throwIfAborted();
     this.#emitToolState(sessionId, toolCall, "running");
+    signal.throwIfAborted();
     const disposition = this.#approvalPolicy.evaluate(tool.risk);
     if (disposition === "deny") {
       return createToolErrorResult(
@@ -410,7 +548,7 @@ export class AgentRuntime {
 
   async #executeApprovalRequiredTool(
     sessionId: SessionId,
-    runId: string,
+    runId: CheckpointRunId,
     toolCall: ToolCall,
     tool: NonNullable<ReturnType<ToolRegistry["get"]>>,
     input: unknown,
@@ -462,52 +600,80 @@ export class AgentRuntime {
       },
       signal,
     );
-    signal.throwIfAborted();
-    session.transitionTo("streaming");
-    session.transitionTo("awaiting_approval");
-    this.#emitApprovalState(sessionId, operation.request, "pending");
-    const decision = await operation.requestDecision(signal);
-    signal.throwIfAborted();
-
-    if (decision.decision === "expired") {
-      this.#emitApprovalState(sessionId, operation.request, "expired");
+    try {
+      signal.throwIfAborted();
+      const approval = validateToolApproval(operation, sessionId, runId, toolCall, tool.risk);
+      signal.throwIfAborted();
       session.transitionTo("streaming");
-      return createToolErrorResult(
-        toolCall,
-        "failed",
-        `Approval for tool "${toolCall.name}" expired.`,
-      );
-    }
+      signal.throwIfAborted();
+      session.transitionTo("awaiting_approval");
+      signal.throwIfAborted();
+      this.#emitApprovalState(sessionId, approval, "pending");
+      signal.throwIfAborted();
+      const decision = await operation.requestDecision(signal);
+      signal.throwIfAborted();
 
-    if (decision.decision === "denied") {
-      this.#emitApprovalState(sessionId, operation.request, "denied");
-      session.transitionTo("streaming");
-      return createToolErrorResult(toolCall, "denied", `The user denied tool "${toolCall.name}".`);
-    }
+      if (decision.decision === "expired") {
+        signal.throwIfAborted();
+        this.#emitApprovalState(sessionId, approval, "expired");
+        signal.throwIfAborted();
+        session.transitionTo("streaming");
+        signal.throwIfAborted();
+        return createToolErrorResult(
+          toolCall,
+          "failed",
+          `Approval for tool "${toolCall.name}" expired.`,
+        );
+      }
 
-    this.#emitApprovalState(sessionId, operation.request, "approved");
-    session.transitionTo("executing_tool");
-    const consumption = await operation.consume(signal);
-    signal.throwIfAborted();
-    if (consumption.outcome === "expired") {
-      this.#emitApprovalState(sessionId, operation.request, "expired");
-      return createToolErrorResult(
-        toolCall,
-        "failed",
-        `Approval for tool "${toolCall.name}" expired before use.`,
-      );
-    }
-    if (consumption.outcome === "conflict") {
-      this.#emitApprovalState(sessionId, operation.request, "invalidated");
-      return createToolErrorResult(toolCall, "conflict", consumption.message);
-    }
+      if (decision.decision === "denied") {
+        signal.throwIfAborted();
+        this.#emitApprovalState(sessionId, approval, "denied");
+        signal.throwIfAborted();
+        session.transitionTo("streaming");
+        signal.throwIfAborted();
+        return createToolErrorResult(
+          toolCall,
+          "denied",
+          `The user denied tool "${toolCall.name}".`,
+        );
+      }
 
-    this.#emitApprovalState(sessionId, operation.request, "consumed");
-    if (tool.risk === "execute") {
-      return this.#executeToolImplementation(toolCall, tool, input, signal);
-    }
+      signal.throwIfAborted();
+      this.#emitApprovalState(sessionId, approval, "approved");
+      signal.throwIfAborted();
+      session.transitionTo("executing_tool");
+      signal.throwIfAborted();
+      const consumption = await operation.consume(signal);
+      signal.throwIfAborted();
+      if (consumption.outcome === "expired") {
+        signal.throwIfAborted();
+        this.#emitApprovalState(sessionId, approval, "expired");
+        signal.throwIfAborted();
+        return createToolErrorResult(
+          toolCall,
+          "failed",
+          `Approval for tool "${toolCall.name}" expired before use.`,
+        );
+      }
+      if (consumption.outcome === "conflict") {
+        signal.throwIfAborted();
+        this.#emitApprovalState(sessionId, approval, "invalidated");
+        signal.throwIfAborted();
+        return createToolErrorResult(toolCall, "conflict", consumption.message);
+      }
 
-    return createApprovedToolResult(toolCall);
+      signal.throwIfAborted();
+      this.#emitApprovalState(sessionId, approval, "consumed");
+      signal.throwIfAborted();
+      if (tool.risk === "execute") {
+        return this.#executeToolImplementation(toolCall, tool, input, signal);
+      }
+
+      return createApprovedToolResult(toolCall);
+    } finally {
+      operation.invalidate();
+    }
   }
 
   async #executeToolImplementation(
@@ -633,6 +799,156 @@ function createToolErrorResult(
     status: "error",
     error: { code, message },
   };
+}
+
+function validateModelHistory(history: unknown): readonly ModelMessage[] {
+  if (!Array.isArray(history)) {
+    throw new InvalidModelHistoryError();
+  }
+  if (history.length > maxHistoryMessages) {
+    throw new InvalidModelHistoryError();
+  }
+
+  const validated: ModelMessage[] = [];
+  for (let index = 0; index < history.length; index += 1) {
+    if (!Object.hasOwn(history, index)) {
+      throw new InvalidModelHistoryError();
+    }
+    validated.push(validateModelHistoryMessage(history[index]));
+  }
+  return validated;
+}
+
+function validateModelHistoryMessage(message: unknown): ModelMessage {
+  if (!isRecord(message)) {
+    throw new InvalidModelHistoryError();
+  }
+
+  if (hasExactKeys(message, ["content", "role"])) {
+    if (
+      (message.role !== "user" && message.role !== "assistant") ||
+      typeof message.content !== "string" ||
+      message.content.length < 1 ||
+      message.content.length > maxHistoryMessageCharacters
+    ) {
+      throw new InvalidModelHistoryError();
+    }
+
+    return {
+      role: message.role,
+      content: message.content,
+    };
+  }
+
+  if (hasExactKeys(message, ["role", "toolCall"])) {
+    if (message.role !== "assistant") {
+      throw new InvalidModelHistoryError();
+    }
+    const toolCall = toolCallSchema.safeParse(message.toolCall);
+    if (!toolCall.success) {
+      throw new InvalidModelHistoryError();
+    }
+    return { role: "assistant", toolCall: toolCall.data };
+  }
+
+  if (hasExactKeys(message, ["result", "role"])) {
+    if (message.role !== "tool") {
+      throw new InvalidModelHistoryError();
+    }
+    const result = toolResultSchema.safeParse(message.result);
+    if (!result.success) {
+      throw new InvalidModelHistoryError();
+    }
+    return { role: "tool", result: result.data };
+  }
+
+  throw new InvalidModelHistoryError();
+}
+
+function validateToolApproval(
+  operation: ToolApprovalOperation,
+  sessionId: SessionId,
+  runId: CheckpointRunId,
+  toolCall: ToolCall,
+  risk: "write" | "execute",
+): ApprovalRequest {
+  const operationRecord =
+    typeof operation === "object" && operation !== null
+      ? (operation as { readonly request?: unknown })
+      : undefined;
+  const parsed = approvalRequestSchema.safeParse(operationRecord?.request);
+  if (!parsed.success) {
+    throw new InvalidToolApprovalError();
+  }
+
+  const scope = parsed.data.scope;
+  if (
+    scope.sessionId !== sessionId ||
+    scope.runId !== runId ||
+    scope.risk !== risk ||
+    !toolCallsMatch(scope.call, toolCall)
+  ) {
+    throw new InvalidToolApprovalError();
+  }
+
+  return parsed.data;
+}
+
+function toolCallsMatch(left: ToolCall, right: ToolCall): boolean {
+  return (
+    left.id === right.id && left.name === right.name && jsonValuesEqual(left.input, right.input)
+  );
+}
+
+function jsonValuesEqual(left: JsonValue, right: JsonValue): boolean {
+  if (left === right) {
+    return true;
+  }
+  if (typeof left !== typeof right || left === null || right === null) {
+    return false;
+  }
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) {
+      return false;
+    }
+    return left.every((value, index) => {
+      const other = right[index];
+      return other !== undefined && jsonValuesEqual(value, other);
+    });
+  }
+  if (typeof left === "object" && typeof right === "object") {
+    const leftObject = left as { readonly [key: string]: JsonValue };
+    const rightObject = right as { readonly [key: string]: JsonValue };
+    const leftKeys = Object.keys(leftObject).sort();
+    const rightKeys = Object.keys(rightObject).sort();
+    if (
+      leftKeys.length !== rightKeys.length ||
+      leftKeys.some((key, index) => key !== rightKeys[index])
+    ) {
+      return false;
+    }
+    return leftKeys.every((key) => {
+      return jsonValuesEqual(leftObject[key], rightObject[key]);
+    });
+  }
+  return false;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function hasExactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
+  const actual = Object.keys(value).sort();
+  const sortedExpected = [...expected].sort();
+  return (
+    actual.length === sortedExpected.length &&
+    actual.every((key, index) => key === sortedExpected[index])
+  );
 }
 
 function isCancellation(error: unknown, signal: AbortSignal): boolean {

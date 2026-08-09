@@ -30,6 +30,11 @@ export interface ToolApprovalOperation {
   readonly request: ApprovalRequest;
   requestDecision(signal: AbortSignal): Promise<ToolApprovalDecision>;
   consume(signal: AbortSignal): Promise<ApprovedToolConsumption>;
+  /**
+   * Idempotently invalidates an unconsumed operation and releases its owner.
+   * Terminal operations remain unchanged.
+   */
+  invalidate(): void;
 }
 
 export interface ToolApprovalWorkflow {

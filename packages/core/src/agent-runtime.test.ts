@@ -6,6 +6,8 @@ import {
   type AgentRuntimeEvent,
   type AgentTool,
   EmptyAgentResponseError,
+  InvalidModelHistoryError,
+  InvalidSessionStatusTransitionError,
   MaxToolStepsExceededError,
   type ModelEvent,
   type ModelGateway,
@@ -46,7 +48,9 @@ describe("AgentRuntime", () => {
       ],
       (request) => requests.push(request),
     );
-    const runtime = new AgentRuntime(gateway, { emit: () => {} }, undefined, {
+    const runtime = new AgentRuntime(gateway, { emit: () => {} });
+
+    await runtime.run({ ...userMessage, content: "Keep my intent" }, new AbortController().signal, {
       externalResources: [
         {
           snapshotId: "snapshot-1",
@@ -58,8 +62,6 @@ describe("AgentRuntime", () => {
         },
       ],
     });
-
-    await runtime.run({ ...userMessage, content: "Keep my intent" }, new AbortController().signal);
 
     expect(requests[0]?.messages).toHaveLength(2);
     expect(requests[0]?.messages[0]).toMatchObject({ role: "user" });
@@ -75,7 +77,9 @@ describe("AgentRuntime", () => {
       ],
       (request) => requests.push(request),
     );
-    const runtime = new AgentRuntime(gateway, { emit: () => {} }, undefined, {
+    const runtime = new AgentRuntime(gateway, { emit: () => {} });
+
+    await runtime.run({ ...userMessage, content: "Keep my intent" }, new AbortController().signal, {
       externalPrompts: [
         {
           serverId: "local_fixture",
@@ -85,8 +89,6 @@ describe("AgentRuntime", () => {
       ],
     });
 
-    await runtime.run({ ...userMessage, content: "Keep my intent" }, new AbortController().signal);
-
     expect(requests[0]?.messages).toEqual([
       {
         role: "user",
@@ -94,6 +96,579 @@ describe("AgentRuntime", () => {
       },
       { role: "user", content: "Keep my intent" },
     ]);
+  });
+
+  it("does not replay external context on a sequential Run", async () => {
+    const requests: ModelRequest[] = [];
+    const gateway = createScriptedModelGateway(
+      [
+        [
+          { type: "text.delta", text: "First" },
+          { type: "finish", reason: "stop" },
+        ],
+        [
+          { type: "text.delta", text: "Second" },
+          { type: "finish", reason: "stop" },
+        ],
+      ],
+      requests,
+    );
+    const runtime = new AgentRuntime(gateway, { emit: () => {} });
+    const attachment = {
+      snapshotId: "snapshot-1",
+      serverId: "local_fixture",
+      uri: "memory://policy",
+      mimeType: "text/plain",
+      text: "Only the first Run may see this.",
+      truncated: false,
+    } as const;
+
+    await runtime.run(userMessage, new AbortController().signal, {
+      externalResources: [attachment],
+    });
+    await runtime.run(
+      { ...userMessage, messageId: "message-2", content: "Second question" },
+      new AbortController().signal,
+    );
+
+    expect(requests[0]?.messages[0]).toMatchObject({ role: "user" });
+    expect(requests[0]?.messages[0]?.content).toContain(attachment.text);
+    expect(requests[0]?.messages[1]).toEqual({
+      role: "user",
+      content: userMessage.content,
+    });
+    expect(requests[1]?.messages).toEqual([{ role: "user", content: "Second question" }]);
+  });
+
+  it("rejects a concurrent same-Session Run without failing the active owner", async () => {
+    const firstStreamStarted = Promise.withResolvers<void>();
+    const releaseFirstStream = Promise.withResolvers<void>();
+    const events: AgentRuntimeEvent[] = [];
+    const gateway: ModelGateway = {
+      async *stream() {
+        firstStreamStarted.resolve();
+        await releaseFirstStream.promise;
+        yield { type: "text.delta", text: "First" };
+        yield { type: "finish", reason: "stop" };
+      },
+    };
+    const runtime = new AgentRuntime(gateway, { emit: (event) => events.push(event) });
+
+    const firstRun = runtime.run(userMessage, new AbortController().signal);
+    await firstStreamStarted.promise;
+    await expect(
+      runtime.run(
+        { ...userMessage, messageId: "message-2", content: "Second question" },
+        new AbortController().signal,
+      ),
+    ).rejects.toEqual(new InvalidSessionStatusTransitionError("streaming", "preparing"));
+    expect(events).not.toContainEqual({
+      type: "session.status-changed",
+      sessionId: "session-1",
+      previousStatus: "streaming",
+      status: "failed",
+    });
+
+    releaseFirstStream.resolve();
+    await expect(firstRun).resolves.toBeUndefined();
+    expect(events.at(-1)).toMatchObject({ status: "completed" });
+  });
+
+  it("starts a fresh Run with injected history after the first Run completes", async () => {
+    const requests: ModelRequest[] = [];
+    const gateway = createScriptedModelGateway(
+      [
+        [
+          { type: "text.delta", text: "First answer" },
+          { type: "finish", reason: "stop" },
+        ],
+        [
+          { type: "text.delta", text: "Second answer" },
+          { type: "finish", reason: "stop" },
+        ],
+      ],
+      requests,
+    );
+    const history = [
+      { role: "user" as const, content: "First question" },
+      { role: "assistant" as const, content: "First answer" },
+    ];
+    let loadCount = 0;
+    const load = vi.fn(async () => {
+      loadCount += 1;
+      return loadCount === 1 ? [] : history;
+    });
+    const events: AgentRuntimeEvent[] = [];
+    const runtime = new AgentRuntime(gateway, { emit: (event) => events.push(event) }, undefined, {
+      historyProvider: { load },
+      createRunId: (() => {
+        const ids = ["run-1", "run-2"];
+        return () => ids.shift() ?? "run-unexpected";
+      })(),
+    });
+
+    await runtime.run(userMessage, new AbortController().signal);
+    await runtime.run(
+      { ...userMessage, messageId: "message-2", content: "Second question" },
+      new AbortController().signal,
+    );
+
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(requests[0]?.messages).toEqual([{ role: "user", content: "Say hello." }]);
+    expect(requests[1]?.messages).toEqual([
+      ...history,
+      { role: "user", content: "Second question" },
+    ]);
+    expect(events.filter((event) => event.type === "session.status-changed")).toEqual([
+      {
+        type: "session.status-changed",
+        sessionId: "session-1",
+        previousStatus: "idle",
+        status: "preparing",
+      },
+      {
+        type: "session.status-changed",
+        sessionId: "session-1",
+        previousStatus: "preparing",
+        status: "streaming",
+      },
+      {
+        type: "session.status-changed",
+        sessionId: "session-1",
+        previousStatus: "streaming",
+        status: "completed",
+      },
+      {
+        type: "session.status-changed",
+        sessionId: "session-1",
+        previousStatus: "completed",
+        status: "preparing",
+      },
+      {
+        type: "session.status-changed",
+        sessionId: "session-1",
+        previousStatus: "preparing",
+        status: "streaming",
+      },
+      {
+        type: "session.status-changed",
+        sessionId: "session-1",
+        previousStatus: "streaming",
+        status: "completed",
+      },
+    ]);
+  });
+
+  it("accepts an empty injected history", async () => {
+    const requests: ModelRequest[] = [];
+    const gateway = createModelGateway(
+      [
+        { type: "text.delta", text: "Hello." },
+        { type: "finish", reason: "stop" },
+      ],
+      (request) => requests.push(request),
+    );
+    const runtime = new AgentRuntime(gateway, { emit() {} }, undefined, {
+      historyProvider: { load: () => [] },
+    });
+
+    await runtime.run(userMessage, new AbortController().signal);
+
+    expect(requests[0]?.messages).toEqual([{ role: "user", content: "Say hello." }]);
+  });
+
+  it("accepts the 10,000-message history ceiling before appending the current user", async () => {
+    const requests: ModelRequest[] = [];
+    const gateway = createModelGateway(
+      [
+        { type: "text.delta", text: "History accepted." },
+        { type: "finish", reason: "stop" },
+      ],
+      (request) => requests.push(request),
+    );
+    const history = Array.from({ length: 10_000 }, (_value, index) => ({
+      role: "user" as const,
+      content: `History message ${index}`,
+    }));
+    const runtime = new AgentRuntime(gateway, { emit() {} }, undefined, {
+      history,
+      tokenCounter: { count: () => 0 },
+    });
+
+    await runtime.run(userMessage, new AbortController().signal);
+
+    expect(requests[0]?.messages).toHaveLength(10_001);
+    expect(requests[0]?.messages.at(-1)).toEqual({ role: "user", content: "Say hello." });
+  });
+
+  it.each([
+    "static",
+    "provider",
+  ] as const)("rejects more than 10,000 history messages from the %s source before copying", async (source) => {
+    const requests: ModelRequest[] = [];
+    const count = vi.fn(() => 0);
+    const gateway = createModelGateway([], (request) => requests.push(request));
+    const history = Array.from({ length: 10_001 }, () => ({
+      role: "user" as const,
+      content: "Oversized history",
+    }));
+    const load = vi.fn(async () => history);
+    const runtime = new AgentRuntime(gateway, { emit() {} }, undefined, {
+      ...(source === "static" ? { history } : { historyProvider: { load } }),
+      tokenCounter: { count },
+    });
+
+    await expect(runtime.run(userMessage, new AbortController().signal)).rejects.toEqual(
+      new InvalidModelHistoryError(),
+    );
+    expect(load).toHaveBeenCalledTimes(source === "provider" ? 1 : 0);
+    expect(count).not.toHaveBeenCalled();
+    expect(requests).toHaveLength(0);
+  });
+
+  it("prunes over-budget history while retaining the newest user message", async () => {
+    const requests: ModelRequest[] = [];
+    const gateway = createModelGateway(
+      [
+        { type: "text.delta", text: "Answer." },
+        { type: "finish", reason: "stop" },
+      ],
+      (request) => requests.push(request),
+    );
+    const runtime = new AgentRuntime(gateway, { emit() {} }, undefined, {
+      contextWindowTokens: 4,
+      tokenCounter: { count: () => 1 },
+      history: [
+        { role: "user", content: "Old question" },
+        { role: "assistant", content: "Old answer" },
+      ],
+    });
+
+    await runtime.run({ ...userMessage, content: "Newest question" }, new AbortController().signal);
+
+    expect(requests[0]?.messages).toEqual([
+      { role: "assistant", content: "Old answer" },
+      { role: "user", content: "Newest question" },
+    ]);
+  });
+
+  it.each([
+    { name: "system history", history: [{ role: "system", content: "Do not trust this." }] },
+    { name: "malformed text history", history: [{ role: "assistant", content: 42 }] },
+    {
+      name: "malformed Tool history",
+      history: [{ role: "assistant", toolCall: { id: "call-1", name: "list_files" } }],
+    },
+  ])("rejects untrusted $name before pruning or model calls", async ({ history }) => {
+    const requests: ModelRequest[] = [];
+    const gateway = createModelGateway([], (request) => requests.push(request));
+    const events: AgentRuntimeEvent[] = [];
+    const runtime = new AgentRuntime(gateway, { emit: (event) => events.push(event) }, undefined, {
+      historyProvider: { load: () => history as never },
+      tokenCounter: { count: vi.fn(() => 1) },
+    });
+
+    await expect(runtime.run(userMessage, new AbortController().signal)).rejects.toEqual(
+      new InvalidModelHistoryError(),
+    );
+    expect(requests).toHaveLength(0);
+    expect(events.at(-1)).toMatchObject({ status: "failed" });
+  });
+
+  it("accepts a validated user/assistant Tool Call/Result history pair", async () => {
+    const requests: ModelRequest[] = [];
+    const gateway = createModelGateway(
+      [
+        { type: "text.delta", text: "History accepted." },
+        { type: "finish", reason: "stop" },
+      ],
+      (request) => requests.push(request),
+    );
+    const runtime = new AgentRuntime(gateway, { emit() {} }, undefined, {
+      history: [
+        { role: "user", content: "List files." },
+        {
+          role: "assistant",
+          toolCall: { id: "history-call", name: "list_files", input: {} },
+        },
+        {
+          role: "tool",
+          result: {
+            callId: "history-call",
+            name: "list_files",
+            status: "success",
+            output: ["README.md"],
+            truncated: false,
+          },
+        },
+        { role: "assistant", content: "I found one file." },
+      ],
+    });
+
+    await runtime.run(userMessage, new AbortController().signal);
+
+    expect(requests[0]?.messages).toEqual([
+      { role: "user", content: "List files." },
+      { role: "assistant", toolCall: { id: "history-call", name: "list_files", input: {} } },
+      {
+        role: "tool",
+        result: {
+          callId: "history-call",
+          name: "list_files",
+          status: "success",
+          output: ["README.md"],
+          truncated: false,
+        },
+      },
+      { role: "assistant", content: "I found one file." },
+      { role: "user", content: "Say hello." },
+    ]);
+  });
+
+  it("rejects an orphan Tool history before calling the model", async () => {
+    const requests: ModelRequest[] = [];
+    const gateway = createModelGateway([], (request) => requests.push(request));
+    const events: AgentRuntimeEvent[] = [];
+    const runtime = new AgentRuntime(gateway, { emit: (event) => events.push(event) }, undefined, {
+      history: [
+        {
+          role: "tool",
+          result: {
+            callId: "call-orphan",
+            name: "list_files",
+            status: "success",
+            output: null,
+            truncated: false,
+          },
+        },
+      ],
+      tokenCounter: { count: () => 1 },
+    });
+
+    await expect(runtime.run(userMessage, new AbortController().signal)).rejects.toEqual(
+      new InvalidModelHistoryError(),
+    );
+    expect(requests).toHaveLength(0);
+    expect(events.at(-1)).toEqual({
+      type: "session.status-changed",
+      sessionId: "session-1",
+      previousStatus: "preparing",
+      status: "failed",
+    });
+  });
+
+  it("does not load or prune history after a completed Run is cancelled", async () => {
+    const requests: ModelRequest[] = [];
+    const gateway = createModelGateway(
+      [
+        { type: "text.delta", text: "First answer" },
+        { type: "finish", reason: "stop" },
+      ],
+      (request) => requests.push(request),
+    );
+    const load = vi.fn(async () => [] as const);
+    const count = vi.fn(() => 1);
+    const events: AgentRuntimeEvent[] = [];
+    const runtime = new AgentRuntime(gateway, { emit: (event) => events.push(event) }, undefined, {
+      historyProvider: { load },
+      tokenCounter: { count },
+    });
+
+    await runtime.run(userMessage, new AbortController().signal);
+    const callsAfterFirstRun = { load: load.mock.calls.length, count: count.mock.calls.length };
+    const controller = new AbortController();
+    controller.abort(new Error("cancelled before second Run"));
+
+    await expect(
+      runtime.run(
+        { ...userMessage, messageId: "message-2", content: "Second question" },
+        controller.signal,
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(load).toHaveBeenCalledTimes(callsAfterFirstRun.load);
+    expect(count).toHaveBeenCalledTimes(callsAfterFirstRun.count);
+    expect(requests).toHaveLength(1);
+    expect(events.at(-1)).toEqual({
+      type: "session.status-changed",
+      sessionId: "session-1",
+      previousStatus: "preparing",
+      status: "cancelled",
+    });
+  });
+
+  it("allocates a fresh approval ownership identity for each Run", async () => {
+    const requests: ModelRequest[] = [];
+    const gateway = createScriptedModelGateway(
+      [
+        [
+          { type: "tool.call", call: { id: "call-1", name: "edit_file", input: {} } },
+          { type: "finish", reason: "tool-calls" },
+        ],
+        [
+          { type: "text.delta", text: "First edit approved." },
+          { type: "finish", reason: "stop" },
+        ],
+        [
+          { type: "tool.call", call: { id: "call-2", name: "edit_file", input: {} } },
+          { type: "finish", reason: "tool-calls" },
+        ],
+        [
+          { type: "text.delta", text: "Second edit approved." },
+          { type: "finish", reason: "stop" },
+        ],
+      ],
+      requests,
+    );
+    const registry = new ToolRegistry();
+    registry.register({
+      name: "edit_file",
+      description: "Edit a file.",
+      inputSchema: emptyInputSchema,
+      risk: "write",
+      parseInput: () => null,
+      execute: async () => ({ output: null, truncated: false }),
+      prepareApproval: async () => ({ output: null, truncated: false }),
+    });
+    const runIds: string[] = [];
+    const approvalIds: string[] = [];
+    const consume = vi.fn(async () => ({ outcome: "approved" as const }));
+    let nextApproval = 1;
+    const workflow: ToolApprovalWorkflow = {
+      async create(prepared): Promise<ToolApprovalOperation> {
+        runIds.push(prepared.runId);
+        const approvalId = `approval-${nextApproval}`;
+        nextApproval += 1;
+        approvalIds.push(approvalId);
+        return {
+          request: {
+            id: approvalId,
+            scope: {
+              sessionId: prepared.sessionId,
+              runId: prepared.runId,
+              call: prepared.call,
+              risk: "write",
+              resources: [],
+            },
+            presentation: { title: "Edit", summary: "Edit one file." },
+            createdAt: "2026-07-19T00:00:00.000Z",
+            expiresAt: "2026-07-19T00:05:00.000Z",
+          },
+          requestDecision: async () => ({
+            requestId: approvalId,
+            decision: "approved",
+            decidedAt: "2026-07-19T00:01:00.000Z",
+          }),
+          consume,
+          invalidate: vi.fn(),
+        };
+      },
+    };
+    const runIdQueue = ["run-1", "run-2"];
+    const runtime = new AgentRuntime(gateway, { emit() {} }, registry, {
+      approvalWorkflow: workflow,
+      createRunId: () => runIdQueue.shift() ?? "run-unexpected",
+    });
+
+    await runtime.run(
+      { ...userMessage, content: "Modify the file." },
+      new AbortController().signal,
+    );
+    await runtime.run(
+      { ...userMessage, messageId: "message-2", content: "Modify the file again." },
+      new AbortController().signal,
+    );
+
+    expect(runIds).toEqual(["run-1", "run-2"]);
+    expect(new Set(runIds).size).toBe(2);
+    expect(approvalIds).toEqual(["approval-1", "approval-2"]);
+    expect(consume).toHaveBeenCalledTimes(2);
+    expect(requests).toHaveLength(4);
+  });
+
+  it.each([
+    "missing-run-id",
+    "prior-run-id",
+    "session-mismatch",
+    "call-mismatch",
+  ] as const)("fails closed for an approval scope with a $1", async (mismatch) => {
+    const requests: ModelRequest[] = [];
+    const gateway = createModelGateway(
+      [
+        {
+          type: "tool.call",
+          call: { id: "call-approval", name: "edit_file", input: {} },
+        },
+        { type: "finish", reason: "tool-calls" },
+      ],
+      (request) => requests.push(request),
+    );
+    const registry = new ToolRegistry();
+    const execute = vi.fn(async () => ({ output: null, truncated: false }));
+    registry.register({
+      name: "edit_file",
+      description: "Edit a file.",
+      inputSchema: emptyInputSchema,
+      risk: "write",
+      parseInput: () => null,
+      execute,
+      prepareApproval: async () => ({ output: null, truncated: false }),
+    });
+    const requestDecision = vi.fn(async () => ({
+      requestId: "approval-invalid",
+      decision: "approved" as const,
+      decidedAt: "2026-07-19T00:01:00.000Z",
+    }));
+    const consume = vi.fn(async () => ({ outcome: "approved" as const }));
+    const invalidate = vi.fn();
+    const workflow: ToolApprovalWorkflow = {
+      async create(prepared) {
+        const baseScope = {
+          sessionId: prepared.sessionId,
+          runId: prepared.runId,
+          call: prepared.call,
+          risk: prepared.risk,
+          resources: [],
+        };
+        const scope =
+          mismatch === "missing-run-id"
+            ? (({ runId: _runId, ...withoutRunId }) => withoutRunId)(baseScope)
+            : mismatch === "prior-run-id"
+              ? { ...baseScope, runId: "run-previous" }
+              : mismatch === "session-mismatch"
+                ? { ...baseScope, sessionId: "session-other" }
+                : { ...baseScope, call: { ...prepared.call, id: "stale-call" } };
+        return {
+          request: {
+            id: "approval-invalid",
+            scope,
+            presentation: { title: "Edit", summary: "Edit one file." },
+            createdAt: "2026-07-19T00:00:00.000Z",
+            expiresAt: "2026-07-19T00:05:00.000Z",
+          },
+          requestDecision,
+          consume,
+          invalidate,
+        };
+      },
+    };
+    const events: AgentRuntimeEvent[] = [];
+    const runtime = new AgentRuntime(gateway, { emit: (event) => events.push(event) }, registry, {
+      approvalWorkflow: workflow,
+      createRunId: () => "run-current",
+    });
+
+    await expect(
+      runtime.run({ ...userMessage, content: "Modify the file." }, new AbortController().signal),
+    ).rejects.toThrow("not bound to the current Session, Run, and Tool Call");
+
+    expect(requests).toHaveLength(1);
+    expect(execute).not.toHaveBeenCalled();
+    expect(requestDecision).not.toHaveBeenCalled();
+    expect(consume).not.toHaveBeenCalled();
+    expect(invalidate).toHaveBeenCalledOnce();
+    expect(events.filter((event) => event.type === "agent.approval-state")).toHaveLength(0);
+    expect(events.at(-1)).toMatchObject({ status: "failed" });
   });
 
   it("emits text deltas in model order and completes the Session", async () => {
@@ -615,6 +1190,7 @@ describe("AgentRuntime", () => {
           id: "approval-command",
           scope: {
             sessionId: prepared.sessionId,
+            runId: prepared.runId,
             call: prepared.call,
             risk: prepared.risk,
             resources: [],
@@ -629,6 +1205,7 @@ describe("AgentRuntime", () => {
           decidedAt: "2026-07-19T00:01:00.000Z",
         }),
         consume: async () => ({ outcome: "approved" }),
+        invalidate: vi.fn(),
       }),
     );
     const runtime = new AgentRuntime(gateway, { emit() {} }, registry, {
@@ -764,12 +1341,14 @@ describe("AgentRuntime", () => {
     const consume = vi.fn(async () => scenario.consumption);
     const workflow: ToolApprovalWorkflow = {
       async create(prepared) {
-        expect(prepared.runId).toBe(userMessage.messageId);
+        expect(prepared.runId).toMatch(/^run-/);
+        expect(prepared.runId).not.toBe(userMessage.messageId);
         return {
           request: {
             id: "approval-edit",
             scope: {
               sessionId: prepared.sessionId,
+              runId: prepared.runId,
               call: prepared.call,
               risk: "write",
               resources: [],
@@ -784,6 +1363,7 @@ describe("AgentRuntime", () => {
             ...(scenario.decision === "expired" ? {} : { decidedAt: "2026-07-19T00:01:00.000Z" }),
           }),
           consume,
+          invalidate: vi.fn(),
         };
       },
     };
@@ -830,14 +1410,21 @@ describe("AgentRuntime", () => {
       prepareApproval: async () => ({ output: null, truncated: false }),
     });
     const consume = vi.fn(async () => ({ outcome: "approved" as const }));
+    const requestDecision = vi.fn(async (signal: AbortSignal) => {
+      signal.throwIfAborted();
+      throw new Error("Expected cancellation before approval wait.");
+    });
+    const invalidate = vi.fn();
     const workflow: ToolApprovalWorkflow = {
       async create(prepared) {
-        expect(prepared.runId).toBe(userMessage.messageId);
+        expect(prepared.runId).toMatch(/^run-/);
+        expect(prepared.runId).not.toBe(userMessage.messageId);
         return {
           request: {
             id: "approval-cancel",
             scope: {
               sessionId: prepared.sessionId,
+              runId: prepared.runId,
               call: prepared.call,
               risk: "write",
               resources: [],
@@ -846,11 +1433,9 @@ describe("AgentRuntime", () => {
             createdAt: "2026-07-19T00:00:00.000Z",
             expiresAt: "2026-07-19T00:05:00.000Z",
           },
-          requestDecision: async (signal) => {
-            signal.throwIfAborted();
-            throw new Error("Expected cancellation before approval wait.");
-          },
+          requestDecision,
           consume,
+          invalidate,
         };
       },
     };
@@ -874,13 +1459,80 @@ describe("AgentRuntime", () => {
     await expect(runtime.run(userMessage, controller.signal)).resolves.toBeUndefined();
 
     expect(requests).toHaveLength(1);
+    expect(requestDecision).not.toHaveBeenCalled();
     expect(consume).not.toHaveBeenCalled();
+    expect(invalidate).toHaveBeenCalledOnce();
     expect(events.at(-1)).toEqual({
       type: "session.status-changed",
       sessionId: "session-1",
       previousStatus: "awaiting_approval",
       status: "cancelled",
     });
+  });
+
+  it("invalidates an approval when the decision workflow fails before consumption", async () => {
+    const requests: ModelRequest[] = [];
+    const gateway = createScriptedModelGateway(
+      [
+        [
+          { type: "tool.call", call: { id: "call-decision-error", name: "edit_file", input: {} } },
+          { type: "finish", reason: "tool-calls" },
+        ],
+      ],
+      requests,
+    );
+    const registry = new ToolRegistry();
+    registry.register({
+      name: "edit_file",
+      description: "Edit a file.",
+      inputSchema: emptyInputSchema,
+      risk: "write",
+      parseInput: () => null,
+      execute: async () => ({ output: null, truncated: false }),
+      prepareApproval: async () => ({ output: null, truncated: false }),
+    });
+    const decisionFailure = new Error("approval service unavailable");
+    const requestDecision = vi.fn(async () => {
+      throw decisionFailure;
+    });
+    const consume = vi.fn(async () => ({ outcome: "approved" as const }));
+    const invalidate = vi.fn();
+    const workflow: ToolApprovalWorkflow = {
+      async create(prepared) {
+        return {
+          request: {
+            id: "approval-decision-error",
+            scope: {
+              sessionId: prepared.sessionId,
+              runId: prepared.runId,
+              call: prepared.call,
+              risk: prepared.risk,
+              resources: [],
+            },
+            presentation: { title: "Edit", summary: "Edit one file." },
+            createdAt: "2026-07-19T00:00:00.000Z",
+            expiresAt: "2026-07-19T00:05:00.000Z",
+          },
+          requestDecision,
+          consume,
+          invalidate,
+        };
+      },
+    };
+    const events: AgentRuntimeEvent[] = [];
+    const runtime = new AgentRuntime(gateway, { emit: (event) => events.push(event) }, registry, {
+      approvalWorkflow: workflow,
+    });
+
+    await expect(runtime.run(userMessage, new AbortController().signal)).rejects.toBe(
+      decisionFailure,
+    );
+
+    expect(requests).toHaveLength(1);
+    expect(requestDecision).toHaveBeenCalledOnce();
+    expect(consume).not.toHaveBeenCalled();
+    expect(invalidate).toHaveBeenCalledOnce();
+    expect(events.at(-1)).toMatchObject({ status: "failed" });
   });
 
   it("preserves tool-provided truncation metadata in the Tool Result", async () => {
@@ -1288,6 +1940,170 @@ describe("AgentRuntime", () => {
     });
   });
 
+  it("stops before the model when the preparing-to-streaming status sink aborts", async () => {
+    const controller = new AbortController();
+    const cancellation = new Error("cancel preparing transition");
+    let streamCalls = 0;
+    const gateway = createModelGateway(
+      [
+        { type: "text.delta", text: "must not stream" },
+        { type: "finish", reason: "stop" },
+      ],
+      () => {
+        streamCalls += 1;
+      },
+    );
+    const events: AgentRuntimeEvent[] = [];
+    const runtime = new AgentRuntime(gateway, {
+      emit(event) {
+        events.push(event);
+        if (event.type === "session.status-changed" && event.status === "streaming") {
+          controller.abort(cancellation);
+        }
+      },
+    });
+
+    await expect(runtime.run(userMessage, controller.signal)).resolves.toBeUndefined();
+
+    expect(streamCalls).toBe(0);
+    expect(events.some((event) => event.type === "agent.text-delta")).toBe(false);
+    expect(events.at(-1)).toMatchObject({ status: "cancelled" });
+  });
+
+  it("stops before approval events when the awaiting-approval status sink aborts", async () => {
+    const controller = new AbortController();
+    const cancellation = new Error("cancel awaiting approval transition");
+    const requests: ModelRequest[] = [];
+    const gateway = createScriptedModelGateway(
+      [
+        [
+          { type: "tool.call", call: { id: "call-await", name: "edit_file", input: {} } },
+          { type: "finish", reason: "tool-calls" },
+        ],
+      ],
+      requests,
+    );
+    const registry = new ToolRegistry();
+    registry.register({
+      name: "edit_file",
+      description: "Edit a file.",
+      inputSchema: emptyInputSchema,
+      risk: "write",
+      parseInput: () => null,
+      execute: vi.fn(async () => ({ output: null, truncated: false })),
+      prepareApproval: async () => ({ output: null, truncated: false }),
+    });
+    const requestDecision = vi.fn(async () => ({
+      requestId: "approval-await",
+      decision: "approved" as const,
+      decidedAt: "2026-07-19T00:01:00.000Z",
+    }));
+    const consume = vi.fn(async () => ({ outcome: "approved" as const }));
+    const invalidate = vi.fn();
+    const workflow: ToolApprovalWorkflow = {
+      async create(prepared) {
+        return {
+          request: {
+            id: "approval-await",
+            scope: {
+              sessionId: prepared.sessionId,
+              runId: prepared.runId,
+              call: prepared.call,
+              risk: prepared.risk,
+              resources: [],
+            },
+            presentation: { title: "Edit", summary: "Edit one file." },
+            createdAt: "2026-07-19T00:00:00.000Z",
+            expiresAt: "2026-07-19T00:05:00.000Z",
+          },
+          requestDecision,
+          consume,
+          invalidate,
+        };
+      },
+    };
+    const events: AgentRuntimeEvent[] = [];
+    const runtime = new AgentRuntime(
+      gateway,
+      {
+        emit(event) {
+          events.push(event);
+          if (event.type === "session.status-changed" && event.status === "awaiting_approval") {
+            controller.abort(cancellation);
+          }
+        },
+      },
+      registry,
+      { approvalWorkflow: workflow },
+    );
+
+    await expect(runtime.run(userMessage, controller.signal)).resolves.toBeUndefined();
+
+    expect(requests).toHaveLength(1);
+    expect(requestDecision).not.toHaveBeenCalled();
+    expect(consume).not.toHaveBeenCalled();
+    expect(invalidate).toHaveBeenCalledOnce();
+    expect(events.filter((event) => event.type === "agent.approval-state")).toHaveLength(0);
+    expect(events.at(-1)).toMatchObject({ status: "cancelled" });
+  });
+
+  it("stops before the next model step when the post-tool status sink aborts", async () => {
+    const controller = new AbortController();
+    const cancellation = new Error("cancel after tool transition");
+    const requests: ModelRequest[] = [];
+    const gateway = createScriptedModelGateway(
+      [
+        [
+          { type: "tool.call", call: { id: "call-post-tool", name: "list_files", input: {} } },
+          { type: "finish", reason: "tool-calls" },
+        ],
+        [
+          { type: "text.delta", text: "must not continue" },
+          { type: "finish", reason: "stop" },
+        ],
+      ],
+      requests,
+    );
+    const execute = vi.fn(async () => ({ output: ["file.txt"], truncated: false }));
+    const registry = new ToolRegistry();
+    registry.register({
+      name: "list_files",
+      description: "List files.",
+      inputSchema: emptyInputSchema,
+      risk: "read",
+      parseInput: () => null,
+      execute,
+    });
+    const events: AgentRuntimeEvent[] = [];
+    const runtime = new AgentRuntime(
+      gateway,
+      {
+        emit(event) {
+          events.push(event);
+          if (
+            event.type === "session.status-changed" &&
+            event.previousStatus === "executing_tool" &&
+            event.status === "streaming"
+          ) {
+            controller.abort(cancellation);
+          }
+        },
+      },
+      registry,
+    );
+
+    await expect(runtime.run(userMessage, controller.signal)).resolves.toBeUndefined();
+
+    expect(execute).toHaveBeenCalledOnce();
+    expect(requests).toHaveLength(1);
+    expect(events).not.toContainEqual({
+      type: "agent.text-delta",
+      sessionId: "session-1",
+      text: "must not continue",
+    });
+    expect(events.at(-1)).toMatchObject({ status: "cancelled" });
+  });
+
   it("passes the caller's AbortSignal to the model", async () => {
     const controller = new AbortController();
     let receivedSignal: AbortSignal | undefined;
@@ -1366,6 +2182,77 @@ describe("AgentRuntime", () => {
         status: "cancelled",
       },
     ]);
+  });
+
+  it.each([
+    {
+      name: "text delta",
+      events: [{ type: "text.delta", text: "first" }],
+      target: "agent.text-delta",
+      targetNextCount: 1,
+    },
+    {
+      name: "reasoning start",
+      events: [{ type: "reasoning.start", blockId: "provider-block" }],
+      target: "agent.reasoning-start",
+      targetNextCount: 1,
+    },
+    {
+      name: "reasoning delta",
+      events: [
+        { type: "reasoning.start", blockId: "provider-block" },
+        { type: "reasoning.delta", blockId: "provider-block", text: "first" },
+      ],
+      target: "agent.reasoning-delta",
+      targetNextCount: 2,
+    },
+    {
+      name: "reasoning end",
+      events: [
+        { type: "reasoning.start", blockId: "provider-block" },
+        { type: "reasoning.end", blockId: "provider-block" },
+      ],
+      target: "agent.reasoning-end",
+      targetNextCount: 2,
+    },
+    {
+      name: "pending Tool state",
+      events: [
+        {
+          type: "tool.call",
+          call: { id: "call-1", name: "list_files", input: {} },
+        },
+      ],
+      target: "agent.tool-state",
+      targetNextCount: 1,
+    },
+  ] as const)("does not request another model event after a synchronous %s sink abort", async (testCase) => {
+    const controller = new AbortController();
+    const cancellation = new Error(`cancel after ${testCase.name}`);
+    let nextCount = 0;
+    const events: AgentRuntimeEvent[] = [];
+    const runtime = new AgentRuntime(
+      createCountingModelGateway(testCase.events, () => {
+        nextCount += 1;
+      }),
+      {
+        emit(event) {
+          events.push(event);
+          if (event.type === testCase.target) {
+            controller.abort(cancellation);
+          }
+        },
+      },
+    );
+
+    await expect(runtime.run(userMessage, controller.signal)).resolves.toBeUndefined();
+
+    expect(nextCount).toBe(testCase.targetNextCount);
+    expect(events.filter((event) => event.type === testCase.target)).toHaveLength(1);
+    expect(
+      events.filter((event) => event.type === "agent.tool-state" && event.status !== "pending"),
+    ).toHaveLength(0);
+    expect(events.at(-1)).toMatchObject({ status: "cancelled" });
   });
 
   it("cancels before starting the model when the signal is already aborted", async () => {
@@ -1521,6 +2408,31 @@ function createScriptedModelGateway(
         signal.throwIfAborted();
         yield event;
       }
+    },
+  };
+}
+
+function createCountingModelGateway(
+  events: readonly ModelEvent[],
+  onNext: () => void,
+): ModelGateway {
+  return {
+    stream() {
+      let index = 0;
+      const iterator: AsyncIterableIterator<ModelEvent> = {
+        async next() {
+          onNext();
+          const event = events[index];
+          index += 1;
+          return event === undefined
+            ? { done: true, value: undefined }
+            : { done: false, value: event };
+        },
+        [Symbol.asyncIterator]() {
+          return this;
+        },
+      };
+      return iterator;
     },
   };
 }

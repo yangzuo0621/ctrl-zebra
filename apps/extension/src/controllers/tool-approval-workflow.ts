@@ -17,6 +17,7 @@ interface FileEditApprovalWorkflowOwner extends ApprovalWorkflowOwner {
 
 interface OwnedApproval {
   readonly owner: ApprovalWorkflowOwner;
+  readonly operation: ToolApprovalOperation;
   readonly removeAbortListener: () => void;
 }
 
@@ -35,42 +36,58 @@ export class ToolApprovalWorkflowRouter implements ToolApprovalWorkflow {
   ): Promise<ToolApprovalOperation> {
     const owner = this.selectOwner(prepared);
     const operation = await owner.create(prepared, signal);
-    signal.throwIfAborted();
-    const approvalId = operation.request.id;
-    if (this.#owners.has(approvalId)) {
-      throw new Error("Approval identifier is already owned by another workflow.");
-    }
+    try {
+      signal.throwIfAborted();
+      const approvalId = operation.request.id;
+      if (this.#owners.has(approvalId)) {
+        throw new Error("Approval identifier is already owned by another workflow.");
+      }
 
-    const abort = () => this.#release(approvalId, owned);
-    const owned: OwnedApproval = {
-      owner,
-      removeAbortListener: () => signal.removeEventListener("abort", abort),
-    };
-    this.#owners.set(approvalId, owned);
-    signal.addEventListener("abort", abort, { once: true });
+      const abort = () => {
+        operation.invalidate();
+        this.#release(approvalId, owned);
+      };
+      const owned: OwnedApproval = {
+        owner,
+        operation,
+        removeAbortListener: () => signal.removeEventListener("abort", abort),
+      };
+      this.#owners.set(approvalId, owned);
+      signal.addEventListener("abort", abort, { once: true });
 
-    return {
-      request: operation.request,
-      requestDecision: async (decisionSignal) => {
-        try {
-          const decision = await operation.requestDecision(decisionSignal);
-          if (decision.decision !== "approved") {
+      return {
+        request: operation.request,
+        requestDecision: async (decisionSignal) => {
+          try {
+            const decision = await operation.requestDecision(decisionSignal);
+            if (decision.decision !== "approved") {
+              operation.invalidate();
+              this.#release(approvalId, owned);
+            }
+            return decision;
+          } catch (error) {
+            operation.invalidate();
+            this.#release(approvalId, owned);
+            throw error;
+          }
+        },
+        consume: async (consumptionSignal) => {
+          try {
+            return await operation.consume(consumptionSignal);
+          } finally {
+            operation.invalidate();
             this.#release(approvalId, owned);
           }
-          return decision;
-        } catch (error) {
+        },
+        invalidate: () => {
+          operation.invalidate();
           this.#release(approvalId, owned);
-          throw error;
-        }
-      },
-      consume: async (consumptionSignal) => {
-        try {
-          return await operation.consume(consumptionSignal);
-        } finally {
-          this.#release(approvalId, owned);
-        }
-      },
-    };
+        },
+      };
+    } catch (error) {
+      operation.invalidate();
+      throw error;
+    }
   }
 
   showDiff(approvalId: string): void {
@@ -85,6 +102,7 @@ export class ToolApprovalWorkflowRouter implements ToolApprovalWorkflow {
 
   dispose(): void {
     for (const owned of this.#owners.values()) {
+      owned.operation.invalidate();
       owned.removeAbortListener();
     }
     this.#owners.clear();
