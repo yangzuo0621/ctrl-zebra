@@ -65,6 +65,60 @@ The event payload is a strict object containing a stable dotted event `type` and
 `data`. T0601 defines the storage envelope only; later tasks define which domain event types are
 written and how they rebuild repository state.
 
+## Multi-turn Session and Run projection
+
+- One persisted Session is an append-only ordered transcript containing multiple sequential Runs.
+  A Run is one user submission, one model/Tool loop, and one terminal outcome. The Host/Core creates
+  a fresh opaque Run identity for every Run; it is distinct from the Session ID, message ID, and
+  Webview `requestId`. This constraint is additive to the version `1` event envelope and does not
+  authorize a format-version bump by itself.
+- The ordered `events.jsonl` log is the source for model-history reconstruction. `messages.jsonl` is
+  a bounded display/compatibility projection and is never trusted as an authorization source or as a
+  replacement for validated event order. History construction reads only the valid prefix and never
+  executes, retries, replays, or approves anything found in persistence.
+- The Host projects, in sequence order, every validated user message; assistant text only when the
+  owning Run reached normal `completed`; and complete assistant Tool Call plus matching Tool Result
+  pairs. Reasoning, status, approval, usage, summary, MCP attachment metadata, and Webview-only
+  source fields are excluded from model history. A Tool pair is retained as one indivisible unit.
+- A `cancelled`, `failed`, or recovery-`interrupted` Run keeps its user message. Partial or empty
+  assistant text is not injected. A complete Tool pair committed before the terminal outcome may be
+  retained; an open call, orphan Result, duplicate call ID, or mismatched call/name pair is dropped
+  only when it is the expected unfinished tail and otherwise makes the Session corrupt. No synthetic
+  Tool Result, assistant end, or recovery event is written.
+- The newest user message is appended by the next Run after the prior projection has passed Schema,
+  identity, pair, and bound checks. Context pruning may remove old units later, but it never rewrites
+  persisted history or removes the newest user message to conceal an overflow.
+
+### Corruption, tail damage, and compatibility
+
+- A duplicate or skipped event sequence, invalid recognized payload, cross-Session identity mismatch,
+  orphan or mismatched Tool Result, duplicate Tool Call ID, or an invalid lifecycle before the final
+  non-empty record marks the Session corrupt and blocks continuation. Readers never guess, reorder,
+  silently repair, or fall back to a new Session.
+- A truncated or invalid final non-empty JSONL record remains tail damage under the existing rule:
+  readers retain the preceding valid records, surface the damaged-tail marker, and never resume the
+  interrupted operation. Any open Tool or reasoning block in that prefix is projected as partial or
+  omitted according to its bounded recovery contract.
+- Existing format `v1` Sessions written before Run identity support, including legacy single-turn
+  Sessions, remain readable without in-place migration. A reader treats recognized legacy events that
+  lack Run identity as one deterministic legacy Run and applies the same ordered projection rules.
+  Unsupported, missing, or mismatched format versions remain isolated as unsupported/corrupt; they are
+  never guessed as the current format. New persistence fields or strict event payloads require an
+  explicit compatibility fixture and owning task.
+- Recovery normalizes active statuses to `interrupted`, preserves `completed`, `cancelled`, `failed`,
+  and existing `interrupted`, and performs no model, Tool, approval, or Provider action. An explicit
+  later submit may reset a recovered Session to a new Run; recovery itself never resumes work.
+
+### Session resource ceilings
+
+Storage adapters enforce all bounds before constructing unbounded values. The current version `1`
+ceilings are one event record ≤1,048,576 UTF-8 bytes, one event log ≤16,777,216 bytes, at most
+10,000 event records, at most 10,000 restored messages, Session ID ≤128 characters (persisted ID
+≤100 UTF-8 bytes), submitted/chat content ≤1,000,000 characters, and the Core model context window
+≤2,000,000 estimated tokens. Existing Tool Call/Result and reasoning ceilings remain in force. A
+limit violation is a stable bounded failure or corruption result; it is never hidden by an unbounded
+allocation or silent cross-Session fallback.
+
 #### Reasoning summary events
 
 Persistence stores only the bounded, user-visible reasoning projection accepted by the Extension
@@ -140,8 +194,11 @@ those records.
 
 ## Interrupted recovery
 
-- `interrupted` is a persisted recovery-only terminal Session status. The live Agent Runtime never
-  transitions into or out of it.
+- `interrupted` is a persisted recovery-only Session status. Automatic recovery and the live Agent
+  Runtime never transition into it or resume work from it. After recovery, an explicit user submission
+  may invoke the Core-owned `beginRun` reset gate to move that recovered Session from `interrupted` to
+  `preparing` for a fresh Run with new cancellation and resource ownership; no other live transition
+  out of `interrupted` is legal.
 - On recovery, `idle`, `preparing`, `streaming`, `awaiting_approval`, and `executing_tool` are written
   back as `interrupted`. `completed`, `cancelled`, `failed`, and `interrupted` remain unchanged.
 - Recovery may read history and update the manifest status only. It never resumes a model request,

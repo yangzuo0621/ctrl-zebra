@@ -20,7 +20,44 @@ This document defines the Webview/Extension message boundary established before 
 
 - The sender creates a fresh request identifier before posting a request and owns any pending UI state for that request.
 - A direct response uses the same `requestId`. Consumers ignore responses that do not match an active request.
-- T0105 does not introduce timeouts, retries, cancellation, persistence, or restoration of in-flight requests. Those behaviors require later task contracts.
+- T0105 established the envelope only. Session continuation, cancellation, persistence, and restoration
+  are governed by the multi-turn rules below; they do not change the meaning of `requestId`.
+
+## Session and Run Commands
+
+The multi-turn contract is additive within protocol version `1`. The Extension and Webview are shipped
+in lockstep, and an older consumer that does not recognize `webview/new-chat` ignores that command under
+the existing unknown-message rule. Existing `webview/submit` messages without `sessionId` retain their
+new-Session behavior.
+
+- `webview/submit` is the strict object `{ protocolVersion, type: "webview/submit", requestId, content,
+  sessionId? }`. `content` keeps the existing non-empty, one-million-character bound. Omitting
+  `sessionId` asks the Extension to allocate a new Session; providing it asks for an exact continuation
+  of that Session. `sessionId: null`, malformed identifiers, unknown Sessions, and identifiers that do
+  not match the selected/owned Session are rejected. The Extension never silently creates a different
+  Session when continuation fails.
+- `webview/new-chat` is the strict object `{ protocolVersion, type: "webview/new-chat", requestId }`.
+  It is an explicit reset intent, not a delete operation and not a model request. When no Run or
+  restore owns the Webview, the Host invalidates unconsumed Resource/Prompt attachments and pending
+  restore state; the Webview clears its transcript and selected Session. The next submit omits
+  `sessionId`. A command racing an active Run, restore, or Session switch is ignored or rejected
+  without changing the active owner, and stale replies remain ignored by request correlation.
+- A Session accepts one active Run at a time. The Host allocates a fresh opaque Run identity for each
+  submit, distinct from `sessionId`, message IDs, and `requestId`; Webview and model data never choose
+  this identity. Run identity is required for Core ownership, exact approvals, checkpoints, diagnostics,
+  and cancellation/resource fencing even when the live wire projection is correlated by `requestId`.
+- A continuation response never replays an approval, Tool, Provider request, or side effect from a
+  prior Run. All accepted live events preserve source order and are ignored after the matching Run's
+  terminal status or after Session replacement.
+- The existing bounds remain authoritative: Session IDs are at most 128 characters, persisted IDs
+  are at most 100 UTF-8 bytes, submitted content is at most 1,000,000 characters, restored message
+  projections contain at most 10,000 messages, and normalized Tool Results remain within the
+  one-mebibyte serialized ceiling. Producers enforce limits incrementally before constructing a
+  complete history or payload.
+
+An unknown or mismatched Session is a Session error, not a new Run. A damaged or corrupt Session is
+isolated and cannot start a model request. A recovered `interrupted` Session may begin only after an
+explicit new submit allocates a fresh Run; recovery itself never resumes work.
 
 ## Reasoning Summary Messages
 
@@ -119,6 +156,12 @@ metadata bags are forbidden.
 - Tool Result errors remain attached to their exact Tool Call through `extension/tool-state`.
   `extension/run-error` represents only a terminal run failure and does not replace Tool Result
   details or turn a recoverable Tool failure into a failed run.
+- Cancellation emits only the correlated `cancelled` terminal status and never a run error. After
+  cancellation, failure, interruption, Session replacement, or disposal, the Extension closes the
+  event gate: no later text delta, reasoning event, Tool Result, retry, approval response, or side
+  effect is delivered. A failed or interrupted Run may display its retained partial answer, but that
+  partial answer is not model history; the next Run receives the user prompt and only complete,
+  validated Tool pairs from the ordered persisted projection.
 
 ## Serializable Boundary
 
