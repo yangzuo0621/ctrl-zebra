@@ -45,16 +45,32 @@ export class ApprovalLifecycle<Record extends ApprovalLifecycleRecord> {
   }
 
   dispose(): void {
-    for (const record of this.#records.values()) {
-      this.#clearExpiration(record);
-      if (record.status === "pending" && record.signal !== undefined) {
-        record.status = "cancelled";
-        this.#service.cancel(record.request.id, new Error("Approval workflow disposed."));
-      } else {
-        this.invalidate(record);
+    let firstError: unknown;
+    for (const record of [...this.#records.values()]) {
+      try {
+        this.#clearExpiration(record);
+        if (record.status === "pending" && record.signal !== undefined) {
+          record.status = "cancelled";
+          try {
+            this.#service.cancel(record.request.id, new Error("Approval workflow disposed."));
+          } catch (error) {
+            if (!(error instanceof ApprovalRequestNotPendingError)) {
+              throw error;
+            }
+          }
+        } else {
+          this.invalidate(record);
+        }
+      } catch (error) {
+        firstError ??= error;
+      } finally {
+        this.#release(record);
       }
     }
     this.#records.clear();
+    if (firstError !== undefined) {
+      throw firstError;
+    }
   }
 
   invalidate(record: Record): void {

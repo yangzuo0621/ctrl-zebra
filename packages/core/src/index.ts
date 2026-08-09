@@ -53,6 +53,7 @@ export type {
   AgentReasoningStartEvent,
   AgentRuntimeEvent,
   AgentRuntimeOptions,
+  AgentRuntimeRunOptions,
   AgentTextDeltaEvent,
   AgentToolStateEvent,
   ModelHistoryProvider,

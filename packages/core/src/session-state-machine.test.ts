@@ -174,4 +174,29 @@ describe("SessionStateMachine", () => {
     expect(() => machine.beginRun()).toThrow(sinkFailure);
     expect(machine.status).toBe("preparing");
   });
+
+  it("keeps concurrent beginRun rejection outside the active owner", () => {
+    const events: SessionStatusChangedEvent[] = [];
+    const machine = new SessionStateMachine("session-1", "idle", {
+      emit(event) {
+        events.push(event);
+      },
+    });
+    const firstOwner = {};
+    const secondOwner = {};
+
+    machine.beginRun(firstOwner);
+
+    expect(() => machine.beginRun(secondOwner)).toThrow(
+      new InvalidSessionStatusTransitionError("preparing", "preparing"),
+    );
+    expect(machine.status).toBe("preparing");
+    expect(machine.ownsRun(firstOwner)).toBe(true);
+    expect(machine.ownsRun(secondOwner)).toBe(false);
+    expect(events).toHaveLength(1);
+
+    machine.transitionTo("streaming");
+    machine.transitionTo("completed");
+    expect(machine.ownsRun(firstOwner)).toBe(false);
+  });
 });

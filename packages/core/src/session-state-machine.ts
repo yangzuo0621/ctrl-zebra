@@ -45,6 +45,7 @@ export class SessionStateMachine {
   readonly #sessionId: SessionId;
   readonly #eventSink: EventSink<SessionStatusChangedEvent>;
   #status: SessionStatus;
+  #runOwner: object | undefined;
 
   constructor(
     sessionId: SessionId,
@@ -64,13 +65,18 @@ export class SessionStateMachine {
    * Starts a fresh Run without resuming any work owned by the previous status.
    * Terminal and recovery states are reset only through this explicit gate.
    */
-  beginRun(): void {
+  beginRun(owner: object = {}): void {
     const previousStatus = this.#status;
     if (!runResetStatuses.has(previousStatus)) {
       throw new InvalidSessionStatusTransitionError(previousStatus, "preparing");
     }
 
+    this.#runOwner = owner;
     this.#commit("preparing");
+  }
+
+  ownsRun(owner: object): boolean {
+    return this.#runOwner === owner;
   }
 
   transitionTo(status: SessionStatus): void {
@@ -86,6 +92,9 @@ export class SessionStateMachine {
   #commit(status: SessionStatus): void {
     const previousStatus = this.#status;
     this.#status = status;
+    if (status === "completed" || status === "cancelled" || status === "failed") {
+      this.#runOwner = undefined;
+    }
     this.#eventSink.emit({
       type: "session.status-changed",
       sessionId: this.#sessionId,

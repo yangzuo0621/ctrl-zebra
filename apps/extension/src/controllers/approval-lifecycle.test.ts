@@ -99,6 +99,28 @@ describe("ApprovalLifecycle", () => {
     expect(lifecycle.get(disposed.request.id)).toBeUndefined();
   });
 
+  it("continues disposing records when a decision settled before the dispose microtask", async () => {
+    const lifecycle = createLifecycle();
+    const decided = createRecord("decided-before-dispose");
+    const stillPending = createRecord("still-pending");
+    lifecycle.register(decided);
+    lifecycle.register(stillPending);
+
+    const decidedWait = lifecycle.requestDecision(decided, new AbortController().signal);
+    const pendingWait = lifecycle.requestDecision(stillPending, new AbortController().signal);
+    lifecycle.decide(decided.request.id, "approved");
+    lifecycle.dispose();
+
+    await expect(decidedWait).rejects.toThrow("approval request was invalidated");
+    await expect(pendingWait).rejects.toThrow("Approval workflow disposed.");
+    expect(decided.status).toBe("cancelled");
+    expect(stillPending.status).toBe("cancelled");
+    expect(lifecycle.get(decided.request.id)).toBeUndefined();
+    expect(lifecycle.get(stillPending.request.id)).toBeUndefined();
+    lifecycle.register(createRecord(decided.request.id));
+    lifecycle.register(createRecord(stillPending.request.id));
+  });
+
   it("invalidates unconsumed records before a decision wait and remains idempotent", () => {
     const lifecycle = createLifecycle();
     const record = createRecord("invalidated-before-wait");

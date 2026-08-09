@@ -126,12 +126,10 @@ export function createChatRunner({
           toolRegistry,
           {
             approvalWorkflow,
-            externalResources,
-            externalPrompts,
           },
         );
         try {
-          await runtime.run(userMessage, signal);
+          await runtime.run(userMessage, signal, { externalResources, externalPrompts });
         } finally {
           reasoning.close();
         }
@@ -216,13 +214,11 @@ export function createChatRunner({
         toolRegistry,
         {
           approvalWorkflow,
-          externalResources,
-          externalPrompts,
         },
       );
 
       try {
-        await runtime.run(userMessage, signal);
+        await runtime.run(userMessage, signal, { externalResources, externalPrompts });
       } finally {
         reasoning.close();
         await persistence;

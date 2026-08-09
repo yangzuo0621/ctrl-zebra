@@ -7,6 +7,7 @@ import {
   type AgentTool,
   EmptyAgentResponseError,
   InvalidModelHistoryError,
+  InvalidSessionStatusTransitionError,
   MaxToolStepsExceededError,
   type ModelEvent,
   type ModelGateway,
@@ -47,7 +48,9 @@ describe("AgentRuntime", () => {
       ],
       (request) => requests.push(request),
     );
-    const runtime = new AgentRuntime(gateway, { emit: () => {} }, undefined, {
+    const runtime = new AgentRuntime(gateway, { emit: () => {} });
+
+    await runtime.run({ ...userMessage, content: "Keep my intent" }, new AbortController().signal, {
       externalResources: [
         {
           snapshotId: "snapshot-1",
@@ -59,8 +62,6 @@ describe("AgentRuntime", () => {
         },
       ],
     });
-
-    await runtime.run({ ...userMessage, content: "Keep my intent" }, new AbortController().signal);
 
     expect(requests[0]?.messages).toHaveLength(2);
     expect(requests[0]?.messages[0]).toMatchObject({ role: "user" });
@@ -76,7 +77,9 @@ describe("AgentRuntime", () => {
       ],
       (request) => requests.push(request),
     );
-    const runtime = new AgentRuntime(gateway, { emit: () => {} }, undefined, {
+    const runtime = new AgentRuntime(gateway, { emit: () => {} });
+
+    await runtime.run({ ...userMessage, content: "Keep my intent" }, new AbortController().signal, {
       externalPrompts: [
         {
           serverId: "local_fixture",
@@ -86,8 +89,6 @@ describe("AgentRuntime", () => {
       ],
     });
 
-    await runtime.run({ ...userMessage, content: "Keep my intent" }, new AbortController().signal);
-
     expect(requests[0]?.messages).toEqual([
       {
         role: "user",
@@ -95,6 +96,82 @@ describe("AgentRuntime", () => {
       },
       { role: "user", content: "Keep my intent" },
     ]);
+  });
+
+  it("does not replay external context on a sequential Run", async () => {
+    const requests: ModelRequest[] = [];
+    const gateway = createScriptedModelGateway(
+      [
+        [
+          { type: "text.delta", text: "First" },
+          { type: "finish", reason: "stop" },
+        ],
+        [
+          { type: "text.delta", text: "Second" },
+          { type: "finish", reason: "stop" },
+        ],
+      ],
+      requests,
+    );
+    const runtime = new AgentRuntime(gateway, { emit: () => {} });
+    const attachment = {
+      snapshotId: "snapshot-1",
+      serverId: "local_fixture",
+      uri: "memory://policy",
+      mimeType: "text/plain",
+      text: "Only the first Run may see this.",
+      truncated: false,
+    } as const;
+
+    await runtime.run(userMessage, new AbortController().signal, {
+      externalResources: [attachment],
+    });
+    await runtime.run(
+      { ...userMessage, messageId: "message-2", content: "Second question" },
+      new AbortController().signal,
+    );
+
+    expect(requests[0]?.messages[0]).toMatchObject({ role: "user" });
+    expect(requests[0]?.messages[0]?.content).toContain(attachment.text);
+    expect(requests[0]?.messages[1]).toEqual({
+      role: "user",
+      content: userMessage.content,
+    });
+    expect(requests[1]?.messages).toEqual([{ role: "user", content: "Second question" }]);
+  });
+
+  it("rejects a concurrent same-Session Run without failing the active owner", async () => {
+    const firstStreamStarted = Promise.withResolvers<void>();
+    const releaseFirstStream = Promise.withResolvers<void>();
+    const events: AgentRuntimeEvent[] = [];
+    const gateway: ModelGateway = {
+      async *stream() {
+        firstStreamStarted.resolve();
+        await releaseFirstStream.promise;
+        yield { type: "text.delta", text: "First" };
+        yield { type: "finish", reason: "stop" };
+      },
+    };
+    const runtime = new AgentRuntime(gateway, { emit: (event) => events.push(event) });
+
+    const firstRun = runtime.run(userMessage, new AbortController().signal);
+    await firstStreamStarted.promise;
+    await expect(
+      runtime.run(
+        { ...userMessage, messageId: "message-2", content: "Second question" },
+        new AbortController().signal,
+      ),
+    ).rejects.toEqual(new InvalidSessionStatusTransitionError("streaming", "preparing"));
+    expect(events).not.toContainEqual({
+      type: "session.status-changed",
+      sessionId: "session-1",
+      previousStatus: "streaming",
+      status: "failed",
+    });
+
+    releaseFirstStream.resolve();
+    await expect(firstRun).resolves.toBeUndefined();
+    expect(events.at(-1)).toMatchObject({ status: "completed" });
   });
 
   it("starts a fresh Run with injected history after the first Run completes", async () => {
@@ -2107,6 +2184,77 @@ describe("AgentRuntime", () => {
     ]);
   });
 
+  it.each([
+    {
+      name: "text delta",
+      events: [{ type: "text.delta", text: "first" }],
+      target: "agent.text-delta",
+      targetNextCount: 1,
+    },
+    {
+      name: "reasoning start",
+      events: [{ type: "reasoning.start", blockId: "provider-block" }],
+      target: "agent.reasoning-start",
+      targetNextCount: 1,
+    },
+    {
+      name: "reasoning delta",
+      events: [
+        { type: "reasoning.start", blockId: "provider-block" },
+        { type: "reasoning.delta", blockId: "provider-block", text: "first" },
+      ],
+      target: "agent.reasoning-delta",
+      targetNextCount: 2,
+    },
+    {
+      name: "reasoning end",
+      events: [
+        { type: "reasoning.start", blockId: "provider-block" },
+        { type: "reasoning.end", blockId: "provider-block" },
+      ],
+      target: "agent.reasoning-end",
+      targetNextCount: 2,
+    },
+    {
+      name: "pending Tool state",
+      events: [
+        {
+          type: "tool.call",
+          call: { id: "call-1", name: "list_files", input: {} },
+        },
+      ],
+      target: "agent.tool-state",
+      targetNextCount: 1,
+    },
+  ] as const)("does not request another model event after a synchronous %s sink abort", async (testCase) => {
+    const controller = new AbortController();
+    const cancellation = new Error(`cancel after ${testCase.name}`);
+    let nextCount = 0;
+    const events: AgentRuntimeEvent[] = [];
+    const runtime = new AgentRuntime(
+      createCountingModelGateway(testCase.events, () => {
+        nextCount += 1;
+      }),
+      {
+        emit(event) {
+          events.push(event);
+          if (event.type === testCase.target) {
+            controller.abort(cancellation);
+          }
+        },
+      },
+    );
+
+    await expect(runtime.run(userMessage, controller.signal)).resolves.toBeUndefined();
+
+    expect(nextCount).toBe(testCase.targetNextCount);
+    expect(events.filter((event) => event.type === testCase.target)).toHaveLength(1);
+    expect(
+      events.filter((event) => event.type === "agent.tool-state" && event.status !== "pending"),
+    ).toHaveLength(0);
+    expect(events.at(-1)).toMatchObject({ status: "cancelled" });
+  });
+
   it("cancels before starting the model when the signal is already aborted", async () => {
     const controller = new AbortController();
     controller.abort(new Error("cancelled before run"));
@@ -2260,6 +2408,31 @@ function createScriptedModelGateway(
         signal.throwIfAborted();
         yield event;
       }
+    },
+  };
+}
+
+function createCountingModelGateway(
+  events: readonly ModelEvent[],
+  onNext: () => void,
+): ModelGateway {
+  return {
+    stream() {
+      let index = 0;
+      const iterator: AsyncIterableIterator<ModelEvent> = {
+        async next() {
+          onNext();
+          const event = events[index];
+          index += 1;
+          return event === undefined
+            ? { done: true, value: undefined }
+            : { done: false, value: event };
+        },
+        [Symbol.asyncIterator]() {
+          return this;
+        },
+      };
+      return iterator;
     },
   };
 }

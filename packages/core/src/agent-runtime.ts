@@ -130,14 +130,17 @@ export interface AgentRuntimeOptions {
   readonly toolRepetitionThreshold?: number;
   readonly approvalPolicy?: BasicApprovalPolicy;
   readonly approvalWorkflow?: ToolApprovalWorkflow;
-  readonly externalResources?: readonly McpResourceAttachment[];
-  readonly externalPrompts?: readonly McpPromptConfirmation[];
   readonly contextWindowTokens?: number;
   readonly history?: readonly ModelMessage[];
   readonly historyProvider?: ModelHistoryProvider;
   readonly tokenCounter?: ModelMessageTokenCounter;
   readonly initialSessionStatus?: SessionStatus;
   readonly createRunId?: () => CheckpointRunId;
+}
+
+export interface AgentRuntimeRunOptions {
+  readonly externalResources?: readonly McpResourceAttachment[];
+  readonly externalPrompts?: readonly McpPromptConfirmation[];
 }
 
 export class MaxToolStepsExceededError extends Error {
@@ -197,8 +200,6 @@ export class AgentRuntime {
   readonly #toolRepetitionThreshold: number;
   readonly #approvalPolicy: BasicApprovalPolicy;
   readonly #approvalWorkflow: ToolApprovalWorkflow | undefined;
-  readonly #externalResources: readonly McpResourceAttachment[];
-  readonly #externalPrompts: readonly McpPromptConfirmation[];
   readonly #filesTokenBudget: number;
   readonly #history: readonly ModelMessage[];
   readonly #historyProvider: ModelHistoryProvider | undefined;
@@ -229,8 +230,6 @@ export class AgentRuntime {
     ).threshold;
     this.#approvalPolicy = options.approvalPolicy ?? new BasicApprovalPolicy();
     this.#approvalWorkflow = options.approvalWorkflow;
-    this.#externalResources = options.externalResources ?? [];
-    this.#externalPrompts = options.externalPrompts ?? [];
     const tokenBudget = allocateTokenBudget(
       options.contextWindowTokens ?? maxModelContextWindowTokens,
     );
@@ -243,17 +242,22 @@ export class AgentRuntime {
     this.#createRunId = options.createRunId ?? createDefaultRunId;
   }
 
-  async run(userMessage: UserMessage, signal: AbortSignal): Promise<void> {
+  async run(
+    userMessage: UserMessage,
+    signal: AbortSignal,
+    runOptions: AgentRuntimeRunOptions = {},
+  ): Promise<void> {
     const session = this.#getSession(userMessage.sessionId);
+    const runOwner = {};
 
     try {
-      session.beginRun();
+      session.beginRun(runOwner);
       signal.throwIfAborted();
       const runId = this.#createRunId();
       signal.throwIfAborted();
       const history = await this.#loadHistory(userMessage.sessionId, signal);
       signal.throwIfAborted();
-      const messages = this.#prepareMessages(history, userMessage.content, signal);
+      const messages = this.#prepareMessages(history, userMessage.content, signal, runOptions);
       signal.throwIfAborted();
       const offerTools = shouldOfferWorkspaceTools(userMessage.content);
       session.transitionTo("streaming");
@@ -304,6 +308,10 @@ export class AgentRuntime {
       signal.throwIfAborted();
       session.transitionTo("completed");
     } catch (error) {
+      if (!session.ownsRun(runOwner)) {
+        throw error;
+      }
+
       if (isCancellation(error, signal)) {
         if (isActiveStatus(session.status)) {
           session.transitionTo("cancelled");
@@ -348,6 +356,7 @@ export class AgentRuntime {
     history: readonly ModelMessage[],
     content: string,
     signal: AbortSignal,
+    runOptions: AgentRuntimeRunOptions,
   ): ModelMessage[] {
     signal.throwIfAborted();
     const withLatestUser: readonly ModelMessage[] = [...history, { role: "user", content }];
@@ -360,8 +369,8 @@ export class AgentRuntime {
     }
     const retainedHistory = pruned.messages.slice(0, -1);
     const externalContext = projectExternalMcpContext(
-      this.#externalResources,
-      this.#externalPrompts,
+      runOptions.externalResources ?? [],
+      runOptions.externalPrompts ?? [],
       this.#filesTokenBudget,
     );
     signal.throwIfAborted();
@@ -403,6 +412,7 @@ export class AgentRuntime {
           sessionId,
           text: event.text,
         });
+        signal.throwIfAborted();
       } else if (event.type === "reasoning.start") {
         if (openReasoningBlock !== undefined || reasoningBlocks.has(event.blockId)) {
           throw new Error("ModelGateway emitted a malformed reasoning lifecycle.");
@@ -415,6 +425,7 @@ export class AgentRuntime {
           sessionId,
           blockId: runtimeBlockId,
         });
+        signal.throwIfAborted();
       } else if (event.type === "reasoning.delta") {
         const runtimeBlockId = reasoningBlocks.get(event.blockId);
         if (event.blockId !== openReasoningBlock || runtimeBlockId === undefined) {
@@ -426,6 +437,7 @@ export class AgentRuntime {
           blockId: runtimeBlockId,
           text: event.text,
         });
+        signal.throwIfAborted();
       } else if (event.type === "reasoning.end") {
         const runtimeBlockId = reasoningBlocks.get(event.blockId);
         if (event.blockId !== openReasoningBlock || runtimeBlockId === undefined) {
@@ -437,6 +449,7 @@ export class AgentRuntime {
           sessionId,
           blockId: runtimeBlockId,
         });
+        signal.throwIfAborted();
       } else if (event.type === "tool.call") {
         if (!offerTools) {
           throw new UnexpectedToolCallError(event.call.name);
@@ -458,6 +471,7 @@ export class AgentRuntime {
 
         toolCall = event.call;
         this.#emitToolState(sessionId, event.call, "pending");
+        signal.throwIfAborted();
       } else if (event.type === "finish") {
         if (openReasoningBlock !== undefined) {
           throw new Error("ModelGateway completed with an open reasoning block.");
