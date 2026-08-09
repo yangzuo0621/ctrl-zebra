@@ -200,6 +200,24 @@ This document defines the initial runtime boundaries for the CtrlZebra desktop V
   repetition detection must pause at a configured threshold no greater than 10 consecutive matching
   calls. Cancellation ends every recovery, retry, delay, summary, and tool-loop action immediately.
 
+### Multi-turn history projection
+
+- A Session is the durable owner of one ordered transcript and may contain multiple sequential Runs.
+  A Run is one user submission, one model/Tool loop, and one terminal outcome; there is no separate
+  Conversation aggregate in this phase.
+- Extension recovery projects model history from the validated Session event log in committed
+  sequence order. It includes every validated user message, complete assistant text only when its Run
+  reached a normal `completed` outcome, and complete assistant Tool Call/Tool Result pairs whose call
+  ID and name match. Reasoning, status, approval, usage, summary, attachment, and UI-source events
+  never become model messages.
+- A cancelled, failed, or recovery-interrupted Run keeps its user message for the next Run. Partial or
+  unconfirmed assistant text is discarded. A Tool Call/Result pair committed before the terminal
+  outcome may remain in order; an open call, orphan result, or mismatched pair is never injected and
+  never receives a synthetic result.
+- The newest user message is appended only after prior history has been validated. A continuation
+  never replays a persisted approval, Tool, Provider request, or side effect. History remains
+  untrusted model context and is bounded before constructing an unbounded array or string.
+
 ## Session State Machine
 
 - Session status changes go through the Core state machine; callers and tools do not mutate or
@@ -208,11 +226,21 @@ This document defines the initial runtime boundaries for the CtrlZebra desktop V
   `streaming → awaiting_approval | executing_tool | completed | cancelled | failed`;
   `awaiting_approval → streaming | executing_tool | cancelled | failed`; and
   `executing_tool → streaming | cancelled | failed`.
-- `completed`, `cancelled`, and `failed` are distinct live terminal states with no outgoing
-  transitions. A terminal Session is never restarted by changing its status.
-- `interrupted` is a recovery-only terminal state with no incoming or outgoing live transition.
-  Recovery normalizes `idle`, `preparing`, `streaming`, `awaiting_approval`, and `executing_tool` to
-  `interrupted`; it never resumes persisted model, approval, or Tool operations.
+- `completed`, `cancelled`, and `failed` are distinct terminal outcomes for the most recent Run.
+  They have no ordinary outgoing transitions. An explicit Core-owned `beginRun` reset gate may move
+  any of those outcomes to `preparing` for one newly allocated Run; it is not a status mutation that
+  resumes the prior Run.
+- `interrupted` is a recovery-only status. Recovery normalizes `idle`, `preparing`, `streaming`,
+  `awaiting_approval`, and `executing_tool` to `interrupted`; it never resumes a persisted model,
+  approval, or Tool operation. A later explicit `beginRun` may reset `interrupted` to `preparing`,
+  with a fresh Run identity and fresh cancellation/resource ownership, but no automatic continuation
+  is allowed.
+- A Session accepts at most one active Run. Submitting while another Run, restore, or Session switch
+  owns the Session fails closed and cannot be redirected to another Session.
+- Every Run receives a host/Core-generated opaque Run identity distinct from Session ID, message ID,
+  and transport request ID. The identity is carried into approval/checkpoint/diagnostic ownership and
+  is never selected by Webview or model data. A Run owns its `AbortSignal`, event gate, Tool steps,
+  and transient resources; none may be reused by a later Run.
 - An illegal transition fails with a domain error without changing state or emitting an event.
 - A legal transition commits the new status before synchronously emitting exactly one status-change
   event. Event-sink failures propagate and do not roll back the committed status.

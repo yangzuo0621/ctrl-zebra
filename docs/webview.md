@@ -9,6 +9,24 @@ This document defines the React Webview constraints established before T0103. It
 - Persisted or Extension-authoritative values are represented as validated protocol DTOs when the protocol is introduced. The Webview must not invent a second authoritative copy.
 - Derived display values are computed from the owning state instead of synchronized through duplicate state variables.
 
+## Session and Run ownership
+
+- The chat store owns only the current validated display projection and the user's interaction state.
+  The Extension Host owns Session identity, persistence, Run allocation, model history, approvals,
+  cancellation, and all resource invalidation.
+- A submit carries the current Session identity when one is selected. An omitted identity means the
+  Host creates a new Session; the Webview never invents a Session or Run ID. Every accepted submit is
+  one fresh Run, and live messages are applied only when their `requestId` belongs to the active Run
+  and their Session projection still matches.
+- `New chat` is an explicit reset action. When no Run or restore is active, the store clears its
+  transcript, selected Session, staged restore, live reasoning, pending Tool/approval display, and
+  stale attachment presentation before the next submit. It does not delete persisted history. During
+  a Run, restore, or Session switch the action is disabled or ignored without retargeting ownership.
+- A Session switch or restore is transactional: stage only validated messages/reasoning for the exact
+  request and Session, then commit them together. Errors, mismatches, disposal, or a newer request
+  discard staged data and leave the current projection intact. A restored `interrupted` Session is
+  display-only until the user explicitly submits a new Run.
+
 ## VS Code API Boundary
 
 - `acquireVsCodeApi()` is called in exactly one Webview-local adapter module when host messaging is introduced.
@@ -44,6 +62,9 @@ This document defines the React Webview constraints established before T0103. It
 - Existing message elements keep stable keys. Updates change only the active message and must not replace the complete transcript tree.
 - Cancellation and completion flush the final owned state exactly once. No deltas may render after cancellation or terminal completion.
 - Streaming updates must not move keyboard focus, repeatedly announce token fragments, or force scrolling when the user has moved away from the newest content.
+- Failed, cancelled, and interrupted partial assistant content remains display-only and is labelled as
+  partial/unfinished where applicable; it is not assumed to be complete model history. A subsequent
+  Run appends to the validated Session projection only after the Host has rebuilt bounded history.
 
 ## Reasoning Summary Rendering
 

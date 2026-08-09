@@ -70,6 +70,27 @@ This document defines the Webview security constraints established before T0104.
   existing allowlisted operational facts such as a stable event name, correlation IDs, and outcome;
   they never record block text, Provider block IDs, truncation details, or content-derived values.
 
+## Session, Run, and history boundary
+
+- A Session ID is an opaque, validated identifier used for exact repository lookup; it is never a
+  path, workspace authority, approval grant, or instruction. Omitting a Session ID on `webview/submit`
+  creates a new Session; providing one requests that exact Session. Unknown, corrupt, active, or
+  mismatched Sessions fail closed and never fall through to a different Session.
+- Each submission receives a fresh Host/Core-generated Run ID, distinct from Session ID, message ID,
+  and transport `requestId`. Webview input, model output, persisted content, and MCP metadata cannot
+  choose or replace it. The Run ID scopes cancellation, event delivery, Tool state, approvals,
+  Checkpoints, diagnostics, and transient resources. A later Run never inherits a prior Run's
+  `AbortSignal`, pending operation, approval, or delivery gate.
+- History reconstructed from a validated local Session is untrusted model context. It may contain
+  bounded user text and complete Tool Call/Result pairs, but it is never authorization, a command,
+  a workspace target, or evidence to replay a side effect. Failed, cancelled, and interrupted partial
+  assistant output is display-only and is not injected into the next Run; an unfinished Tool Call is
+  discarded rather than given a synthetic Result.
+- Cancellation and Session replacement close the Run's event gate before cleanup. No later delta,
+  Tool Result, retry, approval response, persistence mutation, or side effect is accepted. Explicit
+  `webview/new-chat` clears unconsumed user-context attachments and staged restore state but does not
+  delete persisted Sessions or resume an active Run.
+
 ## Tool Input and Output
 
 - Model-supplied Tool Call IDs, names, and input are untrusted. The generic protocol Schema rejects
@@ -152,10 +173,11 @@ risk calls to avoid the matrix is forbidden.
 
 ### Exact Operation Binding
 
-- An Approval Request has a host-generated identifier and binds the Session, exact Tool Call ID and
-  name, trusted risk, validated JSON input, selected workspace root when applicable, affected
+- An Approval Request has a host-generated identifier and binds the exact Session and Run, Tool Call
+  ID and name, trusted risk, validated JSON input, selected workspace root when applicable, affected
   resource identities and revisions when known, user-visible presentation, creation time, and
-  expiration time.
+  expiration time. Built-in and external Tool approvals both require this Run binding; an approval
+  without an owning Run is invalid.
 - The bound operation is compared structurally from validated values, not from display text or raw
   JSON spelling. Any change to the tool name, input, selected root, target URI, resource set,
   expected version or content hash, effect, or risk creates a different operation and requires a
@@ -180,6 +202,9 @@ risk calls to avoid the matrix is forbidden.
 - A changed, missing, replaced, or no-longer-canonical target, a changed resource revision, a scope
   mismatch, or a presentation/operation mismatch changes a pending or approved-but-unconsumed
   request to `invalidated`.
+- Run completion, failure, cancellation, interruption, Session switch, explicit New chat, or disposal
+  invalidates every unconsumed approval owned by that Run. A new Run must create a new exact request;
+  no Session-wide, Tool-wide, remembered, or retry approval exists.
 - Only `approved` may transition to `consumed`, and the transition is atomic with claiming the
   authorization for execution. A consumed request can authorize exactly one attempt of the bound
   operation; retries and modified operations require a new request.
