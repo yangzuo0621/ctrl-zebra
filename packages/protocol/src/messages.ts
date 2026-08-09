@@ -69,6 +69,12 @@ export const submitMessageSchema = z.strictObject({
   ...protocolEnvelopeSchema.shape,
   type: z.literal("webview/submit"),
   content: submittedContentSchema,
+  sessionId: sessionIdSchema.optional(),
+});
+
+export const newChatMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("webview/new-chat"),
 });
 
 export const cancelMessageSchema = z.strictObject({
@@ -437,6 +443,7 @@ export const checkpointErrorMessageSchema = z.strictObject({
 export const webviewToExtensionMessageSchema = z.discriminatedUnion("type", [
   pingMessageSchema,
   submitMessageSchema,
+  newChatMessageSchema,
   cancelMessageSchema,
   mcpConnectMessageSchema,
   mcpDisconnectMessageSchema,
@@ -485,6 +492,7 @@ export type ProtocolEnvelope = z.infer<typeof protocolEnvelopeSchema>;
 export type PingMessage = z.infer<typeof pingMessageSchema>;
 export type PongMessage = z.infer<typeof pongMessageSchema>;
 export type SubmitMessage = z.infer<typeof submitMessageSchema>;
+export type NewChatMessage = z.infer<typeof newChatMessageSchema>;
 export type CancelMessage = z.infer<typeof cancelMessageSchema>;
 export type McpConnectMessage = z.infer<typeof mcpConnectMessageSchema>;
 export type McpDisconnectMessage = z.infer<typeof mcpDisconnectMessageSchema>;

@@ -4,6 +4,7 @@ import {
   type ApprovalRequest,
   type ApprovalStateMessage,
   extensionToWebviewMessageSchema,
+  type NewChatMessage,
   protocolEnvelopeSchema,
   protocolVersion,
   type ToolStateMessage,
@@ -123,6 +124,103 @@ describe("Webview protocol messages", () => {
     expect(webviewToExtensionMessageSchema.parse(cancel)).toEqual(cancel);
     expect(extensionToWebviewMessageSchema.parse(delta)).toEqual(delta);
     expect(extensionToWebviewMessageSchema.parse(status)).toEqual(status);
+  });
+
+  describe("multi-turn Session commands", () => {
+    const legacySubmit = {
+      protocolVersion,
+      type: "webview/submit",
+      requestId: "request-legacy",
+      content: "Continue the existing conversation.",
+    } as const;
+    const continuedSubmit = {
+      ...legacySubmit,
+      requestId: "request-continued",
+      sessionId: "session-1",
+    } as const;
+    const newChat = {
+      protocolVersion,
+      type: "webview/new-chat",
+      requestId: "request-new-chat",
+    } satisfies NewChatMessage;
+
+    it("accepts legacy and continued submits and round-trips them through JSON", () => {
+      expect(
+        webviewToExtensionMessageSchema.parse(JSON.parse(JSON.stringify(legacySubmit)) as unknown),
+      ).toEqual(legacySubmit);
+      expect(
+        webviewToExtensionMessageSchema.parse(
+          JSON.parse(JSON.stringify(continuedSubmit)) as unknown,
+        ),
+      ).toEqual(continuedSubmit);
+    });
+
+    it("accepts the strict envelope-only New chat command and round-trips it through JSON", () => {
+      expect(
+        webviewToExtensionMessageSchema.parse(JSON.parse(JSON.stringify(newChat)) as unknown),
+      ).toEqual(newChat);
+    });
+
+    it.each([
+      { ...continuedSubmit, sessionId: null },
+      { ...continuedSubmit, sessionId: "" },
+      { ...continuedSubmit, sessionId: "x".repeat(129) },
+      { ...continuedSubmit, sessionId: 42 },
+      { ...continuedSubmit, unexpected: true },
+      { ...newChat, sessionId: "session-1" },
+      { ...newChat, unexpected: true },
+    ])("rejects invalid Session command fields %#", (message) => {
+      expect(webviewToExtensionMessageSchema.safeParse(message).success).toBe(false);
+    });
+
+    it("keeps New chat Webview-only and rejects it in the opposite direction", () => {
+      expect(extensionToWebviewMessageSchema.safeParse(newChat).success).toBe(false);
+      expect(
+        webviewToExtensionMessageSchema.safeParse({
+          ...newChat,
+          type: "extension/new-chat",
+        }).success,
+      ).toBe(false);
+    });
+
+    it("accepts content and identifier limits and rejects one character beyond each limit", () => {
+      const maxContent = "x".repeat(1_000_000);
+      const maxRequestId = "r".repeat(128);
+      const maxSessionId = "s".repeat(128);
+      const atLimits = {
+        protocolVersion,
+        type: "webview/submit",
+        requestId: maxRequestId,
+        content: maxContent,
+        sessionId: maxSessionId,
+      } as const;
+
+      expect(webviewToExtensionMessageSchema.safeParse(atLimits).success).toBe(true);
+      expect(
+        webviewToExtensionMessageSchema.safeParse({
+          ...atLimits,
+          content: `${maxContent}x`,
+        }).success,
+      ).toBe(false);
+      expect(
+        webviewToExtensionMessageSchema.safeParse({
+          ...atLimits,
+          requestId: `${maxRequestId}x`,
+        }).success,
+      ).toBe(false);
+      expect(
+        webviewToExtensionMessageSchema.safeParse({
+          ...atLimits,
+          sessionId: `${maxSessionId}x`,
+        }).success,
+      ).toBe(false);
+    });
+
+    it("keeps protocol version 1 submit compatibility when sessionId is omitted", () => {
+      expect(protocolVersion).toBe(1);
+      expect(webviewToExtensionMessageSchema.parse(legacySubmit)).toEqual(legacySubmit);
+      expect("sessionId" in legacySubmit).toBe(false);
+    });
   });
 
   it.each([
