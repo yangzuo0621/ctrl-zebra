@@ -4,12 +4,45 @@ This document defines the continuous integration constraints established by T000
 
 ## Runtime and Triggers
 
-- CI runs on a GitHub-hosted Ubuntu runner.
-- The Node.js major version is pinned to 24.
+- Validation CI runs on a controlled GitHub-hosted matrix of `ubuntu-latest`, `macos-latest`, and
+  `windows-latest`.
+- The Node.js runtime is pinned to `24.13.3` for every matrix leg.
 - The root `package.json` `packageManager` field is the single source of truth for the pnpm version, currently `pnpm@11.11.0`.
 - The workflow runs for pushes to `main` and pull requests whose target branch is `main`.
 - Only the latest run for the same workflow and branch or pull request remains active; a newer run cancels an unfinished older run.
-- Each job has a 15-minute `timeout-minutes` limit. A timeout is reported as a failure and must not be hidden by increasing the limit arbitrarily.
+- Matrix strategy uses `fail-fast: false` and does not set `continue-on-error`: every OS leg reports its own result, and any failed leg fails the workflow without cancelling the other legs. A skipped conditional step is an explicit matrix policy, not failure suppression.
+- Each matrix leg has a 15-minute `timeout-minutes` limit. A timeout is reported as a failure and must not be hidden by increasing the limit arbitrarily.
+
+## Validation Matrix
+
+Every OS leg runs the repository-owned commands in this order and stops on the first failure:
+
+1. `pnpm install --frozen-lockfile`
+2. `pnpm check`
+3. `pnpm typecheck`
+4. `pnpm test:unit`
+5. `pnpm build`
+
+The Ubuntu leg additionally runs:
+
+- `xvfb-run -a pnpm test:integration`, because the Extension Development Host requires a display and
+  the existing harness/package workflow is already verified on the Linux/Xvfb path;
+- `pnpm test:coverage`, retaining the single T1502 coverage gate without tripling the same unit-only
+  report across the matrix.
+
+macOS and Windows still execute the complete node/jsdom unit suite and production build. Those tests
+provide the minimum real-runner evidence for platform-sensitive behavior already owned by the code:
+
+- Windows drive/UNC, case, and separator rules in `workspace-scope.test.ts`, plus Windows environment
+  and filesystem-path handling in `workspace-command-executor.test.ts`;
+- CRLF and mixed line-ending behavior in `diff-presenter.test.ts` and `tool-output-limiter.test.ts`;
+- child-process streaming, cancellation, process-tree termination, Windows `taskkill`, and POSIX
+  (including `darwin`) branches in `spawn-command-runner.test.ts` and `mcp-stdio-port.test.ts`.
+
+The skipped integration and coverage steps on macOS/Windows are visible in the matrix UI and do not
+make those jobs successful when another step fails. The expensive VS Code/Electron integration path
+is intentionally limited to Ubuntu; `package-vsix.yml` remains a separate Ubuntu-only artifact
+workflow.
 
 ## VSIX Packaging Workflow
 
@@ -47,22 +80,19 @@ This document defines the continuous integration constraints established by T000
 
 ## Validation Commands
 
-CI runs the following commands in order and stops when any command fails:
-
-1. `pnpm install --frozen-lockfile`
-2. `pnpm check`
-3. `pnpm typecheck`
-4. `pnpm test`
-5. `pnpm test:coverage`
-6. `pnpm build`
-
-Use the project-pinned pnpm version for equivalent local validation:
+Use the project-pinned pnpm version for equivalent local validation on Windows, macOS, or Linux:
 
 ```powershell
 corepack pnpm install --frozen-lockfile
 corepack pnpm check
 corepack pnpm typecheck
-corepack pnpm test
-corepack pnpm test:coverage
+corepack pnpm test:unit
 corepack pnpm build
+```
+
+On Ubuntu with an available Xvfb display, also run:
+
+```bash
+corepack pnpm test:integration
+corepack pnpm test:coverage
 ```

@@ -65,11 +65,11 @@
 
 - 总任务：148
 - 已完成：100
-- 进行中：0
+- 进行中：1
 - 受阻：0
-- 待开始：48
-- 当前任务：无
-- 下一任务：T1503
+- 待开始：47
+- 当前任务：T1503
+- 下一任务：T1504
 - 最后更新：2026-08-09
 
 | 阶段 | 任务 | 状态 | 完成 PR | 完成日期 |
@@ -174,7 +174,7 @@
 | 14 | T1409 | 已完成 | [#150](https://github.com/yangzuo0621/ctrl-zebra/pull/150) | 2026-08-03 |
 | 15 | T1501 | 已完成 | [#153](https://github.com/yangzuo0621/ctrl-zebra/pull/153) | 2026-08-09 |
 | 15 | T1502 | 已完成 | [#155](https://github.com/yangzuo0621/ctrl-zebra/pull/155) | 2026-08-09 |
-| 15 | T1503 | 待开始 | — | — |
+| 15 | T1503 | 进行中 | — | — |
 | 15 | T1504 | 待开始 | — | — |
 | 15 | T1505 | 待开始 | — | — |
 | 15 | T1506 | 待开始 | — | — |
@@ -320,4 +320,4 @@ T1401 由 [#141](https://github.com/yangzuo0621/ctrl-zebra/pull/141) 交付；T1
 [#149](https://github.com/yangzuo0621/ctrl-zebra/pull/149) 交付；T1409 由
 [#150](https://github.com/yangzuo0621/ctrl-zebra/pull/150) 交付。阶段 15–22 已完成规划；T1501 由
 [#153](https://github.com/yangzuo0621/ctrl-zebra/pull/153) 交付；T1502 由
-[#155](https://github.com/yangzuo0621/ctrl-zebra/pull/155) 交付。当前无进行中任务；下一任务为 T1503。
+[#155](https://github.com/yangzuo0621/ctrl-zebra/pull/155) 交付。当前正在执行 T1503：建立跨平台 CI 基线；完成后下一任务为 T1504。

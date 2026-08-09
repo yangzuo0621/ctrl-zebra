@@ -17,8 +17,21 @@ concurrency:
 
 jobs:
   ci:
-    name: Install and validate
-    runs-on: ubuntu-latest
+    name: Validate (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            run-integration: true
+            run-coverage: true
+          - os: macos-latest
+            run-integration: false
+            run-coverage: false
+          - os: windows-latest
+            run-integration: false
+            run-coverage: false
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 15
 
     steps:
@@ -31,7 +44,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version: "24"
+          node-version: "24.13.3"
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
@@ -44,10 +57,15 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
-      - name: Test
-        run: xvfb-run -a pnpm test
+      - name: Unit tests
+        run: pnpm test:unit
 
-      - name: Coverage
+      - name: Extension integration tests (Ubuntu)
+        if: ${{ matrix.run-integration }}
+        run: xvfb-run -a pnpm test:integration
+
+      - name: Coverage gate (Ubuntu)
+        if: ${{ matrix.run-coverage }}
         run: pnpm test:coverage
 
       - name: Build
