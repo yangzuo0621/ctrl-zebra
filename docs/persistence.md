@@ -194,8 +194,11 @@ those records.
 
 ## Interrupted recovery
 
-- `interrupted` is a persisted recovery-only terminal Session status. The live Agent Runtime never
-  transitions into or out of it.
+- `interrupted` is a persisted recovery-only Session status. Automatic recovery and the live Agent
+  Runtime never transition into it or resume work from it. After recovery, an explicit user submission
+  may invoke the Core-owned `beginRun` reset gate to move that recovered Session from `interrupted` to
+  `preparing` for a fresh Run with new cancellation and resource ownership; no other live transition
+  out of `interrupted` is legal.
 - On recovery, `idle`, `preparing`, `streaming`, `awaiting_approval`, and `executing_tool` are written
   back as `interrupted`. `completed`, `cancelled`, `failed`, and `interrupted` remain unchanged.
 - Recovery may read history and update the manifest status only. It never resumes a model request,
