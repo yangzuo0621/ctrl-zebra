@@ -1,7 +1,9 @@
 import {
   type ApprovalRequest,
   type ApprovalStatus,
+  approvalRequestSchema,
   type CheckpointRunId,
+  type JsonValue,
   jsonValueSchema,
   type McpPromptConfirmation,
   type McpResourceAttachment,
@@ -12,6 +14,7 @@ import {
   type ToolErrorResult,
   type ToolResult,
   type ToolSuccessResult,
+  toolCallSchema,
   toolResultSchema,
   type UserMessage,
 } from "@ctrl-zebra/protocol";
@@ -27,7 +30,7 @@ import {
 import type { ModelGateway, ModelMessage } from "./model-gateway.js";
 import { SessionStateMachine, type SessionStatusChangedEvent } from "./session-state-machine.js";
 import { allocateTokenBudget, maxModelContextWindowTokens } from "./token-budget.js";
-import type { ToolApprovalWorkflow } from "./tool-approval.js";
+import type { ToolApprovalOperation, ToolApprovalWorkflow } from "./tool-approval.js";
 import { InvalidToolInputError, parseToolInput } from "./tool-input-validation.js";
 import { limitToolOutput } from "./tool-output-limiter.js";
 import {
@@ -162,7 +165,16 @@ export class UnexpectedToolCallError extends Error {
   }
 }
 
+class InvalidToolApprovalError extends Error {
+  constructor() {
+    super("Tool approval request is not bound to the current Session, Run, and Tool Call.");
+    this.name = "InvalidToolApprovalError";
+  }
+}
+
 let nextDefaultRunId = 0;
+
+const maxHistoryMessageCharacters = 1_000_000;
 
 const defaultModelMessageTokenCounter: ModelMessageTokenCounter = {
   count(message) {
@@ -232,10 +244,11 @@ export class AgentRuntime {
 
   async run(userMessage: UserMessage, signal: AbortSignal): Promise<void> {
     const session = this.#getSession(userMessage.sessionId);
-    session.beginRun();
-    const runId = this.#createRunId();
 
     try {
+      session.beginRun();
+      signal.throwIfAborted();
+      const runId = this.#createRunId();
       signal.throwIfAborted();
       const history = await this.#loadHistory(userMessage.sessionId, signal);
       signal.throwIfAborted();
@@ -243,6 +256,7 @@ export class AgentRuntime {
       signal.throwIfAborted();
       const offerTools = shouldOfferWorkspaceTools(userMessage.content);
       session.transitionTo("streaming");
+      signal.throwIfAborted();
       let toolSteps = 0;
       const repetitionDetector = new ToolRepetitionDetector(this.#toolRepetitionThreshold);
       const reasoningIds = new RunReasoningIds();
@@ -282,6 +296,7 @@ export class AgentRuntime {
         signal.throwIfAborted();
         if (session.status === "executing_tool") {
           session.transitionTo("streaming");
+          signal.throwIfAborted();
         }
       }
 
@@ -320,16 +335,12 @@ export class AgentRuntime {
 
   async #loadHistory(sessionId: SessionId, signal: AbortSignal): Promise<readonly ModelMessage[]> {
     signal.throwIfAborted();
-    if (this.#historyProvider === undefined) {
-      return [...this.#history];
-    }
-
-    const history = await this.#historyProvider.load(sessionId, signal);
+    const history =
+      this.#historyProvider === undefined
+        ? this.#history
+        : await this.#historyProvider.load(sessionId, signal);
     signal.throwIfAborted();
-    if (!Array.isArray(history)) {
-      throw new InvalidModelHistoryError();
-    }
-    return [...history];
+    return validateModelHistory(history);
   }
 
   #prepareMessages(
@@ -575,18 +586,22 @@ export class AgentRuntime {
       signal,
     );
     signal.throwIfAborted();
+    const approval = validateToolApproval(operation, sessionId, runId, toolCall, tool.risk);
+    signal.throwIfAborted();
     session.transitionTo("streaming");
+    signal.throwIfAborted();
     session.transitionTo("awaiting_approval");
     signal.throwIfAborted();
-    this.#emitApprovalState(sessionId, operation.request, "pending");
+    this.#emitApprovalState(sessionId, approval, "pending");
     const decision = await operation.requestDecision(signal);
     signal.throwIfAborted();
 
     if (decision.decision === "expired") {
       signal.throwIfAborted();
-      this.#emitApprovalState(sessionId, operation.request, "expired");
+      this.#emitApprovalState(sessionId, approval, "expired");
       signal.throwIfAborted();
       session.transitionTo("streaming");
+      signal.throwIfAborted();
       return createToolErrorResult(
         toolCall,
         "failed",
@@ -596,14 +611,15 @@ export class AgentRuntime {
 
     if (decision.decision === "denied") {
       signal.throwIfAborted();
-      this.#emitApprovalState(sessionId, operation.request, "denied");
+      this.#emitApprovalState(sessionId, approval, "denied");
       signal.throwIfAborted();
       session.transitionTo("streaming");
+      signal.throwIfAborted();
       return createToolErrorResult(toolCall, "denied", `The user denied tool "${toolCall.name}".`);
     }
 
     signal.throwIfAborted();
-    this.#emitApprovalState(sessionId, operation.request, "approved");
+    this.#emitApprovalState(sessionId, approval, "approved");
     signal.throwIfAborted();
     session.transitionTo("executing_tool");
     signal.throwIfAborted();
@@ -611,7 +627,7 @@ export class AgentRuntime {
     signal.throwIfAborted();
     if (consumption.outcome === "expired") {
       signal.throwIfAborted();
-      this.#emitApprovalState(sessionId, operation.request, "expired");
+      this.#emitApprovalState(sessionId, approval, "expired");
       signal.throwIfAborted();
       return createToolErrorResult(
         toolCall,
@@ -621,13 +637,13 @@ export class AgentRuntime {
     }
     if (consumption.outcome === "conflict") {
       signal.throwIfAborted();
-      this.#emitApprovalState(sessionId, operation.request, "invalidated");
+      this.#emitApprovalState(sessionId, approval, "invalidated");
       signal.throwIfAborted();
       return createToolErrorResult(toolCall, "conflict", consumption.message);
     }
 
     signal.throwIfAborted();
-    this.#emitApprovalState(sessionId, operation.request, "consumed");
+    this.#emitApprovalState(sessionId, approval, "consumed");
     signal.throwIfAborted();
     if (tool.risk === "execute") {
       return this.#executeToolImplementation(toolCall, tool, input, signal);
@@ -759,6 +775,153 @@ function createToolErrorResult(
     status: "error",
     error: { code, message },
   };
+}
+
+function validateModelHistory(history: unknown): readonly ModelMessage[] {
+  if (!Array.isArray(history)) {
+    throw new InvalidModelHistoryError();
+  }
+
+  const validated: ModelMessage[] = [];
+  for (let index = 0; index < history.length; index += 1) {
+    if (!Object.hasOwn(history, index)) {
+      throw new InvalidModelHistoryError();
+    }
+    validated.push(validateModelHistoryMessage(history[index]));
+  }
+  return validated;
+}
+
+function validateModelHistoryMessage(message: unknown): ModelMessage {
+  if (!isRecord(message)) {
+    throw new InvalidModelHistoryError();
+  }
+
+  if (hasExactKeys(message, ["content", "role"])) {
+    if (
+      (message.role !== "user" && message.role !== "assistant") ||
+      typeof message.content !== "string" ||
+      message.content.length < 1 ||
+      message.content.length > maxHistoryMessageCharacters
+    ) {
+      throw new InvalidModelHistoryError();
+    }
+
+    return {
+      role: message.role,
+      content: message.content,
+    };
+  }
+
+  if (hasExactKeys(message, ["role", "toolCall"])) {
+    if (message.role !== "assistant") {
+      throw new InvalidModelHistoryError();
+    }
+    const toolCall = toolCallSchema.safeParse(message.toolCall);
+    if (!toolCall.success) {
+      throw new InvalidModelHistoryError();
+    }
+    return { role: "assistant", toolCall: toolCall.data };
+  }
+
+  if (hasExactKeys(message, ["result", "role"])) {
+    if (message.role !== "tool") {
+      throw new InvalidModelHistoryError();
+    }
+    const result = toolResultSchema.safeParse(message.result);
+    if (!result.success) {
+      throw new InvalidModelHistoryError();
+    }
+    return { role: "tool", result: result.data };
+  }
+
+  throw new InvalidModelHistoryError();
+}
+
+function validateToolApproval(
+  operation: ToolApprovalOperation,
+  sessionId: SessionId,
+  runId: CheckpointRunId,
+  toolCall: ToolCall,
+  risk: "write" | "execute",
+): ApprovalRequest {
+  const operationRecord =
+    typeof operation === "object" && operation !== null
+      ? (operation as { readonly request?: unknown })
+      : undefined;
+  const parsed = approvalRequestSchema.safeParse(operationRecord?.request);
+  if (!parsed.success) {
+    throw new InvalidToolApprovalError();
+  }
+
+  const scope = parsed.data.scope;
+  if (
+    scope.sessionId !== sessionId ||
+    scope.runId !== runId ||
+    scope.risk !== risk ||
+    !toolCallsMatch(scope.call, toolCall)
+  ) {
+    throw new InvalidToolApprovalError();
+  }
+
+  return parsed.data;
+}
+
+function toolCallsMatch(left: ToolCall, right: ToolCall): boolean {
+  return (
+    left.id === right.id && left.name === right.name && jsonValuesEqual(left.input, right.input)
+  );
+}
+
+function jsonValuesEqual(left: JsonValue, right: JsonValue): boolean {
+  if (left === right) {
+    return true;
+  }
+  if (typeof left !== typeof right || left === null || right === null) {
+    return false;
+  }
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) {
+      return false;
+    }
+    return left.every((value, index) => {
+      const other = right[index];
+      return other !== undefined && jsonValuesEqual(value, other);
+    });
+  }
+  if (typeof left === "object" && typeof right === "object") {
+    const leftObject = left as { readonly [key: string]: JsonValue };
+    const rightObject = right as { readonly [key: string]: JsonValue };
+    const leftKeys = Object.keys(leftObject).sort();
+    const rightKeys = Object.keys(rightObject).sort();
+    if (
+      leftKeys.length !== rightKeys.length ||
+      leftKeys.some((key, index) => key !== rightKeys[index])
+    ) {
+      return false;
+    }
+    return leftKeys.every((key) => {
+      return jsonValuesEqual(leftObject[key], rightObject[key]);
+    });
+  }
+  return false;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function hasExactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
+  const actual = Object.keys(value).sort();
+  const sortedExpected = [...expected].sort();
+  return (
+    actual.length === sortedExpected.length &&
+    actual.every((key, index) => key === sortedExpected[index])
+  );
 }
 
 function isCancellation(error: unknown, signal: AbortSignal): boolean {

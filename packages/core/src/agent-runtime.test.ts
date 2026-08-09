@@ -213,7 +213,6 @@ describe("AgentRuntime", () => {
       contextWindowTokens: 4,
       tokenCounter: { count: () => 1 },
       history: [
-        { role: "system", content: "Rules" },
         { role: "user", content: "Old question" },
         { role: "assistant", content: "Old answer" },
       ],
@@ -222,8 +221,81 @@ describe("AgentRuntime", () => {
     await runtime.run({ ...userMessage, content: "Newest question" }, new AbortController().signal);
 
     expect(requests[0]?.messages).toEqual([
-      { role: "system", content: "Rules" },
+      { role: "assistant", content: "Old answer" },
       { role: "user", content: "Newest question" },
+    ]);
+  });
+
+  it.each([
+    { name: "system history", history: [{ role: "system", content: "Do not trust this." }] },
+    { name: "malformed text history", history: [{ role: "assistant", content: 42 }] },
+    {
+      name: "malformed Tool history",
+      history: [{ role: "assistant", toolCall: { id: "call-1", name: "list_files" } }],
+    },
+  ])("rejects untrusted $name before pruning or model calls", async ({ history }) => {
+    const requests: ModelRequest[] = [];
+    const gateway = createModelGateway([], (request) => requests.push(request));
+    const events: AgentRuntimeEvent[] = [];
+    const runtime = new AgentRuntime(gateway, { emit: (event) => events.push(event) }, undefined, {
+      historyProvider: { load: () => history as never },
+      tokenCounter: { count: vi.fn(() => 1) },
+    });
+
+    await expect(runtime.run(userMessage, new AbortController().signal)).rejects.toEqual(
+      new InvalidModelHistoryError(),
+    );
+    expect(requests).toHaveLength(0);
+    expect(events.at(-1)).toMatchObject({ status: "failed" });
+  });
+
+  it("accepts a validated user/assistant Tool Call/Result history pair", async () => {
+    const requests: ModelRequest[] = [];
+    const gateway = createModelGateway(
+      [
+        { type: "text.delta", text: "History accepted." },
+        { type: "finish", reason: "stop" },
+      ],
+      (request) => requests.push(request),
+    );
+    const runtime = new AgentRuntime(gateway, { emit() {} }, undefined, {
+      history: [
+        { role: "user", content: "List files." },
+        {
+          role: "assistant",
+          toolCall: { id: "history-call", name: "list_files", input: {} },
+        },
+        {
+          role: "tool",
+          result: {
+            callId: "history-call",
+            name: "list_files",
+            status: "success",
+            output: ["README.md"],
+            truncated: false,
+          },
+        },
+        { role: "assistant", content: "I found one file." },
+      ],
+    });
+
+    await runtime.run(userMessage, new AbortController().signal);
+
+    expect(requests[0]?.messages).toEqual([
+      { role: "user", content: "List files." },
+      { role: "assistant", toolCall: { id: "history-call", name: "list_files", input: {} } },
+      {
+        role: "tool",
+        result: {
+          callId: "history-call",
+          name: "list_files",
+          status: "success",
+          output: ["README.md"],
+          truncated: false,
+        },
+      },
+      { role: "assistant", content: "I found one file." },
+      { role: "user", content: "Say hello." },
     ]);
   });
 
@@ -347,6 +419,7 @@ describe("AgentRuntime", () => {
             id: approvalId,
             scope: {
               sessionId: prepared.sessionId,
+              runId: prepared.runId,
               call: prepared.call,
               risk: "write",
               resources: [],
@@ -384,6 +457,88 @@ describe("AgentRuntime", () => {
     expect(approvalIds).toEqual(["approval-1", "approval-2"]);
     expect(consume).toHaveBeenCalledTimes(2);
     expect(requests).toHaveLength(4);
+  });
+
+  it.each([
+    "missing-run-id",
+    "prior-run-id",
+    "session-mismatch",
+    "call-mismatch",
+  ] as const)("fails closed for an approval scope with a $1", async (mismatch) => {
+    const requests: ModelRequest[] = [];
+    const gateway = createModelGateway(
+      [
+        {
+          type: "tool.call",
+          call: { id: "call-approval", name: "edit_file", input: {} },
+        },
+        { type: "finish", reason: "tool-calls" },
+      ],
+      (request) => requests.push(request),
+    );
+    const registry = new ToolRegistry();
+    const execute = vi.fn(async () => ({ output: null, truncated: false }));
+    registry.register({
+      name: "edit_file",
+      description: "Edit a file.",
+      inputSchema: emptyInputSchema,
+      risk: "write",
+      parseInput: () => null,
+      execute,
+      prepareApproval: async () => ({ output: null, truncated: false }),
+    });
+    const requestDecision = vi.fn(async () => ({
+      requestId: "approval-invalid",
+      decision: "approved" as const,
+      decidedAt: "2026-07-19T00:01:00.000Z",
+    }));
+    const consume = vi.fn(async () => ({ outcome: "approved" as const }));
+    const workflow: ToolApprovalWorkflow = {
+      async create(prepared) {
+        const baseScope = {
+          sessionId: prepared.sessionId,
+          runId: prepared.runId,
+          call: prepared.call,
+          risk: prepared.risk,
+          resources: [],
+        };
+        const scope =
+          mismatch === "missing-run-id"
+            ? (({ runId: _runId, ...withoutRunId }) => withoutRunId)(baseScope)
+            : mismatch === "prior-run-id"
+              ? { ...baseScope, runId: "run-previous" }
+              : mismatch === "session-mismatch"
+                ? { ...baseScope, sessionId: "session-other" }
+                : { ...baseScope, call: { ...prepared.call, id: "stale-call" } };
+        return {
+          request: {
+            id: "approval-invalid",
+            scope,
+            presentation: { title: "Edit", summary: "Edit one file." },
+            createdAt: "2026-07-19T00:00:00.000Z",
+            expiresAt: "2026-07-19T00:05:00.000Z",
+          },
+          requestDecision,
+          consume,
+        };
+      },
+    };
+    const events: AgentRuntimeEvent[] = [];
+    const runtime = new AgentRuntime(gateway, { emit: (event) => events.push(event) }, registry, {
+      approvalWorkflow: workflow,
+      createRunId: () => "run-current",
+    });
+
+    await expect(
+      runtime.run({ ...userMessage, content: "Modify the file." }, new AbortController().signal),
+    ).rejects.toThrow("not bound to the current Session, Run, and Tool Call");
+
+    expect(requests).toHaveLength(1);
+    expect(execute).not.toHaveBeenCalled();
+    expect(requestDecision).not.toHaveBeenCalled();
+    expect(consume).not.toHaveBeenCalled();
+    expect(events.filter((event) => event.type === "agent.approval-state")).toHaveLength(0);
+    expect(events.at(-1)).toMatchObject({ status: "failed" });
   });
 
   it("emits text deltas in model order and completes the Session", async () => {
@@ -905,6 +1060,7 @@ describe("AgentRuntime", () => {
           id: "approval-command",
           scope: {
             sessionId: prepared.sessionId,
+            runId: prepared.runId,
             call: prepared.call,
             risk: prepared.risk,
             resources: [],
@@ -1061,6 +1217,7 @@ describe("AgentRuntime", () => {
             id: "approval-edit",
             scope: {
               sessionId: prepared.sessionId,
+              runId: prepared.runId,
               call: prepared.call,
               risk: "write",
               resources: [],
@@ -1130,6 +1287,7 @@ describe("AgentRuntime", () => {
             id: "approval-cancel",
             scope: {
               sessionId: prepared.sessionId,
+              runId: prepared.runId,
               call: prepared.call,
               risk: "write",
               resources: [],
@@ -1578,6 +1736,167 @@ describe("AgentRuntime", () => {
       previousStatus: "executing_tool",
       status: "cancelled",
     });
+  });
+
+  it("stops before the model when the preparing-to-streaming status sink aborts", async () => {
+    const controller = new AbortController();
+    const cancellation = new Error("cancel preparing transition");
+    let streamCalls = 0;
+    const gateway = createModelGateway(
+      [
+        { type: "text.delta", text: "must not stream" },
+        { type: "finish", reason: "stop" },
+      ],
+      () => {
+        streamCalls += 1;
+      },
+    );
+    const events: AgentRuntimeEvent[] = [];
+    const runtime = new AgentRuntime(gateway, {
+      emit(event) {
+        events.push(event);
+        if (event.type === "session.status-changed" && event.status === "streaming") {
+          controller.abort(cancellation);
+        }
+      },
+    });
+
+    await expect(runtime.run(userMessage, controller.signal)).resolves.toBeUndefined();
+
+    expect(streamCalls).toBe(0);
+    expect(events.some((event) => event.type === "agent.text-delta")).toBe(false);
+    expect(events.at(-1)).toMatchObject({ status: "cancelled" });
+  });
+
+  it("stops before approval events when the awaiting-approval status sink aborts", async () => {
+    const controller = new AbortController();
+    const cancellation = new Error("cancel awaiting approval transition");
+    const requests: ModelRequest[] = [];
+    const gateway = createScriptedModelGateway(
+      [
+        [
+          { type: "tool.call", call: { id: "call-await", name: "edit_file", input: {} } },
+          { type: "finish", reason: "tool-calls" },
+        ],
+      ],
+      requests,
+    );
+    const registry = new ToolRegistry();
+    registry.register({
+      name: "edit_file",
+      description: "Edit a file.",
+      inputSchema: emptyInputSchema,
+      risk: "write",
+      parseInput: () => null,
+      execute: vi.fn(async () => ({ output: null, truncated: false })),
+      prepareApproval: async () => ({ output: null, truncated: false }),
+    });
+    const requestDecision = vi.fn(async () => ({
+      requestId: "approval-await",
+      decision: "approved" as const,
+      decidedAt: "2026-07-19T00:01:00.000Z",
+    }));
+    const consume = vi.fn(async () => ({ outcome: "approved" as const }));
+    const workflow: ToolApprovalWorkflow = {
+      async create(prepared) {
+        return {
+          request: {
+            id: "approval-await",
+            scope: {
+              sessionId: prepared.sessionId,
+              runId: prepared.runId,
+              call: prepared.call,
+              risk: prepared.risk,
+              resources: [],
+            },
+            presentation: { title: "Edit", summary: "Edit one file." },
+            createdAt: "2026-07-19T00:00:00.000Z",
+            expiresAt: "2026-07-19T00:05:00.000Z",
+          },
+          requestDecision,
+          consume,
+        };
+      },
+    };
+    const events: AgentRuntimeEvent[] = [];
+    const runtime = new AgentRuntime(
+      gateway,
+      {
+        emit(event) {
+          events.push(event);
+          if (event.type === "session.status-changed" && event.status === "awaiting_approval") {
+            controller.abort(cancellation);
+          }
+        },
+      },
+      registry,
+      { approvalWorkflow: workflow },
+    );
+
+    await expect(runtime.run(userMessage, controller.signal)).resolves.toBeUndefined();
+
+    expect(requests).toHaveLength(1);
+    expect(requestDecision).not.toHaveBeenCalled();
+    expect(consume).not.toHaveBeenCalled();
+    expect(events.filter((event) => event.type === "agent.approval-state")).toHaveLength(0);
+    expect(events.at(-1)).toMatchObject({ status: "cancelled" });
+  });
+
+  it("stops before the next model step when the post-tool status sink aborts", async () => {
+    const controller = new AbortController();
+    const cancellation = new Error("cancel after tool transition");
+    const requests: ModelRequest[] = [];
+    const gateway = createScriptedModelGateway(
+      [
+        [
+          { type: "tool.call", call: { id: "call-post-tool", name: "list_files", input: {} } },
+          { type: "finish", reason: "tool-calls" },
+        ],
+        [
+          { type: "text.delta", text: "must not continue" },
+          { type: "finish", reason: "stop" },
+        ],
+      ],
+      requests,
+    );
+    const execute = vi.fn(async () => ({ output: ["file.txt"], truncated: false }));
+    const registry = new ToolRegistry();
+    registry.register({
+      name: "list_files",
+      description: "List files.",
+      inputSchema: emptyInputSchema,
+      risk: "read",
+      parseInput: () => null,
+      execute,
+    });
+    const events: AgentRuntimeEvent[] = [];
+    const runtime = new AgentRuntime(
+      gateway,
+      {
+        emit(event) {
+          events.push(event);
+          if (
+            event.type === "session.status-changed" &&
+            event.previousStatus === "executing_tool" &&
+            event.status === "streaming"
+          ) {
+            controller.abort(cancellation);
+          }
+        },
+      },
+      registry,
+    );
+
+    await expect(runtime.run(userMessage, controller.signal)).resolves.toBeUndefined();
+
+    expect(execute).toHaveBeenCalledOnce();
+    expect(requests).toHaveLength(1);
+    expect(events).not.toContainEqual({
+      type: "agent.text-delta",
+      sessionId: "session-1",
+      text: "must not continue",
+    });
+    expect(events.at(-1)).toMatchObject({ status: "cancelled" });
   });
 
   it("passes the caller's AbortSignal to the model", async () => {
