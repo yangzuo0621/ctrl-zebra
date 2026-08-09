@@ -6,6 +6,7 @@ import {
   type AgentRuntimeEvent,
   type AgentTool,
   EmptyAgentResponseError,
+  InvalidModelHistoryError,
   MaxToolStepsExceededError,
   type ModelEvent,
   type ModelGateway,
@@ -94,6 +95,295 @@ describe("AgentRuntime", () => {
       },
       { role: "user", content: "Keep my intent" },
     ]);
+  });
+
+  it("starts a fresh Run with injected history after the first Run completes", async () => {
+    const requests: ModelRequest[] = [];
+    const gateway = createScriptedModelGateway(
+      [
+        [
+          { type: "text.delta", text: "First answer" },
+          { type: "finish", reason: "stop" },
+        ],
+        [
+          { type: "text.delta", text: "Second answer" },
+          { type: "finish", reason: "stop" },
+        ],
+      ],
+      requests,
+    );
+    const history = [
+      { role: "user" as const, content: "First question" },
+      { role: "assistant" as const, content: "First answer" },
+    ];
+    let loadCount = 0;
+    const load = vi.fn(async () => {
+      loadCount += 1;
+      return loadCount === 1 ? [] : history;
+    });
+    const events: AgentRuntimeEvent[] = [];
+    const runtime = new AgentRuntime(gateway, { emit: (event) => events.push(event) }, undefined, {
+      historyProvider: { load },
+      createRunId: (() => {
+        const ids = ["run-1", "run-2"];
+        return () => ids.shift() ?? "run-unexpected";
+      })(),
+    });
+
+    await runtime.run(userMessage, new AbortController().signal);
+    await runtime.run(
+      { ...userMessage, messageId: "message-2", content: "Second question" },
+      new AbortController().signal,
+    );
+
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(requests[0]?.messages).toEqual([{ role: "user", content: "Say hello." }]);
+    expect(requests[1]?.messages).toEqual([
+      ...history,
+      { role: "user", content: "Second question" },
+    ]);
+    expect(events.filter((event) => event.type === "session.status-changed")).toEqual([
+      {
+        type: "session.status-changed",
+        sessionId: "session-1",
+        previousStatus: "idle",
+        status: "preparing",
+      },
+      {
+        type: "session.status-changed",
+        sessionId: "session-1",
+        previousStatus: "preparing",
+        status: "streaming",
+      },
+      {
+        type: "session.status-changed",
+        sessionId: "session-1",
+        previousStatus: "streaming",
+        status: "completed",
+      },
+      {
+        type: "session.status-changed",
+        sessionId: "session-1",
+        previousStatus: "completed",
+        status: "preparing",
+      },
+      {
+        type: "session.status-changed",
+        sessionId: "session-1",
+        previousStatus: "preparing",
+        status: "streaming",
+      },
+      {
+        type: "session.status-changed",
+        sessionId: "session-1",
+        previousStatus: "streaming",
+        status: "completed",
+      },
+    ]);
+  });
+
+  it("accepts an empty injected history", async () => {
+    const requests: ModelRequest[] = [];
+    const gateway = createModelGateway(
+      [
+        { type: "text.delta", text: "Hello." },
+        { type: "finish", reason: "stop" },
+      ],
+      (request) => requests.push(request),
+    );
+    const runtime = new AgentRuntime(gateway, { emit() {} }, undefined, {
+      historyProvider: { load: () => [] },
+    });
+
+    await runtime.run(userMessage, new AbortController().signal);
+
+    expect(requests[0]?.messages).toEqual([{ role: "user", content: "Say hello." }]);
+  });
+
+  it("prunes over-budget history while retaining the newest user message", async () => {
+    const requests: ModelRequest[] = [];
+    const gateway = createModelGateway(
+      [
+        { type: "text.delta", text: "Answer." },
+        { type: "finish", reason: "stop" },
+      ],
+      (request) => requests.push(request),
+    );
+    const runtime = new AgentRuntime(gateway, { emit() {} }, undefined, {
+      contextWindowTokens: 4,
+      tokenCounter: { count: () => 1 },
+      history: [
+        { role: "system", content: "Rules" },
+        { role: "user", content: "Old question" },
+        { role: "assistant", content: "Old answer" },
+      ],
+    });
+
+    await runtime.run({ ...userMessage, content: "Newest question" }, new AbortController().signal);
+
+    expect(requests[0]?.messages).toEqual([
+      { role: "system", content: "Rules" },
+      { role: "user", content: "Newest question" },
+    ]);
+  });
+
+  it("rejects an orphan Tool history before calling the model", async () => {
+    const requests: ModelRequest[] = [];
+    const gateway = createModelGateway([], (request) => requests.push(request));
+    const events: AgentRuntimeEvent[] = [];
+    const runtime = new AgentRuntime(gateway, { emit: (event) => events.push(event) }, undefined, {
+      history: [
+        {
+          role: "tool",
+          result: {
+            callId: "call-orphan",
+            name: "list_files",
+            status: "success",
+            output: null,
+            truncated: false,
+          },
+        },
+      ],
+      tokenCounter: { count: () => 1 },
+    });
+
+    await expect(runtime.run(userMessage, new AbortController().signal)).rejects.toEqual(
+      new InvalidModelHistoryError(),
+    );
+    expect(requests).toHaveLength(0);
+    expect(events.at(-1)).toEqual({
+      type: "session.status-changed",
+      sessionId: "session-1",
+      previousStatus: "preparing",
+      status: "failed",
+    });
+  });
+
+  it("does not load or prune history after a completed Run is cancelled", async () => {
+    const requests: ModelRequest[] = [];
+    const gateway = createModelGateway(
+      [
+        { type: "text.delta", text: "First answer" },
+        { type: "finish", reason: "stop" },
+      ],
+      (request) => requests.push(request),
+    );
+    const load = vi.fn(async () => [] as const);
+    const count = vi.fn(() => 1);
+    const events: AgentRuntimeEvent[] = [];
+    const runtime = new AgentRuntime(gateway, { emit: (event) => events.push(event) }, undefined, {
+      historyProvider: { load },
+      tokenCounter: { count },
+    });
+
+    await runtime.run(userMessage, new AbortController().signal);
+    const callsAfterFirstRun = { load: load.mock.calls.length, count: count.mock.calls.length };
+    const controller = new AbortController();
+    controller.abort(new Error("cancelled before second Run"));
+
+    await expect(
+      runtime.run(
+        { ...userMessage, messageId: "message-2", content: "Second question" },
+        controller.signal,
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(load).toHaveBeenCalledTimes(callsAfterFirstRun.load);
+    expect(count).toHaveBeenCalledTimes(callsAfterFirstRun.count);
+    expect(requests).toHaveLength(1);
+    expect(events.at(-1)).toEqual({
+      type: "session.status-changed",
+      sessionId: "session-1",
+      previousStatus: "preparing",
+      status: "cancelled",
+    });
+  });
+
+  it("allocates a fresh approval ownership identity for each Run", async () => {
+    const requests: ModelRequest[] = [];
+    const gateway = createScriptedModelGateway(
+      [
+        [
+          { type: "tool.call", call: { id: "call-1", name: "edit_file", input: {} } },
+          { type: "finish", reason: "tool-calls" },
+        ],
+        [
+          { type: "text.delta", text: "First edit approved." },
+          { type: "finish", reason: "stop" },
+        ],
+        [
+          { type: "tool.call", call: { id: "call-2", name: "edit_file", input: {} } },
+          { type: "finish", reason: "tool-calls" },
+        ],
+        [
+          { type: "text.delta", text: "Second edit approved." },
+          { type: "finish", reason: "stop" },
+        ],
+      ],
+      requests,
+    );
+    const registry = new ToolRegistry();
+    registry.register({
+      name: "edit_file",
+      description: "Edit a file.",
+      inputSchema: emptyInputSchema,
+      risk: "write",
+      parseInput: () => null,
+      execute: async () => ({ output: null, truncated: false }),
+      prepareApproval: async () => ({ output: null, truncated: false }),
+    });
+    const runIds: string[] = [];
+    const approvalIds: string[] = [];
+    const consume = vi.fn(async () => ({ outcome: "approved" as const }));
+    let nextApproval = 1;
+    const workflow: ToolApprovalWorkflow = {
+      async create(prepared): Promise<ToolApprovalOperation> {
+        runIds.push(prepared.runId);
+        const approvalId = `approval-${nextApproval}`;
+        nextApproval += 1;
+        approvalIds.push(approvalId);
+        return {
+          request: {
+            id: approvalId,
+            scope: {
+              sessionId: prepared.sessionId,
+              call: prepared.call,
+              risk: "write",
+              resources: [],
+            },
+            presentation: { title: "Edit", summary: "Edit one file." },
+            createdAt: "2026-07-19T00:00:00.000Z",
+            expiresAt: "2026-07-19T00:05:00.000Z",
+          },
+          requestDecision: async () => ({
+            requestId: approvalId,
+            decision: "approved",
+            decidedAt: "2026-07-19T00:01:00.000Z",
+          }),
+          consume,
+        };
+      },
+    };
+    const runIdQueue = ["run-1", "run-2"];
+    const runtime = new AgentRuntime(gateway, { emit() {} }, registry, {
+      approvalWorkflow: workflow,
+      createRunId: () => runIdQueue.shift() ?? "run-unexpected",
+    });
+
+    await runtime.run(
+      { ...userMessage, content: "Modify the file." },
+      new AbortController().signal,
+    );
+    await runtime.run(
+      { ...userMessage, messageId: "message-2", content: "Modify the file again." },
+      new AbortController().signal,
+    );
+
+    expect(runIds).toEqual(["run-1", "run-2"]);
+    expect(new Set(runIds).size).toBe(2);
+    expect(approvalIds).toEqual(["approval-1", "approval-2"]);
+    expect(consume).toHaveBeenCalledTimes(2);
+    expect(requests).toHaveLength(4);
   });
 
   it("emits text deltas in model order and completes the Session", async () => {
@@ -764,7 +1054,8 @@ describe("AgentRuntime", () => {
     const consume = vi.fn(async () => scenario.consumption);
     const workflow: ToolApprovalWorkflow = {
       async create(prepared) {
-        expect(prepared.runId).toBe(userMessage.messageId);
+        expect(prepared.runId).toMatch(/^run-/);
+        expect(prepared.runId).not.toBe(userMessage.messageId);
         return {
           request: {
             id: "approval-edit",
@@ -832,7 +1123,8 @@ describe("AgentRuntime", () => {
     const consume = vi.fn(async () => ({ outcome: "approved" as const }));
     const workflow: ToolApprovalWorkflow = {
       async create(prepared) {
-        expect(prepared.runId).toBe(userMessage.messageId);
+        expect(prepared.runId).toMatch(/^run-/);
+        expect(prepared.runId).not.toBe(userMessage.messageId);
         return {
           request: {
             id: "approval-cancel",

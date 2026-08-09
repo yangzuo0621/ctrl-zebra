@@ -55,12 +55,14 @@ export type {
   AgentRuntimeOptions,
   AgentTextDeltaEvent,
   AgentToolStateEvent,
+  ModelHistoryProvider,
 } from "./agent-runtime.js";
 export {
   AgentRuntime,
   defaultMaxToolSteps,
   EmptyAgentResponseError,
   MaxToolStepsExceededError,
+  SessionIdentityMismatchError,
   UnexpectedToolCallError,
 } from "./agent-runtime.js";
 export type { ApprovalPolicyDisposition } from "./approval-policy.js";

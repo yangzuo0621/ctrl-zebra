@@ -101,4 +101,77 @@ describe("SessionStateMachine", () => {
     expect(() => machine.transitionTo("preparing")).toThrow(sinkFailure);
     expect(machine.status).toBe("preparing");
   });
+
+  it.each([
+    "idle",
+    "completed",
+    "cancelled",
+    "failed",
+    "interrupted",
+  ] as const)("resets %s through the explicit beginRun gate", (status) => {
+    const events: SessionStatusChangedEvent[] = [];
+    const machine = new SessionStateMachine("session-1", status, {
+      emit(event) {
+        events.push(event);
+      },
+    });
+
+    machine.beginRun();
+
+    expect(machine.status).toBe("preparing");
+    expect(events).toEqual([
+      {
+        type: "session.status-changed",
+        sessionId: "session-1",
+        previousStatus: status,
+        status: "preparing",
+      },
+    ]);
+  });
+
+  it.each([
+    "preparing",
+    "streaming",
+    "awaiting_approval",
+    "executing_tool",
+  ] as const)("rejects beginRun while %s owns an active Run", (status) => {
+    const events: SessionStatusChangedEvent[] = [];
+    const machine = new SessionStateMachine("session-1", status, {
+      emit(event) {
+        events.push(event);
+      },
+    });
+
+    expect(() => machine.beginRun()).toThrow(
+      new InvalidSessionStatusTransitionError(status, "preparing"),
+    );
+    expect(machine.status).toBe(status);
+    expect(events).toEqual([]);
+  });
+
+  it("commits a beginRun reset before synchronously emitting its event", () => {
+    let statusObservedBySink: SessionStatus | undefined;
+    let machine: SessionStateMachine;
+    machine = new SessionStateMachine("session-1", "completed", {
+      emit() {
+        statusObservedBySink = machine.status;
+      },
+    });
+
+    machine.beginRun();
+
+    expect(statusObservedBySink).toBe("preparing");
+  });
+
+  it("keeps a beginRun reset committed when the event sink throws", () => {
+    const sinkFailure = new Error("event sink failed");
+    const machine = new SessionStateMachine("session-1", "completed", {
+      emit() {
+        throw sinkFailure;
+      },
+    });
+
+    expect(() => machine.beginRun()).toThrow(sinkFailure);
+    expect(machine.status).toBe("preparing");
+  });
 });

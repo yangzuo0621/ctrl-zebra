@@ -14,6 +14,14 @@ const legalTransitions = {
   interrupted: [],
 } as const satisfies Record<SessionStatus, readonly SessionStatus[]>;
 
+const runResetStatuses = new Set<SessionStatus>([
+  "idle",
+  "completed",
+  "cancelled",
+  "failed",
+  "interrupted",
+]);
+
 export interface SessionStatusChangedEvent extends DomainEvent {
   readonly type: "session.status-changed";
   readonly sessionId: SessionId;
@@ -52,6 +60,19 @@ export class SessionStateMachine {
     return this.#status;
   }
 
+  /**
+   * Starts a fresh Run without resuming any work owned by the previous status.
+   * Terminal and recovery states are reset only through this explicit gate.
+   */
+  beginRun(): void {
+    const previousStatus = this.#status;
+    if (!runResetStatuses.has(previousStatus)) {
+      throw new InvalidSessionStatusTransitionError(previousStatus, "preparing");
+    }
+
+    this.#commit("preparing");
+  }
+
   transitionTo(status: SessionStatus): void {
     const previousStatus = this.#status;
     const allowedStatuses: readonly SessionStatus[] = legalTransitions[previousStatus];
@@ -59,6 +80,11 @@ export class SessionStateMachine {
       throw new InvalidSessionStatusTransitionError(previousStatus, status);
     }
 
+    this.#commit(status);
+  }
+
+  #commit(status: SessionStatus): void {
+    const previousStatus = this.#status;
     this.#status = status;
     this.#eventSink.emit({
       type: "session.status-changed",
