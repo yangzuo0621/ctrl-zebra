@@ -1,4 +1,4 @@
-import type { ModelGateway } from "@ctrl-zebra/core";
+import { type ModelGateway, RetryingModelGateway } from "@ctrl-zebra/core";
 
 import {
   ApiKeySecretStorageError,
@@ -61,6 +61,22 @@ interface SelectModelGatewayOptions {
 }
 
 export async function selectModelGateway({
+  configuration,
+  requiredCapabilities,
+  secrets,
+  factories,
+}: SelectModelGatewayOptions): Promise<ModelGateway> {
+  const gateway = await createProviderGateway({
+    configuration,
+    requiredCapabilities,
+    secrets,
+    factories,
+  });
+
+  return new RetryingModelGateway(gateway);
+}
+
+async function createProviderGateway({
   configuration,
   requiredCapabilities,
   secrets,
