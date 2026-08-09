@@ -64,11 +64,11 @@
 **进度摘要**：
 
 - 总任务：148
-- 已完成：102
-- 进行中：1
+- 已完成：103
+- 进行中：0
 - 受阻：0
 - 待开始：45
-- 当前任务：T1505
+- 当前任务：无
 - 下一任务：T1506
 - 最后更新：2026-08-10
 
@@ -176,7 +176,7 @@
 | 15 | T1502 | 已完成 | [#155](https://github.com/yangzuo0621/ctrl-zebra/pull/155) | 2026-08-09 |
 | 15 | T1503 | 已完成 | [#156](https://github.com/yangzuo0621/ctrl-zebra/pull/156) | 2026-08-09 |
 | 15 | T1504 | 已完成 | [#158](https://github.com/yangzuo0621/ctrl-zebra/pull/158) | 2026-08-10 |
-| 15 | T1505 | 进行中 | — | — |
+| 15 | T1505 | 已完成 | [#159](https://github.com/yangzuo0621/ctrl-zebra/pull/159) | 2026-08-10 |
 | 15 | T1506 | 待开始 | — | — |
 | 15 | T1507 | 待开始 | — | — |
 | 15 | T1508 | 待开始 | — | — |
@@ -323,5 +323,6 @@ T1401 由 [#141](https://github.com/yangzuo0621/ctrl-zebra/pull/141) 交付；T1
 [#155](https://github.com/yangzuo0621/ctrl-zebra/pull/155) 交付；T1503 由
 [#156](https://github.com/yangzuo0621/ctrl-zebra/pull/156) 交付，跨平台 CI 基线已完成；T1504 由
 [#157](https://github.com/yangzuo0621/ctrl-zebra/pull/157) 提供约束并由
-[#158](https://github.com/yangzuo0621/ctrl-zebra/pull/158) 完成 Protocol 实现，已交付。当前执行点为进行中的
-[T1505：接入 Core 回合复位、历史注入与裁剪](roadmap/phases/phase-15.md#t1505接入-core-回合复位历史注入与裁剪)，下一任务为 T1506。
+[#158](https://github.com/yangzuo0621/ctrl-zebra/pull/158) 完成 Protocol 实现，已交付。T1505 已由
+[#159](https://github.com/yangzuo0621/ctrl-zebra/pull/159) 交付；当前执行点为无，下一任务为
+[T1506：重建持久化历史并续接 Extension Run](roadmap/phases/phase-15.md#t1506重建持久化历史并续接-extension-run)。
