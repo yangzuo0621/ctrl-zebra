@@ -3,6 +3,9 @@
 - Status: Accepted
 - Date: 2026-08-03
 - Task: T1401
+- Superseded in part: [ADR 0002](0002-mcp-dual-era-stdio-compatibility.md) replaces the protocol-era/version
+  compatibility decision for T1804–T1807; all other module, capability, process, approval and content boundaries
+  remain accepted.
 
 ## Context
 

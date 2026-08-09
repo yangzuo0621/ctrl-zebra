@@ -223,6 +223,11 @@ The long-term decision and rejected alternatives are recorded in
 [ADR 0001](adr/0001-controlled-mcp-client-boundary.md). MCP is an external protocol adapter, not a
 second Agent Runtime.
 
+[ADR 0002](adr/0002-mcp-dual-era-stdio-compatibility.md) approves a later stage 18 extension for
+explicit modern-only/dual stdio compatibility. Until T1804–T1807 complete, the production contract
+in this section remains the stage 14 modern-only `2026-07-28` implementation; the dual-era tasks
+must update this document before changing runtime behavior.
+
 ### Package and dependency ownership
 
 - `packages/mcp-client` owns the MCP `2026-07-28` Client lifecycle, capability projection,
