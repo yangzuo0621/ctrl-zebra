@@ -64,11 +64,11 @@
 **进度摘要**：
 
 - 总任务：148
-- 已完成：99
-- 进行中：1
+- 已完成：100
+- 进行中：0
 - 受阻：0
 - 待开始：48
-- 当前任务：T1502
+- 当前任务：无
 - 下一任务：T1503
 - 最后更新：2026-08-09
 
@@ -173,7 +173,7 @@
 | 14 | T1408 | 已完成 | [#149](https://github.com/yangzuo0621/ctrl-zebra/pull/149) | 2026-08-03 |
 | 14 | T1409 | 已完成 | [#150](https://github.com/yangzuo0621/ctrl-zebra/pull/150) | 2026-08-03 |
 | 15 | T1501 | 已完成 | [#153](https://github.com/yangzuo0621/ctrl-zebra/pull/153) | 2026-08-09 |
-| 15 | T1502 | 进行中 | — | — |
+| 15 | T1502 | 已完成 | [#155](https://github.com/yangzuo0621/ctrl-zebra/pull/155) | 2026-08-09 |
 | 15 | T1503 | 待开始 | — | — |
 | 15 | T1504 | 待开始 | — | — |
 | 15 | T1505 | 待开始 | — | — |
@@ -319,5 +319,5 @@ T1401 由 [#141](https://github.com/yangzuo0621/ctrl-zebra/pull/141) 交付；T1
 [#148](https://github.com/yangzuo0621/ctrl-zebra/pull/148) 交付；T1408 由
 [#149](https://github.com/yangzuo0621/ctrl-zebra/pull/149) 交付；T1409 由
 [#150](https://github.com/yangzuo0621/ctrl-zebra/pull/150) 交付。阶段 15–22 已完成规划；T1501 由
-[#153](https://github.com/yangzuo0621/ctrl-zebra/pull/153) 交付。T1502 已从最新 `main` 创建分支并进入进行中状态，
-当前执行点为建立覆盖率基线与防回退门禁；完成后下一任务为 T1503。
+[#153](https://github.com/yangzuo0621/ctrl-zebra/pull/153) 交付；T1502 由
+[#155](https://github.com/yangzuo0621/ctrl-zebra/pull/155) 交付。当前无进行中任务；下一任务为 T1503。
