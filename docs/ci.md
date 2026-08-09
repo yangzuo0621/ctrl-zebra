@@ -53,7 +53,8 @@ CI runs the following commands in order and stops when any command fails:
 2. `pnpm check`
 3. `pnpm typecheck`
 4. `pnpm test`
-5. `pnpm build`
+5. `pnpm test:coverage`
+6. `pnpm build`
 
 Use the project-pinned pnpm version for equivalent local validation:
 
@@ -62,5 +63,6 @@ corepack pnpm install --frozen-lockfile
 corepack pnpm check
 corepack pnpm typecheck
 corepack pnpm test
+corepack pnpm test:coverage
 corepack pnpm build
 ```
