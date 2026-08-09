@@ -1,4 +1,4 @@
-import type { ModelGateway } from "@ctrl-zebra/core";
+import { type ModelEvent, type ModelGateway, RetryingModelGateway } from "@ctrl-zebra/core";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import type { ProviderApiKeySecretReader } from "../adapters/api-key-secret-storage.js";
@@ -21,6 +21,10 @@ const gateways = {
   openai: gateway("openai"),
   gemini: gateway("gemini"),
   "openai-compatible": gateway("openai-compatible"),
+} as const;
+
+const request = {
+  messages: [{ role: "user", content: "Hello" }],
 } as const;
 
 function gateway(text: string): ModelGateway {
@@ -85,14 +89,19 @@ describe("ModelGateway selector", () => {
       read: vi.fn(async () => `test-${provider}-api-key`),
     };
 
-    await expect(
-      selectModelGateway({
-        configuration: configuration(provider),
-        requiredCapabilities: ["text-streaming"],
-        secrets,
-        factories: { [provider]: factory },
-      }),
-    ).resolves.toBe(gateways[provider]);
+    const selected = await selectModelGateway({
+      configuration: configuration(provider),
+      requiredCapabilities: ["text-streaming"],
+      secrets,
+      factories: { [provider]: factory },
+    });
+
+    expect(selected).toBeInstanceOf(RetryingModelGateway);
+    expect((selected as RetryingModelGateway).gateway).toBe(gateways[provider]);
+    await expect(collect(selected.stream(request, new AbortController().signal))).resolves.toEqual([
+      { type: "text.delta", text: provider },
+      { type: "finish", reason: "stop" },
+    ]);
     expect(secrets.read).toHaveBeenCalledWith(provider);
     expect(factory).toHaveBeenCalledWith({
       configuration: configuration(provider),
@@ -112,14 +121,15 @@ describe("ModelGateway selector", () => {
     const factory = vi.fn(() => gateways["openai-compatible"]);
     const secrets: ProviderApiKeySecretReader = { read: vi.fn() };
 
-    await expect(
-      selectModelGateway({
-        configuration: localConfiguration,
-        requiredCapabilities: ["text-streaming"],
-        secrets,
-        factories: { "openai-compatible": factory },
-      }),
-    ).resolves.toBe(gateways["openai-compatible"]);
+    const selected = await selectModelGateway({
+      configuration: localConfiguration,
+      requiredCapabilities: ["text-streaming"],
+      secrets,
+      factories: { "openai-compatible": factory },
+    });
+
+    expect(selected).toBeInstanceOf(RetryingModelGateway);
+    expect((selected as RetryingModelGateway).gateway).toBe(gateways["openai-compatible"]);
     expect(secrets.read).not.toHaveBeenCalled();
     expect(factory).toHaveBeenCalledWith({ configuration: localConfiguration, apiKey: undefined });
   });
@@ -182,3 +192,11 @@ describe("ModelGateway selector", () => {
     ).toBeUndefined();
   });
 });
+
+async function collect(events: AsyncIterable<ModelEvent>): Promise<readonly ModelEvent[]> {
+  const collected: ModelEvent[] = [];
+  for await (const event of events) {
+    collected.push(event);
+  }
+  return collected;
+}
