@@ -69,6 +69,7 @@ export class FileEditApprovalWorkflow implements ToolApprovalWorkflow, FileEditA
       id: this.#dependencies.createId(),
       scope: {
         sessionId: prepared.sessionId,
+        runId: prepared.runId,
         call: prepared.call,
         risk: prepared.risk,
         workspaceRootUri,
@@ -94,6 +95,7 @@ export class FileEditApprovalWorkflow implements ToolApprovalWorkflow, FileEditA
       request,
       requestDecision: (signal) => this.#lifecycle.requestDecision(record, signal),
       consume: (signal) => this.#consume(record, signal),
+      invalidate: () => this.#lifecycle.invalidate(record),
     };
   }
 

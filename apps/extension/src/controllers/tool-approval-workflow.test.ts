@@ -72,7 +72,8 @@ describe("ToolApprovalWorkflowRouter", () => {
       new Error("consumption failed"),
     );
     const fileEdits = createWorkflow(denied, expired, consumed, failed, consumptionFailed);
-    const commands = createWorkflow(createOperation("cancelled-approval"));
+    const cancelledOperation = createOperation("cancelled-approval");
+    const commands = createWorkflow(cancelledOperation);
     const router = new ToolApprovalWorkflowRouter(fileEdits.values, commands.values);
 
     const deniedOperation = await router.create(
@@ -121,11 +122,13 @@ describe("ToolApprovalWorkflowRouter", () => {
 
     expect(fileEdits.decide).not.toHaveBeenCalled();
     expect(commands.decide).not.toHaveBeenCalled();
+    expect(cancelledOperation.invalidate).toHaveBeenCalledOnce();
   });
 
   it("rejects duplicate approval identifiers without replacing the existing owner", async () => {
     const fileEdits = createWorkflow(createOperation("duplicate-approval"));
-    const commands = createWorkflow(createOperation("duplicate-approval"));
+    const duplicateOperation = createOperation("duplicate-approval");
+    const commands = createWorkflow(duplicateOperation);
     const router = new ToolApprovalWorkflowRouter(fileEdits.values, commands.values);
     const signal = new AbortController().signal;
 
@@ -137,6 +140,7 @@ describe("ToolApprovalWorkflowRouter", () => {
 
     expect(fileEdits.decide).toHaveBeenCalledOnce();
     expect(commands.decide).not.toHaveBeenCalled();
+    expect(duplicateOperation.invalidate).toHaveBeenCalledOnce();
   });
 
   it("disposes both workflows and releases all ownership", async () => {
@@ -205,6 +209,7 @@ function createOperation(
       }
       return { outcome: "approved" as const };
     }),
+    invalidate: vi.fn(),
   };
 }
 

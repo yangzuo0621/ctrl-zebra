@@ -175,6 +175,7 @@ class InvalidToolApprovalError extends Error {
 let nextDefaultRunId = 0;
 
 const maxHistoryMessageCharacters = 1_000_000;
+const maxHistoryMessages = 10_000;
 
 const defaultModelMessageTokenCounter: ModelMessageTokenCounter = {
   count(message) {
@@ -585,71 +586,80 @@ export class AgentRuntime {
       },
       signal,
     );
-    signal.throwIfAborted();
-    const approval = validateToolApproval(operation, sessionId, runId, toolCall, tool.risk);
-    signal.throwIfAborted();
-    session.transitionTo("streaming");
-    signal.throwIfAborted();
-    session.transitionTo("awaiting_approval");
-    signal.throwIfAborted();
-    this.#emitApprovalState(sessionId, approval, "pending");
-    const decision = await operation.requestDecision(signal);
-    signal.throwIfAborted();
-
-    if (decision.decision === "expired") {
+    try {
       signal.throwIfAborted();
-      this.#emitApprovalState(sessionId, approval, "expired");
+      const approval = validateToolApproval(operation, sessionId, runId, toolCall, tool.risk);
       signal.throwIfAborted();
       session.transitionTo("streaming");
       signal.throwIfAborted();
-      return createToolErrorResult(
-        toolCall,
-        "failed",
-        `Approval for tool "${toolCall.name}" expired.`,
-      );
-    }
+      session.transitionTo("awaiting_approval");
+      signal.throwIfAborted();
+      this.#emitApprovalState(sessionId, approval, "pending");
+      signal.throwIfAborted();
+      const decision = await operation.requestDecision(signal);
+      signal.throwIfAborted();
 
-    if (decision.decision === "denied") {
-      signal.throwIfAborted();
-      this.#emitApprovalState(sessionId, approval, "denied");
-      signal.throwIfAborted();
-      session.transitionTo("streaming");
-      signal.throwIfAborted();
-      return createToolErrorResult(toolCall, "denied", `The user denied tool "${toolCall.name}".`);
-    }
+      if (decision.decision === "expired") {
+        signal.throwIfAborted();
+        this.#emitApprovalState(sessionId, approval, "expired");
+        signal.throwIfAborted();
+        session.transitionTo("streaming");
+        signal.throwIfAborted();
+        return createToolErrorResult(
+          toolCall,
+          "failed",
+          `Approval for tool "${toolCall.name}" expired.`,
+        );
+      }
 
-    signal.throwIfAborted();
-    this.#emitApprovalState(sessionId, approval, "approved");
-    signal.throwIfAborted();
-    session.transitionTo("executing_tool");
-    signal.throwIfAborted();
-    const consumption = await operation.consume(signal);
-    signal.throwIfAborted();
-    if (consumption.outcome === "expired") {
-      signal.throwIfAborted();
-      this.#emitApprovalState(sessionId, approval, "expired");
-      signal.throwIfAborted();
-      return createToolErrorResult(
-        toolCall,
-        "failed",
-        `Approval for tool "${toolCall.name}" expired before use.`,
-      );
-    }
-    if (consumption.outcome === "conflict") {
-      signal.throwIfAborted();
-      this.#emitApprovalState(sessionId, approval, "invalidated");
-      signal.throwIfAborted();
-      return createToolErrorResult(toolCall, "conflict", consumption.message);
-    }
+      if (decision.decision === "denied") {
+        signal.throwIfAborted();
+        this.#emitApprovalState(sessionId, approval, "denied");
+        signal.throwIfAborted();
+        session.transitionTo("streaming");
+        signal.throwIfAborted();
+        return createToolErrorResult(
+          toolCall,
+          "denied",
+          `The user denied tool "${toolCall.name}".`,
+        );
+      }
 
-    signal.throwIfAborted();
-    this.#emitApprovalState(sessionId, approval, "consumed");
-    signal.throwIfAborted();
-    if (tool.risk === "execute") {
-      return this.#executeToolImplementation(toolCall, tool, input, signal);
-    }
+      signal.throwIfAborted();
+      this.#emitApprovalState(sessionId, approval, "approved");
+      signal.throwIfAborted();
+      session.transitionTo("executing_tool");
+      signal.throwIfAborted();
+      const consumption = await operation.consume(signal);
+      signal.throwIfAborted();
+      if (consumption.outcome === "expired") {
+        signal.throwIfAborted();
+        this.#emitApprovalState(sessionId, approval, "expired");
+        signal.throwIfAborted();
+        return createToolErrorResult(
+          toolCall,
+          "failed",
+          `Approval for tool "${toolCall.name}" expired before use.`,
+        );
+      }
+      if (consumption.outcome === "conflict") {
+        signal.throwIfAborted();
+        this.#emitApprovalState(sessionId, approval, "invalidated");
+        signal.throwIfAborted();
+        return createToolErrorResult(toolCall, "conflict", consumption.message);
+      }
 
-    return createApprovedToolResult(toolCall);
+      signal.throwIfAborted();
+      this.#emitApprovalState(sessionId, approval, "consumed");
+      signal.throwIfAborted();
+      if (tool.risk === "execute") {
+        return this.#executeToolImplementation(toolCall, tool, input, signal);
+      }
+
+      return createApprovedToolResult(toolCall);
+    } finally {
+      operation.invalidate();
+    }
   }
 
   async #executeToolImplementation(
@@ -779,6 +789,9 @@ function createToolErrorResult(
 
 function validateModelHistory(history: unknown): readonly ModelMessage[] {
   if (!Array.isArray(history)) {
+    throw new InvalidModelHistoryError();
+  }
+  if (history.length > maxHistoryMessages) {
     throw new InvalidModelHistoryError();
   }
 

@@ -98,6 +98,50 @@ describe("ApprovalLifecycle", () => {
     expect(disposed.status).toBe("cancelled");
     expect(lifecycle.get(disposed.request.id)).toBeUndefined();
   });
+
+  it("invalidates unconsumed records before a decision wait and remains idempotent", () => {
+    const lifecycle = createLifecycle();
+    const record = createRecord("invalidated-before-wait");
+    lifecycle.register(record);
+
+    lifecycle.invalidate(record);
+    lifecycle.invalidate(record);
+
+    expect(record.status).toBe("invalidated");
+    expect(lifecycle.get(record.request.id)).toBeUndefined();
+    expect(() => lifecycle.decide(record.request.id, "approved")).not.toThrow();
+    lifecycle.register(createRecord(record.request.id));
+  });
+
+  it("invalidates an approved unconsumed record and releases it", async () => {
+    const lifecycle = createLifecycle();
+    const record = createRecord("invalidated-after-decision");
+    lifecycle.register(record);
+    const decision = lifecycle.requestDecision(record, new AbortController().signal);
+    lifecycle.decide(record.request.id, "approved");
+    await expect(decision).resolves.toMatchObject({ decision: "approved" });
+
+    lifecycle.invalidate(record);
+
+    expect(record.status).toBe("invalidated");
+    expect(lifecycle.get(record.request.id)).toBeUndefined();
+    expect(() => lifecycle.validateConsumption(record, new AbortController().signal)).toThrow(
+      "not available",
+    );
+  });
+
+  it("settles an active decision wait when invalidated", async () => {
+    const lifecycle = createLifecycle();
+    const record = createRecord("invalidated-during-wait");
+    lifecycle.register(record);
+    const decision = lifecycle.requestDecision(record, new AbortController().signal);
+
+    lifecycle.invalidate(record);
+
+    await expect(decision).rejects.toThrow("approval request was invalidated");
+    expect(record.status).toBe("invalidated");
+    expect(lifecycle.get(record.request.id)).toBeUndefined();
+  });
 });
 
 function createLifecycle(): ApprovalLifecycle<ApprovalLifecycleRecord> {

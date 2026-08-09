@@ -76,6 +76,7 @@ export class CommandApprovalWorkflow implements ToolApprovalWorkflow, CommandApp
       id: this.#dependencies.createId(),
       scope: {
         sessionId: prepared.sessionId,
+        runId: prepared.runId,
         call: prepared.call,
         risk: prepared.risk,
         workspaceRootUri: binding.workspaceRootUri,
@@ -100,6 +101,7 @@ export class CommandApprovalWorkflow implements ToolApprovalWorkflow, CommandApp
       request,
       requestDecision: (decisionSignal) => this.#lifecycle.requestDecision(record, decisionSignal),
       consume: (consumptionSignal) => this.#consume(record, consumptionSignal),
+      invalidate: () => this.#lifecycle.invalidate(record),
     };
   }
 

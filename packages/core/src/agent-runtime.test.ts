@@ -200,6 +200,55 @@ describe("AgentRuntime", () => {
     expect(requests[0]?.messages).toEqual([{ role: "user", content: "Say hello." }]);
   });
 
+  it("accepts the 10,000-message history ceiling before appending the current user", async () => {
+    const requests: ModelRequest[] = [];
+    const gateway = createModelGateway(
+      [
+        { type: "text.delta", text: "History accepted." },
+        { type: "finish", reason: "stop" },
+      ],
+      (request) => requests.push(request),
+    );
+    const history = Array.from({ length: 10_000 }, (_value, index) => ({
+      role: "user" as const,
+      content: `History message ${index}`,
+    }));
+    const runtime = new AgentRuntime(gateway, { emit() {} }, undefined, {
+      history,
+      tokenCounter: { count: () => 0 },
+    });
+
+    await runtime.run(userMessage, new AbortController().signal);
+
+    expect(requests[0]?.messages).toHaveLength(10_001);
+    expect(requests[0]?.messages.at(-1)).toEqual({ role: "user", content: "Say hello." });
+  });
+
+  it.each([
+    "static",
+    "provider",
+  ] as const)("rejects more than 10,000 history messages from the %s source before copying", async (source) => {
+    const requests: ModelRequest[] = [];
+    const count = vi.fn(() => 0);
+    const gateway = createModelGateway([], (request) => requests.push(request));
+    const history = Array.from({ length: 10_001 }, () => ({
+      role: "user" as const,
+      content: "Oversized history",
+    }));
+    const load = vi.fn(async () => history);
+    const runtime = new AgentRuntime(gateway, { emit() {} }, undefined, {
+      ...(source === "static" ? { history } : { historyProvider: { load } }),
+      tokenCounter: { count },
+    });
+
+    await expect(runtime.run(userMessage, new AbortController().signal)).rejects.toEqual(
+      new InvalidModelHistoryError(),
+    );
+    expect(load).toHaveBeenCalledTimes(source === "provider" ? 1 : 0);
+    expect(count).not.toHaveBeenCalled();
+    expect(requests).toHaveLength(0);
+  });
+
   it("prunes over-budget history while retaining the newest user message", async () => {
     const requests: ModelRequest[] = [];
     const gateway = createModelGateway(
@@ -434,6 +483,7 @@ describe("AgentRuntime", () => {
             decidedAt: "2026-07-19T00:01:00.000Z",
           }),
           consume,
+          invalidate: vi.fn(),
         };
       },
     };
@@ -493,6 +543,7 @@ describe("AgentRuntime", () => {
       decidedAt: "2026-07-19T00:01:00.000Z",
     }));
     const consume = vi.fn(async () => ({ outcome: "approved" as const }));
+    const invalidate = vi.fn();
     const workflow: ToolApprovalWorkflow = {
       async create(prepared) {
         const baseScope = {
@@ -520,6 +571,7 @@ describe("AgentRuntime", () => {
           },
           requestDecision,
           consume,
+          invalidate,
         };
       },
     };
@@ -537,6 +589,7 @@ describe("AgentRuntime", () => {
     expect(execute).not.toHaveBeenCalled();
     expect(requestDecision).not.toHaveBeenCalled();
     expect(consume).not.toHaveBeenCalled();
+    expect(invalidate).toHaveBeenCalledOnce();
     expect(events.filter((event) => event.type === "agent.approval-state")).toHaveLength(0);
     expect(events.at(-1)).toMatchObject({ status: "failed" });
   });
@@ -1075,6 +1128,7 @@ describe("AgentRuntime", () => {
           decidedAt: "2026-07-19T00:01:00.000Z",
         }),
         consume: async () => ({ outcome: "approved" }),
+        invalidate: vi.fn(),
       }),
     );
     const runtime = new AgentRuntime(gateway, { emit() {} }, registry, {
@@ -1232,6 +1286,7 @@ describe("AgentRuntime", () => {
             ...(scenario.decision === "expired" ? {} : { decidedAt: "2026-07-19T00:01:00.000Z" }),
           }),
           consume,
+          invalidate: vi.fn(),
         };
       },
     };
@@ -1278,6 +1333,11 @@ describe("AgentRuntime", () => {
       prepareApproval: async () => ({ output: null, truncated: false }),
     });
     const consume = vi.fn(async () => ({ outcome: "approved" as const }));
+    const requestDecision = vi.fn(async (signal: AbortSignal) => {
+      signal.throwIfAborted();
+      throw new Error("Expected cancellation before approval wait.");
+    });
+    const invalidate = vi.fn();
     const workflow: ToolApprovalWorkflow = {
       async create(prepared) {
         expect(prepared.runId).toMatch(/^run-/);
@@ -1296,11 +1356,9 @@ describe("AgentRuntime", () => {
             createdAt: "2026-07-19T00:00:00.000Z",
             expiresAt: "2026-07-19T00:05:00.000Z",
           },
-          requestDecision: async (signal) => {
-            signal.throwIfAborted();
-            throw new Error("Expected cancellation before approval wait.");
-          },
+          requestDecision,
           consume,
+          invalidate,
         };
       },
     };
@@ -1324,13 +1382,80 @@ describe("AgentRuntime", () => {
     await expect(runtime.run(userMessage, controller.signal)).resolves.toBeUndefined();
 
     expect(requests).toHaveLength(1);
+    expect(requestDecision).not.toHaveBeenCalled();
     expect(consume).not.toHaveBeenCalled();
+    expect(invalidate).toHaveBeenCalledOnce();
     expect(events.at(-1)).toEqual({
       type: "session.status-changed",
       sessionId: "session-1",
       previousStatus: "awaiting_approval",
       status: "cancelled",
     });
+  });
+
+  it("invalidates an approval when the decision workflow fails before consumption", async () => {
+    const requests: ModelRequest[] = [];
+    const gateway = createScriptedModelGateway(
+      [
+        [
+          { type: "tool.call", call: { id: "call-decision-error", name: "edit_file", input: {} } },
+          { type: "finish", reason: "tool-calls" },
+        ],
+      ],
+      requests,
+    );
+    const registry = new ToolRegistry();
+    registry.register({
+      name: "edit_file",
+      description: "Edit a file.",
+      inputSchema: emptyInputSchema,
+      risk: "write",
+      parseInput: () => null,
+      execute: async () => ({ output: null, truncated: false }),
+      prepareApproval: async () => ({ output: null, truncated: false }),
+    });
+    const decisionFailure = new Error("approval service unavailable");
+    const requestDecision = vi.fn(async () => {
+      throw decisionFailure;
+    });
+    const consume = vi.fn(async () => ({ outcome: "approved" as const }));
+    const invalidate = vi.fn();
+    const workflow: ToolApprovalWorkflow = {
+      async create(prepared) {
+        return {
+          request: {
+            id: "approval-decision-error",
+            scope: {
+              sessionId: prepared.sessionId,
+              runId: prepared.runId,
+              call: prepared.call,
+              risk: prepared.risk,
+              resources: [],
+            },
+            presentation: { title: "Edit", summary: "Edit one file." },
+            createdAt: "2026-07-19T00:00:00.000Z",
+            expiresAt: "2026-07-19T00:05:00.000Z",
+          },
+          requestDecision,
+          consume,
+          invalidate,
+        };
+      },
+    };
+    const events: AgentRuntimeEvent[] = [];
+    const runtime = new AgentRuntime(gateway, { emit: (event) => events.push(event) }, registry, {
+      approvalWorkflow: workflow,
+    });
+
+    await expect(runtime.run(userMessage, new AbortController().signal)).rejects.toBe(
+      decisionFailure,
+    );
+
+    expect(requests).toHaveLength(1);
+    expect(requestDecision).toHaveBeenCalledOnce();
+    expect(consume).not.toHaveBeenCalled();
+    expect(invalidate).toHaveBeenCalledOnce();
+    expect(events.at(-1)).toMatchObject({ status: "failed" });
   });
 
   it("preserves tool-provided truncation metadata in the Tool Result", async () => {
@@ -1797,6 +1922,7 @@ describe("AgentRuntime", () => {
       decidedAt: "2026-07-19T00:01:00.000Z",
     }));
     const consume = vi.fn(async () => ({ outcome: "approved" as const }));
+    const invalidate = vi.fn();
     const workflow: ToolApprovalWorkflow = {
       async create(prepared) {
         return {
@@ -1815,6 +1941,7 @@ describe("AgentRuntime", () => {
           },
           requestDecision,
           consume,
+          invalidate,
         };
       },
     };
@@ -1838,6 +1965,7 @@ describe("AgentRuntime", () => {
     expect(requests).toHaveLength(1);
     expect(requestDecision).not.toHaveBeenCalled();
     expect(consume).not.toHaveBeenCalled();
+    expect(invalidate).toHaveBeenCalledOnce();
     expect(events.filter((event) => event.type === "agent.approval-state")).toHaveLength(0);
     expect(events.at(-1)).toMatchObject({ status: "cancelled" });
   });
