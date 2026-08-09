@@ -64,11 +64,11 @@
 **进度摘要**：
 
 - 总任务：148
-- 已完成：100
-- 进行中：1
+- 已完成：101
+- 进行中：0
 - 受阻：0
 - 待开始：47
-- 当前任务：T1503
+- 当前任务：无
 - 下一任务：T1504
 - 最后更新：2026-08-09
 
@@ -174,7 +174,7 @@
 | 14 | T1409 | 已完成 | [#150](https://github.com/yangzuo0621/ctrl-zebra/pull/150) | 2026-08-03 |
 | 15 | T1501 | 已完成 | [#153](https://github.com/yangzuo0621/ctrl-zebra/pull/153) | 2026-08-09 |
 | 15 | T1502 | 已完成 | [#155](https://github.com/yangzuo0621/ctrl-zebra/pull/155) | 2026-08-09 |
-| 15 | T1503 | 进行中 | — | — |
+| 15 | T1503 | 已完成 | [#156](https://github.com/yangzuo0621/ctrl-zebra/pull/156) | 2026-08-09 |
 | 15 | T1504 | 待开始 | — | — |
 | 15 | T1505 | 待开始 | — | — |
 | 15 | T1506 | 待开始 | — | — |
@@ -320,4 +320,6 @@ T1401 由 [#141](https://github.com/yangzuo0621/ctrl-zebra/pull/141) 交付；T1
 [#149](https://github.com/yangzuo0621/ctrl-zebra/pull/149) 交付；T1409 由
 [#150](https://github.com/yangzuo0621/ctrl-zebra/pull/150) 交付。阶段 15–22 已完成规划；T1501 由
 [#153](https://github.com/yangzuo0621/ctrl-zebra/pull/153) 交付；T1502 由
-[#155](https://github.com/yangzuo0621/ctrl-zebra/pull/155) 交付。当前正在执行 T1503：建立跨平台 CI 基线；完成后下一任务为 T1504。
+[#155](https://github.com/yangzuo0621/ctrl-zebra/pull/155) 交付；T1503 由
+[#156](https://github.com/yangzuo0621/ctrl-zebra/pull/156) 交付，跨平台 CI 基线已完成。当前执行点为空，下一任务为
+[T1504：确定多轮 Session 的产品与跨边界契约](roadmap/phases/phase-15.md#t1504确定多轮-session-的产品与跨边界契约)。
