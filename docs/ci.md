@@ -11,7 +11,9 @@ This document defines the continuous integration constraints established by T000
   `31316305029` failed during `Set up Node.js` on all three legs because the official
   `actions/node-versions` manifest had no matching release or platform archive. The manifest and
   Node release index list `24.19.0` as the current stable Node 24 release with Linux x64, macOS
-  arm64, and Windows x64 archives; the corrected version is pending a new matrix run.
+  arm64, and Windows x64 archives. Corrected run `31316592340` passed setup, installation,
+  checks, typecheck, unit tests, and build on all three legs; Ubuntu also passed integration and
+  coverage, while macOS and Windows explicitly skipped those Ubuntu-only steps.
 - The root `package.json` `packageManager` field is the single source of truth for the pnpm version, currently `pnpm@11.11.0`.
 - The workflow runs for pushes to `main` and pull requests whose target branch is `main`.
 - Only the latest run for the same workflow and branch or pull request remains active; a newer run cancels an unfinished older run.
