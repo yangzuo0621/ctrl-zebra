@@ -63,6 +63,7 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
   const [userScrolledUp, setUserScrolledUp] = useState(false);
 
   const mainRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const suppressNextAutoFollow = useRef(false);
 
   const messages = useStore(store, (state) => state.messages);
@@ -70,9 +71,13 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
   const activeRequestId = useStore(store, (state) => state.activeRequestId);
   const sessions = useStore(store, (state) => state.sessions);
   const selectedSessionId = useStore(store, (state) => state.selectedSessionId);
+  const sessionSelectionId = useStore(store, (state) => state.sessionSelectionId);
+  const sessionSwitchPending = useStore(store, (state) => state.sessionSwitchPending);
+  const restoring = useStore(store, (state) => state.restoring);
   const sessionError = useStore(store, (state) => state.sessionError);
   const runError = useStore(store, (state) => state.runError);
   const reasoningAnnouncement = useStore(store, (state) => state.reasoningAnnouncement);
+  const sessionAnnouncement = useStore(store, (state) => state.sessionAnnouncement);
   const approval = useStore(approvalStore, (state) => state.current);
   const pendingDecision = useStore(approvalStore, (state) => state.pendingDecision);
 
@@ -121,6 +126,15 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
     store.getState().toggleReasoningBlock(messageId, blockId);
   };
 
+  const handleNewChat = () => {
+    if (store.getState().newChat()) {
+      setDraft("");
+      setUserScrolledUp(false);
+      mcpStore.getState().clearDraft();
+      inputRef.current?.focus();
+    }
+  };
+
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (store.getState().submit(draft)) {
@@ -144,7 +158,6 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
   const hasInlineApproval =
     approval !== undefined &&
     messages.some((m) => m.toolCalls.some((tc) => tc.call.id === approval.approval.scope.call.id));
-
   return (
     <div className={styles.shell}>
       <header className={styles.header}>
@@ -159,15 +172,43 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
             <p className={styles.description}>Ask a question and stream the response.</p>
           </div>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setShowSessionsDrawer((prev) => !prev)}
-          aria-expanded={showSessionsDrawer}
-        >
-          {showSessionsDrawer ? "Hide Sessions" : "Sessions"}
-        </Button>
+        <div className={styles.headerActions}>
+          <span
+            className={styles.currentSession}
+            aria-live="polite"
+            title={selectedSessionId ?? "New chat"}
+          >
+            Current Session: {selectedSessionId ?? "New chat"}
+          </span>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleNewChat}
+            disabled={activeRequestId !== undefined || restoring || sessionSwitchPending}
+            aria-describedby="session-action-hint"
+          >
+            New chat
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowSessionsDrawer((prev) => !prev)}
+            aria-expanded={showSessionsDrawer}
+          >
+            {showSessionsDrawer ? "Hide Sessions" : "Sessions"}
+          </Button>
+        </div>
       </header>
+
+      <p id="session-action-hint" className={styles.srOnly}>
+        {activeRequestId !== undefined
+          ? "Session actions are unavailable while a response is running."
+          : restoring
+            ? "Session actions are unavailable while a Session is restoring."
+            : sessionSwitchPending
+              ? "Restore the selected Session before sending a message."
+              : "Start a separate conversation without deleting saved Sessions."}
+      </p>
 
       {showSessionsDrawer ? (
         <section className={styles.secondaryDrawer} aria-label="Session history and checkpoints">
@@ -176,9 +217,9 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
             <div className={styles.sessionControls}>
               <select
                 aria-label="Saved session"
-                value={selectedSessionId ?? ""}
+                value={sessionSelectionId ?? ""}
                 onChange={(event) => store.getState().selectSession(event.target.value)}
-                disabled={sessions.length === 0 || activeRequestId !== undefined}
+                disabled={sessions.length === 0 || activeRequestId !== undefined || restoring}
               >
                 {sessions.length === 0 ? <option value="">No saved sessions</option> : null}
                 {sessions.map((session) => (
@@ -187,14 +228,21 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
                   </option>
                 ))}
               </select>
-              <Button variant="secondary" size="sm" onClick={() => store.getState().loadSessions()}>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => store.getState().loadSessions()}
+                disabled={activeRequestId !== undefined || restoring}
+              >
                 Refresh
               </Button>
               <Button
                 variant="secondary"
                 size="sm"
                 onClick={() => store.getState().restoreSelectedSession()}
-                disabled={selectedSessionId === undefined || activeRequestId !== undefined}
+                disabled={
+                  sessionSelectionId === undefined || activeRequestId !== undefined || restoring
+                }
               >
                 Restore
               </Button>
@@ -202,6 +250,7 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
             {sessionError === undefined ? null : (
               <p className={styles.sessionError}>{sessionError}</p>
             )}
+            {restoring ? <p className={styles.sessionStatus}>Restoring Session…</p> : null}
           </section>
           <CheckpointPanel store={checkpointStore} />
         </section>
@@ -292,6 +341,15 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
         >
           {reasoningAnnouncement}
         </p>
+        <p
+          className={styles.srOnly}
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          aria-label="Session status"
+        >
+          {sessionAnnouncement}
+        </p>
 
         {runError === undefined ? null : (
           <p className={styles.runError} role="alert">
@@ -305,6 +363,7 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
               Message
             </label>
             <textarea
+              ref={inputRef}
               className={styles.input}
               id="chat-message"
               placeholder="Describe what to build or ask a question…"
@@ -314,7 +373,7 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
               onCompositionStart={() => setIsComposing(true)}
               onCompositionEnd={() => setIsComposing(false)}
               rows={3}
-              disabled={activeRequestId !== undefined}
+              disabled={activeRequestId !== undefined || restoring}
             />
             <div className={styles.composerFooter}>
               <span className={styles.composerHint}>Enter to send, Shift+Enter for line break</span>
@@ -322,7 +381,12 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
                 <Button
                   type="submit"
                   size="sm"
-                  disabled={activeRequestId !== undefined || draft.trim().length === 0}
+                  disabled={
+                    activeRequestId !== undefined ||
+                    restoring ||
+                    sessionSwitchPending ||
+                    draft.trim().length === 0
+                  }
                 >
                   Send
                 </Button>

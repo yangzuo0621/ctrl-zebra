@@ -62,6 +62,26 @@ describe("MCP Resource actions", () => {
     expect(actions.takeAttachments()).toEqual([]);
   });
 
+  it("clears previews and unconsumed attachments when the draft is reset", async () => {
+    const actions = new McpResourceActions({
+      connection: {
+        getState: () => connected,
+        readResource: async () => snapshot,
+      },
+      createId: () => "snapshot-1",
+    });
+
+    const preview = await actions.read("local_fixture", 2, {
+      kind: "resource",
+      uri: "memory://note",
+    });
+    actions.attach("local_fixture", 2, preview.snapshotId);
+    actions.clearInput();
+
+    expect(actions.takeAttachments()).toEqual([]);
+    expect(() => actions.attach("local_fixture", 2, preview.snapshotId)).toThrow(McpResourceError);
+  });
+
   it("cancels reads on disposal and retains no late preview", async () => {
     let resolveRead: ((value: typeof snapshot) => void) | undefined;
     const actions = new McpResourceActions({

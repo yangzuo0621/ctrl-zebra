@@ -119,11 +119,20 @@ describe("Webview protocol messages", () => {
       requestId: "request-2",
       status: "completed",
     } as const;
+    const sessionStarted = {
+      protocolVersion,
+      type: "extension/session-started",
+      requestId: "request-2",
+      sessionId: "session-1",
+    } as const;
 
     expect(webviewToExtensionMessageSchema.parse(submit)).toEqual(submit);
     expect(webviewToExtensionMessageSchema.parse(cancel)).toEqual(cancel);
     expect(extensionToWebviewMessageSchema.parse(delta)).toEqual(delta);
     expect(extensionToWebviewMessageSchema.parse(status)).toEqual(status);
+    expect(
+      extensionToWebviewMessageSchema.parse(JSON.parse(JSON.stringify(sessionStarted)) as unknown),
+    ).toEqual(sessionStarted);
   });
 
   describe("multi-turn Session commands", () => {
@@ -438,6 +447,23 @@ describe("Webview protocol messages", () => {
         type: "extension/run-status",
         requestId: "request-1",
         status: "idle",
+      }).success,
+    ).toBe(false);
+    expect(
+      extensionToWebviewMessageSchema.safeParse({
+        protocolVersion,
+        type: "extension/session-started",
+        requestId: "request-1",
+        sessionId: "",
+      }).success,
+    ).toBe(false);
+    expect(
+      extensionToWebviewMessageSchema.safeParse({
+        protocolVersion,
+        type: "extension/session-started",
+        requestId: "request-1",
+        sessionId: "session-1",
+        extra: true,
       }).success,
     ).toBe(false);
     expect(

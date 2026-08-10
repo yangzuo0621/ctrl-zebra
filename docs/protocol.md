@@ -42,6 +42,12 @@ new-Session behavior.
   restore state; the Webview clears its transcript and selected Session. The next submit omits
   `sessionId`. A command racing an active Run, restore, or Session switch is ignored or rejected
   without changing the active owner, and stale replies remain ignored by request correlation.
+- `extension/session-started` is a strict Host-to-Webview event containing `{ protocolVersion,
+  type: "extension/session-started", requestId, sessionId }`. The Host emits it once, after the
+  requested Session has been validated or a new Session has been allocated and the Run has produced
+  its first accepted event. The Webview accepts it only for the active request and stores the
+  confirmed Session identity; it never derives an identity from `requestId`, display state, or model
+  output. A stale, duplicate, or mismatched event has no UI or ownership effect.
 - A Session accepts one active Run at a time. The Host allocates a fresh opaque Run identity for each
   submit, distinct from `sessionId`, message IDs, and `requestId`; Webview and model data never choose
   this identity. Run identity is required for Core ownership, exact approvals, checkpoints, diagnostics,

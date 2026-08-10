@@ -335,6 +335,12 @@ export const runStatusMessageSchema = z.strictObject({
   status: runStatusSchema,
 });
 
+export const sessionStartedMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("extension/session-started"),
+  sessionId: sessionIdSchema,
+});
+
 export const runErrorCodeSchema = z.enum([
   "configuration",
   "authentication",
@@ -470,6 +476,7 @@ export const extensionToWebviewMessageSchema = z.union([
   reasoningEndMessageSchema,
   reasoningLimitMessageSchema,
   reasoningRestoredMessageSchema,
+  sessionStartedMessageSchema,
   runStatusMessageSchema,
   runErrorMessageSchema,
   toolStateMessageSchema,
@@ -523,6 +530,7 @@ export type ReasoningDeltaMessage = z.infer<typeof reasoningDeltaMessageSchema>;
 export type ReasoningEndMessage = z.infer<typeof reasoningEndMessageSchema>;
 export type ReasoningLimitMessage = z.infer<typeof reasoningLimitMessageSchema>;
 export type ReasoningRestoredMessage = z.infer<typeof reasoningRestoredMessageSchema>;
+export type SessionStartedMessage = z.infer<typeof sessionStartedMessageSchema>;
 export type RunStatus = z.infer<typeof runStatusSchema>;
 export type RunStatusMessage = z.infer<typeof runStatusMessageSchema>;
 export type RunErrorCode = z.infer<typeof runErrorCodeSchema>;

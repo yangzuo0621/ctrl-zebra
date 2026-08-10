@@ -64,12 +64,12 @@
 **进度摘要**：
 
 - 总任务：148
-- 已完成：104
+- 已完成：105
 - 进行中：0
 - 受阻：0
-- 待开始：44
+- 待开始：43
 - 当前任务：无
-- 下一任务：T1507
+- 下一任务：T1508
 - 最后更新：2026-08-10
 
 | 阶段 | 任务 | 状态 | 完成 PR | 完成日期 |
@@ -178,7 +178,7 @@
 | 15 | T1504 | 已完成 | [#158](https://github.com/yangzuo0621/ctrl-zebra/pull/158) | 2026-08-10 |
 | 15 | T1505 | 已完成 | [#159](https://github.com/yangzuo0621/ctrl-zebra/pull/159) | 2026-08-10 |
 | 15 | T1506 | 已完成 | [#160](https://github.com/yangzuo0621/ctrl-zebra/pull/160) | 2026-08-10 |
-| 15 | T1507 | 待开始 | — | — |
+| 15 | T1507 | 已完成 | [#161](https://github.com/yangzuo0621/ctrl-zebra/pull/161) | 2026-08-10 |
 | 15 | T1508 | 待开始 | — | — |
 | 15 | T1509 | 待开始 | — | — |
 | 15 | T1510 | 待开始 | — | — |
@@ -246,7 +246,7 @@
 | 12 | 已完成 | [阶段 12 归档](roadmap/archive/phase-12.md) |
 | 13 | 已完成 | [阶段 13 归档](roadmap/archive/phase-13.md) |
 | 14 | 已完成 | [阶段 14 归档](roadmap/archive/phase-14.md) |
-| 15 | 已规划 | [阶段 15：多轮对话与上下文生命周期](roadmap/phases/phase-15.md) |
+| 15 | 进行中 | [阶段 15：多轮对话与上下文生命周期](roadmap/phases/phase-15.md) |
 | 16 | 已规划 | [阶段 16：Provider 上手体验](roadmap/phases/phase-16.md) |
 | 17 | 已规划 | [阶段 17：界面一致性与内容呈现](roadmap/phases/phase-17.md) |
 | 18 | 已规划 | [阶段 18：MCP Schema 与双纪元兼容性](roadmap/phases/phase-18.md) |
@@ -328,5 +328,5 @@ T1401 由 [#141](https://github.com/yangzuo0621/ctrl-zebra/pull/141) 交付；T1
 续接 Session 的 Run 启动与取消/关闭竞态隔离，并通过聚焦的 48 个测试、全库 1,273 个单元测试、
 TypeScript 类型检查与 Biome 检查；Standards 与 Spec 独立审查均已批准，由
 [#160](https://github.com/yangzuo0621/ctrl-zebra/pull/160) 交付。
-当前执行点为无，下一任务为
-[T1507：实现 Webview 会话延续与 New chat](roadmap/phases/phase-15.md#t1507实现-webview-会话延续与-new-chat)。
+T1507 已由 [#161](https://github.com/yangzuo0621/ctrl-zebra/pull/161) 交付。当前执行点为无，下一任务为
+[T1508：统一生产 Token 估算与预算口径](roadmap/phases/phase-15.md#t1508统一生产-token-估算与预算口径)。

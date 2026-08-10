@@ -163,6 +163,15 @@ describe("unified MCP feature store", () => {
       catalog: { server, generation: 3, resources: [], templates: [] },
     });
     expect(store.getState().resources).toBeUndefined();
+
+    store.getState().clearDraft();
+    expect(store.getState()).toMatchObject({
+      attachments: [],
+      confirmations: [],
+      resourcePreview: undefined,
+      promptPreview: undefined,
+      announcement: "MCP draft context cleared.",
+    });
   });
 
   it("keeps selection on refresh and rejects missing required Template arguments", () => {

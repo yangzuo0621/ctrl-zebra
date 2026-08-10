@@ -26,6 +26,23 @@
   display: flex;
   align-items: center;
   gap: var(--cz-space-2);
+  min-width: 0;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--cz-space-2);
+  min-width: 0;
+}
+
+.currentSession {
+  min-width: 0;
+  max-width: 24ch;
+  overflow-wrap: anywhere;
+  color: var(--cz-color-muted);
+  font-size: var(--cz-font-size-xs);
 }
 
 .mark {
@@ -101,6 +118,12 @@
   margin: var(--cz-space-2) 0 0;
   font-size: var(--cz-font-size-xs);
   color: var(--cz-color-error-fg);
+}
+
+.sessionStatus {
+  margin: var(--cz-space-2) 0 0;
+  font-size: var(--cz-font-size-xs);
+  color: var(--cz-color-muted);
 }
 
 .transcriptSection {
@@ -242,6 +265,32 @@
 .actions {
   display: flex;
   gap: var(--cz-space-2);
+}
+
+@media (max-width: 420px) {
+  .header {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .headerActions {
+    flex: 1 1 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .currentSession {
+    flex: 1 1 100%;
+    max-width: none;
+  }
+
+  .sessionControls {
+    flex-wrap: wrap;
+  }
+
+  .sessionControls select {
+    flex-basis: 100%;
+  }
 }
 
 .status {

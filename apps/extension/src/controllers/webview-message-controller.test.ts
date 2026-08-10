@@ -1,10 +1,11 @@
 import { protocolVersion } from "@ctrl-zebra/protocol";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { ProviderConfigurationError } from "../adapters/provider-configuration.js";
 import type { ChatRunnerEvent } from "./chat-runner.js";
 import { McpPromptActions } from "./mcp-prompt-actions.js";
 import { McpResourceActions } from "./mcp-resource-actions.js";
+import type { SessionRecoveryActions, SessionRestoreProjection } from "./session-recovery.js";
 import {
   bindWebviewMessageController,
   handleWebviewMessage,
@@ -369,6 +370,111 @@ describe("handleWebviewMessage", () => {
     ]);
   });
 
+  it("clears MCP draft context only when New chat is safe", async () => {
+    let messageListener: ((message: unknown) => void) | undefined;
+    let resolveRestore: ((projection: SessionRestoreProjection) => void) | undefined;
+    const resource = new McpResourceActions({
+      connection: {
+        getState: () =>
+          ({
+            status: "disconnected",
+            generation: 0,
+            configurationStale: false,
+          }) as const,
+        readResource: async () => {
+          throw new Error("unused");
+        },
+      },
+    });
+    const prompt = new McpPromptActions({
+      connection: {
+        getState: () =>
+          ({
+            status: "disconnected",
+            generation: 0,
+            configurationStale: false,
+          }) as const,
+        getPromptCatalog: () => undefined,
+        getPrompt: async () => {
+          throw new Error("unused");
+        },
+      },
+    });
+    const clearResource = vi.spyOn(resource, "clearInput");
+    const clearPrompt = vi.spyOn(prompt, "clearInput");
+
+    const sessionActions: SessionRecoveryActions = {
+      async list() {
+        return [];
+      },
+      restore() {
+        return new Promise<SessionRestoreProjection>((resolve) => {
+          resolveRestore = resolve;
+        });
+      },
+    };
+    bindWebviewMessageController(
+      {
+        onDidReceiveMessage(listener) {
+          messageListener = listener;
+          return { dispose() {} };
+        },
+        postMessage() {
+          return Promise.resolve(true);
+        },
+      },
+      { onDidDispose: () => ({ dispose() {} }) },
+      () => {},
+      idleChatRunner,
+      undefined,
+      sessionActions,
+      undefined,
+      undefined,
+      resource,
+      prompt,
+    );
+
+    messageListener?.({ protocolVersion, type: "webview/new-chat", requestId: "new-chat-1" });
+    expect(clearResource).toHaveBeenCalledTimes(1);
+    expect(clearPrompt).toHaveBeenCalledTimes(1);
+
+    messageListener?.({
+      protocolVersion,
+      type: "webview/submit",
+      requestId: "run-1",
+      content: "Run while draft reset is disabled.",
+    });
+    messageListener?.({ protocolVersion, type: "webview/new-chat", requestId: "new-chat-2" });
+    expect(clearResource).toHaveBeenCalledTimes(1);
+    expect(clearPrompt).toHaveBeenCalledTimes(1);
+
+    await Promise.resolve();
+    messageListener?.({
+      protocolVersion,
+      type: "webview/cancel",
+      requestId: "run-1",
+    });
+
+    messageListener?.({
+      protocolVersion,
+      type: "webview/restore-session",
+      requestId: "restore-1",
+      sessionId: "session-1",
+    });
+    messageListener?.({ protocolVersion, type: "webview/new-chat", requestId: "new-chat-3" });
+    expect(clearResource).toHaveBeenCalledTimes(2);
+    expect(clearPrompt).toHaveBeenCalledTimes(2);
+    resolveRestore?.({
+      session: {
+        sessionId: "session-1",
+        status: "completed",
+        messages: [],
+        eventLogTailDamaged: false,
+      },
+      reasoning: { sessionId: "session-1", blocks: [], runTruncated: false },
+    });
+  });
+
   it("routes Checkpoint list and restore requests with correlated results", async () => {
     let messageListener: ((message: unknown) => void) | undefined;
     const postedMessages: unknown[] = [];
@@ -578,6 +684,12 @@ describe("handleWebviewMessage", () => {
         type: "extension/run-status",
         requestId: "request-1",
         status: "preparing",
+      },
+      {
+        protocolVersion,
+        type: "extension/session-started",
+        requestId: "request-1",
+        sessionId: "session-1",
       },
       {
         protocolVersion,
@@ -844,6 +956,12 @@ describe("handleWebviewMessage", () => {
       },
       {
         protocolVersion,
+        type: "extension/session-started",
+        requestId: "request-error",
+        sessionId: "session-1",
+      },
+      {
+        protocolVersion,
         type: "extension/run-error",
         requestId: "request-error",
         code: "configuration",
@@ -1001,7 +1119,7 @@ describe("handleWebviewMessage", () => {
     });
     await Promise.resolve();
 
-    expect(postedMessages[1]).toMatchObject({
+    expect(postedMessages[2]).toMatchObject({
       protocolVersion,
       type: "extension/approval-state",
       requestId: "request-approval",

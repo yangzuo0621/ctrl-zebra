@@ -109,6 +109,12 @@ export function bindWebviewMessageController(
           );
         }
         return;
+      case "webview/new-chat":
+        if (runMessages.canStart() && !sessionMessages.isRestoring()) {
+          resourceActions?.clearInput();
+          promptActions?.clearInput();
+        }
+        return;
       case "webview/mcp-connect":
         void mcpActions?.connect(data.requestId).catch(reportRunFailure);
         return;
@@ -235,8 +241,11 @@ export function bindWebviewMessageController(
         sessionMessages.list(data.requestId);
         return;
       case "webview/restore-session":
-        promptActions?.clearInput();
-        sessionMessages.restore(data.requestId, data.sessionId);
+        if (runMessages.canStart() && !sessionMessages.isRestoring()) {
+          resourceActions?.clearInput();
+          promptActions?.clearInput();
+          sessionMessages.restore(data.requestId, data.sessionId);
+        }
         return;
       case "webview/list-checkpoints":
         checkpointMessages.list(data.requestId);
