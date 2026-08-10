@@ -177,7 +177,7 @@
 | 15 | T1503 | 已完成 | [#156](https://github.com/yangzuo0621/ctrl-zebra/pull/156) | 2026-08-09 |
 | 15 | T1504 | 已完成 | [#158](https://github.com/yangzuo0621/ctrl-zebra/pull/158) | 2026-08-10 |
 | 15 | T1505 | 已完成 | [#159](https://github.com/yangzuo0621/ctrl-zebra/pull/159) | 2026-08-10 |
-| 15 | T1506 | 已完成 | 待创建 PR | 2026-08-10 |
+| 15 | T1506 | 已完成 | [#160](https://github.com/yangzuo0621/ctrl-zebra/pull/160) | 2026-08-10 |
 | 15 | T1507 | 待开始 | — | — |
 | 15 | T1508 | 待开始 | — | — |
 | 15 | T1509 | 待开始 | — | — |
@@ -326,6 +326,7 @@ T1401 由 [#141](https://github.com/yangzuo0621/ctrl-zebra/pull/141) 交付；T1
 [#158](https://github.com/yangzuo0621/ctrl-zebra/pull/158) 完成 Protocol 实现，已交付。T1505 已由
 [#159](https://github.com/yangzuo0621/ctrl-zebra/pull/159) 交付。T1506 已在当前任务分支完成 Host-owned 持久化历史投影、
 续接 Session 的 Run 启动与取消/关闭竞态隔离，并通过聚焦的 48 个测试、全库 1,273 个单元测试、
-TypeScript 类型检查与 Biome 检查；Standards 与 Spec 独立审查均已批准，完成 PR 待创建。
+TypeScript 类型检查与 Biome 检查；Standards 与 Spec 独立审查均已批准，由
+[#160](https://github.com/yangzuo0621/ctrl-zebra/pull/160) 交付。
 当前执行点为无，下一任务为
 [T1507：实现 Webview 会话延续与 New chat](roadmap/phases/phase-15.md#t1507实现-webview-会话延续与-new-chat)。
