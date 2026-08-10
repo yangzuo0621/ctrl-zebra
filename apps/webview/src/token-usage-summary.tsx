@@ -7,7 +7,7 @@ interface TokenUsageSummaryProps {
   readonly status: string;
 }
 
-const terminalStatuses = new Set(["completed", "cancelled", "failed", "interrupted"]);
+const terminalStatuses = new Set(["completed", "cancelled", "failed", "interrupted", "truncated"]);
 
 export function TokenUsageSummary({ usage, status }: TokenUsageSummaryProps) {
   if (usage === undefined && !terminalStatuses.has(status)) {

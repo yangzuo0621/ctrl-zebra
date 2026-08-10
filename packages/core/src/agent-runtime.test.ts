@@ -5,6 +5,7 @@ import {
   AgentRuntime,
   type AgentRuntimeEvent,
   type AgentTool,
+  ContextOverflowRecoveryExhaustedError,
   EmptyAgentResponseError,
   InvalidModelHistoryError,
   InvalidModelUsageError,
@@ -12,6 +13,7 @@ import {
   MaxToolStepsExceededError,
   type ModelEvent,
   type ModelGateway,
+  ModelGatewayError,
   type ModelRequest,
   maxToolOutputEntries,
   type PreparedToolApproval,
@@ -383,6 +385,223 @@ describe("AgentRuntime", () => {
       { role: "assistant", content: "Old answer" },
       { role: "user", content: "Newest question" },
     ]);
+  });
+
+  it("recovers once from a Provider context overflow after strict pruning", async () => {
+    const requests: ModelRequest[] = [];
+    let attempt = 0;
+    const gateway: ModelGateway = {
+      async *stream(request) {
+        requests.push(request);
+        attempt += 1;
+        if (attempt === 1) {
+          throw new ModelGatewayError("context-overflow");
+        }
+        yield { type: "text.delta", text: "Recovered." };
+        yield { type: "finish", reason: "stop" };
+      },
+    };
+    const runtime = new AgentRuntime(gateway, { emit() {} }, undefined, {
+      contextWindowTokens: 30,
+      tokenCounter: { count: () => 5 },
+      history: [
+        { role: "user", content: "Old question" },
+        { role: "assistant", content: "Old answer" },
+      ],
+    });
+
+    await runtime.run({ ...userMessage, content: "Continue" }, new AbortController().signal, {
+      externalResources: [
+        {
+          snapshotId: "snapshot-overflow",
+          serverId: "local_fixture",
+          uri: "memory://overflow",
+          mimeType: "text/plain",
+          text: "Bounded context.",
+          truncated: false,
+        },
+      ],
+    });
+
+    expect(requests).toHaveLength(2);
+    expect(requests[1]?.messages.length).toBeLessThan(requests[0]?.messages.length ?? 0);
+  });
+
+  it("stops after the single bounded overflow recovery when the retry overflows again", async () => {
+    const requests: ModelRequest[] = [];
+    const gateway: ModelGateway = {
+      async *stream(request) {
+        requests.push(request);
+        yield* [];
+        throw new ModelGatewayError("context-overflow");
+      },
+    };
+    const events: AgentRuntimeEvent[] = [];
+    const runtime = new AgentRuntime(gateway, { emit: (event) => events.push(event) }, undefined, {
+      contextWindowTokens: 30,
+      tokenCounter: { count: () => 5 },
+      history: [
+        { role: "user", content: "Old question" },
+        { role: "assistant", content: "Old answer" },
+      ],
+    });
+
+    await expect(
+      runtime.run({ ...userMessage, content: "Continue" }, new AbortController().signal, {
+        externalResources: [
+          {
+            snapshotId: "snapshot-overflow",
+            serverId: "local_fixture",
+            uri: "memory://overflow",
+            mimeType: "text/plain",
+            text: "Bounded context.",
+            truncated: false,
+          },
+        ],
+      }),
+    ).rejects.toEqual(new ContextOverflowRecoveryExhaustedError(1, "retry-limit"));
+
+    expect(requests).toHaveLength(2);
+    expect(events.at(-1)).toMatchObject({ status: "failed" });
+  });
+
+  it("does not retry when the protected latest message leaves no recovery budget", async () => {
+    const requests: ModelRequest[] = [];
+    const gateway: ModelGateway = {
+      async *stream(request) {
+        requests.push(request);
+        yield* [];
+        throw new ModelGatewayError("context-overflow");
+      },
+    };
+    const runtime = new AgentRuntime(gateway, { emit() {} }, undefined, {
+      contextWindowTokens: 10,
+      tokenCounter: { count: () => 5 },
+    });
+
+    await expect(runtime.run(userMessage, new AbortController().signal)).rejects.toEqual(
+      new ContextOverflowRecoveryExhaustedError(0, "no-reduction"),
+    );
+    expect(requests).toHaveLength(1);
+  });
+
+  it("does not treat an ordinary invalid request as context overflow", async () => {
+    const requests: ModelRequest[] = [];
+    const gateway: ModelGateway = {
+      async *stream(request) {
+        requests.push(request);
+        yield* [];
+        throw new ModelGatewayError("invalid-request");
+      },
+    };
+    const runtime = new AgentRuntime(gateway, { emit() {} }, undefined, {
+      contextWindowTokens: 30,
+      tokenCounter: { count: () => 5 },
+      history: [{ role: "user", content: "Earlier" }],
+    });
+
+    await expect(runtime.run(userMessage, new AbortController().signal)).rejects.toEqual(
+      new ModelGatewayError("invalid-request"),
+    );
+    expect(requests).toHaveLength(1);
+  });
+
+  it("does not retry a context overflow after the Provider emitted output", async () => {
+    const requests: ModelRequest[] = [];
+    const gateway: ModelGateway = {
+      async *stream(request) {
+        requests.push(request);
+        yield { type: "text.delta", text: "Already emitted." };
+        throw new ModelGatewayError("context-overflow");
+      },
+    };
+    const events: AgentRuntimeEvent[] = [];
+    const runtime = new AgentRuntime(gateway, { emit: (event) => events.push(event) }, undefined, {
+      contextWindowTokens: 30,
+      tokenCounter: { count: () => 5 },
+      history: [{ role: "user", content: "Earlier" }],
+    });
+
+    await expect(runtime.run(userMessage, new AbortController().signal)).rejects.toEqual(
+      new ModelGatewayError("context-overflow"),
+    );
+    expect(requests).toHaveLength(1);
+    expect(events).toContainEqual({
+      type: "agent.text-delta",
+      sessionId: "session-1",
+      text: "Already emitted.",
+    });
+    expect(events.at(-1)).toMatchObject({ status: "failed" });
+  });
+
+  it("marks a length-finished text response as truncated rather than completed", async () => {
+    const events: AgentRuntimeEvent[] = [];
+    const runtime = new AgentRuntime(
+      {
+        async *stream() {
+          yield { type: "text.delta", text: "Partial" };
+          yield { type: "finish", reason: "length" };
+        },
+      },
+      { emit: (event) => events.push(event) },
+    );
+
+    await expect(runtime.run(userMessage, new AbortController().signal)).resolves.toBeUndefined();
+    expect(events.at(-1)).toMatchObject({ status: "truncated" });
+    expect(events).not.toContainEqual(expect.objectContaining({ status: "completed" }));
+  });
+
+  it("does not execute a Tool Call when the response is length-truncated", async () => {
+    const execute = vi.fn(async () => ({ output: null, truncated: false }));
+    const registry = new ToolRegistry();
+    registry.register({
+      name: "list_files",
+      description: "List files.",
+      inputSchema: emptyInputSchema,
+      risk: "read",
+      parseInput: () => null,
+      execute,
+    });
+    const events: AgentRuntimeEvent[] = [];
+    const runtime = new AgentRuntime(
+      {
+        async *stream() {
+          yield {
+            type: "tool.call",
+            call: { id: "call-truncated", name: "list_files", input: {} },
+          };
+          yield { type: "finish", reason: "length" };
+        },
+      },
+      { emit: (event) => events.push(event) },
+      registry,
+    );
+
+    await runtime.run({ ...userMessage, content: "List files." }, new AbortController().signal);
+
+    expect(execute).not.toHaveBeenCalled();
+    expect(events.at(-1)).toMatchObject({ status: "truncated" });
+    expect(events.filter((event) => event.type === "agent.tool-state")).toHaveLength(1);
+  });
+
+  it("prioritizes cancellation over a context overflow recovery", async () => {
+    const controller = new AbortController();
+    const cancellation = new Error("cancelled before recovery");
+    let calls = 0;
+    const gateway: ModelGateway = {
+      async *stream() {
+        calls += 1;
+        controller.abort(cancellation);
+        yield* [];
+        throw new ModelGatewayError("context-overflow");
+      },
+    };
+    const events: AgentRuntimeEvent[] = [];
+    const runtime = new AgentRuntime(gateway, { emit: (event) => events.push(event) });
+
+    await expect(runtime.run(userMessage, controller.signal)).resolves.toBeUndefined();
+    expect(calls).toBe(1);
+    expect(events.at(-1)).toMatchObject({ status: "cancelled" });
   });
 
   it.each([

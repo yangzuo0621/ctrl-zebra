@@ -1,4 +1,9 @@
-import type { ModelEvent, ModelGatewayErrorCode, ModelRequest } from "@ctrl-zebra/core";
+import {
+  type ModelEvent,
+  ModelGatewayError,
+  type ModelGatewayErrorCode,
+  type ModelRequest,
+} from "@ctrl-zebra/core";
 import { APICallError, InvalidResponseDataError, LoadAPIKeyError } from "ai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -353,6 +358,24 @@ describe("OpenAI ModelGateway", () => {
     ).rejects.toMatchObject({
       code: expectedCode,
     });
+  });
+
+  it("classifies a structured context overflow without inspecting provider text", async () => {
+    sdkMocks.streamText.mockImplementation(() => {
+      throw new APICallError({
+        isRetryable: false,
+        message: "private provider wording",
+        requestBodyValues: {},
+        statusCode: 400,
+        url: "https://example.invalid",
+        data: { error: { code: "context_length_exceeded", message: "secret" } },
+      });
+    });
+    const gateway = createOpenAIModelGateway({ apiKey: "test-key", modelId: "gpt-test" });
+
+    await expect(
+      collectEvents(gateway.stream(request, new AbortController().signal)),
+    ).rejects.toEqual(new ModelGatewayError("context-overflow"));
   });
 
   it.each([

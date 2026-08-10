@@ -231,6 +231,33 @@ describe("chat reasoning store", () => {
     expect(harness.store.getState().activeRequestId).toBeUndefined();
   });
 
+  it("flushes the partial answer and marks a length-truncated run incomplete", () => {
+    const harness = createHarness();
+    startRun(harness);
+    harness.receive({
+      protocolVersion,
+      type: "extension/text-delta",
+      requestId: "request-1",
+      text: "Partial answer",
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/run-status",
+      requestId: "request-1",
+      status: "truncated",
+    });
+
+    expect(harness.store.getState().status).toBe("truncated");
+    expect(harness.store.getState().runError).toBe(
+      "The response was truncated before completion. Ask a follow-up to continue.",
+    );
+    expect(harness.store.getState().messages[1]).toMatchObject({
+      role: "assistant",
+      content: "Partial answer",
+    });
+    expect(harness.store.getState().activeRequestId).toBeUndefined();
+  });
+
   it("accumulates partial provider usage during a run and fences terminal updates", () => {
     const harness = createHarness();
     startRun(harness);

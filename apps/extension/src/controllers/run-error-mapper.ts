@@ -87,6 +87,10 @@ export function mapRunErrorToUi(error: unknown): RunErrorDto {
     };
   }
 
+  if (error instanceof ModelGatewayError && error.code === "context-overflow") {
+    return { code: "context", message: messages.context };
+  }
+
   if (error instanceof ModelGatewayError && error.code in providerMessages) {
     const code = error.code as keyof typeof providerMessages;
     return {

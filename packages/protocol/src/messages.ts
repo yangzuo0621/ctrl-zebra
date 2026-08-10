@@ -332,6 +332,7 @@ export const runStatusSchema = z.enum([
   "preparing",
   "streaming",
   "completed",
+  "truncated",
   "cancelled",
   "failed",
 ]);

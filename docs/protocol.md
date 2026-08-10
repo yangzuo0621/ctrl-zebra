@@ -172,10 +172,16 @@ metadata bags are forbidden.
 ## Run Errors
 
 - A failed chat run emits one correlated `extension/run-error` message before its terminal
-  `extension/run-status` message. Cancellation emits only `cancelled` and never an error message.
+  `extension/run-status` message. A response that ends with Provider finish reason `length` emits
+  terminal `truncated` without a run error; the Webview labels the retained text as incomplete.
+  Cancellation emits only `cancelled` and never an error message.
 - The run error category is a closed set: `authentication`, `network`, `rate-limit`, `context`,
   `tool`, and `internal`. The Extension maps trusted error types to these categories; unknown
   failures use `internal`.
+- A structured Provider context-window rejection is normalized as `context-overflow`, mapped to the
+  safe `context` UI category, and may trigger at most one Core-owned reduced-context retry. A second
+  overflow or an unreducible protected message is terminal; ordinary `invalid-request` never enters
+  this recovery path.
 - Each category has one fixed, user-safe message that explains the failure and a reasonable next
   action. Raw error messages, stacks, SDK objects, response bodies, Tool input/output, workspace
   content, and nested causes are forbidden.
@@ -185,7 +191,7 @@ metadata bags are forbidden.
   `extension/run-error` represents only a terminal run failure and does not replace Tool Result
   details or turn a recoverable Tool failure into a failed run.
 - Cancellation emits only the correlated `cancelled` terminal status and never a run error. After
-  cancellation, failure, interruption, Session replacement, or disposal, the Extension closes the
+  truncation, cancellation, failure, interruption, Session replacement, or disposal, the Extension closes the
   event gate: no later text delta, reasoning event, Tool Result, retry, approval response, or side
   effect is delivered. A failed or interrupted Run may display its retained partial answer, but that
   partial answer is not model history; the next Run receives the user prompt and only complete,

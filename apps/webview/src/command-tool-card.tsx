@@ -44,6 +44,8 @@ export function CommandToolCard({
     runStatus === "cancelled" && (toolCall.status === "pending" || toolCall.status === "running");
   const commandInterrupted =
     runStatus === "interrupted" && (toolCall.status === "pending" || toolCall.status === "running");
+  const commandTruncated =
+    runStatus === "truncated" && (toolCall.status === "pending" || toolCall.status === "running");
   const canTerminate =
     toolCall.status === "running" &&
     (runStatus === "preparing" || runStatus === "streaming") &&
@@ -54,10 +56,13 @@ export function CommandToolCard({
       ? "Terminated"
       : commandInterrupted
         ? "Interrupted"
-        : terminationRequested && toolCall.status === "running"
-          ? "Terminating…"
-          : commandStatus(toolCall);
-  const visualStatus = commandCancelled || commandInterrupted ? "error" : toolCall.status;
+        : commandTruncated
+          ? "Not completed"
+          : terminationRequested && toolCall.status === "running"
+            ? "Terminating…"
+            : commandStatus(toolCall);
+  const visualStatus =
+    commandCancelled || commandInterrupted || commandTruncated ? "error" : toolCall.status;
   const badgeVariant = isAwaitingApproval
     ? "warning"
     : visualStatus === "success"
@@ -135,6 +140,12 @@ export function CommandToolCard({
           {commandCancelled ? (
             <p className={styles.error} role="alert">
               Command execution was cancelled before it completed.
+            </p>
+          ) : null}
+
+          {commandTruncated ? (
+            <p className={styles.error} role="alert">
+              The response ended before this Tool could complete.
             </p>
           ) : null}
 

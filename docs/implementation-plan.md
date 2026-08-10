@@ -64,12 +64,12 @@
 **进度摘要**：
 
 - 总任务：148
-- 已完成：107
+- 已完成：108
 - 进行中：0
 - 受阻：0
-- 待开始：41
-- 当前任务：无
-- 下一任务：T1510
+- 待开始：39
+- 当前任务：T1511
+- 下一任务：T1601
 - 最后更新：2026-08-10
 
 | 阶段 | 任务 | 状态 | 完成 PR | 完成日期 |
@@ -181,7 +181,7 @@
 | 15 | T1507 | 已完成 | [#161](https://github.com/yangzuo0621/ctrl-zebra/pull/161) | 2026-08-10 |
 | 15 | T1508 | 已完成 | [#162](https://github.com/yangzuo0621/ctrl-zebra/pull/162) | 2026-08-10 |
 | 15 | T1509 | 已完成 | [#163](https://github.com/yangzuo0621/ctrl-zebra/pull/163) | 2026-08-10 |
-| 15 | T1510 | 待开始 | — | — |
+| 15 | T1510 | 已完成 | [#164](https://github.com/yangzuo0621/ctrl-zebra/pull/164) | 2026-08-10 |
 | 15 | T1511 | 待开始 | — | — |
 | 16 | T1601 | 待开始 | — | — |
 | 16 | T1602 | 待开始 | — | — |
@@ -332,4 +332,4 @@ T1507 已由 [#161](https://github.com/yangzuo0621/ctrl-zebra/pull/161) 交付�
 [#162](https://github.com/yangzuo0621/ctrl-zebra/pull/162) 交付，统一 Core Token 估算、上下文预算
 与有界确定性计数。T1509 已由 [#163](https://github.com/yangzuo0621/ctrl-zebra/pull/163) 交付，贯通
 Provider Usage 事件的 Core、Protocol、持久化投影与 Webview 展示，并覆盖缺失、重复、迟到、恢复和
-溢出降级语义。当前执行点为无，下一任务为 T1510。
+溢出降级语义。T1510 已由 [#164](https://github.com/yangzuo0621/ctrl-zebra/pull/164) 交付，完成上下文溢出与响应截断的稳定分类、受控恢复与有界结果。当前执行点为 T1511，下一任务为 T1601。

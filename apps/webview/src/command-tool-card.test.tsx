@@ -119,6 +119,19 @@ describe("CommandToolCard", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Command execution was cancelled before it completed.",
     );
+
+    view.rerender(
+      <CommandToolCard
+        toolCall={{ call, status: "pending" }}
+        runStatus="truncated"
+        onTerminate={() => {}}
+      />,
+    );
+
+    expect(screen.getByLabelText("Command status")).toHaveTextContent("Not completed");
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "The response ended before this Tool could complete.",
+    );
   });
 
   it("renders awaiting approval state with status badge and embedded execute risk badge", () => {
