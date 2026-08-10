@@ -15,8 +15,18 @@ class FakeWebviewHost implements WebviewHost {
   readonly sent: WebviewToExtensionMessage[] = [];
   readonly listeners = new Set<(message: ExtensionToWebviewMessage) => void>();
 
-  submit(requestId: string, content: string): void {
-    this.sent.push({ protocolVersion, type: "webview/submit", requestId, content });
+  submit(requestId: string, content: string, sessionId?: string): void {
+    this.sent.push({
+      protocolVersion,
+      type: "webview/submit",
+      requestId,
+      content,
+      ...(sessionId === undefined ? {} : { sessionId }),
+    });
+  }
+
+  newChat(requestId: string): void {
+    this.sent.push({ protocolVersion, type: "webview/new-chat", requestId });
   }
 
   cancel(requestId: string): void {
@@ -174,6 +184,7 @@ describe("App streaming chat", () => {
       });
     });
 
+    expect(screen.getByRole("button", { name: "New chat" })).toBeDisabled();
     await user.click(screen.getByRole("button", { name: "Restore" }));
     expect(host.sent.at(-1)).toEqual({
       protocolVersion,
@@ -212,6 +223,104 @@ describe("App streaming chat", () => {
 
     expect(screen.getByText("Saved question")).toBeVisible();
     expect(screen.getByText("Saved answer")).toBeVisible();
+  });
+
+  it("shows the confirmed current Session and carries it into the next submit", async () => {
+    const host = new FakeWebviewHost();
+    const ids = ["request-1", "request-2"];
+    const user = userEvent.setup();
+    render(<App host={host} createRequestId={() => ids.shift() ?? "unexpected"} />);
+
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "First question.");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    expect(host.sent.at(-1)).toEqual({
+      protocolVersion,
+      type: "webview/submit",
+      requestId: "request-1",
+      content: "First question.",
+    });
+    act(() => {
+      host.emit({
+        protocolVersion,
+        type: "extension/session-started",
+        requestId: "request-1",
+        sessionId: "session-host",
+      });
+      host.emit({
+        protocolVersion,
+        type: "extension/run-status",
+        requestId: "request-1",
+        status: "completed",
+      });
+    });
+
+    expect(screen.getByText("Current Session: session-host")).toBeVisible();
+    expect(screen.getByRole("status", { name: "Session status" })).toHaveTextContent(
+      "Current Session confirmed.",
+    );
+
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "Follow-up.");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    expect(host.sent.at(-1)).toEqual({
+      protocolVersion,
+      type: "webview/submit",
+      requestId: "request-2",
+      content: "Follow-up.",
+      sessionId: "session-host",
+    });
+  });
+
+  it("starts a focused New chat and omits the previous Session ID", async () => {
+    const host = new FakeWebviewHost();
+    const ids = ["request-1", "new-chat-1", "request-2"];
+    const user = userEvent.setup();
+    render(<App host={host} createRequestId={() => ids.shift() ?? "unexpected"} />);
+
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "Old question.");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    act(() => {
+      host.emit({
+        protocolVersion,
+        type: "extension/session-started",
+        requestId: "request-1",
+        sessionId: "session-old",
+      });
+      host.emit({
+        protocolVersion,
+        type: "extension/text-delta",
+        requestId: "request-1",
+        text: "Old answer.",
+      });
+      animationFrames[0]?.(0);
+      host.emit({
+        protocolVersion,
+        type: "extension/run-status",
+        requestId: "request-1",
+        status: "completed",
+      });
+    });
+    expect(screen.getByText("Old answer.")).toBeVisible();
+
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "Stale draft");
+    await user.click(screen.getByRole("button", { name: "New chat" }));
+    expect(host.sent.at(-1)).toEqual({
+      protocolVersion,
+      type: "webview/new-chat",
+      requestId: "new-chat-1",
+    });
+    expect(screen.queryByText("Old answer.")).not.toBeInTheDocument();
+    expect(screen.getByText("Current Session: New chat")).toBeVisible();
+    expect(screen.getByRole("textbox", { name: "Message" })).toHaveValue("");
+    expect(screen.getByRole("textbox", { name: "Message" })).toHaveFocus();
+
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "New question.");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    expect(host.sent.at(-1)).toEqual({
+      protocolVersion,
+      type: "webview/submit",
+      requestId: "request-2",
+      content: "New question.",
+    });
   });
 
   it("shows an interrupted recovery without starting a run", async () => {

@@ -9,6 +9,7 @@ function createHarness(ids: string[] = ["request-1"]) {
   const cancelledFlushes: number[] = [];
   const host: WebviewHost = {
     submit: vi.fn(),
+    newChat: vi.fn(),
     cancel: vi.fn(),
     showApprovalDiff: vi.fn(),
     decideApproval: vi.fn(),
@@ -398,6 +399,201 @@ describe("chat reasoning store", () => {
     });
 
     expect(harness.store.getState().messages).toEqual([]);
+  });
+
+  it("confirms the Host Session ID before sending a continuation", () => {
+    const harness = createHarness(["request-new", "request-continue"]);
+
+    expect(harness.store.getState().submit("Start here.")).toBe(true);
+    expect(harness.host.submit).toHaveBeenLastCalledWith("request-new", "Start here.", undefined);
+    harness.receive({
+      protocolVersion,
+      type: "extension/session-started",
+      requestId: "request-new",
+      sessionId: "session-host",
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/run-status",
+      requestId: "request-new",
+      status: "completed",
+    });
+
+    expect(harness.store.getState().selectedSessionId).toBe("session-host");
+    expect(harness.store.getState().sessionAnnouncement).toBe("Current Session confirmed.");
+    expect(harness.store.getState().submit("Continue here.")).toBe(true);
+    expect(harness.host.submit).toHaveBeenLastCalledWith(
+      "request-continue",
+      "Continue here.",
+      "session-host",
+    );
+  });
+
+  it("fences a continuation when the Host reports a different Session", () => {
+    const harness = createHarness(["request-1", "request-2"]);
+    startRun(harness);
+    harness.receive({
+      protocolVersion,
+      type: "extension/session-started",
+      requestId: "request-1",
+      sessionId: "session-current",
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/run-status",
+      requestId: "request-1",
+      status: "completed",
+    });
+    expect(harness.store.getState().submit("Continue safely.")).toBe(true);
+
+    harness.receive({
+      protocolVersion,
+      type: "extension/session-started",
+      requestId: "request-2",
+      sessionId: "session-other",
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/text-delta",
+      requestId: "request-2",
+      text: "Wrong Session answer",
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/run-status",
+      requestId: "request-2",
+      status: "completed",
+    });
+
+    expect(harness.store.getState().messages.at(-1)?.content).toBe("");
+    expect(harness.store.getState().activeRequestId).toBeUndefined();
+    expect(harness.store.getState().selectedSessionId).toBe("session-current");
+    expect(harness.store.getState().sessionError).toBe(
+      "The response belonged to a different Session.",
+    );
+  });
+
+  it("resets the transcript and stale draft when starting a New chat", () => {
+    const harness = createHarness(["request-1", "new-chat-1", "request-2"]);
+    startRun(harness);
+    harness.receive({
+      protocolVersion,
+      type: "extension/session-started",
+      requestId: "request-1",
+      sessionId: "session-1",
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/text-delta",
+      requestId: "request-1",
+      text: "Old answer",
+    });
+    harness.flush();
+    harness.receive({
+      protocolVersion,
+      type: "extension/run-status",
+      requestId: "request-1",
+      status: "completed",
+    });
+
+    expect(harness.store.getState().messages).toHaveLength(2);
+    expect(harness.store.getState().newChat()).toBe(true);
+    expect(harness.host.newChat).toHaveBeenCalledWith("new-chat-1");
+    expect(harness.store.getState()).toMatchObject({
+      messages: [],
+      selectedSessionId: undefined,
+      sessionSelectionId: undefined,
+      activeRequestId: undefined,
+      restoring: false,
+    });
+
+    harness.receive({
+      protocolVersion,
+      type: "extension/text-delta",
+      requestId: "request-1",
+      text: "Late answer",
+    });
+    expect(harness.store.getState().messages).toEqual([]);
+    expect(harness.store.getState().submit("Fresh question.")).toBe(true);
+    expect(harness.host.submit).toHaveBeenLastCalledWith("request-2", "Fresh question.", undefined);
+  });
+
+  it("keeps the current projection while a selected Session is restoring", () => {
+    const harness = createHarness(["request-1", "list-1", "restore-1", "request-next"]);
+    expect(harness.store.getState().submit("Current question.")).toBe(true);
+    harness.receive({
+      protocolVersion,
+      type: "extension/session-started",
+      requestId: "request-1",
+      sessionId: "session-current",
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/text-delta",
+      requestId: "request-1",
+      text: "Current answer",
+    });
+    harness.flush();
+    harness.receive({
+      protocolVersion,
+      type: "extension/run-status",
+      requestId: "request-1",
+      status: "completed",
+    });
+
+    harness.store.getState().loadSessions();
+    harness.receive({
+      protocolVersion,
+      type: "extension/session-list",
+      requestId: "list-1",
+      sessions: [
+        {
+          sessionId: "session-other",
+          status: "completed",
+          createdAt: "2026-07-31T00:00:00.000Z",
+        },
+      ],
+    });
+    harness.store.getState().selectSession("session-other");
+    expect(harness.store.getState().sessionSwitchPending).toBe(true);
+    expect(harness.store.getState().newChat()).toBe(false);
+    expect(harness.host.newChat).not.toHaveBeenCalled();
+    expect(harness.store.getState().submit("Do not switch yet.")).toBe(false);
+    expect(harness.store.getState().restoreSelectedSession()).toBe(true);
+    expect(harness.store.getState().restoring).toBe(true);
+    expect(harness.store.getState().submit("Still waiting.")).toBe(false);
+    expect(harness.store.getState().messages[1]?.content).toBe("Current answer");
+    harness.receive({
+      protocolVersion,
+      type: "extension/session-list",
+      requestId: "list-1",
+      sessions: [
+        {
+          sessionId: "session-stale",
+          status: "completed",
+          createdAt: "2026-07-31T00:00:00.000Z",
+        },
+      ],
+    });
+    expect(harness.store.getState().sessionSelectionId).toBe("session-other");
+
+    harness.receive({
+      protocolVersion,
+      type: "extension/session-restored",
+      requestId: "restore-1",
+      session: {
+        sessionId: "session-wrong",
+        status: "completed",
+        eventLogTailDamaged: false,
+        messages: [],
+      },
+    });
+    expect(harness.store.getState().restoring).toBe(false);
+    expect(harness.store.getState().selectedSessionId).toBe("session-current");
+    expect(harness.store.getState().messages[1]?.content).toBe("Current answer");
+    expect(harness.store.getState().sessionError).toContain("did not match");
+    expect(harness.store.getState().restoreSelectedSession()).toBe(true);
+    expect(harness.store.getState().submit("After retry starts.")).toBe(false);
   });
 
   it("cancels its owned scheduler on disposal", () => {

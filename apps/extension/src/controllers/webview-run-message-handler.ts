@@ -21,6 +21,7 @@ interface ActiveRun {
   readonly requestId: string;
   readonly abortController: AbortController;
   sessionId?: string;
+  sessionStartedSent: boolean;
   eventsClosed: boolean;
   terminalSent: boolean;
 }
@@ -51,6 +52,7 @@ export class WebviewRunMessageHandler {
       requestId,
       abortController: new AbortController(),
       sessionId,
+      sessionStartedSent: false,
       eventsClosed: false,
       terminalSent: false,
     };
@@ -153,6 +155,20 @@ export class WebviewRunMessageHandler {
       run.sessionId = event.sessionId;
     } else if (run.sessionId !== event.sessionId) {
       return;
+    }
+
+    if (!run.sessionStartedSent) {
+      const sessionId = run.sessionId;
+      if (sessionId === undefined) {
+        return;
+      }
+      run.sessionStartedSent = true;
+      this.post({
+        protocolVersion,
+        type: "extension/session-started",
+        requestId: run.requestId,
+        sessionId,
+      });
     }
 
     if (event.type === "agent.text-delta") {

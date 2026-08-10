@@ -50,6 +50,7 @@ export interface McpState {
   confirmPrompt(): boolean;
   cancelPrompt(): boolean;
   detachPrompt(previewId: string): void;
+  clearDraft(): void;
   receive(message: ExtensionToWebviewMessage): void;
 }
 
@@ -219,6 +220,18 @@ export function createMcpStore(
     detachPrompt(previewId) {
       promptRequest = createRequestId();
       host.detachMcpPrompt?.(promptRequest, previewId);
+    },
+    clearDraft() {
+      resourceRequest = undefined;
+      promptRequest = undefined;
+      set({
+        attachments: [],
+        confirmations: [],
+        resourcePreview: undefined,
+        promptPreview: undefined,
+        busy: undefined,
+        announcement: "MCP draft context cleared.",
+      });
     },
     receive(message) {
       if (message.type === "extension/mcp-connection") {

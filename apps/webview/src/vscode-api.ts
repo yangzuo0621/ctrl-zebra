@@ -18,7 +18,8 @@ let vscodeApi: VsCodeApi | undefined;
 
 export interface WebviewHost {
   ping?(requestId: string): void;
-  submit(requestId: string, content: string): void;
+  submit(requestId: string, content: string, sessionId?: string): void;
+  newChat?(requestId: string): void;
   cancel(requestId: string): void;
   showApprovalDiff(requestId: string, approvalId: string): void;
   decideApproval(requestId: string, approvalId: string, decision: ApprovalDecisionIntent): void;
@@ -88,13 +89,17 @@ function subscribe(listener: (message: ExtensionToWebviewMessage) => void): () =
 
 const webviewHost: WebviewHost = {
   ping: sendPing,
-  submit(requestId, content) {
+  submit(requestId, content, sessionId) {
     getVsCodeApi().postMessage({
       protocolVersion,
       type: "webview/submit",
       requestId,
       content,
+      ...(sessionId === undefined ? {} : { sessionId }),
     });
+  },
+  newChat(requestId) {
+    getVsCodeApi().postMessage({ protocolVersion, type: "webview/new-chat", requestId });
   },
   cancel(requestId) {
     getVsCodeApi().postMessage({

@@ -120,6 +120,11 @@ export class McpResourceActions {
     return attachments;
   }
 
+  clearInput(): void {
+    this.#attachments.clear();
+    this.invalidateLiveState();
+  }
+
   detach(snapshotId: string): boolean {
     return this.#attachments.delete(snapshotId);
   }
@@ -134,8 +139,7 @@ export class McpResourceActions {
 
   dispose(): void {
     this.#disposed = true;
-    this.invalidateLiveState();
-    this.#attachments.clear();
+    this.clearInput();
   }
 }
 
