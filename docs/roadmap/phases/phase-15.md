@@ -106,8 +106,11 @@ macOS 文件系统差异；失败 matrix 不被静默忽略。
 
 **目标**：让用户清楚知道当前会话，并能续接或显式开始新会话。
 
-**产物**：提交携带当前 Session 身份；New chat 清空当前投影和陈旧附件；恢复完成的会话后可以继续；
-运行中、切换中和恢复失败时禁止错投到其他会话；键盘、焦点和 live region 行为完整。
+**产物**：复用 T1506 已接通的 `webview/submit.sessionId → WebviewRunMessageHandler → ChatRunner`
+续接路径；Webview 只保存 Host 在 Run 启动或会话恢复时确认的 Session 身份，首次提交省略该身份，
+同一会话的后续提交携带该身份；New chat 清空当前投影和陈旧附件；恢复完成的会话后可以继续；
+运行中、切换中和恢复失败时禁止错投到其他会话；键盘、焦点和 live region 行为完整。T1507 不重新实现
+Extension 的持久化历史投影或 Session 续接语义。
 
 **测试**：新会话首次提交；同会话第二次提交；New chat；恢复后续接；Session 快速切换；
 运行中禁用/取消路径；窄侧栏与键盘流程。

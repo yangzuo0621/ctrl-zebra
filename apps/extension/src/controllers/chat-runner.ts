@@ -4,10 +4,17 @@ import {
   AgentRuntime,
   type AgentRuntimeEvent,
   allocateTokenBudget,
+  CorruptEventLogError,
+  EventLogLimitExceededError,
+  InconsistentSessionRecordError,
+  InvalidSessionManifestError,
   type JsonValue,
   type ModelGateway,
+  type ModelMessage,
   maxModelContextWindowTokens,
   projectExternalMcpContext,
+  SessionNotFoundError,
+  type SessionRecord,
   type SessionRepository,
   type ToolApprovalWorkflow,
   ToolRegistry,
@@ -18,6 +25,8 @@ import {
   type McpResourceAttachment,
   type PersistedMcpToolSource,
   persistenceFormatVersion,
+  type SessionStatus,
+  sessionIdSchema,
   type ToolStateSourceDto,
   type UserMessage,
 } from "@ctrl-zebra/protocol";
@@ -27,6 +36,8 @@ import {
   isRuntimeReasoningEvent,
   ReasoningCollector,
 } from "./reasoning-collector.js";
+import { projectSessionModelHistory, SessionHistoryCorruptError } from "./session-history.js";
+import { SessionRecoveryError } from "./session-recovery.js";
 
 type NonReasoningAgentRuntimeEvent = Exclude<
   AgentRuntimeEvent,
@@ -52,6 +63,7 @@ export interface ChatRunner {
     emit: (event: ChatRunnerEvent) => void,
     externalResources?: readonly McpResourceAttachment[],
     externalPrompts?: readonly McpPromptConfirmation[],
+    sessionId?: string,
   ): Promise<void>;
 }
 
@@ -91,14 +103,61 @@ export function createChatRunner({
   mcpToolSources,
 }: ChatRunnerDependencies): ChatRunner {
   return {
-    async run(content, signal, emit, externalResources = [], externalPrompts = []) {
+    async run(
+      content,
+      signal,
+      emit,
+      externalResources = [],
+      externalPrompts = [],
+      requestedSessionId,
+    ) {
       signal.throwIfAborted();
       projectExternalMcpContext(
         externalResources,
         externalPrompts,
         allocateTokenBudget(maxModelContextWindowTokens).filesTokens,
       );
-      const sessionId = createId();
+      const normalizedRequestedSessionId =
+        requestedSessionId === undefined ? undefined : parseRequestedSessionId(requestedSessionId);
+      let existingRecord: SessionRecord | undefined;
+      let history: readonly ModelMessage[] = [];
+      let initialSessionStatus: SessionStatus = "idle";
+      if (normalizedRequestedSessionId !== undefined) {
+        if (sessionRepository === undefined) {
+          throw new SessionRecoveryError("unavailable");
+        }
+        try {
+          existingRecord = await sessionRepository.get(normalizedRequestedSessionId);
+        } catch (error) {
+          if (signal.aborted) {
+            signal.throwIfAborted();
+          }
+          throw toContinuationError(error);
+        }
+        signal.throwIfAborted();
+        if (existingRecord === undefined) {
+          throw new SessionRecoveryError("not-found");
+        }
+        if (existingRecord.eventLogTailDamaged) {
+          throw new SessionRecoveryError("corrupt");
+        }
+        if (isActiveSessionStatus(existingRecord.manifest.status)) {
+          throw new SessionRecoveryError("unavailable");
+        }
+        try {
+          history = projectSessionModelHistory(existingRecord);
+        } catch (error) {
+          if (error instanceof SessionHistoryCorruptError) {
+            throw new SessionRecoveryError("corrupt");
+          }
+          throw error;
+        }
+        initialSessionStatus = existingRecord.manifest.status;
+      }
+
+      signal.throwIfAborted();
+      const sessionId = normalizedRequestedSessionId ?? createId();
+      signal.throwIfAborted();
       const userMessage: UserMessage = {
         messageId: createId(),
         sessionId,
@@ -108,6 +167,7 @@ export function createChatRunner({
       };
       const reasoning = new ReasoningCollector(sessionId);
       if (sessionRepository === undefined) {
+        signal.throwIfAborted();
         const runtime = new AgentRuntime(
           modelGateway,
           {
@@ -129,6 +189,7 @@ export function createChatRunner({
           },
         );
         try {
+          signal.throwIfAborted();
           await runtime.run(userMessage, signal, { externalResources, externalPrompts });
         } finally {
           reasoning.close();
@@ -136,15 +197,24 @@ export function createChatRunner({
         return;
       }
 
-      await sessionRepository.create({
-        formatVersion: persistenceFormatVersion,
-        sessionId,
-        status: "idle",
-        createdAt: userMessage.createdAt,
-        updatedAt: userMessage.createdAt,
-        lastEventSequence: 0,
-      });
-      let sequence = 1;
+      let sequence: number;
+      if (existingRecord === undefined) {
+        signal.throwIfAborted();
+        await sessionRepository.create({
+          formatVersion: persistenceFormatVersion,
+          sessionId,
+          status: "idle",
+          createdAt: userMessage.createdAt,
+          updatedAt: userMessage.createdAt,
+          lastEventSequence: 0,
+        });
+        signal.throwIfAborted();
+        sequence = 1;
+      } else {
+        sequence =
+          (existingRecord.events.at(-1)?.sequence ?? existingRecord.manifest.lastEventSequence) + 1;
+      }
+      signal.throwIfAborted();
       await sessionRepository.appendEvent(sessionId, {
         sequence,
         recordedAt: userMessage.createdAt,
@@ -154,6 +224,7 @@ export function createChatRunner({
         },
       });
       for (const attachment of externalResources) {
+        signal.throwIfAborted();
         sequence += 1;
         await sessionRepository.appendEvent(sessionId, {
           sequence,
@@ -165,6 +236,7 @@ export function createChatRunner({
         });
       }
       for (const confirmation of externalPrompts) {
+        signal.throwIfAborted();
         sequence += 1;
         await sessionRepository.appendEvent(sessionId, {
           sequence,
@@ -214,10 +286,17 @@ export function createChatRunner({
         toolRegistry,
         {
           approvalWorkflow,
+          ...(existingRecord === undefined
+            ? {}
+            : {
+                initialSessionStatus,
+                historyProvider: { load: () => history },
+              }),
         },
       );
 
       try {
+        signal.throwIfAborted();
         await runtime.run(userMessage, signal, { externalResources, externalPrompts });
       } finally {
         reasoning.close();
@@ -278,7 +357,7 @@ export function createSelectingChatRunner({
   selectSessionRepository,
 }: SelectingChatRunnerDependencies): ChatRunner {
   return {
-    async run(content, signal, emit, externalResources = [], externalPrompts = []) {
+    async run(content, signal, emit, externalResources = [], externalPrompts = [], sessionId) {
       signal.throwIfAborted();
       const sessionRepository = await selectSessionRepository?.();
       signal.throwIfAborted();
@@ -296,9 +375,44 @@ export function createSelectingChatRunner({
         approvalWorkflow,
         sessionRepository,
         mcpToolSources: selection.mcpToolSources,
-      }).run(content, signal, emit, externalResources, externalPrompts);
+      }).run(content, signal, emit, externalResources, externalPrompts, sessionId);
     },
   };
+}
+
+function parseRequestedSessionId(value: string): string {
+  const result = sessionIdSchema.safeParse(value);
+  if (!result.success) {
+    throw new SessionRecoveryError("not-found");
+  }
+  return result.data;
+}
+
+function isActiveSessionStatus(status: SessionStatus): boolean {
+  return (
+    status === "preparing" ||
+    status === "streaming" ||
+    status === "awaiting_approval" ||
+    status === "executing_tool"
+  );
+}
+
+function toContinuationError(error: unknown): SessionRecoveryError {
+  if (error instanceof SessionRecoveryError) {
+    return error;
+  }
+  if (error instanceof SessionNotFoundError) {
+    return new SessionRecoveryError("not-found");
+  }
+  if (
+    error instanceof InvalidSessionManifestError ||
+    error instanceof CorruptEventLogError ||
+    error instanceof EventLogLimitExceededError ||
+    error instanceof InconsistentSessionRecordError
+  ) {
+    return new SessionRecoveryError("corrupt");
+  }
+  return new SessionRecoveryError("unavailable");
 }
 
 function projectPersistedEvents(

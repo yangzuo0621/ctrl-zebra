@@ -119,6 +119,7 @@ describe("handleWebviewMessage", () => {
       type: "webview/submit",
       requestId: "run-1",
       content: "Use the note.",
+      sessionId: "session-existing",
     });
     expect(runs[0]?.[3]).toEqual([
       {
@@ -130,6 +131,7 @@ describe("handleWebviewMessage", () => {
         truncated: false,
       },
     ]);
+    expect(runs[0]?.[5]).toBe("session-existing");
   });
 
   it("routes Prompt preview, confirmation, and ordinary context into the next run", async () => {
@@ -566,6 +568,7 @@ describe("handleWebviewMessage", () => {
       type: "webview/submit",
       requestId: "request-1",
       content: "Say hello.",
+      sessionId: "session-1",
     });
     await Promise.resolve();
 
@@ -721,6 +724,63 @@ describe("handleWebviewMessage", () => {
         type: "extension/run-status",
         requestId: "request-1",
         status: "cancelled",
+      },
+    ]);
+  });
+
+  it("closes an active run without forwarding late events", async () => {
+    let messageListener: ((message: unknown) => void) | undefined;
+    let disposeListener: (() => void) | undefined;
+    let emitRuntimeEvent: ((event: ChatRunnerEvent) => void) | undefined;
+    let receivedSignal: AbortSignal | undefined;
+    const postedMessages: unknown[] = [];
+
+    bindWebviewMessageController(
+      {
+        onDidReceiveMessage(listener) {
+          messageListener = listener;
+          return { dispose() {} };
+        },
+        postMessage(message) {
+          postedMessages.push(message);
+          return Promise.resolve(true);
+        },
+      },
+      {
+        onDidDispose(listener) {
+          disposeListener = listener;
+          return { dispose() {} };
+        },
+      },
+      () => {},
+      {
+        run(_content, signal, emit) {
+          receivedSignal = signal;
+          emitRuntimeEvent = emit;
+          return new Promise<void>((resolve) => {
+            signal.addEventListener("abort", () => resolve(), { once: true });
+          });
+        },
+      },
+    );
+
+    messageListener?.({
+      protocolVersion,
+      type: "webview/submit",
+      requestId: "request-close",
+      content: "Close me.",
+    });
+    disposeListener?.();
+    emitRuntimeEvent?.({ type: "agent.text-delta", sessionId: "session-1", text: "late" });
+    await Promise.resolve();
+
+    expect(receivedSignal?.aborted).toBe(true);
+    expect(postedMessages).toEqual([
+      {
+        protocolVersion,
+        type: "extension/run-status",
+        requestId: "request-close",
+        status: "preparing",
       },
     ]);
   });

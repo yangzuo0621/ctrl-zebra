@@ -41,6 +41,7 @@ export class WebviewRunMessageHandler {
     content: string,
     externalResources: readonly McpResourceAttachment[] = [],
     externalPrompts: readonly McpPromptConfirmation[] = [],
+    sessionId?: string,
   ): void {
     if (this.#activeRun !== undefined) {
       return;
@@ -49,6 +50,7 @@ export class WebviewRunMessageHandler {
     const run: ActiveRun = {
       requestId,
       abortController: new AbortController(),
+      sessionId,
       eventsClosed: false,
       terminalSent: false,
     };
@@ -62,6 +64,7 @@ export class WebviewRunMessageHandler {
         (event) => this.#handleRuntimeEvent(run, event),
         externalResources,
         externalPrompts,
+        sessionId,
       )
       .then(
         () => {

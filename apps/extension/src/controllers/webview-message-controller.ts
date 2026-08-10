@@ -105,6 +105,7 @@ export function bindWebviewMessageController(
             data.content,
             resourceActions?.takeAttachments(),
             promptActions?.takeConfirmations(),
+            data.sessionId,
           );
         }
         return;
