@@ -33,16 +33,6 @@ export interface ApprovalUiActions {
   decide(requestId: string, approvalId: string, decision: ApprovalDecisionIntent): void;
 }
 
-export function handleWebviewMessage(message: unknown): ExtensionToWebviewMessage | undefined {
-  const result = webviewToExtensionMessageSchema.safeParse(message);
-
-  if (!result.success) {
-    return undefined;
-  }
-
-  return createPong(result.data.requestId);
-}
-
 function createPong(requestId: string): ExtensionToWebviewMessage {
   return {
     protocolVersion,
@@ -51,19 +41,33 @@ function createPong(requestId: string): ExtensionToWebviewMessage {
   };
 }
 
-export function bindWebviewMessageController(
-  channel: WebviewMessageChannel,
-  lifetime: WebviewViewLifetime,
-  reportDeliveryFailure: () => void,
-  chatRunner: ChatRunner,
-  approvalActions?: ApprovalUiActions,
-  sessionActions?: SessionRecoveryActions,
-  checkpointActions?: CheckpointActions,
-  reportRunFailure: (error: unknown) => void = () => {},
-  resourceActions?: McpResourceActions,
-  promptActions?: McpPromptActions,
-  mcpActions?: McpWebviewActions,
-): void {
+interface BindWebviewMessageControllerOptions {
+  readonly channel: WebviewMessageChannel;
+  readonly lifetime: WebviewViewLifetime;
+  readonly reportDeliveryFailure?: () => void;
+  readonly chatRunner: ChatRunner;
+  readonly approvalActions?: ApprovalUiActions;
+  readonly sessionActions?: SessionRecoveryActions;
+  readonly checkpointActions?: CheckpointActions;
+  readonly reportRunFailure?: (error: unknown) => void;
+  readonly resourceActions?: McpResourceActions;
+  readonly promptActions?: McpPromptActions;
+  readonly mcpActions?: McpWebviewActions;
+}
+
+export function bindWebviewMessageController({
+  channel,
+  lifetime,
+  reportDeliveryFailure = () => {},
+  chatRunner,
+  approvalActions,
+  sessionActions,
+  checkpointActions,
+  reportRunFailure = () => {},
+  resourceActions,
+  promptActions,
+  mcpActions,
+}: BindWebviewMessageControllerOptions): void {
   let disposed = false;
   const post = (message: ExtensionToWebviewMessage) => {
     if (disposed) {

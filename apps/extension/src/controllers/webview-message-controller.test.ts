@@ -6,39 +6,13 @@ import type { ChatRunnerEvent } from "./chat-runner.js";
 import { McpPromptActions } from "./mcp-prompt-actions.js";
 import { McpResourceActions } from "./mcp-resource-actions.js";
 import type { SessionRecoveryActions, SessionRestoreProjection } from "./session-recovery.js";
-import {
-  bindWebviewMessageController,
-  handleWebviewMessage,
-} from "./webview-message-controller.js";
+import { bindWebviewMessageController } from "./webview-message-controller.js";
 
 const idleChatRunner = {
   async run() {},
 };
 
-describe("handleWebviewMessage", () => {
-  it("returns a correlated pong for a valid ping", () => {
-    expect(
-      handleWebviewMessage({
-        protocolVersion,
-        type: "webview/ping",
-        requestId: "request-1",
-      }),
-    ).toEqual({
-      protocolVersion,
-      type: "extension/pong",
-      requestId: "request-1",
-    });
-  });
-
-  it.each([
-    null,
-    "webview/ping",
-    { protocolVersion: 2, type: "webview/ping", requestId: "request-1" },
-    { protocolVersion, type: "webview/unknown", requestId: "request-1" },
-  ])("ignores invalid or unknown input %#", (message) => {
-    expect(handleWebviewMessage(message)).toBeUndefined();
-  });
-
+describe("bindWebviewMessageController", () => {
   it("routes Resource read, attach, and the immutable attachment into the next run", async () => {
     let messageListener: ((message: unknown) => void) | undefined;
     const postedMessages: unknown[] = [];
@@ -63,8 +37,8 @@ describe("handleWebviewMessage", () => {
       },
       createId: () => "snapshot-1",
     });
-    bindWebviewMessageController(
-      {
+    bindWebviewMessageController({
+      channel: {
         onDidReceiveMessage(listener) {
           messageListener = listener;
           return { dispose() {} };
@@ -74,19 +48,16 @@ describe("handleWebviewMessage", () => {
           return Promise.resolve(true);
         },
       },
-      { onDidDispose: () => ({ dispose() {} }) },
-      () => {},
-      {
+      lifetime: { onDidDispose: () => ({ dispose() {} }) },
+      reportDeliveryFailure: () => {},
+      chatRunner: {
         async run(...args) {
           runs.push(args);
         },
       },
-      undefined,
-      undefined,
-      undefined,
-      () => {},
+      reportRunFailure: () => {},
       resourceActions,
-    );
+    });
 
     messageListener?.({
       protocolVersion,
@@ -165,8 +136,8 @@ describe("handleWebviewMessage", () => {
       },
       createId: () => "preview-1",
     });
-    bindWebviewMessageController(
-      {
+    bindWebviewMessageController({
+      channel: {
         onDidReceiveMessage(listener) {
           messageListener = listener;
           return { dispose() {} };
@@ -176,20 +147,16 @@ describe("handleWebviewMessage", () => {
           return Promise.resolve(true);
         },
       },
-      { onDidDispose: () => ({ dispose() {} }) },
-      () => {},
-      {
+      lifetime: { onDidDispose: () => ({ dispose() {} }) },
+      reportDeliveryFailure: () => {},
+      chatRunner: {
         async run(...args) {
           runs.push(args);
         },
       },
-      undefined,
-      undefined,
-      undefined,
-      () => {},
-      undefined,
+      reportRunFailure: () => {},
       promptActions,
-    );
+    });
     messageListener?.({
       protocolVersion,
       type: "webview/mcp-prompt-preview",
@@ -240,8 +207,8 @@ describe("handleWebviewMessage", () => {
       }
     };
 
-    bindWebviewMessageController(
-      {
+    bindWebviewMessageController({
+      channel: {
         onDidReceiveMessage(listener) {
           messageListener = listener;
           return {
@@ -255,7 +222,7 @@ describe("handleWebviewMessage", () => {
           return Promise.resolve(true);
         },
       },
-      {
+      lifetime: {
         onDidDispose(listener) {
           disposeListener = listener;
           return {
@@ -265,9 +232,9 @@ describe("handleWebviewMessage", () => {
           };
         },
       },
-      () => deliveryFailures.push("failed"),
-      idleChatRunner,
-    );
+      reportDeliveryFailure: () => deliveryFailures.push("failed"),
+      chatRunner: idleChatRunner,
+    });
 
     emitMessage({ protocolVersion, type: "webview/ping", requestId: "request-1" });
     emitMessage({ protocolVersion, type: "webview/unknown", requestId: "request-2" });
@@ -290,8 +257,8 @@ describe("handleWebviewMessage", () => {
   it("routes Session list and restore requests without starting a run", async () => {
     let messageListener: ((message: unknown) => void) | undefined;
     const postedMessages: unknown[] = [];
-    bindWebviewMessageController(
-      {
+    bindWebviewMessageController({
+      channel: {
         onDidReceiveMessage(listener) {
           messageListener = listener;
           return { dispose() {} };
@@ -301,15 +268,14 @@ describe("handleWebviewMessage", () => {
           return Promise.resolve(true);
         },
       },
-      {
+      lifetime: {
         onDidDispose() {
           return { dispose() {} };
         },
       },
-      () => {},
-      idleChatRunner,
-      undefined,
-      {
+      reportDeliveryFailure: () => {},
+      chatRunner: idleChatRunner,
+      sessionActions: {
         async list() {
           return [
             { sessionId: "session-1", status: "completed", createdAt: "2026-07-19T10:00:00.000Z" },
@@ -327,7 +293,7 @@ describe("handleWebviewMessage", () => {
           };
         },
       },
-    );
+    });
 
     messageListener?.({ protocolVersion, type: "webview/list-sessions", requestId: "list-1" });
     messageListener?.({
@@ -413,8 +379,8 @@ describe("handleWebviewMessage", () => {
         });
       },
     };
-    bindWebviewMessageController(
-      {
+    bindWebviewMessageController({
+      channel: {
         onDidReceiveMessage(listener) {
           messageListener = listener;
           return { dispose() {} };
@@ -423,16 +389,13 @@ describe("handleWebviewMessage", () => {
           return Promise.resolve(true);
         },
       },
-      { onDidDispose: () => ({ dispose() {} }) },
-      () => {},
-      idleChatRunner,
-      undefined,
+      lifetime: { onDidDispose: () => ({ dispose() {} }) },
+      reportDeliveryFailure: () => {},
+      chatRunner: idleChatRunner,
       sessionActions,
-      undefined,
-      undefined,
-      resource,
-      prompt,
-    );
+      resourceActions: resource,
+      promptActions: prompt,
+    });
 
     messageListener?.({ protocolVersion, type: "webview/new-chat", requestId: "new-chat-1" });
     expect(clearResource).toHaveBeenCalledTimes(1);
@@ -478,8 +441,8 @@ describe("handleWebviewMessage", () => {
   it("routes Checkpoint list and restore requests with correlated results", async () => {
     let messageListener: ((message: unknown) => void) | undefined;
     const postedMessages: unknown[] = [];
-    bindWebviewMessageController(
-      {
+    bindWebviewMessageController({
+      channel: {
         onDidReceiveMessage(listener) {
           messageListener = listener;
           return { dispose() {} };
@@ -489,12 +452,10 @@ describe("handleWebviewMessage", () => {
           return Promise.resolve(true);
         },
       },
-      { onDidDispose: () => ({ dispose() {} }) },
-      () => {},
-      idleChatRunner,
-      undefined,
-      undefined,
-      {
+      lifetime: { onDidDispose: () => ({ dispose() {} }) },
+      reportDeliveryFailure: () => {},
+      chatRunner: idleChatRunner,
+      checkpointActions: {
         async list() {
           return [
             {
@@ -514,7 +475,7 @@ describe("handleWebviewMessage", () => {
         },
         async restore() {},
       },
-    );
+    });
 
     messageListener?.({
       protocolVersion,
@@ -548,8 +509,8 @@ describe("handleWebviewMessage", () => {
     let messageListener: ((message: unknown) => void) | undefined;
     let deliveryFailureCount = 0;
 
-    bindWebviewMessageController(
-      {
+    bindWebviewMessageController({
+      channel: {
         onDidReceiveMessage(listener) {
           messageListener = listener;
           return { dispose() {} };
@@ -558,16 +519,16 @@ describe("handleWebviewMessage", () => {
           return Promise.reject(new Error("delivery failed"));
         },
       },
-      {
+      lifetime: {
         onDidDispose() {
           return { dispose() {} };
         },
       },
-      () => {
+      reportDeliveryFailure: () => {
         deliveryFailureCount += 1;
       },
-      idleChatRunner,
-    );
+      chatRunner: idleChatRunner,
+    });
 
     messageListener?.({ protocolVersion, type: "webview/ping", requestId: "request-1" });
     await Promise.resolve();
@@ -580,8 +541,8 @@ describe("handleWebviewMessage", () => {
     let messageListener: ((message: unknown) => void) | undefined;
     const postedMessages: unknown[] = [];
 
-    bindWebviewMessageController(
-      {
+    bindWebviewMessageController({
+      channel: {
         onDidReceiveMessage(listener) {
           messageListener = listener;
           return { dispose() {} };
@@ -591,13 +552,13 @@ describe("handleWebviewMessage", () => {
           return Promise.resolve(true);
         },
       },
-      {
+      lifetime: {
         onDidDispose() {
           return { dispose() {} };
         },
       },
-      () => {},
-      {
+      reportDeliveryFailure: () => {},
+      chatRunner: {
         async run(_content, _signal, emit) {
           emit({
             type: "session.status-changed",
@@ -672,7 +633,7 @@ describe("handleWebviewMessage", () => {
           });
         },
       },
-    );
+    });
 
     messageListener?.({
       protocolVersion,
@@ -786,8 +747,8 @@ describe("handleWebviewMessage", () => {
     let emitRuntimeEvent: ((event: ChatRunnerEvent) => void) | undefined;
     let receivedSignal: AbortSignal | undefined;
 
-    bindWebviewMessageController(
-      {
+    bindWebviewMessageController({
+      channel: {
         onDidReceiveMessage(listener) {
           messageListener = listener;
           return { dispose() {} };
@@ -797,13 +758,13 @@ describe("handleWebviewMessage", () => {
           return Promise.resolve(true);
         },
       },
-      {
+      lifetime: {
         onDidDispose() {
           return { dispose() {} };
         },
       },
-      () => {},
-      {
+      reportDeliveryFailure: () => {},
+      chatRunner: {
         run(_content, signal, emit) {
           receivedSignal = signal;
           emitRuntimeEvent = emit;
@@ -812,7 +773,7 @@ describe("handleWebviewMessage", () => {
           });
         },
       },
-    );
+    });
 
     messageListener?.({
       protocolVersion,
@@ -863,8 +824,8 @@ describe("handleWebviewMessage", () => {
     let receivedSignal: AbortSignal | undefined;
     const postedMessages: unknown[] = [];
 
-    bindWebviewMessageController(
-      {
+    bindWebviewMessageController({
+      channel: {
         onDidReceiveMessage(listener) {
           messageListener = listener;
           return { dispose() {} };
@@ -874,14 +835,14 @@ describe("handleWebviewMessage", () => {
           return Promise.resolve(true);
         },
       },
-      {
+      lifetime: {
         onDidDispose(listener) {
           disposeListener = listener;
           return { dispose() {} };
         },
       },
-      () => {},
-      {
+      reportDeliveryFailure: () => {},
+      chatRunner: {
         run(_content, signal, emit) {
           receivedSignal = signal;
           emitRuntimeEvent = emit;
@@ -890,7 +851,7 @@ describe("handleWebviewMessage", () => {
           });
         },
       },
-    );
+    });
 
     messageListener?.({
       protocolVersion,
@@ -919,8 +880,8 @@ describe("handleWebviewMessage", () => {
     const reportedFailures: unknown[] = [];
     const failure = new ProviderConfigurationError("missing-model", "model", "secret-token");
 
-    bindWebviewMessageController(
-      {
+    bindWebviewMessageController({
+      channel: {
         onDidReceiveMessage(listener) {
           messageListener = listener;
           return { dispose() {} };
@@ -930,9 +891,9 @@ describe("handleWebviewMessage", () => {
           return Promise.resolve(true);
         },
       },
-      { onDidDispose: () => ({ dispose() {} }) },
-      () => {},
-      {
+      lifetime: { onDidDispose: () => ({ dispose() {} }) },
+      reportDeliveryFailure: () => {},
+      chatRunner: {
         async run(_content, _signal, emit) {
           emit({
             type: "session.status-changed",
@@ -948,11 +909,8 @@ describe("handleWebviewMessage", () => {
           throw failure;
         },
       },
-      undefined,
-      undefined,
-      undefined,
-      (error) => reportedFailures.push(error),
-    );
+      reportRunFailure: (error) => reportedFailures.push(error),
+    });
 
     messageListener?.({
       protocolVersion,
@@ -1001,8 +959,8 @@ describe("handleWebviewMessage", () => {
     const resolveRuns: Array<() => void> = [];
     const emitters: Array<(event: ChatRunnerEvent) => void> = [];
 
-    bindWebviewMessageController(
-      {
+    bindWebviewMessageController({
+      channel: {
         onDidReceiveMessage(listener) {
           messageListener = listener;
           return { dispose() {} };
@@ -1012,20 +970,20 @@ describe("handleWebviewMessage", () => {
           return Promise.resolve(true);
         },
       },
-      {
+      lifetime: {
         onDidDispose() {
           return { dispose() {} };
         },
       },
-      () => {},
-      {
+      reportDeliveryFailure: () => {},
+      chatRunner: {
         run(content, _signal, emit) {
           receivedContents.push(content);
           emitters.push(emit);
           return new Promise((resolve) => resolveRuns.push(resolve));
         },
       },
-    );
+    });
 
     messageListener?.({
       protocolVersion,
@@ -1088,8 +1046,8 @@ describe("handleWebviewMessage", () => {
     let messageListener: ((message: unknown) => void) | undefined;
     const postedMessages: unknown[] = [];
     let finishRun: (() => void) | undefined;
-    bindWebviewMessageController(
-      {
+    bindWebviewMessageController({
+      channel: {
         onDidReceiveMessage(listener) {
           messageListener = listener;
           return { dispose() {} };
@@ -1099,9 +1057,9 @@ describe("handleWebviewMessage", () => {
           return Promise.resolve(true);
         },
       },
-      { onDidDispose: () => ({ dispose() {} }) },
-      () => {},
-      {
+      lifetime: { onDidDispose: () => ({ dispose() {} }) },
+      reportDeliveryFailure: () => {},
+      chatRunner: {
         async run(_content, _signal, emit) {
           emit({
             type: "agent.approval-state",
@@ -1125,7 +1083,7 @@ describe("handleWebviewMessage", () => {
           });
         },
       },
-    );
+    });
 
     messageListener?.({
       protocolVersion,
@@ -1149,8 +1107,8 @@ describe("handleWebviewMessage", () => {
     let messageListener: ((message: unknown) => void) | undefined;
     const actions: unknown[] = [];
 
-    bindWebviewMessageController(
-      {
+    bindWebviewMessageController({
+      channel: {
         onDidReceiveMessage(listener) {
           messageListener = listener;
           return { dispose() {} };
@@ -1159,14 +1117,14 @@ describe("handleWebviewMessage", () => {
           return Promise.resolve(true);
         },
       },
-      {
+      lifetime: {
         onDidDispose() {
           return { dispose() {} };
         },
       },
-      () => {},
-      idleChatRunner,
-      {
+      reportDeliveryFailure: () => {},
+      chatRunner: idleChatRunner,
+      approvalActions: {
         showDiff(requestId, approvalId) {
           actions.push({ type: "show-diff", requestId, approvalId });
         },
@@ -1174,7 +1132,7 @@ describe("handleWebviewMessage", () => {
           actions.push({ type: "decision", requestId, approvalId, decision });
         },
       },
-    );
+    });
 
     messageListener?.({
       protocolVersion,
