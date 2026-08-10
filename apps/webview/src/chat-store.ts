@@ -1,14 +1,17 @@
 import {
   type ExtensionToWebviewMessage,
+  hasTokenUsage,
   maxReasoningBlockCodePoints,
   maxReasoningBlocksPerRun,
   maxReasoningBlockUtf8Bytes,
   maxReasoningRunCodePoints,
   maxReasoningRunUtf8Bytes,
   measureReasoningText,
+  mergeTokenUsage as mergeProviderTokenUsage,
   type ReasoningRestoredMessage,
   type RunStatus,
   type SessionSummary,
+  type TokenUsage,
   type ToolCall,
   type ToolErrorResult,
   type ToolStateMessage,
@@ -36,6 +39,8 @@ export interface DisplayMessage {
   readonly reasoningBlocks: readonly DisplayReasoningBlock[];
   readonly reasoningRunTruncated: boolean;
 }
+
+export type DisplayTokenUsage = TokenUsage;
 
 export type DisplayToolCall =
   | {
@@ -69,6 +74,7 @@ interface ChatState {
   readonly runError?: string;
   readonly reasoningAnnouncement: string;
   readonly sessionAnnouncement: string;
+  readonly usage?: DisplayTokenUsage;
   submit(content: string): boolean;
   cancel(): void;
   newChat(): boolean;
@@ -146,6 +152,7 @@ export function createChatStore({
   let reasoningBlockCountLimited = false;
   let reasoningDirty = false;
   let pendingReasoningAnnouncement: string | undefined;
+  let usageOverflowed = false;
   const liveReasoningBlocks = new Map<string, LiveReasoningBlock>();
 
   const cancelFlush = () => {
@@ -301,6 +308,22 @@ export function createChatStore({
       }));
     };
 
+    const applyTokenUsage = (usage: TokenUsage) => {
+      if (usageOverflowed || !hasTokenUsage(usage)) {
+        return;
+      }
+      const merged = mergeProviderTokenUsage(get().usage, usage);
+      if (!merged.ok) {
+        usageOverflowed = true;
+        set({
+          usage: undefined,
+          runError: "Provider usage exceeded the supported Session limit.",
+        });
+        return;
+      }
+      set({ usage: merged.usage });
+    };
+
     const restoreMessages = (
       message: Extract<ExtensionToWebviewMessage, { type: "extension/session-restored" }>,
       staged: ReasoningRestoredMessage | undefined,
@@ -356,6 +379,7 @@ export function createChatStore({
     return {
       messages: [],
       status: "idle",
+      usage: undefined,
       sessions: [],
       sessionSwitchPending: false,
       restoring: false,
@@ -403,6 +427,7 @@ export function createChatStore({
           status: "preparing",
           activeRequestId: requestId,
           runError: undefined,
+          usage: state.usage,
           reasoningAnnouncement: "",
           sessionAnnouncement:
             sessionId === undefined ? "Starting a new Session." : "Continuing the current Session.",
@@ -435,6 +460,7 @@ export function createChatStore({
         stagedReasoningRestore = undefined;
         activeAssistantMessageId = undefined;
         resetLiveReasoning();
+        usageOverflowed = false;
         const requestId = createRequestId();
         set({
           messages: [],
@@ -446,6 +472,7 @@ export function createChatStore({
           restoring: false,
           sessionError: undefined,
           runError: undefined,
+          usage: undefined,
           reasoningAnnouncement: "",
           sessionAnnouncement: "New chat ready.",
         });
@@ -596,6 +623,7 @@ export function createChatStore({
           pendingTextDelta = "";
           activeAssistantMessageId = undefined;
           resetLiveReasoning();
+          usageOverflowed = false;
           set({
             messages: restoreMessages(message, stagedForCurrentMessage),
             status:
@@ -610,6 +638,7 @@ export function createChatStore({
             sessionSwitchPending: false,
             restoring: false,
             runError: undefined,
+            usage: message.session.usage,
             reasoningAnnouncement: "",
             sessionError: message.session.eventLogTailDamaged
               ? "Recovered through the last valid event."
@@ -662,6 +691,13 @@ export function createChatStore({
         if (message.type === "extension/text-delta") {
           if (state.status === "preparing" || state.status === "streaming") {
             queueTextDelta(message.text);
+          }
+          return;
+        }
+
+        if (message.type === "extension/token-usage") {
+          if (state.status === "preparing" || state.status === "streaming") {
+            applyTokenUsage(message.usage);
           }
           return;
         }
@@ -791,6 +827,7 @@ export function createChatStore({
       dispose() {
         cancelFlush();
         pendingTextDelta = "";
+        usageOverflowed = false;
         listRequestId = undefined;
         restoreRequestId = undefined;
         restoreTargetSessionId = undefined;

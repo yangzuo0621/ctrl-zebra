@@ -95,6 +95,25 @@ This document defines the initial runtime boundaries for the CtrlZebra desktop V
 - Reasoning support is detected only from actual events. It is not added to the version `1`
   Provider capability declaration, and Core does not reject a request because reasoning is absent.
 
+### Provider token usage event boundary
+
+- A Provider may emit a `usage` event with actual input, output, and/or total token counts. Each
+  present count is an integer from `0` through `2,000,000`; an empty object means that the Provider
+  supplied no usable count. Prices, billing data, estimates, and SDK metadata are not Core values.
+- The Agent Runtime validates Usage at the Provider boundary, republishes at most one
+  `agent.usage` event for each model stream step, and preserves its source order relative to text,
+  reasoning, Tool, and terminal events. Duplicate Usage events in one step are consumed but do not
+  create duplicate display or persistence records. A malformed or out-of-range count fails the
+  Provider operation rather than crossing the Core boundary.
+- Usage is display and recovery metadata only. It is never inserted into model history, does not
+  alter context-budget decisions, and does not authorize a retry or Tool action. Once cancellation
+  or another terminal outcome closes a Run, late Usage events are ignored and cannot cause protocol,
+  persistence, or UI side effects.
+- Session-cumulative Usage uses the shared Protocol merge rule: every field is added independently
+  and a cumulative value above `2,000,000` is an explicit overflow, never a saturated count. Live
+  presentation downgrades to unavailable and ignores further Usage for that Session, including
+  continuations; recovery rejects the Session as corrupt, so neither path fabricates a Provider value.
+
 ## Provider Configuration Boundary
 
 - `apps/extension` owns Provider configuration. It accepts VS Code configuration values as

@@ -77,6 +77,27 @@ describe("persistence format", () => {
     ).toBe(false);
   });
 
+  it("strictly validates bounded Provider Usage events and permits partial fields", () => {
+    expect(
+      persistedEventPayloadSchema.parse({
+        type: "session.usage",
+        data: { inputTokens: 5, totalTokens: 5 },
+      }),
+    ).toEqual({ type: "session.usage", data: { inputTokens: 5, totalTokens: 5 } });
+    expect(
+      persistedEventPayloadSchema.safeParse({
+        type: "session.usage",
+        data: { outputTokens: -1 },
+      }).success,
+    ).toBe(false);
+    expect(
+      persistedEventPayloadSchema.safeParse({
+        type: "session.usage",
+        data: { totalTokens: 1, source: "estimate" },
+      }).success,
+    ).toBe(false);
+  });
+
   it("parses the current manifest and JSONL record structures", () => {
     expect(sessionManifestSchema.parse(manifest)).toEqual(manifest);
     expect(

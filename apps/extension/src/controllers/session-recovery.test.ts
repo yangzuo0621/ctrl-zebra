@@ -3,7 +3,11 @@ import {
   InMemorySessionRepository,
   type SessionRepository,
 } from "@ctrl-zebra/core";
-import { type PersistedEventRecord, persistenceFormatVersion } from "@ctrl-zebra/protocol";
+import {
+  maxTokenCount,
+  type PersistedEventRecord,
+  persistenceFormatVersion,
+} from "@ctrl-zebra/protocol";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -152,6 +156,66 @@ describe("Session recovery", () => {
         ],
       },
       reasoning: { sessionId: "session-1", blocks: [], runTruncated: false },
+    });
+  });
+
+  it("recovers cumulative and partial Provider Usage without treating it as model history", async () => {
+    const repository = new InMemorySessionRepository();
+    await repository.create(manifest("session-usage", "2026-08-10T00:00:00.000Z"));
+    await repository.appendEvent("session-usage", {
+      sequence: 1,
+      recordedAt: "2026-08-10T00:00:00.000Z",
+      event: {
+        type: "session.user-message",
+        data: {
+          messageId: "message-usage",
+          sessionId: "session-usage",
+          createdAt: "2026-08-10T00:00:00.000Z",
+          role: "user",
+          content: "Count",
+        },
+      },
+    });
+    await repository.appendEvent("session-usage", {
+      sequence: 2,
+      recordedAt: "2026-08-10T00:00:01.000Z",
+      event: { type: "session.usage", data: { inputTokens: 4, totalTokens: 6 } },
+    });
+    await repository.appendEvent("session-usage", {
+      sequence: 3,
+      recordedAt: "2026-08-10T00:00:02.000Z",
+      event: { type: "session.usage", data: { outputTokens: 2, totalTokens: 3 } },
+    });
+
+    await expect(
+      createSessionRecoveryActions(async () => repository).restore("session-usage"),
+    ).resolves.toMatchObject({
+      session: {
+        usage: { inputTokens: 4, outputTokens: 2, totalTokens: 9 },
+        messages: [{ role: "user", content: "Count" }],
+      },
+    });
+  });
+
+  it("rejects cumulative Provider Usage overflow as corrupt", async () => {
+    const repository = new InMemorySessionRepository();
+    await repository.create(manifest("session-usage-overflow", "2026-08-10T00:00:00.000Z"));
+    await repository.appendEvent("session-usage-overflow", {
+      sequence: 1,
+      recordedAt: "2026-08-10T00:00:00.000Z",
+      event: { type: "session.usage", data: { inputTokens: maxTokenCount } },
+    });
+    await repository.appendEvent("session-usage-overflow", {
+      sequence: 2,
+      recordedAt: "2026-08-10T00:00:01.000Z",
+      event: { type: "session.usage", data: { inputTokens: 1 } },
+    });
+
+    await expect(
+      createSessionRecoveryActions(async () => repository).restore("session-usage-overflow"),
+    ).rejects.toMatchObject({
+      name: "SessionRecoveryError",
+      code: "corrupt",
     });
   });
 

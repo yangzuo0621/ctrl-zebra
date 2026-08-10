@@ -181,6 +181,16 @@ export class WebviewRunMessageHandler {
       return;
     }
 
+    if (event.type === "agent.usage") {
+      this.post({
+        protocolVersion,
+        type: "extension/token-usage",
+        requestId: run.requestId,
+        usage: event.usage,
+      });
+      return;
+    }
+
     if (event.type === "agent.tool-state") {
       if (!("result" in event)) {
         this.post({

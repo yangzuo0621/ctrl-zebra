@@ -7,6 +7,7 @@ import {
   type AgentTool,
   EmptyAgentResponseError,
   InvalidModelHistoryError,
+  InvalidModelUsageError,
   InvalidSessionStatusTransitionError,
   MaxToolStepsExceededError,
   type ModelEvent,
@@ -732,6 +733,11 @@ describe("AgentRuntime", () => {
         status: "streaming",
       },
       { type: "agent.text-delta", sessionId: "session-1", text: "Hel" },
+      {
+        type: "agent.usage",
+        sessionId: "session-1",
+        usage: { inputTokens: 3, outputTokens: 1, totalTokens: 4 },
+      },
       { type: "agent.text-delta", sessionId: "session-1", text: "lo" },
       {
         type: "session.status-changed",
@@ -740,6 +746,89 @@ describe("AgentRuntime", () => {
         status: "completed",
       },
     ]);
+  });
+
+  it("emits one bounded Provider Usage event per model response and skips missing Usage", async () => {
+    const events: AgentRuntimeEvent[] = [];
+    const gateway = createScriptedModelGateway(
+      [
+        [
+          { type: "text.delta", text: "First" },
+          { type: "usage", usage: { inputTokens: 2, outputTokens: 1, totalTokens: 3 } },
+          { type: "usage", usage: { inputTokens: 2, outputTokens: 1, totalTokens: 3 } },
+          { type: "tool.call", call: { id: "call-usage", name: "lookup_zebra", input: {} } },
+          { type: "finish", reason: "tool-calls" },
+        ],
+        [
+          { type: "text.delta", text: "Second" },
+          { type: "usage", usage: { outputTokens: 4 } },
+          { type: "finish", reason: "stop" },
+        ],
+      ],
+      [],
+    );
+    const registry = new ToolRegistry();
+    registry.register({
+      name: "lookup_zebra",
+      description: "Look up a zebra.",
+      inputSchema: emptyInputSchema,
+      risk: "read",
+      parseInput: () => ({}),
+      async execute() {
+        return { output: { ok: true }, truncated: false };
+      },
+    });
+    const runtime = new AgentRuntime(gateway, { emit: (event) => events.push(event) }, registry);
+
+    await runtime.run(
+      { ...userMessage, content: "Inspect workspace." },
+      new AbortController().signal,
+    );
+
+    expect(events.filter((event) => event.type === "agent.usage")).toEqual([
+      {
+        type: "agent.usage",
+        sessionId: "session-1",
+        usage: { inputTokens: 2, outputTokens: 1, totalTokens: 3 },
+      },
+      { type: "agent.usage", sessionId: "session-1", usage: { outputTokens: 4 } },
+    ]);
+  });
+
+  it("rejects invalid Provider Usage and never emits it after cancellation", async () => {
+    const invalidEvents: AgentRuntimeEvent[] = [];
+    const invalidRuntime = new AgentRuntime(
+      createModelGateway([
+        { type: "usage", usage: { inputTokens: -1 } },
+        { type: "text.delta", text: "ignored" },
+        { type: "finish", reason: "stop" },
+      ]),
+      { emit: (event) => invalidEvents.push(event) },
+    );
+    await expect(
+      invalidRuntime.run(userMessage, new AbortController().signal),
+    ).rejects.toBeInstanceOf(InvalidModelUsageError);
+    expect(invalidEvents.some((event) => event.type === "agent.usage")).toBe(false);
+
+    const controller = new AbortController();
+    const lateEvents: AgentRuntimeEvent[] = [];
+    const lateRuntime = new AgentRuntime(
+      createModelGateway([
+        { type: "text.delta", text: "before" },
+        { type: "usage", usage: { totalTokens: 7 } },
+        { type: "finish", reason: "stop" },
+      ]),
+      {
+        emit: (event) => {
+          lateEvents.push(event);
+          if (event.type === "agent.text-delta") {
+            controller.abort(new Error("cancelled"));
+          }
+        },
+      },
+    );
+    await expect(lateRuntime.run(userMessage, controller.signal)).resolves.toBeUndefined();
+    expect(lateEvents.some((event) => event.type === "agent.usage")).toBe(false);
   });
 
   it("publishes reasoning and text in source order with run-scoped block IDs", async () => {

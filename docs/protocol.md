@@ -90,6 +90,26 @@ Live message delivery preserves the exact accepted Runtime event order relative 
 block may occur in a run, including across Tool steps. An empty start/end lifecycle remains
 protocol-valid but does not create visible Webview content.
 
+## Token Usage Messages
+
+Provider Usage is delivered as a dedicated Extension-to-Webview event and never as text or Tool
+content. `extension/token-usage` is the strict object `{ protocolVersion, type:
+"extension/token-usage", requestId, usage }`; `usage` may contain any subset of non-negative integer
+`inputTokens`, `outputTokens`, and `totalTokens`, each bounded to `2,000,000`. An empty object is a
+valid explicit indication that no count was supplied. The values are actual Provider-reported usage
+only; prices, billing, and client estimates are not represented.
+
+The Extension preserves accepted source order and emits at most one Usage message per model step;
+an empty Provider report is consumed as no usable count and produces no live or persisted Usage
+event.
+The Webview accumulates each present field independently for the active Session projection, keeps
+missing fields unknown, and labels a partial projection as partial. A cumulative addition above
+`2,000,000` is rejected by the shared merge rule: the live projection becomes explicitly unavailable
+for that Session, including continuations, instead of being clamped. A terminal response with no
+Usage shows an explicit unavailable state instead of an estimate or fabricated zero. Duplicate,
+stale, mismatched, malformed, or post-terminal Usage messages are ignored without persistence or UI
+side effects.
+
 Reasoning text is well-formed Unicode and each delta contains 1–8,192 Unicode code points and at
 most 32,768 UTF-8 bytes. The Extension collector also enforces these cumulative ceilings without
 first constructing the complete value:
@@ -113,8 +133,10 @@ the reason is `utf8-bytes`; if block and run ceilings are crossed by the same de
 is delivered first and the run marker second. Counters saturate at their ceilings and do not grow
 with discarded content.
 
-Session restoration does not add fields to the existing strict `extension/session-restored`
-message. For every successful restore, the Extension first sends one correlated
+Reasoning restoration does not add fields to the existing strict `extension/session-restored`
+message. The additive optional `usage` field carries the validated cumulative Provider counts when
+available and is absent for legacy Sessions or responses without usable counts. For every successful
+restore, the Extension first sends one correlated
 `extension/reasoning-restored` message containing:
 
 - the restored `sessionId`;

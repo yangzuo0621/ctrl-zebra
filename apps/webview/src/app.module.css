@@ -196,6 +196,25 @@
   font-size: var(--cz-font-size-sm);
 }
 
+.tokenUsage {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cz-space-2);
+  align-items: baseline;
+  margin: 0;
+  color: var(--cz-color-muted);
+  font-size: var(--cz-font-size-xs);
+}
+
+.tokenUsageTitle {
+  color: var(--cz-color-fg);
+  font-weight: var(--cz-font-weight-semibold);
+}
+
+.tokenUsageUnavailable {
+  font-style: italic;
+}
+
 .composer {
   display: flex;
   flex-direction: column;

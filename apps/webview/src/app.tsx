@@ -12,6 +12,7 @@ import { McpPanel } from "./mcp-panel.js";
 import { createMcpStore } from "./mcp-store.js";
 import { OnboardingCard } from "./onboarding-card.js";
 import { ReasoningSummary } from "./reasoning-summary.js";
+import { TokenUsageSummary } from "./token-usage-summary.js";
 import { ToolCallCard } from "./tool-call-card.js";
 import { Button } from "./ui/button.js";
 import { getWebviewHost, type WebviewHost } from "./vscode-api.js";
@@ -78,6 +79,7 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
   const runError = useStore(store, (state) => state.runError);
   const reasoningAnnouncement = useStore(store, (state) => state.reasoningAnnouncement);
   const sessionAnnouncement = useStore(store, (state) => state.sessionAnnouncement);
+  const usage = useStore(store, (state) => state.usage);
   const approval = useStore(approvalStore, (state) => state.current);
   const pendingDecision = useStore(approvalStore, (state) => state.pendingDecision);
 
@@ -356,6 +358,8 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
             {runError}
           </p>
         )}
+
+        <TokenUsageSummary usage={usage} status={status} />
 
         <form className={styles.composer} onSubmit={handleSubmit}>
           <div className={styles.composerBox}>

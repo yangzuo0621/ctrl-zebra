@@ -607,6 +607,11 @@ describe("handleWebviewMessage", () => {
           });
           emit({ type: "agent.text-delta", sessionId: "session-1", text: "Hel" });
           emit({
+            type: "agent.usage",
+            sessionId: "session-1",
+            usage: { inputTokens: 12, outputTokens: 4, totalTokens: 16 },
+          });
+          emit({
             type: "session.reasoning-start",
             sessionId: "session-other",
             blockId: "mismatched",
@@ -702,6 +707,12 @@ describe("handleWebviewMessage", () => {
         type: "extension/text-delta",
         requestId: "request-1",
         text: "Hel",
+      },
+      {
+        protocolVersion,
+        type: "extension/token-usage",
+        requestId: "request-1",
+        usage: { inputTokens: 12, outputTokens: 4, totalTokens: 16 },
       },
       {
         protocolVersion,
@@ -815,6 +826,11 @@ describe("handleWebviewMessage", () => {
       requestId: "request-1",
     });
     emitRuntimeEvent?.({ type: "agent.text-delta", sessionId: "session-1", text: "late" });
+    emitRuntimeEvent?.({
+      type: "agent.usage",
+      sessionId: "session-1",
+      usage: { totalTokens: 99 },
+    });
     emitRuntimeEvent?.({
       type: "session.reasoning-delta",
       sessionId: "session-1",

@@ -420,9 +420,17 @@ function projectPersistedEvents(
   sources: ReadonlyMap<string, RuntimeMcpToolSource> | undefined,
 ): readonly { readonly type: string; readonly data: JsonValue }[] {
   const { type, sessionId: _sessionId, ...rawData } = event;
-  const data = event.type === "agent.tool-state" ? omitUiSource(rawData) : rawData;
+  const data =
+    event.type === "agent.tool-state"
+      ? omitUiSource(rawData)
+      : event.type === "agent.usage"
+        ? event.usage
+        : rawData;
   const events: { readonly type: string; readonly data: JsonValue }[] = [
-    { type, data: jsonValueSchema.parse(data) },
+    {
+      type: event.type === "agent.usage" ? "session.usage" : type,
+      data: jsonValueSchema.parse(data),
+    },
   ];
   if (event.type !== "agent.tool-state") {
     return events;

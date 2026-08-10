@@ -187,6 +187,7 @@ export type {
   ShowApprovalDiffMessage,
   SubmitMessage,
   TextDeltaMessage,
+  TokenUsageMessage,
   ToolStateMessage,
   WebviewToExtensionMessage,
 } from "./messages.js";
@@ -245,6 +246,7 @@ export {
   submitMessageSchema,
   successToolStateMessageSchema,
   textDeltaMessageSchema,
+  tokenUsageMessageSchema,
   toolStateMessageSchema,
   webviewToExtensionMessageSchema,
 } from "./messages.js";
@@ -258,6 +260,7 @@ export type {
   PersistedMcpToolSource,
   PersistedMessageRecord,
   PersistedReasoningEventPayload,
+  PersistedUsageEventPayload,
   SessionManifest,
   SessionPersistencePaths,
 } from "./persistence.js";
@@ -276,6 +279,7 @@ export {
   persistedMessageRecordSchema,
   persistedReasoningEventPayloadSchema,
   persistedSessionIdSchema,
+  persistedUsageEventPayloadSchema,
   persistenceCheckpointsDirectory,
   persistenceFormatDirectory,
   persistenceFormatVersion,
@@ -356,3 +360,11 @@ export {
   toolRiskSchema,
   toolSuccessResultSchema,
 } from "./tool.js";
+export type { TokenUsage, TokenUsageMergeResult } from "./usage.js";
+export {
+  hasTokenUsage,
+  maxTokenCount,
+  mergeTokenUsage,
+  tokenCountSchema,
+  tokenUsageSchema,
+} from "./usage.js";

@@ -133,6 +133,14 @@ describe("Webview protocol messages", () => {
     expect(
       extensionToWebviewMessageSchema.parse(JSON.parse(JSON.stringify(sessionStarted)) as unknown),
     ).toEqual(sessionStarted);
+
+    const usage = {
+      protocolVersion,
+      type: "extension/token-usage",
+      requestId: "request-2",
+      usage: { inputTokens: 12, outputTokens: 4, totalTokens: 16 },
+    } as const;
+    expect(extensionToWebviewMessageSchema.parse(usage)).toEqual(usage);
   });
 
   describe("multi-turn Session commands", () => {
@@ -473,6 +481,14 @@ describe("Webview protocol messages", () => {
         requestId: "request-1",
         call: { id: "call-1", name: "read_file", input: {} },
         status: "success",
+      }).success,
+    ).toBe(false);
+    expect(
+      extensionToWebviewMessageSchema.safeParse({
+        protocolVersion,
+        type: "extension/token-usage",
+        requestId: "request-1",
+        usage: { inputTokens: -1 },
       }).success,
     ).toBe(false);
   });

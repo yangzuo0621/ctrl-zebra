@@ -9,6 +9,7 @@ import {
 } from "@ctrl-zebra/core";
 import {
   assistantMessageSchema,
+  hasTokenUsage,
   type JsonValue,
   maxReasoningBlockCodePoints,
   maxReasoningBlocksPerRun,
@@ -16,12 +17,15 @@ import {
   maxReasoningRunCodePoints,
   maxReasoningRunUtf8Bytes,
   measureReasoningText,
+  mergeTokenUsage,
   persistedReasoningEventPayloadSchema,
   type RestoredReasoning,
   type RestoredSession,
   restoredReasoningSchema,
   restoredSessionSchema,
   type SessionSummary,
+  type TokenUsage,
+  tokenUsageSchema,
   userMessageSchema,
 } from "@ctrl-zebra/protocol";
 
@@ -140,11 +144,33 @@ export function createSessionRecoveryActions(
           status,
           messages,
           eventLogTailDamaged: record.eventLogTailDamaged,
+          usage: recoverUsage(record),
         }),
         reasoning: recoverReasoning(record),
       };
     },
   };
+}
+
+function recoverUsage(record: SessionRecord): TokenUsage | undefined {
+  let usage: TokenUsage | undefined;
+
+  for (const persisted of record.events) {
+    if (persisted.event.type !== "session.usage") {
+      continue;
+    }
+    const parsed = tokenUsageSchema.safeParse(persisted.event.data);
+    if (!parsed.success) {
+      throw new SessionRecoveryError("corrupt");
+    }
+    const merged = mergeTokenUsage(usage, parsed.data);
+    if (!merged.ok) {
+      throw new SessionRecoveryError("corrupt");
+    }
+    usage = merged.usage;
+  }
+
+  return usage === undefined || !hasTokenUsage(usage) ? undefined : usage;
 }
 
 interface RecoveredBlock {

@@ -56,12 +56,14 @@ export type {
   AgentRuntimeRunOptions,
   AgentTextDeltaEvent,
   AgentToolStateEvent,
+  AgentUsageEvent,
   ModelHistoryProvider,
 } from "./agent-runtime.js";
 export {
   AgentRuntime,
   defaultMaxToolSteps,
   EmptyAgentResponseError,
+  InvalidModelUsageError,
   MaxToolStepsExceededError,
   SessionIdentityMismatchError,
   UnexpectedToolCallError,

@@ -3,6 +3,7 @@ import {
   type ApprovalStatus,
   approvalRequestSchema,
   type CheckpointRunId,
+  hasTokenUsage,
   type JsonValue,
   jsonValueSchema,
   type McpPromptConfirmation,
@@ -14,6 +15,7 @@ import {
   type ToolErrorResult,
   type ToolResult,
   type ToolSuccessResult,
+  tokenUsageSchema,
   toolCallSchema,
   toolResultSchema,
   type UserMessage,
@@ -50,6 +52,12 @@ export interface AgentTextDeltaEvent extends DomainEvent {
   readonly type: "agent.text-delta";
   readonly sessionId: SessionId;
   readonly text: string;
+}
+
+export interface AgentUsageEvent extends DomainEvent {
+  readonly type: "agent.usage";
+  readonly sessionId: SessionId;
+  readonly usage: import("@ctrl-zebra/protocol").TokenUsage;
 }
 
 export interface AgentReasoningStartEvent extends DomainEvent {
@@ -95,6 +103,7 @@ export type AgentToolStateEvent =
 
 export type AgentRuntimeEvent =
   | AgentTextDeltaEvent
+  | AgentUsageEvent
   | AgentReasoningEvent
   | AgentToolStateEvent
   | AgentApprovalStateEvent
@@ -166,6 +175,13 @@ export class UnexpectedToolCallError extends Error {
   constructor(readonly toolName: string) {
     super(`The model requested Tool "${toolName}" when tools were unavailable for this request.`);
     this.name = "UnexpectedToolCallError";
+  }
+}
+
+export class InvalidModelUsageError extends Error {
+  constructor() {
+    super("ModelGateway emitted invalid token usage.");
+    this.name = "InvalidModelUsageError";
   }
 }
 
@@ -394,6 +410,7 @@ export class AgentRuntime {
           };
     const reasoningBlocks = new Map<string, string>();
     let openReasoningBlock: string | undefined;
+    let usageSeen = false;
 
     for await (const event of this.#modelGateway.stream(request, signal)) {
       signal.throwIfAborted();
@@ -445,6 +462,20 @@ export class AgentRuntime {
           blockId: runtimeBlockId,
         });
         signal.throwIfAborted();
+      } else if (event.type === "usage") {
+        const usageResult = tokenUsageSchema.safeParse(event.usage);
+        if (!usageResult.success) {
+          throw new InvalidModelUsageError();
+        }
+        if (!usageSeen && hasTokenUsage(usageResult.data)) {
+          usageSeen = true;
+          this.#eventSink.emit({
+            type: "agent.usage",
+            sessionId,
+            usage: normalizeTokenUsage(usageResult.data),
+          });
+          signal.throwIfAborted();
+        }
       } else if (event.type === "tool.call") {
         if (!offerTools) {
           throw new UnexpectedToolCallError(event.call.name);
@@ -761,6 +792,16 @@ export class AgentRuntime {
       result,
     });
   }
+}
+
+function normalizeTokenUsage(
+  usage: import("@ctrl-zebra/protocol").TokenUsage,
+): import("@ctrl-zebra/protocol").TokenUsage {
+  return {
+    ...(usage.inputTokens === undefined ? {} : { inputTokens: usage.inputTokens }),
+    ...(usage.outputTokens === undefined ? {} : { outputTokens: usage.outputTokens }),
+    ...(usage.totalTokens === undefined ? {} : { totalTokens: usage.totalTokens }),
+  };
 }
 
 class RunReasoningIds {

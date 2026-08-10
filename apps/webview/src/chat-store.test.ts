@@ -1,4 +1,8 @@
-import { type ExtensionToWebviewMessage, protocolVersion } from "@ctrl-zebra/protocol";
+import {
+  type ExtensionToWebviewMessage,
+  maxTokenCount,
+  protocolVersion,
+} from "@ctrl-zebra/protocol";
 import { describe, expect, it, vi } from "vitest";
 
 import { createChatStore } from "./chat-store.js";
@@ -227,6 +231,119 @@ describe("chat reasoning store", () => {
     expect(harness.store.getState().activeRequestId).toBeUndefined();
   });
 
+  it("accumulates partial provider usage during a run and fences terminal updates", () => {
+    const harness = createHarness();
+    startRun(harness);
+    harness.receive({
+      protocolVersion,
+      type: "extension/token-usage",
+      requestId: "request-1",
+      usage: { inputTokens: 7, totalTokens: 10 },
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/token-usage",
+      requestId: "request-1",
+      usage: { outputTokens: 3, totalTokens: 12 },
+    });
+
+    expect(harness.store.getState().usage).toEqual({
+      inputTokens: 7,
+      outputTokens: 3,
+      totalTokens: 22,
+    });
+
+    harness.receive({
+      protocolVersion,
+      type: "extension/run-status",
+      requestId: "request-1",
+      status: "completed",
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/token-usage",
+      requestId: "request-1",
+      usage: { inputTokens: 99, outputTokens: 99, totalTokens: 99 },
+    });
+
+    expect(harness.store.getState().usage).toEqual({
+      inputTokens: 7,
+      outputTokens: 3,
+      totalTokens: 22,
+    });
+    expect(harness.store.getState().activeRequestId).toBeUndefined();
+  });
+
+  it("downgrades cumulative overflow instead of clamping and ignores later reports", () => {
+    const harness = createHarness();
+    startRun(harness);
+    harness.receive({
+      protocolVersion,
+      type: "extension/token-usage",
+      requestId: "request-1",
+      usage: { inputTokens: maxTokenCount },
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/token-usage",
+      requestId: "request-1",
+      usage: { inputTokens: 1 },
+    });
+
+    expect(harness.store.getState().usage).toBeUndefined();
+    expect(harness.store.getState().runError).toBe(
+      "Provider usage exceeded the supported Session limit.",
+    );
+
+    harness.receive({
+      protocolVersion,
+      type: "extension/token-usage",
+      requestId: "request-1",
+      usage: { outputTokens: 1 },
+    });
+    expect(harness.store.getState().usage).toBeUndefined();
+  });
+
+  it("keeps overflow unavailable across a completed continuation", () => {
+    const harness = createHarness(["request-1", "request-2"]);
+    startRun(harness);
+    harness.receive({
+      protocolVersion,
+      type: "extension/token-usage",
+      requestId: "request-1",
+      usage: { inputTokens: maxTokenCount },
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/token-usage",
+      requestId: "request-1",
+      usage: { inputTokens: 1 },
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/run-status",
+      requestId: "request-1",
+      status: "completed",
+    });
+
+    expect(harness.store.getState().usage).toBeUndefined();
+    expect(harness.store.getState().submit("Continue here.")).toBe(true);
+    harness.receive({
+      protocolVersion,
+      type: "extension/run-status",
+      requestId: "request-2",
+      status: "streaming",
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/token-usage",
+      requestId: "request-2",
+      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+    });
+
+    expect(harness.store.getState().usage).toBeUndefined();
+  });
+
   it("removes an empty completed lifecycle and defensively truncates oversized blocks", () => {
     const harness = createHarness();
     startRun(harness);
@@ -318,6 +435,7 @@ describe("chat reasoning store", () => {
         sessionId: "session-1",
         status: "interrupted",
         eventLogTailDamaged: false,
+        usage: { inputTokens: 10, totalTokens: 12 },
         messages: [
           {
             messageId: "user-1",
@@ -346,6 +464,7 @@ describe("chat reasoning store", () => {
       ],
     });
     expect(harness.store.getState().reasoningAnnouncement).toBe("");
+    expect(harness.store.getState().usage).toEqual({ inputTokens: 10, totalTokens: 12 });
   });
 
   it("discards a staged restore when the next message does not match", () => {
@@ -429,6 +548,48 @@ describe("chat reasoning store", () => {
     );
   });
 
+  it("keeps usage cumulative for a continuation within the same Session", () => {
+    const harness = createHarness(["request-new", "request-continue"]);
+
+    expect(harness.store.getState().submit("Start here.")).toBe(true);
+    harness.receive({
+      protocolVersion,
+      type: "extension/token-usage",
+      requestId: "request-new",
+      usage: { inputTokens: 4, outputTokens: 2, totalTokens: 6 },
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/session-started",
+      requestId: "request-new",
+      sessionId: "session-host",
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/run-status",
+      requestId: "request-new",
+      status: "completed",
+    });
+
+    expect(harness.store.getState().submit("Continue here.")).toBe(true);
+    expect(harness.store.getState().usage).toEqual({
+      inputTokens: 4,
+      outputTokens: 2,
+      totalTokens: 6,
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/token-usage",
+      requestId: "request-continue",
+      usage: { inputTokens: 3, totalTokens: 5 },
+    });
+    expect(harness.store.getState().usage).toEqual({
+      inputTokens: 7,
+      outputTokens: 2,
+      totalTokens: 11,
+    });
+  });
+
   it("fences a continuation when the Host reports a different Session", () => {
     const harness = createHarness(["request-1", "request-2"]);
     startRun(harness);
@@ -491,6 +652,12 @@ describe("chat reasoning store", () => {
     harness.flush();
     harness.receive({
       protocolVersion,
+      type: "extension/token-usage",
+      requestId: "request-1",
+      usage: { inputTokens: 4, outputTokens: 2, totalTokens: 6 },
+    });
+    harness.receive({
+      protocolVersion,
       type: "extension/run-status",
       requestId: "request-1",
       status: "completed",
@@ -505,6 +672,7 @@ describe("chat reasoning store", () => {
       sessionSelectionId: undefined,
       activeRequestId: undefined,
       restoring: false,
+      usage: undefined,
     });
 
     harness.receive({
