@@ -159,9 +159,9 @@ those records.
 
 The Extension persists the bounded Provider Usage projection as the additive version `1` event
 `session.usage` with strict data `{ inputTokens?, outputTokens?, totalTokens? }`. Each present value
-is an actual non-negative Provider count no greater than `2,000,000`; an empty object preserves the
-fact that a step supplied no count but does not create a visible zero. Prices, billing data,
-estimates, SDK metadata, and raw responses are never persisted.
+is an actual non-negative Provider count no greater than `2,000,000`. An empty Provider report is
+consumed as no usable count and is not persisted; missing fields remain unknown. Prices, billing
+data, estimates, SDK metadata, and raw responses are never persisted.
 
 Usage events retain their source order with text, reasoning, Tool, and status events, but remain
 outside model history. Recovery validates every recognized Usage payload and sums each field

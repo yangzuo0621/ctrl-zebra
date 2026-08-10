@@ -99,7 +99,9 @@ content. `extension/token-usage` is the strict object `{ protocolVersion, type:
 valid explicit indication that no count was supplied. The values are actual Provider-reported usage
 only; prices, billing, and client estimates are not represented.
 
-The Extension preserves accepted source order and emits at most one Usage message per model step.
+The Extension preserves accepted source order and emits at most one Usage message per model step;
+an empty Provider report is consumed as no usable count and produces no live or persisted Usage
+event.
 The Webview accumulates each present field independently for the active request, keeps missing
 fields unknown, and labels a partial projection as partial. A terminal response with no Usage shows
 an explicit unavailable state instead of an estimate or fabricated zero. Duplicate, stale,
@@ -129,8 +131,10 @@ the reason is `utf8-bytes`; if block and run ceilings are crossed by the same de
 is delivered first and the run marker second. Counters saturate at their ceilings and do not grow
 with discarded content.
 
-Session restoration does not add fields to the existing strict `extension/session-restored`
-message. For every successful restore, the Extension first sends one correlated
+Reasoning restoration does not add fields to the existing strict `extension/session-restored`
+message. The additive optional `usage` field carries the validated cumulative Provider counts when
+available and is absent for legacy Sessions or responses without usable counts. For every successful
+restore, the Extension first sends one correlated
 `extension/reasoning-restored` message containing:
 
 - the restored `sessionId`;
