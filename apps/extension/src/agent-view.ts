@@ -79,70 +79,55 @@ export function createAgentViewHtml(
 }
 
 class AgentViewProvider implements WebviewViewProvider {
-  constructor(
-    private readonly extensionUri: Uri,
-    private readonly chatRunner: ChatRunner,
-    private readonly approvalActions?: ApprovalUiActions,
-    private readonly sessionActions?: SessionRecoveryActions,
-    private readonly checkpointActions?: CheckpointActions,
-    private readonly reportDeliveryFailure: () => void = () => {},
-    private readonly reportDisplay: () => void = () => {},
-    private readonly reportRunFailure: (error: unknown) => void = () => {},
-    private readonly createResourceActions?: () => McpResourceActions,
-    private readonly createPromptActions?: () => McpPromptActions,
-    private readonly createMcpActions?: () => McpWebviewActions,
-  ) {}
+  constructor(private readonly options: AgentViewProviderOptions) {}
 
   resolveWebviewView(webviewView: WebviewView): void {
-    webviewView.webview.options = createAgentViewOptions(this.extensionUri);
+    webviewView.webview.options = createAgentViewOptions(this.options.extensionUri);
     const nonce = randomBytes(16).toString("hex");
-    webviewView.webview.html = createAgentViewHtml(webviewView.webview, this.extensionUri, nonce);
-
-    bindWebviewMessageController(
+    webviewView.webview.html = createAgentViewHtml(
       webviewView.webview,
-      webviewView,
-      this.reportDeliveryFailure,
-      this.chatRunner,
-      this.approvalActions,
-      this.sessionActions,
-      this.checkpointActions,
-      this.reportRunFailure,
-      this.createResourceActions?.(),
-      this.createPromptActions?.(),
-      this.createMcpActions?.(),
+      this.options.extensionUri,
+      nonce,
     );
-    this.reportDisplay();
+
+    bindWebviewMessageController({
+      channel: webviewView.webview,
+      lifetime: webviewView,
+      reportDeliveryFailure: this.options.reportDeliveryFailure,
+      chatRunner: this.options.chatRunner,
+      approvalActions: this.options.approvalActions,
+      sessionActions: this.options.sessionActions,
+      checkpointActions: this.options.checkpointActions,
+      reportRunFailure: this.options.reportRunFailure,
+      resourceActions: this.options.createResourceActions?.(),
+      promptActions: this.options.createPromptActions?.(),
+      mcpActions: this.options.createMcpActions?.(),
+    });
+    this.options.reportDisplay?.();
   }
 }
 
-export function registerAgentView(
-  extensionUri: Uri,
-  registrar: WebviewViewRegistrar,
-  chatRunner: ChatRunner,
-  approvalActions?: ApprovalUiActions,
-  sessionActions?: SessionRecoveryActions,
-  checkpointActions?: CheckpointActions,
-  reportDeliveryFailure?: () => void,
-  reportDisplay?: () => void,
-  reportRunFailure?: (error: unknown) => void,
-  createResourceActions?: () => McpResourceActions,
-  createPromptActions?: () => McpPromptActions,
-  createMcpActions?: () => McpWebviewActions,
-): Disposable {
-  return registrar(
-    agentViewId,
-    new AgentViewProvider(
-      extensionUri,
-      chatRunner,
-      approvalActions,
-      sessionActions,
-      checkpointActions,
-      reportDeliveryFailure,
-      reportDisplay,
-      reportRunFailure,
-      createResourceActions,
-      createPromptActions,
-      createMcpActions,
-    ),
-  );
+interface AgentViewProviderOptions {
+  readonly extensionUri: Uri;
+  readonly chatRunner: ChatRunner;
+  readonly approvalActions?: ApprovalUiActions;
+  readonly sessionActions?: SessionRecoveryActions;
+  readonly checkpointActions?: CheckpointActions;
+  readonly reportDeliveryFailure?: () => void;
+  readonly reportDisplay?: () => void;
+  readonly reportRunFailure?: (error: unknown) => void;
+  readonly createResourceActions?: () => McpResourceActions;
+  readonly createPromptActions?: () => McpPromptActions;
+  readonly createMcpActions?: () => McpWebviewActions;
+}
+
+interface RegisterAgentViewOptions extends AgentViewProviderOptions {
+  readonly registrar: WebviewViewRegistrar;
+}
+
+export function registerAgentView({
+  registrar,
+  ...providerOptions
+}: RegisterAgentViewOptions): Disposable {
+  return registrar(agentViewId, new AgentViewProvider(providerOptions));
 }

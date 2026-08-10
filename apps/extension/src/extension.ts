@@ -339,17 +339,17 @@ export function activate(context: ExtensionContext): void {
       showInformationMessage: (message) => window.showInformationMessage(message),
       showErrorMessage: (message) => window.showErrorMessage(message),
     }),
-    registerAgentView(
-      context.extensionUri,
-      (viewId, provider) => window.registerWebviewViewProvider(viewId, provider),
+    registerAgentView({
+      extensionUri: context.extensionUri,
+      registrar: (viewId, provider) => window.registerWebviewViewProvider(viewId, provider),
       chatRunner,
-      {
+      approvalActions: {
         showDiff: (_requestId, approvalId) => approvalWorkflow.showDiff(approvalId),
         decide: (_requestId, approvalId, decision) => approvalWorkflow.decide(approvalId, decision),
       },
-      createSessionRecoveryActions(selectSessionRepository),
+      sessionActions: createSessionRecoveryActions(selectSessionRepository),
       checkpointActions,
-      () => {
+      reportDeliveryFailure: () => {
         logger.error({
           event: "webview_response_delivery_failed",
           component: "agent_view",
@@ -357,20 +357,22 @@ export function activate(context: ExtensionContext): void {
           errorCode: "delivery_failed",
         });
       },
-      () => performanceBaseline.recordFirstWebviewDisplay(),
-      (error) => {
+      reportDisplay: () => performanceBaseline.recordFirstWebviewDisplay(),
+      reportRunFailure: (error) => {
         logger.error(getRunFailureLogEntry(error));
       },
-      () => new McpResourceActions({ connection: mcpConnection, createId: randomUUID }),
-      () => new McpPromptActions({ connection: mcpConnection, createId: randomUUID }),
-      () =>
+      createResourceActions: () =>
+        new McpResourceActions({ connection: mcpConnection, createId: randomUUID }),
+      createPromptActions: () =>
+        new McpPromptActions({ connection: mcpConnection, createId: randomUUID }),
+      createMcpActions: () =>
         new McpWebviewActions({
           connection: mcpConnection,
           openSettings: () => {
             void commands.executeCommand("workbench.action.openSettings", mcpServerSettingSection);
           },
         }),
-    ),
+    }),
   );
 
   performanceBaseline.recordActivationComplete();
