@@ -304,6 +304,46 @@ describe("chat reasoning store", () => {
     expect(harness.store.getState().usage).toBeUndefined();
   });
 
+  it("keeps overflow unavailable across a completed continuation", () => {
+    const harness = createHarness(["request-1", "request-2"]);
+    startRun(harness);
+    harness.receive({
+      protocolVersion,
+      type: "extension/token-usage",
+      requestId: "request-1",
+      usage: { inputTokens: maxTokenCount },
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/token-usage",
+      requestId: "request-1",
+      usage: { inputTokens: 1 },
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/run-status",
+      requestId: "request-1",
+      status: "completed",
+    });
+
+    expect(harness.store.getState().usage).toBeUndefined();
+    expect(harness.store.getState().submit("Continue here.")).toBe(true);
+    harness.receive({
+      protocolVersion,
+      type: "extension/run-status",
+      requestId: "request-2",
+      status: "streaming",
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/token-usage",
+      requestId: "request-2",
+      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+    });
+
+    expect(harness.store.getState().usage).toBeUndefined();
+  });
+
   it("removes an empty completed lifecycle and defensively truncates oversized blocks", () => {
     const harness = createHarness();
     startRun(harness);

@@ -111,8 +111,8 @@ This document defines the initial runtime boundaries for the CtrlZebra desktop V
   persistence, or UI side effects.
 - Session-cumulative Usage uses the shared Protocol merge rule: every field is added independently
   and a cumulative value above `2,000,000` is an explicit overflow, never a saturated count. Live
-  presentation downgrades to unavailable and ignores further Usage for that Run; recovery rejects the
-  Session as corrupt, so neither path fabricates a Provider value.
+  presentation downgrades to unavailable and ignores further Usage for that Session, including
+  continuations; recovery rejects the Session as corrupt, so neither path fabricates a Provider value.
 
 ## Provider Configuration Boundary
 

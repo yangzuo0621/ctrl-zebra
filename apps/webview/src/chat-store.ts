@@ -400,7 +400,6 @@ export function createChatStore({
         pendingTextDelta = "";
         stagedReasoningRestore = undefined;
         resetLiveReasoning();
-        usageOverflowed = false;
         const requestId = createRequestId();
         const sessionId = state.selectedSessionId;
         const assistantMessageId = `${requestId}:assistant`;

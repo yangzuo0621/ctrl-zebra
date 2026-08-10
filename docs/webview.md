@@ -119,8 +119,8 @@ This document defines the React Webview constraints established before T0103. It
   prices, billing, or estimates.
 - The projection is Session-cumulative: a continuation keeps the prior validated counts and adds the
   next Run's actual fields; New chat clears the projection. The shared bounded merge rejects a
-  cumulative overflow instead of clamping it, marks the live projection unavailable, and ignores
-  later Usage for that Run.
+  cumulative overflow instead of clamping it, marks the live projection unavailable, and keeps that
+  unavailable latch through terminal completion and continuation Runs; successful restore resets it.
 - Usage is shown in a semantic Provider-usage region after a response. Complete actual counts are
   labelled normally; partial counts are labelled partial and unknown fields use an explicit em dash.
   A terminal response without any Provider count says that usage is unavailable rather than showing
