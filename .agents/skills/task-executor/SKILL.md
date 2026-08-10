@@ -60,11 +60,16 @@ After `task-reviewer` returns `APPROVED`:
 - hand off the same branch/PR to `task-finalizer`.
 
 ### 7. Finalizer-Directed Rework
-If Task-Finalizer returns:
+If Task-Finalizer returns a structured result with:
 
-`FINALIZATION: BLOCKED`
-`Reason: IMPLEMENTATION_FIX_REQUIRED`
-`Owner: task-executor`
+```json
+{
+  "status": "BLOCKED",
+  "reason": "IMPLEMENTATION_FIX_REQUIRED",
+  "owner": "task-executor",
+  "reReviewRequired": true
+}
+```
 
 then:
 - fix only the identified implementation/workflow issue on the same PR;
