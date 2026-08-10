@@ -27,4 +27,10 @@ describe("TokenUsageSummary", () => {
 
     expect(screen.getByText("Unavailable for this response.")).toBeVisible();
   });
+
+  it("explains when a truncated response has no provider usage", () => {
+    render(<TokenUsageSummary usage={undefined} status="truncated" />);
+
+    expect(screen.getByText("Unavailable for this response.")).toBeVisible();
+  });
 });

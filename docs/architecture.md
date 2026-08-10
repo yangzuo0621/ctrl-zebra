@@ -223,7 +223,9 @@ This document defines the initial runtime boundaries for the CtrlZebra desktop V
 - One model turn may perform at most one context-overflow recovery retry. The retry must strictly
   reduce estimated input tokens; otherwise recovery stops. A second overflow is terminal for that
   Run. Summary generation remains separately bounded to at most one operation where a later task
-  supplies an approved summarizer.
+  supplies an approved summarizer. The exported Core recovery helper enforces the same one-retry
+  bound and does not invoke a summarizer; summary recovery remains deferred until that contract is
+  explicitly supplied.
   Provider retry policy may perform at most two retries after the initial attempt, and tool
   repetition detection must pause at a configured threshold no greater than 10 consecutive matching
   calls. Cancellation ends every recovery, retry, delay, summary, and tool-loop action immediately.
