@@ -2,6 +2,8 @@ import {
   InMemorySessionRepository,
   type ModelGateway,
   type ModelRequest,
+  type SessionRecord,
+  type SessionRepository,
   ToolRegistry,
 } from "@ctrl-zebra/core";
 import { describe, expect, it } from "vitest";
@@ -174,6 +176,36 @@ describe("createChatRunner", () => {
         },
         async update() {},
         async appendEvent() {},
+      },
+    });
+
+    await expect(runner.run("Hello", new AbortController().signal, () => {})).rejects.toThrow(
+      "storage unavailable",
+    );
+    expect(gatewayStarted).toBe(false);
+  });
+
+  it("does not start the model when the user message cannot be appended", async () => {
+    let gatewayStarted = false;
+    const runner = createChatRunner({
+      modelGateway: {
+        async *stream() {
+          gatewayStarted = true;
+          yield { type: "finish", reason: "stop" } as const;
+        },
+      },
+      sessionRepository: {
+        async create() {},
+        async get() {
+          return undefined;
+        },
+        async list() {
+          return [];
+        },
+        async update() {},
+        async appendEvent() {
+          throw new Error("storage unavailable");
+        },
       },
     });
 
@@ -475,6 +507,287 @@ describe("createChatRunner", () => {
           },
         },
       },
+    ]);
+  });
+
+  it("continues an existing Session with projected history without creating it again", async () => {
+    const repository = new InMemorySessionRepository();
+    const requests: ModelRequest[] = [];
+    const runner = createChatRunner({
+      modelGateway: {
+        async *stream(request) {
+          requests.push(request);
+          yield {
+            type: "text.delta",
+            text: requests.length === 1 ? "First answer" : "Second answer",
+          } as const;
+          yield { type: "finish", reason: "stop" } as const;
+        },
+      },
+      createId: (() => {
+        const ids = ["session-1", "message-1", "message-2"];
+        return () => ids.shift() ?? "unexpected-id";
+      })(),
+      now: () => new Date("2026-08-10T00:00:00.000Z"),
+      sessionRepository: repository,
+    });
+
+    await runner.run("First question", new AbortController().signal, () => {});
+    await runner.run(
+      "Second question",
+      new AbortController().signal,
+      () => {},
+      [],
+      [],
+      "session-1",
+    );
+
+    expect(requests[1]?.messages).toEqual([
+      { role: "user", content: "First question" },
+      { role: "assistant", content: "First answer" },
+      { role: "user", content: "Second question" },
+    ]);
+    expect(
+      (await repository.get("session-1"))?.events.filter(
+        ({ event }) => event.type === "session.user-message",
+      ),
+    ).toHaveLength(2);
+  });
+
+  it("does not append or start the gateway when continuation loading is cancelled", async () => {
+    const controller = new AbortController();
+    const cancellation = new Error("cancelled while loading history");
+    let signalGetStarted!: () => void;
+    const getStarted = new Promise<void>((resolve) => {
+      signalGetStarted = resolve;
+    });
+    let releaseGet!: (record: SessionRecord | undefined) => void;
+    let appendCalls = 0;
+    let gatewayStarted = false;
+    const repository: SessionRepository = {
+      async get() {
+        signalGetStarted();
+        return new Promise<SessionRecord | undefined>((resolve) => {
+          releaseGet = resolve;
+        });
+      },
+      async list() {
+        return [];
+      },
+      async create() {},
+      async update() {},
+      async appendEvent() {
+        appendCalls += 1;
+      },
+    };
+    const runner = createChatRunner({
+      modelGateway: {
+        async *stream() {
+          gatewayStarted = true;
+          yield { type: "finish", reason: "stop" } as const;
+        },
+      },
+      sessionRepository: repository,
+    });
+
+    const pending = runner.run("Continue", controller.signal, () => {}, [], [], "session-1");
+    await getStarted;
+    controller.abort(cancellation);
+    releaseGet(undefined);
+
+    await expect(pending).rejects.toBe(cancellation);
+    expect(appendCalls).toBe(0);
+    expect(gatewayStarted).toBe(false);
+  });
+
+  it("rejects a damaged-tail continuation before append or model startup", async () => {
+    let appendCalls = 0;
+    let gatewayStarted = false;
+    const repository: SessionRepository = {
+      async get() {
+        return {
+          manifest: {
+            formatVersion: 1 as const,
+            sessionId: "session-damaged",
+            status: "completed" as const,
+            createdAt: "2026-08-10T00:00:00.000Z",
+            updatedAt: "2026-08-10T00:00:00.000Z",
+            lastEventSequence: 1,
+          },
+          events: [
+            {
+              sequence: 1,
+              recordedAt: "2026-08-10T00:00:00.000Z",
+              event: {
+                type: "session.user-message",
+                data: {
+                  messageId: "message-1",
+                  sessionId: "session-damaged",
+                  createdAt: "2026-08-10T00:00:00.000Z",
+                  role: "user",
+                  content: "Interrupted question",
+                },
+              },
+            },
+          ],
+          eventLogTailDamaged: true,
+        };
+      },
+      async list() {
+        return [];
+      },
+      async create() {},
+      async update() {},
+      async appendEvent() {
+        appendCalls += 1;
+      },
+    };
+    const runner = createChatRunner({
+      modelGateway: {
+        async *stream() {
+          gatewayStarted = true;
+          yield { type: "finish", reason: "stop" } as const;
+        },
+      },
+      sessionRepository: repository,
+    });
+
+    await expect(
+      runner.run(
+        "Fresh question",
+        new AbortController().signal,
+        () => {},
+        [],
+        [],
+        "session-damaged",
+      ),
+    ).rejects.toMatchObject({ code: "corrupt" });
+    expect(appendCalls).toBe(0);
+    expect(gatewayStarted).toBe(false);
+  });
+
+  it("rejects an unknown or corrupt continuation before selecting a model response", async () => {
+    let gatewayStarted = false;
+    const runner = createChatRunner({
+      modelGateway: {
+        async *stream() {
+          gatewayStarted = true;
+          yield { type: "finish", reason: "stop" } as const;
+        },
+      },
+      sessionRepository: new InMemorySessionRepository(),
+    });
+
+    await expect(
+      runner.run("Continue", new AbortController().signal, () => {}, [], [], "missing-session"),
+    ).rejects.toMatchObject({ code: "not-found" });
+    expect(gatewayStarted).toBe(false);
+
+    const corruptRepository: SessionRepository = {
+      async get() {
+        return {
+          manifest: {
+            formatVersion: 1 as const,
+            sessionId: "session-corrupt",
+            status: "completed" as const,
+            createdAt: "2026-08-10T00:00:00.000Z",
+            updatedAt: "2026-08-10T00:00:00.000Z",
+            lastEventSequence: 1,
+          },
+          events: [
+            {
+              sequence: 1,
+              recordedAt: "2026-08-10T00:00:00.000Z",
+              event: {
+                type: "session.user-message",
+                data: {
+                  messageId: "message-1",
+                  sessionId: "session-corrupt",
+                  createdAt: "2026-08-10T00:00:00.000Z",
+                  role: "user",
+                  content: "Corrupt",
+                  extra: true,
+                },
+              },
+            },
+          ],
+          eventLogTailDamaged: false,
+        };
+      },
+      async list() {
+        return [];
+      },
+      async create() {},
+      async update() {},
+      async appendEvent() {},
+    };
+    const corruptRunner = createChatRunner({
+      modelGateway: {
+        async *stream() {
+          yield { type: "finish", reason: "stop" } as const;
+          throw new Error("must not start");
+        },
+      },
+      sessionRepository: corruptRepository,
+    });
+    await expect(
+      corruptRunner.run(
+        "Continue",
+        new AbortController().signal,
+        () => {},
+        [],
+        [],
+        "session-corrupt",
+      ),
+    ).rejects.toMatchObject({ code: "corrupt" });
+  });
+
+  it("gives a cancelled Run no history text and a continuation a fresh signal", async () => {
+    const repository = new InMemorySessionRepository();
+    const firstController = new AbortController();
+    const signals: AbortSignal[] = [];
+    const requests: ModelRequest[] = [];
+    let invocation = 0;
+    const cancellation = new Error("cancelled");
+    const runner = createChatRunner({
+      modelGateway: {
+        async *stream(request, signal) {
+          requests.push(request);
+          signals.push(signal);
+          invocation += 1;
+          if (invocation === 1) {
+            yield { type: "text.delta", text: "partial" } as const;
+            firstController.abort(cancellation);
+            signal.throwIfAborted();
+            return;
+          }
+          yield { type: "text.delta", text: "continued" } as const;
+          yield { type: "finish", reason: "stop" } as const;
+        },
+      },
+      createId: (() => {
+        const ids = ["session-cancelled", "message-1", "message-2"];
+        return () => ids.shift() ?? "unexpected-id";
+      })(),
+      now: () => new Date("2026-08-10T00:00:00.000Z"),
+      sessionRepository: repository,
+    });
+
+    await runner.run("Cancelled question", firstController.signal, () => {});
+    await runner.run(
+      "Fresh question",
+      new AbortController().signal,
+      () => {},
+      [],
+      [],
+      "session-cancelled",
+    );
+
+    expect(signals).toHaveLength(2);
+    expect(signals[0]).not.toBe(signals[1]);
+    expect(requests[1]?.messages).toEqual([
+      { role: "user", content: "Cancelled question" },
+      { role: "user", content: "Fresh question" },
     ]);
   });
 });

@@ -64,12 +64,12 @@
 **进度摘要**：
 
 - 总任务：148
-- 已完成：103
+- 已完成：104
 - 进行中：0
 - 受阻：0
-- 待开始：45
+- 待开始：44
 - 当前任务：无
-- 下一任务：T1506
+- 下一任务：T1507
 - 最后更新：2026-08-10
 
 | 阶段 | 任务 | 状态 | 完成 PR | 完成日期 |
@@ -177,7 +177,7 @@
 | 15 | T1503 | 已完成 | [#156](https://github.com/yangzuo0621/ctrl-zebra/pull/156) | 2026-08-09 |
 | 15 | T1504 | 已完成 | [#158](https://github.com/yangzuo0621/ctrl-zebra/pull/158) | 2026-08-10 |
 | 15 | T1505 | 已完成 | [#159](https://github.com/yangzuo0621/ctrl-zebra/pull/159) | 2026-08-10 |
-| 15 | T1506 | 待开始 | — | — |
+| 15 | T1506 | 已完成 | [#160](https://github.com/yangzuo0621/ctrl-zebra/pull/160) | 2026-08-10 |
 | 15 | T1507 | 待开始 | — | — |
 | 15 | T1508 | 待开始 | — | — |
 | 15 | T1509 | 待开始 | — | — |
@@ -324,5 +324,9 @@ T1401 由 [#141](https://github.com/yangzuo0621/ctrl-zebra/pull/141) 交付；T1
 [#156](https://github.com/yangzuo0621/ctrl-zebra/pull/156) 交付，跨平台 CI 基线已完成；T1504 由
 [#157](https://github.com/yangzuo0621/ctrl-zebra/pull/157) 提供约束并由
 [#158](https://github.com/yangzuo0621/ctrl-zebra/pull/158) 完成 Protocol 实现，已交付。T1505 已由
-[#159](https://github.com/yangzuo0621/ctrl-zebra/pull/159) 交付；当前执行点为无，下一任务为
-[T1506：重建持久化历史并续接 Extension Run](roadmap/phases/phase-15.md#t1506重建持久化历史并续接-extension-run)。
+[#159](https://github.com/yangzuo0621/ctrl-zebra/pull/159) 交付。T1506 已在当前任务分支完成 Host-owned 持久化历史投影、
+续接 Session 的 Run 启动与取消/关闭竞态隔离，并通过聚焦的 48 个测试、全库 1,273 个单元测试、
+TypeScript 类型检查与 Biome 检查；Standards 与 Spec 独立审查均已批准，由
+[#160](https://github.com/yangzuo0621/ctrl-zebra/pull/160) 交付。
+当前执行点为无，下一任务为
+[T1507：实现 Webview 会话延续与 New chat](roadmap/phases/phase-15.md#t1507实现-webview-会话延续与-new-chat)。
