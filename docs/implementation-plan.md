@@ -227,7 +227,7 @@
 
 ## 5. 阶段规格索引
 
-阶段 0–14 已完成，完整任务正文均已按阶段归档。阶段 15–22 已规划，等待依次开始。
+阶段 0–15 已完成，完整任务正文均已按阶段归档。阶段 16–22 已规划，等待依次开始。
 
 | 阶段 | 状态 | 详细规格 |
 |---|---|---|
@@ -246,7 +246,7 @@
 | 12 | 已完成 | [阶段 12 归档](roadmap/archive/phase-12.md) |
 | 13 | 已完成 | [阶段 13 归档](roadmap/archive/phase-13.md) |
 | 14 | 已完成 | [阶段 14 归档](roadmap/archive/phase-14.md) |
-| 15 | 进行中 | [阶段 15：多轮对话与上下文生命周期](roadmap/phases/phase-15.md) |
+| 15 | 已完成 | [阶段 15 归档](roadmap/archive/phase-15.md) |
 | 16 | 已规划 | [阶段 16：Provider 上手体验](roadmap/phases/phase-16.md) |
 | 17 | 已规划 | [阶段 17：界面一致性与内容呈现](roadmap/phases/phase-17.md) |
 | 18 | 已规划 | [阶段 18：MCP Schema 与双纪元兼容性](roadmap/phases/phase-18.md) |
@@ -308,8 +308,8 @@
 [T1303：打通 Extension 协议、持久化与恢复](roadmap/archive/phase-13.md#t1303打通-extension-协议持久化与恢复)
 以及
 [T1304：实现可访问的推理摘要 Webview 体验](roadmap/archive/phase-13.md#t1304实现可访问的推理摘要-webview-体验)
-均已完成。T1304 由 [#135](https://github.com/yangzuo0621/ctrl-zebra/pull/135) 交付。阶段 14
-已完成[受控的 MCP Client 与三类 Server 原语](roadmap/archive/phase-14.md)，包含 T1401–T1409；
+均已完成。T1304 由 [#135](https://github.com/yangzuo0621/ctrl-zebra/pull/135) 交付。阶段 14 的
+[受控的 MCP Client 与三类 Server 原语](roadmap/archive/phase-14.md) 已完成，包含 T1401–T1409；
 T1401 由 [#141](https://github.com/yangzuo0621/ctrl-zebra/pull/141) 交付；T1402 由
 [#143](https://github.com/yangzuo0621/ctrl-zebra/pull/143) 交付；T1403 由
 [#144](https://github.com/yangzuo0621/ctrl-zebra/pull/144) 交付；T1404 由
@@ -318,7 +318,8 @@ T1401 由 [#141](https://github.com/yangzuo0621/ctrl-zebra/pull/141) 交付；T1
 [#147](https://github.com/yangzuo0621/ctrl-zebra/pull/147) 交付；T1407 由
 [#148](https://github.com/yangzuo0621/ctrl-zebra/pull/148) 交付；T1408 由
 [#149](https://github.com/yangzuo0621/ctrl-zebra/pull/149) 交付；T1409 由
-[#150](https://github.com/yangzuo0621/ctrl-zebra/pull/150) 交付。阶段 15–22 已完成规划；T1501 由
+[#150](https://github.com/yangzuo0621/ctrl-zebra/pull/150) 交付。阶段 15 的
+[多轮对话与上下文生命周期](roadmap/archive/phase-15.md) 已完成，包含 T1501–T1511；阶段 16–22 已完成规划。T1501 由
 [#153](https://github.com/yangzuo0621/ctrl-zebra/pull/153) 交付；T1502 由
 [#155](https://github.com/yangzuo0621/ctrl-zebra/pull/155) 交付；T1503 由
 [#156](https://github.com/yangzuo0621/ctrl-zebra/pull/156) 交付，跨平台 CI 基线已完成；T1504 由
@@ -332,4 +333,5 @@ T1507 已由 [#161](https://github.com/yangzuo0621/ctrl-zebra/pull/161) 交付�
 [#162](https://github.com/yangzuo0621/ctrl-zebra/pull/162) 交付，统一 Core Token 估算、上下文预算
 与有界确定性计数。T1509 已由 [#163](https://github.com/yangzuo0621/ctrl-zebra/pull/163) 交付，贯通
 Provider Usage 事件的 Core、Protocol、持久化投影与 Webview 展示，并覆盖缺失、重复、迟到、恢复和
-溢出降级语义。T1510 已由 [#164](https://github.com/yangzuo0621/ctrl-zebra/pull/164) 交付，完成上下文溢出与响应截断的稳定分类、受控恢复与有界结果。T1511 已由 [#165](https://github.com/yangzuo0621/ctrl-zebra/pull/165) 交付，完成错误因果保留、Provider 事件审计和安全诊断投影。当前执行点为 T1601，暂无进行中的任务。
+溢出降级语义。T1510 已由 [#164](https://github.com/yangzuo0621/ctrl-zebra/pull/164) 交付，完成上下文溢出与响应截断的稳定分类、受控恢复与有界结果。T1511 已由 [#165](https://github.com/yangzuo0621/ctrl-zebra/pull/165) 交付，完成错误因果保留、Provider 事件审计和安全诊断投影。当前执行点为
+[T1601：补齐三个 Provider 的密钥保存入口](roadmap/phases/phase-16.md#t1601补齐三个-provider-的密钥保存入口)，暂无进行中的任务。
