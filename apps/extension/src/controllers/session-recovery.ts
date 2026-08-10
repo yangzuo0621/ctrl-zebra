@@ -9,14 +9,15 @@ import {
 } from "@ctrl-zebra/core";
 import {
   assistantMessageSchema,
+  hasTokenUsage,
   type JsonValue,
   maxReasoningBlockCodePoints,
   maxReasoningBlocksPerRun,
   maxReasoningBlockUtf8Bytes,
   maxReasoningRunCodePoints,
   maxReasoningRunUtf8Bytes,
-  maxTokenCount,
   measureReasoningText,
+  mergeTokenUsage,
   persistedReasoningEventPayloadSchema,
   type RestoredReasoning,
   type RestoredSession,
@@ -152,9 +153,7 @@ export function createSessionRecoveryActions(
 }
 
 function recoverUsage(record: SessionRecord): TokenUsage | undefined {
-  let inputTokens: number | undefined;
-  let outputTokens: number | undefined;
-  let totalTokens: number | undefined;
+  let usage: TokenUsage | undefined;
 
   for (const persisted of record.events) {
     if (persisted.event.type !== "session.usage") {
@@ -164,31 +163,14 @@ function recoverUsage(record: SessionRecord): TokenUsage | undefined {
     if (!parsed.success) {
       throw new SessionRecoveryError("corrupt");
     }
-    const usage = parsed.data;
-    inputTokens = addUsageValue(inputTokens, usage.inputTokens);
-    outputTokens = addUsageValue(outputTokens, usage.outputTokens);
-    totalTokens = addUsageValue(totalTokens, usage.totalTokens);
+    const merged = mergeTokenUsage(usage, parsed.data);
+    if (!merged.ok) {
+      throw new SessionRecoveryError("corrupt");
+    }
+    usage = merged.usage;
   }
 
-  const usage = {
-    ...(inputTokens === undefined ? {} : { inputTokens }),
-    ...(outputTokens === undefined ? {} : { outputTokens }),
-    ...(totalTokens === undefined ? {} : { totalTokens }),
-  } satisfies TokenUsage;
-  return Object.keys(usage).length === 0 ? undefined : usage;
-}
-
-function addUsageValue(current: number | undefined, next: number | undefined): number | undefined {
-  if (next === undefined) {
-    return current;
-  }
-  if (current === undefined) {
-    return next;
-  }
-  if (current > maxTokenCount - next) {
-    throw new SessionRecoveryError("corrupt");
-  }
-  return current + next;
+  return usage === undefined || !hasTokenUsage(usage) ? undefined : usage;
 }
 
 interface RecoveredBlock {

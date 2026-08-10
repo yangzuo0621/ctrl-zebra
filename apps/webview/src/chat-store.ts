@@ -1,12 +1,13 @@
 import {
   type ExtensionToWebviewMessage,
+  hasTokenUsage,
   maxReasoningBlockCodePoints,
   maxReasoningBlocksPerRun,
   maxReasoningBlockUtf8Bytes,
   maxReasoningRunCodePoints,
   maxReasoningRunUtf8Bytes,
-  maxTokenCount,
   measureReasoningText,
+  mergeTokenUsage as mergeProviderTokenUsage,
   type ReasoningRestoredMessage,
   type RunStatus,
   type SessionSummary,
@@ -151,6 +152,7 @@ export function createChatStore({
   let reasoningBlockCountLimited = false;
   let reasoningDirty = false;
   let pendingReasoningAnnouncement: string | undefined;
+  let usageOverflowed = false;
   const liveReasoningBlocks = new Map<string, LiveReasoningBlock>();
 
   const cancelFlush = () => {
@@ -307,7 +309,19 @@ export function createChatStore({
     };
 
     const applyTokenUsage = (usage: TokenUsage) => {
-      set((state) => ({ usage: mergeTokenUsage(state.usage, usage) }));
+      if (usageOverflowed || !hasTokenUsage(usage)) {
+        return;
+      }
+      const merged = mergeProviderTokenUsage(get().usage, usage);
+      if (!merged.ok) {
+        usageOverflowed = true;
+        set({
+          usage: undefined,
+          runError: "Provider usage exceeded the supported Session limit.",
+        });
+        return;
+      }
+      set({ usage: merged.usage });
     };
 
     const restoreMessages = (
@@ -386,6 +400,7 @@ export function createChatStore({
         pendingTextDelta = "";
         stagedReasoningRestore = undefined;
         resetLiveReasoning();
+        usageOverflowed = false;
         const requestId = createRequestId();
         const sessionId = state.selectedSessionId;
         const assistantMessageId = `${requestId}:assistant`;
@@ -446,6 +461,7 @@ export function createChatStore({
         stagedReasoningRestore = undefined;
         activeAssistantMessageId = undefined;
         resetLiveReasoning();
+        usageOverflowed = false;
         const requestId = createRequestId();
         set({
           messages: [],
@@ -608,6 +624,7 @@ export function createChatStore({
           pendingTextDelta = "";
           activeAssistantMessageId = undefined;
           resetLiveReasoning();
+          usageOverflowed = false;
           set({
             messages: restoreMessages(message, stagedForCurrentMessage),
             status:
@@ -811,6 +828,7 @@ export function createChatStore({
       dispose() {
         cancelFlush();
         pendingTextDelta = "";
+        usageOverflowed = false;
         listRequestId = undefined;
         restoreRequestId = undefined;
         restoreTargetSessionId = undefined;
@@ -840,31 +858,4 @@ function toDisplayToolCall(message: ToolStateMessage): DisplayToolCall {
   }
 
   return { call: message.call, source: message.source, status: "error", result: message.result };
-}
-
-function mergeTokenUsage(current: TokenUsage | undefined, next: TokenUsage): DisplayTokenUsage {
-  return {
-    ...(mergeUsageValue(current?.inputTokens, next.inputTokens) === undefined
-      ? {}
-      : { inputTokens: mergeUsageValue(current?.inputTokens, next.inputTokens) }),
-    ...(mergeUsageValue(current?.outputTokens, next.outputTokens) === undefined
-      ? {}
-      : { outputTokens: mergeUsageValue(current?.outputTokens, next.outputTokens) }),
-    ...(mergeUsageValue(current?.totalTokens, next.totalTokens) === undefined
-      ? {}
-      : { totalTokens: mergeUsageValue(current?.totalTokens, next.totalTokens) }),
-  };
-}
-
-function mergeUsageValue(
-  current: number | undefined,
-  next: number | undefined,
-): number | undefined {
-  if (next === undefined) {
-    return current;
-  }
-  if (current === undefined) {
-    return next;
-  }
-  return current > maxTokenCount - next ? maxTokenCount : current + next;
 }

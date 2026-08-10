@@ -360,5 +360,11 @@ export {
   toolRiskSchema,
   toolSuccessResultSchema,
 } from "./tool.js";
-export type { TokenUsage } from "./usage.js";
-export { hasTokenUsage, maxTokenCount, tokenCountSchema, tokenUsageSchema } from "./usage.js";
+export type { TokenUsage, TokenUsageMergeResult } from "./usage.js";
+export {
+  hasTokenUsage,
+  maxTokenCount,
+  mergeTokenUsage,
+  tokenCountSchema,
+  tokenUsageSchema,
+} from "./usage.js";

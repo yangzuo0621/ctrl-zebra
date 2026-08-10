@@ -102,11 +102,12 @@ only; prices, billing, and client estimates are not represented.
 The Extension preserves accepted source order and emits at most one Usage message per model step;
 an empty Provider report is consumed as no usable count and produces no live or persisted Usage
 event.
-The Webview accumulates each present field independently for the active request, keeps missing
-fields unknown, and labels a partial projection as partial. A terminal response with no Usage shows
-an explicit unavailable state instead of an estimate or fabricated zero. Duplicate, stale,
-mismatched, malformed, or post-terminal Usage messages are ignored without persistence or UI side
-effects.
+The Webview accumulates each present field independently for the active Session projection, keeps
+missing fields unknown, and labels a partial projection as partial. A cumulative addition above
+`2,000,000` is rejected by the shared merge rule: the live projection becomes explicitly unavailable
+for that Run instead of being clamped. A terminal response with no Usage shows an explicit
+unavailable state instead of an estimate or fabricated zero. Duplicate, stale, mismatched,
+malformed, or post-terminal Usage messages are ignored without persistence or UI side effects.
 
 Reasoning text is well-formed Unicode and each delta contains 1–8,192 Unicode code points and at
 most 32,768 UTF-8 bytes. The Extension collector also enforces these cumulative ceilings without

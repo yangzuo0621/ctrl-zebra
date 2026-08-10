@@ -1,4 +1,8 @@
-import { type ExtensionToWebviewMessage, protocolVersion } from "@ctrl-zebra/protocol";
+import {
+  type ExtensionToWebviewMessage,
+  maxTokenCount,
+  protocolVersion,
+} from "@ctrl-zebra/protocol";
 import { describe, expect, it, vi } from "vitest";
 
 import { createChatStore } from "./chat-store.js";
@@ -270,6 +274,36 @@ describe("chat reasoning store", () => {
     expect(harness.store.getState().activeRequestId).toBeUndefined();
   });
 
+  it("downgrades cumulative overflow instead of clamping and ignores later reports", () => {
+    const harness = createHarness();
+    startRun(harness);
+    harness.receive({
+      protocolVersion,
+      type: "extension/token-usage",
+      requestId: "request-1",
+      usage: { inputTokens: maxTokenCount },
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/token-usage",
+      requestId: "request-1",
+      usage: { inputTokens: 1 },
+    });
+
+    expect(harness.store.getState().usage).toBeUndefined();
+    expect(harness.store.getState().runError).toBe(
+      "Provider usage exceeded the supported Session limit.",
+    );
+
+    harness.receive({
+      protocolVersion,
+      type: "extension/token-usage",
+      requestId: "request-1",
+      usage: { outputTokens: 1 },
+    });
+    expect(harness.store.getState().usage).toBeUndefined();
+  });
+
   it("removes an empty completed lifecycle and defensively truncates oversized blocks", () => {
     const harness = createHarness();
     startRun(harness);
@@ -472,6 +506,48 @@ describe("chat reasoning store", () => {
       "Continue here.",
       "session-host",
     );
+  });
+
+  it("keeps usage cumulative for a continuation within the same Session", () => {
+    const harness = createHarness(["request-new", "request-continue"]);
+
+    expect(harness.store.getState().submit("Start here.")).toBe(true);
+    harness.receive({
+      protocolVersion,
+      type: "extension/token-usage",
+      requestId: "request-new",
+      usage: { inputTokens: 4, outputTokens: 2, totalTokens: 6 },
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/session-started",
+      requestId: "request-new",
+      sessionId: "session-host",
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/run-status",
+      requestId: "request-new",
+      status: "completed",
+    });
+
+    expect(harness.store.getState().submit("Continue here.")).toBe(true);
+    expect(harness.store.getState().usage).toEqual({
+      inputTokens: 4,
+      outputTokens: 2,
+      totalTokens: 6,
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/token-usage",
+      requestId: "request-continue",
+      usage: { inputTokens: 3, totalTokens: 5 },
+    });
+    expect(harness.store.getState().usage).toEqual({
+      inputTokens: 7,
+      outputTokens: 2,
+      totalTokens: 11,
+    });
   });
 
   it("fences a continuation when the Host reports a different Session", () => {

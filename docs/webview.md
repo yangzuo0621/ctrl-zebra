@@ -114,8 +114,13 @@ This document defines the React Webview constraints established before T0103. It
 ## Provider Usage Rendering
 
 - The chat store owns the validated `extension/token-usage` projection and accumulates each present
-  field independently for the active Run. Missing input, output, or total values remain unknown;
-  the Webview never derives one field from another and never displays prices, billing, or estimates.
+  field independently for the active Session while a Run is processing. Missing input, output, or
+  total values remain unknown; the Webview never derives one field from another and never displays
+  prices, billing, or estimates.
+- The projection is Session-cumulative: a continuation keeps the prior validated counts and adds the
+  next Run's actual fields; New chat clears the projection. The shared bounded merge rejects a
+  cumulative overflow instead of clamping it, marks the live projection unavailable, and ignores
+  later Usage for that Run.
 - Usage is shown in a semantic Provider-usage region after a response. Complete actual counts are
   labelled normally; partial counts are labelled partial and unknown fields use an explicit em dash.
   A terminal response without any Provider count says that usage is unavailable rather than showing

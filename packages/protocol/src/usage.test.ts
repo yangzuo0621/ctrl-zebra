@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { hasTokenUsage, maxTokenCount, tokenUsageSchema } from "./index.js";
+import { hasTokenUsage, maxTokenCount, mergeTokenUsage, tokenUsageSchema } from "./index.js";
 
 describe("Provider token Usage DTO", () => {
   it("accepts complete and partial actual counts but keeps missing Usage distinguishable", () => {
@@ -21,5 +21,17 @@ describe("Provider token Usage DTO", () => {
     { totalTokens: 1, unexpected: true },
   ])("rejects invalid or overprivileged Usage %#", (usage) => {
     expect(tokenUsageSchema.safeParse(usage).success).toBe(false);
+  });
+
+  it("rejects cumulative overflow instead of silently clamping a valid next report", () => {
+    expect(
+      mergeTokenUsage(
+        { inputTokens: maxTokenCount - 1 },
+        tokenUsageSchema.parse({ inputTokens: 1 }),
+      ),
+    ).toEqual({ ok: true, usage: { inputTokens: maxTokenCount } });
+    expect(
+      mergeTokenUsage({ inputTokens: maxTokenCount }, tokenUsageSchema.parse({ inputTokens: 1 })),
+    ).toEqual({ ok: false, reason: "overflow" });
   });
 });
