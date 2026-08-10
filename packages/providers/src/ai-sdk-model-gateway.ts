@@ -519,16 +519,18 @@ function classifyProviderError(error: unknown): ModelGatewayErrorCode {
   }
 
   if (APICallError.isInstance(error)) {
-    return classifyApiCallError(error.statusCode, error.isRetryable);
+    return classifyApiCallError(error);
   }
 
   return "unknown";
 }
 
-function classifyApiCallError(
-  statusCode: number | undefined,
-  isRetryable: boolean,
-): ModelGatewayErrorCode {
+function classifyApiCallError(error: APICallError): ModelGatewayErrorCode {
+  if (isContextOverflowData(error.data)) {
+    return "context-overflow";
+  }
+
+  const statusCode = error.statusCode;
   if (statusCode === 401) {
     return "authentication";
   }
@@ -545,7 +547,7 @@ function classifyApiCallError(
     return "rate-limit";
   }
 
-  if (isRetryable || (statusCode !== undefined && statusCode >= 500)) {
+  if (error.isRetryable || (statusCode !== undefined && statusCode >= 500)) {
     return "unavailable";
   }
 
@@ -554,4 +556,36 @@ function classifyApiCallError(
   }
 
   return "unknown";
+}
+
+const contextOverflowCodes = new Set([
+  "context_length_exceeded",
+  "context_window_exceeded",
+  "input_too_long",
+  "max_context_length_exceeded",
+  "maximum_context_length_exceeded",
+  "prompt_too_long",
+  "request_too_large",
+]);
+
+function isContextOverflowData(value: unknown, depth = 0): boolean {
+  if (depth > 4 || typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+  for (const key of ["code", "reason", "status", "type"]) {
+    const candidate = record[key];
+    if (typeof candidate === "string" && contextOverflowCodes.has(candidate.toLowerCase())) {
+      return true;
+    }
+  }
+
+  for (const key of ["error", "details", "errors"]) {
+    if (isContextOverflowData(record[key], depth + 1)) {
+      return true;
+    }
+  }
+
+  return false;
 }

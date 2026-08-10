@@ -321,7 +321,10 @@ function projectRuntimeEvent(
   }
   if (
     event.type === "session.status-changed" &&
-    (event.status === "completed" || event.status === "cancelled" || event.status === "failed")
+    (event.status === "completed" ||
+      event.status === "truncated" ||
+      event.status === "cancelled" ||
+      event.status === "failed")
   ) {
     reasoning.close();
   }

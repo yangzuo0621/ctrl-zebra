@@ -27,6 +27,7 @@ const statusText = {
   preparing: "Preparing response…",
   streaming: "Generating response…",
   completed: "Response complete.",
+  truncated: "Response truncated.",
   cancelled: "Response cancelled.",
   failed: "Response failed.",
   interrupted: "Session was interrupted by a restart.",
@@ -39,6 +40,10 @@ function messageContent(message: DisplayMessage, status: string): string {
 
   if (status === "cancelled") {
     return "Cancelled before a response was received.";
+  }
+
+  if (status === "truncated") {
+    return "The response was truncated before a complete answer was received.";
   }
 
   if (status === "failed") {

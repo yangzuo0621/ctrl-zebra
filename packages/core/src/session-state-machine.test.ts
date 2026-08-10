@@ -14,6 +14,7 @@ const statuses = [
   "awaiting_approval",
   "executing_tool",
   "completed",
+  "truncated",
   "cancelled",
   "failed",
   "interrupted",
@@ -27,6 +28,7 @@ const legalTransitionKeys = new Set([
   "streaming:awaiting_approval",
   "streaming:executing_tool",
   "streaming:completed",
+  "streaming:truncated",
   "streaming:cancelled",
   "streaming:failed",
   "awaiting_approval:streaming",
@@ -105,6 +107,7 @@ describe("SessionStateMachine", () => {
   it.each([
     "idle",
     "completed",
+    "truncated",
     "cancelled",
     "failed",
     "interrupted",

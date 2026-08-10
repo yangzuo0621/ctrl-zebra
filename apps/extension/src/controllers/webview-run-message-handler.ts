@@ -137,7 +137,7 @@ export class WebviewRunMessageHandler {
     });
   }
 
-  #finish(run: ActiveRun, status: "completed" | "cancelled" | "failed"): void {
+  #finish(run: ActiveRun, status: "completed" | "truncated" | "cancelled" | "failed"): void {
     if (this.#disposed || this.#activeRun !== run || run.terminalSent) {
       return;
     }
@@ -294,7 +294,11 @@ export class WebviewRunMessageHandler {
       return;
     }
 
-    if (event.status === "completed" || event.status === "cancelled") {
+    if (
+      event.status === "completed" ||
+      event.status === "truncated" ||
+      event.status === "cancelled"
+    ) {
       this.#finish(run, event.status);
     }
   }

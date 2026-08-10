@@ -20,6 +20,7 @@ const activeStatuses = new Set<SessionStatus>([
 
 const terminalStatuses = new Set<SessionStatus>([
   "completed",
+  "truncated",
   "cancelled",
   "failed",
   "interrupted",
@@ -32,6 +33,7 @@ const legalTransitions: Readonly<Record<SessionStatus, readonly SessionStatus[]>
     "awaiting_approval",
     "executing_tool",
     "completed",
+    "truncated",
     "cancelled",
     "failed",
     "interrupted",
@@ -39,6 +41,7 @@ const legalTransitions: Readonly<Record<SessionStatus, readonly SessionStatus[]>
   awaiting_approval: ["streaming", "executing_tool", "cancelled", "failed", "interrupted"],
   executing_tool: ["streaming", "cancelled", "failed", "interrupted"],
   completed: ["preparing"],
+  truncated: ["preparing"],
   cancelled: ["preparing"],
   failed: ["preparing"],
   interrupted: ["preparing"],
@@ -73,7 +76,7 @@ interface RunProjection {
 
 type TerminalRunStatus = Extract<
   SessionStatus,
-  "completed" | "cancelled" | "failed" | "interrupted"
+  "completed" | "truncated" | "cancelled" | "failed" | "interrupted"
 >;
 
 /**
@@ -193,7 +196,7 @@ function closeRun(
     }
   }
 
-  // A completed Run cannot end with a Tool Call lacking its Result. Cancellation,
+  // A completed Run cannot end with a Tool Call lacking its Result. Truncation, cancellation,
   // failure, interruption, and damaged tails deliberately discard that unfinished tail.
   if (run.pendingToolCalls.size > 0 && outcome === "completed") {
     throw new SessionHistoryCorruptError();

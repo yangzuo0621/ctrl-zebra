@@ -43,11 +43,12 @@ describe("Session DTO", () => {
         "awaiting_approval",
         "executing_tool",
         "completed",
+        "truncated",
         "cancelled",
         "failed",
         "interrupted",
       ].map((status) => sessionStatusSchema.parse(status)),
-    ).toHaveLength(9);
+    ).toHaveLength(10);
   });
 
   it("validates session identifiers independently", () => {

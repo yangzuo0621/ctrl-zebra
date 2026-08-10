@@ -53,8 +53,15 @@ This document defines the initial runtime boundaries for the CtrlZebra desktop V
 - `packages/providers` implements `ModelGateway`. A provider adapter is limited to translating Core requests into SDK calls and normalizing the resulting text deltas, tool calls, token usage, finish reasons, and failures into Core values in source order.
 - SDK output and failures are untrusted adapter-boundary input. Adapters narrow or validate them before creating Core values. Unsupported or malformed SDK data becomes a stable Core provider error rather than leaking an SDK object or relying on SDK error-message text.
 - Core defines a closed set of provider error categories suitable for runtime decisions. Adapter diagnostics may retain a redacted cause privately, but SDK error classes, status objects, response bodies, headers, and credentials never cross the `ModelGateway` boundary.
+- `context-overflow` is the stable Provider-neutral category for a structured provider response that
+  rejects the request because the model context is too large. Adapters may classify only bounded,
+  structured error fields; response text and third-party wording never control this decision. Other
+  invalid requests remain `invalid-request`.
 - The caller owns cancellation and passes an `AbortSignal` to `ModelGateway.stream`. An adapter passes that same signal to the underlying SDK operation, observes cancellation while consuming the stream, emits no later events, and preserves cancellation as distinct from provider failure.
 - Provider adapters do not decide session transitions, retry policy, tool approval or execution, persistence, or presentation. Those decisions remain with the owning Core runtime or host adapter introduced by their roadmap tasks.
+- A normalized `FinishReason` of `length` is a terminal truncated response. Core preserves any
+  bounded text already emitted, does not execute a Tool Call observed in that response, and never
+  reports the Run as normally completed.
 
 ### Reasoning summary event boundary
 
@@ -213,8 +220,10 @@ This document defines the initial runtime boundaries for the CtrlZebra desktop V
   Call. It is limited to 32,768 Unicode code points, records the covered message range, preserves
   unresolved user requests and material decisions, and must not claim facts absent from its source.
   Summary generation receives complete Tool Call/Result pairs and cannot authorize or replay tools.
-- One model turn may perform at most two context-overflow recovery attempts and at most one summary
-  generation. Each attempt must strictly reduce estimated input tokens; otherwise recovery stops.
+- One model turn may perform at most one context-overflow recovery retry. The retry must strictly
+  reduce estimated input tokens; otherwise recovery stops. A second overflow is terminal for that
+  Run. Summary generation remains separately bounded to at most one operation where a later task
+  supplies an approved summarizer.
   Provider retry policy may perform at most two retries after the initial attempt, and tool
   repetition detection must pause at a configured threshold no greater than 10 consecutive matching
   calls. Cancellation ends every recovery, retry, delay, summary, and tool-loop action immediately.
@@ -229,7 +238,7 @@ This document defines the initial runtime boundaries for the CtrlZebra desktop V
   reached a normal `completed` outcome, and complete assistant Tool Call/Tool Result pairs whose call
   ID and name match. Reasoning, status, approval, usage, summary, attachment, and UI-source events
   never become model messages.
-- A cancelled, failed, or recovery-interrupted Run keeps its user message for the next Run. Partial or
+- A truncated, cancelled, failed, or recovery-interrupted Run keeps its user message for the next Run. Partial or
   unconfirmed assistant text is discarded. A Tool Call/Result pair committed before the terminal
   outcome may remain in order; an open call, orphan result, or mismatched pair is never injected and
   never receives a synthetic result.
@@ -242,10 +251,10 @@ This document defines the initial runtime boundaries for the CtrlZebra desktop V
 - Session status changes go through the Core state machine; callers and tools do not mutate or
   bypass the current status.
 - Legal live transitions are `idle → preparing`; `preparing → streaming | cancelled | failed`;
-  `streaming → awaiting_approval | executing_tool | completed | cancelled | failed`;
+  `streaming → awaiting_approval | executing_tool | completed | truncated | cancelled | failed`;
   `awaiting_approval → streaming | executing_tool | cancelled | failed`; and
   `executing_tool → streaming | cancelled | failed`.
-- `completed`, `cancelled`, and `failed` are distinct terminal outcomes for the most recent Run.
+- `completed`, `truncated`, `cancelled`, and `failed` are distinct terminal outcomes for the most recent Run.
   They have no ordinary outgoing transitions. An explicit Core-owned `beginRun` reset gate may move
   any of those outcomes to `preparing` for one newly allocated Run; it is not a status mutation that
   resumes the prior Run.

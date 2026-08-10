@@ -443,6 +443,44 @@ describe("App streaming chat", () => {
     expect(screen.getByRole("textbox", { name: "Message" })).toBeEnabled();
   });
 
+  it("shows a partial answer and an explicit prompt when the response is truncated", async () => {
+    const host = new FakeWebviewHost();
+    const user = userEvent.setup();
+    render(<App host={host} createRequestId={() => "request-truncated"} />);
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "Keep answering.");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    act(() => {
+      host.emit({
+        protocolVersion,
+        type: "extension/run-status",
+        requestId: "request-truncated",
+        status: "streaming",
+      });
+      host.emit({
+        protocolVersion,
+        type: "extension/text-delta",
+        requestId: "request-truncated",
+        text: "Partial answer",
+      });
+      host.emit({
+        protocolVersion,
+        type: "extension/run-status",
+        requestId: "request-truncated",
+        status: "truncated",
+      });
+    });
+
+    expect(screen.getByText("Partial answer")).toBeVisible();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "The response was truncated before completion. Ask a follow-up to continue.",
+    );
+    expect(screen.getByRole("status", { name: "Run status" })).toHaveTextContent(
+      "Response truncated.",
+    );
+    expect(screen.getByRole("textbox", { name: "Message" })).toBeEnabled();
+  });
+
   it.each([
     ["authentication", "Check the selected provider and saved API key."],
     ["network", "Check your connection and try again."],

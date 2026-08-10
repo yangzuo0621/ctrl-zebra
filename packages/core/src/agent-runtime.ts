@@ -22,15 +22,22 @@ import {
 } from "@ctrl-zebra/protocol";
 import { agentSystemInstruction, shouldOfferWorkspaceTools } from "./agent-behavior-policy.js";
 import { BasicApprovalPolicy } from "./approval-policy.js";
+import { ContextOverflowRecoveryExhaustedError } from "./context-overflow-recovery.js";
 import type { DomainEvent, EventSink } from "./events.js";
 import { projectExternalMcpContext } from "./external-resource-context.js";
 import { defaultModelMessageTokenCounter } from "./heuristic-token-counter.js";
 import {
   InvalidModelHistoryError,
+  InvalidModelMessageTokenCountError,
   type ModelMessageTokenCounter,
   pruneModelHistory,
 } from "./history-pruner.js";
-import type { ModelGateway, ModelMessage } from "./model-gateway.js";
+import {
+  type FinishReason,
+  type ModelGateway,
+  ModelGatewayError,
+  type ModelMessage,
+} from "./model-gateway.js";
 import { SessionStateMachine, type SessionStatusChangedEvent } from "./session-state-machine.js";
 import { allocateTokenBudget, maxModelContextWindowTokens } from "./token-budget.js";
 import type { ToolApprovalOperation, ToolApprovalWorkflow } from "./tool-approval.js";
@@ -185,6 +192,20 @@ export class InvalidModelUsageError extends Error {
   }
 }
 
+type ModelStepResult =
+  | {
+      readonly outcome: "response";
+      readonly messages: readonly ModelMessage[];
+      readonly toolCall?: ToolCall;
+      readonly hasMeaningfulText: boolean;
+    }
+  | {
+      readonly outcome: "truncated";
+      readonly messages: readonly ModelMessage[];
+    };
+
+type ModelStreamResult = ModelStepResult | { readonly outcome: "overflow" };
+
 class InvalidToolApprovalError extends Error {
   constructor() {
     super("Tool approval request is not bound to the current Session, Run, and Tool Call.");
@@ -267,7 +288,7 @@ export class AgentRuntime {
       signal.throwIfAborted();
       const history = await this.#loadHistory(userMessage.sessionId, signal);
       signal.throwIfAborted();
-      const messages = this.#prepareMessages(history, userMessage.content, signal, runOptions);
+      let messages = this.#prepareMessages(history, userMessage.content, signal, runOptions);
       signal.throwIfAborted();
       const offerTools = shouldOfferWorkspaceTools(userMessage.content);
       session.transitionTo("streaming");
@@ -277,7 +298,7 @@ export class AgentRuntime {
       const reasoningIds = new RunReasoningIds();
 
       while (true) {
-        const response = await this.#streamModel(
+        const response = await this.#streamWithOverflowRecovery(
           messages,
           userMessage.sessionId,
           signal,
@@ -286,6 +307,12 @@ export class AgentRuntime {
           toolSteps,
           repetitionDetector,
         );
+        messages = [...response.messages];
+        if (response.outcome === "truncated") {
+          signal.throwIfAborted();
+          session.transitionTo("truncated");
+          return;
+        }
         if (response.toolCall === undefined) {
           if (!response.hasMeaningfulText) {
             throw new EmptyAgentResponseError(toolSteps > 0);
@@ -388,6 +415,53 @@ export class AgentRuntime {
     return [...retainedHistory, ...externalContext, latestUser];
   }
 
+  async #streamWithOverflowRecovery(
+    messages: readonly ModelMessage[],
+    sessionId: SessionId,
+    signal: AbortSignal,
+    offerTools: boolean,
+    reasoningIds: RunReasoningIds,
+    toolSteps: number,
+    repetitionDetector: ToolRepetitionDetector,
+  ): Promise<ModelStepResult> {
+    const first = await this.#streamModel(
+      messages,
+      sessionId,
+      signal,
+      offerTools,
+      reasoningIds,
+      toolSteps,
+      repetitionDetector,
+    );
+    if (first.outcome !== "overflow") {
+      return { ...first, messages };
+    }
+
+    signal.throwIfAborted();
+    const pruned = pruneModelHistory(messages, this.#historyTokenBudget, this.#tokenCounter);
+    const initialEstimate = estimateModelMessages(messages, this.#tokenCounter);
+    if (!pruned.pruned || pruned.estimatedTokens >= initialEstimate) {
+      throw new ContextOverflowRecoveryExhaustedError(0, "no-reduction");
+    }
+
+    signal.throwIfAborted();
+    const retry = await this.#streamModel(
+      pruned.messages,
+      sessionId,
+      signal,
+      offerTools,
+      reasoningIds,
+      toolSteps,
+      repetitionDetector,
+    );
+    signal.throwIfAborted();
+    if (retry.outcome === "overflow") {
+      throw new ContextOverflowRecoveryExhaustedError(1, "retry-limit");
+    }
+
+    return { ...retry, messages: pruned.messages };
+  }
+
   async #streamModel(
     messages: readonly ModelMessage[],
     sessionId: SessionId,
@@ -396,9 +470,11 @@ export class AgentRuntime {
     reasoningIds: RunReasoningIds,
     toolSteps: number,
     repetitionDetector: ToolRepetitionDetector,
-  ): Promise<{ readonly toolCall?: ToolCall; readonly hasMeaningfulText: boolean }> {
+  ): Promise<ModelStreamResult> {
     let toolCall: ToolCall | undefined;
     let hasMeaningfulText = false;
+    let finishReason: FinishReason | undefined;
+    let emittedEvent = false;
     const toolDeclarations = offerTools ? this.#toolRegistry.declarations() : [];
     const request =
       toolDeclarations.length === 0
@@ -412,105 +488,127 @@ export class AgentRuntime {
     let openReasoningBlock: string | undefined;
     let usageSeen = false;
 
-    for await (const event of this.#modelGateway.stream(request, signal)) {
-      signal.throwIfAborted();
+    try {
+      for await (const event of this.#modelGateway.stream(request, signal)) {
+        signal.throwIfAborted();
+        emittedEvent = true;
 
-      if (event.type === "text.delta") {
-        if (event.text.trim() !== "") {
-          hasMeaningfulText = true;
-        }
-        this.#eventSink.emit({
-          type: "agent.text-delta",
-          sessionId,
-          text: event.text,
-        });
-        signal.throwIfAborted();
-      } else if (event.type === "reasoning.start") {
-        if (openReasoningBlock !== undefined || reasoningBlocks.has(event.blockId)) {
-          throw new Error("ModelGateway emitted a malformed reasoning lifecycle.");
-        }
-        const runtimeBlockId = reasoningIds.next();
-        reasoningBlocks.set(event.blockId, runtimeBlockId);
-        openReasoningBlock = event.blockId;
-        this.#eventSink.emit({
-          type: "agent.reasoning-start",
-          sessionId,
-          blockId: runtimeBlockId,
-        });
-        signal.throwIfAborted();
-      } else if (event.type === "reasoning.delta") {
-        const runtimeBlockId = reasoningBlocks.get(event.blockId);
-        if (event.blockId !== openReasoningBlock || runtimeBlockId === undefined) {
-          throw new Error("ModelGateway emitted a malformed reasoning lifecycle.");
-        }
-        this.#eventSink.emit({
-          type: "agent.reasoning-delta",
-          sessionId,
-          blockId: runtimeBlockId,
-          text: event.text,
-        });
-        signal.throwIfAborted();
-      } else if (event.type === "reasoning.end") {
-        const runtimeBlockId = reasoningBlocks.get(event.blockId);
-        if (event.blockId !== openReasoningBlock || runtimeBlockId === undefined) {
-          throw new Error("ModelGateway emitted a malformed reasoning lifecycle.");
-        }
-        openReasoningBlock = undefined;
-        this.#eventSink.emit({
-          type: "agent.reasoning-end",
-          sessionId,
-          blockId: runtimeBlockId,
-        });
-        signal.throwIfAborted();
-      } else if (event.type === "usage") {
-        const usageResult = tokenUsageSchema.safeParse(event.usage);
-        if (!usageResult.success) {
-          throw new InvalidModelUsageError();
-        }
-        if (!usageSeen && hasTokenUsage(usageResult.data)) {
-          usageSeen = true;
+        if (event.type === "text.delta") {
+          if (event.text.trim() !== "") {
+            hasMeaningfulText = true;
+          }
           this.#eventSink.emit({
-            type: "agent.usage",
+            type: "agent.text-delta",
             sessionId,
-            usage: normalizeTokenUsage(usageResult.data),
+            text: event.text,
           });
           signal.throwIfAborted();
-        }
-      } else if (event.type === "tool.call") {
-        if (!offerTools) {
-          throw new UnexpectedToolCallError(event.call.name);
-        }
-        if (toolCall !== undefined) {
-          throw new Error("AgentRuntime supports only one Tool Call per model response.");
-        }
-        if (toolSteps >= this.#maxToolSteps) {
-          throw new MaxToolStepsExceededError(this.#maxToolSteps);
-        }
-        const repetition = repetitionDetector.observe(event.call);
-        if (repetition.thresholdReached) {
-          throw new ToolRepetitionDetectedError(
-            event.call.name,
-            repetition.consecutiveCount,
-            repetitionDetector.threshold,
-          );
-        }
+        } else if (event.type === "reasoning.start") {
+          if (openReasoningBlock !== undefined || reasoningBlocks.has(event.blockId)) {
+            throw new Error("ModelGateway emitted a malformed reasoning lifecycle.");
+          }
+          const runtimeBlockId = reasoningIds.next();
+          reasoningBlocks.set(event.blockId, runtimeBlockId);
+          openReasoningBlock = event.blockId;
+          this.#eventSink.emit({
+            type: "agent.reasoning-start",
+            sessionId,
+            blockId: runtimeBlockId,
+          });
+          signal.throwIfAborted();
+        } else if (event.type === "reasoning.delta") {
+          const runtimeBlockId = reasoningBlocks.get(event.blockId);
+          if (event.blockId !== openReasoningBlock || runtimeBlockId === undefined) {
+            throw new Error("ModelGateway emitted a malformed reasoning lifecycle.");
+          }
+          this.#eventSink.emit({
+            type: "agent.reasoning-delta",
+            sessionId,
+            blockId: runtimeBlockId,
+            text: event.text,
+          });
+          signal.throwIfAborted();
+        } else if (event.type === "reasoning.end") {
+          const runtimeBlockId = reasoningBlocks.get(event.blockId);
+          if (event.blockId !== openReasoningBlock || runtimeBlockId === undefined) {
+            throw new Error("ModelGateway emitted a malformed reasoning lifecycle.");
+          }
+          openReasoningBlock = undefined;
+          this.#eventSink.emit({
+            type: "agent.reasoning-end",
+            sessionId,
+            blockId: runtimeBlockId,
+          });
+          signal.throwIfAborted();
+        } else if (event.type === "usage") {
+          const usageResult = tokenUsageSchema.safeParse(event.usage);
+          if (!usageResult.success) {
+            throw new InvalidModelUsageError();
+          }
+          if (!usageSeen && hasTokenUsage(usageResult.data)) {
+            usageSeen = true;
+            this.#eventSink.emit({
+              type: "agent.usage",
+              sessionId,
+              usage: normalizeTokenUsage(usageResult.data),
+            });
+            signal.throwIfAborted();
+          }
+        } else if (event.type === "tool.call") {
+          if (!offerTools) {
+            throw new UnexpectedToolCallError(event.call.name);
+          }
+          if (toolCall !== undefined) {
+            throw new Error("AgentRuntime supports only one Tool Call per model response.");
+          }
+          if (toolSteps >= this.#maxToolSteps) {
+            throw new MaxToolStepsExceededError(this.#maxToolSteps);
+          }
+          const repetition = repetitionDetector.observe(event.call);
+          if (repetition.thresholdReached) {
+            throw new ToolRepetitionDetectedError(
+              event.call.name,
+              repetition.consecutiveCount,
+              repetitionDetector.threshold,
+            );
+          }
 
-        toolCall = event.call;
-        this.#emitToolState(sessionId, event.call, "pending");
-        signal.throwIfAborted();
-      } else if (event.type === "finish") {
-        if (openReasoningBlock !== undefined) {
-          throw new Error("ModelGateway completed with an open reasoning block.");
+          toolCall = event.call;
+          this.#emitToolState(sessionId, event.call, "pending");
+          signal.throwIfAborted();
+        } else if (event.type === "finish") {
+          if (openReasoningBlock !== undefined) {
+            throw new Error("ModelGateway completed with an open reasoning block.");
+          }
+          finishReason = event.reason;
+          break;
         }
-        break;
       }
+    } catch (error) {
+      signal.throwIfAborted();
+      if (
+        !emittedEvent &&
+        error instanceof ModelGatewayError &&
+        error.code === "context-overflow"
+      ) {
+        return { outcome: "overflow" };
+      }
+      throw error;
     }
 
     signal.throwIfAborted();
     if (openReasoningBlock !== undefined) {
       throw new Error("ModelGateway completed with an open reasoning block.");
     }
-    return { ...(toolCall === undefined ? {} : { toolCall }), hasMeaningfulText };
+    if (finishReason === "length") {
+      return { outcome: "truncated", messages };
+    }
+    return {
+      outcome: "response",
+      messages,
+      ...(toolCall === undefined ? {} : { toolCall }),
+      hasMeaningfulText,
+    };
   }
 
   async #executeTool(
@@ -989,6 +1087,24 @@ function hasExactKeys(value: Record<string, unknown>, expected: readonly string[
 
 function isCancellation(error: unknown, signal: AbortSignal): boolean {
   return signal.aborted && error === signal.reason;
+}
+
+function estimateModelMessages(
+  messages: readonly ModelMessage[],
+  tokenCounter: ModelMessageTokenCounter,
+): number {
+  return messages.reduce((total, message) => {
+    const tokens = tokenCounter.count(message);
+    if (
+      !Number.isSafeInteger(tokens) ||
+      tokens < 0 ||
+      tokens > maxModelContextWindowTokens ||
+      !Number.isSafeInteger(total + tokens)
+    ) {
+      throw new InvalidModelMessageTokenCountError();
+    }
+    return total + tokens;
+  }, 0);
 }
 
 function isActiveStatus(status: SessionStatus): boolean {

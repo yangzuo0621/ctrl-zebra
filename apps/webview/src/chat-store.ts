@@ -628,6 +628,7 @@ export function createChatStore({
             messages: restoreMessages(message, stagedForCurrentMessage),
             status:
               message.session.status === "completed" ||
+              message.session.status === "truncated" ||
               message.session.status === "cancelled" ||
               message.session.status === "failed" ||
               message.session.status === "interrupted"
@@ -637,12 +638,15 @@ export function createChatStore({
             sessionSelectionId: message.session.sessionId,
             sessionSwitchPending: false,
             restoring: false,
-            runError: undefined,
             usage: message.session.usage,
             reasoningAnnouncement: "",
             sessionError: message.session.eventLogTailDamaged
               ? "Recovered through the last valid event."
               : undefined,
+            runError:
+              message.session.status === "truncated"
+                ? "The response was truncated before completion. Ask a follow-up to continue."
+                : undefined,
             sessionAnnouncement: "Session restored.",
           });
           return;
@@ -675,6 +679,7 @@ export function createChatStore({
           if (
             message.type === "extension/run-status" &&
             (message.status === "completed" ||
+              message.status === "truncated" ||
               message.status === "cancelled" ||
               message.status === "failed")
           ) {
@@ -802,6 +807,7 @@ export function createChatStore({
         if (message.type === "extension/run-status") {
           if (
             message.status === "completed" ||
+            message.status === "truncated" ||
             message.status === "cancelled" ||
             message.status === "failed"
           ) {
@@ -819,6 +825,12 @@ export function createChatStore({
             }
             openReasoningBlockId = undefined;
             applyPendingStreams(message.status);
+            if (message.status === "truncated") {
+              set({
+                runError:
+                  "The response was truncated before completion. Ask a follow-up to continue.",
+              });
+            }
           } else {
             set({ status: message.status });
           }

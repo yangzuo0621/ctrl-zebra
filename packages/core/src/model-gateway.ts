@@ -116,6 +116,7 @@ export type ModelGatewayErrorCode =
   | "permission-denied"
   | "model-not-found"
   | "rate-limit"
+  | "context-overflow"
   | "invalid-request"
   | "unavailable"
   | "malformed-response"

@@ -80,7 +80,7 @@ written and how they rebuild repository state.
   owning Run reached normal `completed`; and complete assistant Tool Call plus matching Tool Result
   pairs. Reasoning, status, approval, usage, summary, MCP attachment metadata, and Webview-only
   source fields are excluded from model history. A Tool pair is retained as one indivisible unit.
-- A `cancelled`, `failed`, or recovery-`interrupted` Run keeps its user message. Partial or empty
+- A `truncated`, `cancelled`, `failed`, or recovery-`interrupted` Run keeps its user message. Partial or empty
   assistant text is not injected. A complete Tool pair committed before the terminal outcome may be
   retained; an open call, orphan Result, duplicate call ID, or mismatched call/name pair is dropped
   only when it is the expected unfinished tail and otherwise makes the Session corrupt. No synthetic
@@ -105,7 +105,7 @@ written and how they rebuild repository state.
   Unsupported, missing, or mismatched format versions remain isolated as unsupported/corrupt; they are
   never guessed as the current format. New persistence fields or strict event payloads require an
   explicit compatibility fixture and owning task.
-- Recovery normalizes active statuses to `interrupted`, preserves `completed`, `cancelled`, `failed`,
+- Recovery normalizes active statuses to `interrupted`, preserves `completed`, `truncated`, `cancelled`, `failed`,
   and existing `interrupted`, and performs no model, Tool, approval, or Provider action. An explicit
   later submit may reset a recovered Session to a new Run; recovery itself never resumes work.
 
@@ -217,7 +217,7 @@ do not mutate recovered state.
   `preparing` for a fresh Run with new cancellation and resource ownership; no other live transition
   out of `interrupted` is legal.
 - On recovery, `idle`, `preparing`, `streaming`, `awaiting_approval`, and `executing_tool` are written
-  back as `interrupted`. `completed`, `cancelled`, `failed`, and `interrupted` remain unchanged.
+  back as `interrupted`. `completed`, `truncated`, `cancelled`, `failed`, and `interrupted` remain unchanged.
 - Recovery may read history and update the manifest status only. It never resumes a model request,
   consumes an approval, executes a tool, or repeats any other persisted side effect.
 - Recovery may project committed reasoning events for display, including bounded partial blocks and

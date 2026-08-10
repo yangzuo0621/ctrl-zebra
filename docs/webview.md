@@ -62,9 +62,10 @@ This document defines the React Webview constraints established before T0103. It
 - Existing message elements keep stable keys. Updates change only the active message and must not replace the complete transcript tree.
 - Cancellation and completion flush the final owned state exactly once. No deltas may render after cancellation or terminal completion.
 - Streaming updates must not move keyboard focus, repeatedly announce token fragments, or force scrolling when the user has moved away from the newest content.
-- Failed, cancelled, and interrupted partial assistant content remains display-only and is labelled as
-  partial/unfinished where applicable; it is not assumed to be complete model history. A subsequent
-  Run appends to the validated Session projection only after the Host has rebuilt bounded history.
+- Failed, cancelled, interrupted, and truncated partial assistant content remains display-only and is
+  labelled as partial/unfinished where applicable; it is not assumed to be complete model history.
+  A subsequent Run appends to the validated Session projection only after the Host has rebuilt bounded
+  history.
 
 ## Reasoning Summary Rendering
 

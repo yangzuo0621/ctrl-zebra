@@ -125,6 +125,38 @@ describe("projectSessionModelHistory", () => {
     ]);
   });
 
+  it("retains complete Tool pairs and drops partial text after truncation", () => {
+    const call = { id: "call-1", name: "list_files", input: {} } as const;
+    const result = {
+      callId: "call-1",
+      name: "list_files",
+      status: "success",
+      output: { files: [] },
+      truncated: false,
+    } as const;
+    const session = record(
+      [
+        userEvent("message-1", "List files"),
+        statusEvent("idle", "preparing"),
+        statusEvent("preparing", "streaming"),
+        toolEvent("pending", call),
+        statusEvent("streaming", "executing_tool"),
+        toolEvent("running", call),
+        toolEvent("success", call, result),
+        statusEvent("executing_tool", "streaming"),
+        textEvent("partial answer"),
+        statusEvent("streaming", "truncated"),
+      ],
+      "truncated",
+    );
+
+    expect(projectSessionModelHistory(session)).toEqual([
+      { role: "user", content: "List files" },
+      { role: "assistant", toolCall: call },
+      { role: "tool", result },
+    ]);
+  });
+
   it("rejects an orphan Tool Result", () => {
     const session = record([
       userEvent("message-1", "List files"),
@@ -251,7 +283,14 @@ describe("projectSessionModelHistory", () => {
 
 function record(
   events: readonly PersistedEventRecord[],
-  status: "idle" | "streaming" | "completed" | "cancelled" | "failed" | "interrupted" = "completed",
+  status:
+    | "idle"
+    | "streaming"
+    | "completed"
+    | "truncated"
+    | "cancelled"
+    | "failed"
+    | "interrupted" = "completed",
   eventLogTailDamaged = false,
 ): SessionRecord {
   const normalizedEvents = events.map((persisted, index) => ({
