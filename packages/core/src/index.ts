@@ -55,8 +55,8 @@ export type {
   AgentRuntimeOptions,
   AgentRuntimeRunOptions,
   AgentTextDeltaEvent,
-  AgentUsageEvent,
   AgentToolStateEvent,
+  AgentUsageEvent,
   ModelHistoryProvider,
 } from "./agent-runtime.js";
 export {

@@ -842,10 +842,7 @@ function toDisplayToolCall(message: ToolStateMessage): DisplayToolCall {
   return { call: message.call, source: message.source, status: "error", result: message.result };
 }
 
-function mergeTokenUsage(
-  current: TokenUsage | undefined,
-  next: TokenUsage,
-): DisplayTokenUsage {
+function mergeTokenUsage(current: TokenUsage | undefined, next: TokenUsage): DisplayTokenUsage {
   return {
     ...(mergeUsageValue(current?.inputTokens, next.inputTokens) === undefined
       ? {}
@@ -859,7 +856,10 @@ function mergeTokenUsage(
   };
 }
 
-function mergeUsageValue(current: number | undefined, next: number | undefined): number | undefined {
+function mergeUsageValue(
+  current: number | undefined,
+  next: number | undefined,
+): number | undefined {
   if (next === undefined) {
     return current;
   }

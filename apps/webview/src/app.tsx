@@ -12,8 +12,8 @@ import { McpPanel } from "./mcp-panel.js";
 import { createMcpStore } from "./mcp-store.js";
 import { OnboardingCard } from "./onboarding-card.js";
 import { ReasoningSummary } from "./reasoning-summary.js";
-import { ToolCallCard } from "./tool-call-card.js";
 import { TokenUsageSummary } from "./token-usage-summary.js";
+import { ToolCallCard } from "./tool-call-card.js";
 import { Button } from "./ui/button.js";
 import { getWebviewHost, type WebviewHost } from "./vscode-api.js";
 

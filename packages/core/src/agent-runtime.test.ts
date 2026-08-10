@@ -750,20 +750,23 @@ describe("AgentRuntime", () => {
 
   it("emits one bounded Provider Usage event per model response and skips missing Usage", async () => {
     const events: AgentRuntimeEvent[] = [];
-    const gateway = createScriptedModelGateway([
+    const gateway = createScriptedModelGateway(
       [
-        { type: "text.delta", text: "First" },
-        { type: "usage", usage: { inputTokens: 2, outputTokens: 1, totalTokens: 3 } },
-        { type: "usage", usage: { inputTokens: 2, outputTokens: 1, totalTokens: 3 } },
-        { type: "tool.call", call: { id: "call-usage", name: "lookup_zebra", input: {} } },
-        { type: "finish", reason: "tool-calls" },
+        [
+          { type: "text.delta", text: "First" },
+          { type: "usage", usage: { inputTokens: 2, outputTokens: 1, totalTokens: 3 } },
+          { type: "usage", usage: { inputTokens: 2, outputTokens: 1, totalTokens: 3 } },
+          { type: "tool.call", call: { id: "call-usage", name: "lookup_zebra", input: {} } },
+          { type: "finish", reason: "tool-calls" },
+        ],
+        [
+          { type: "text.delta", text: "Second" },
+          { type: "usage", usage: { outputTokens: 4 } },
+          { type: "finish", reason: "stop" },
+        ],
       ],
-      [
-        { type: "text.delta", text: "Second" },
-        { type: "usage", usage: { outputTokens: 4 } },
-        { type: "finish", reason: "stop" },
-      ],
-    ], []);
+      [],
+    );
     const registry = new ToolRegistry();
     registry.register({
       name: "lookup_zebra",
@@ -777,10 +780,17 @@ describe("AgentRuntime", () => {
     });
     const runtime = new AgentRuntime(gateway, { emit: (event) => events.push(event) }, registry);
 
-    await runtime.run({ ...userMessage, content: "Inspect workspace." }, new AbortController().signal);
+    await runtime.run(
+      { ...userMessage, content: "Inspect workspace." },
+      new AbortController().signal,
+    );
 
     expect(events.filter((event) => event.type === "agent.usage")).toEqual([
-      { type: "agent.usage", sessionId: "session-1", usage: { inputTokens: 2, outputTokens: 1, totalTokens: 3 } },
+      {
+        type: "agent.usage",
+        sessionId: "session-1",
+        usage: { inputTokens: 2, outputTokens: 1, totalTokens: 3 },
+      },
       { type: "agent.usage", sessionId: "session-1", usage: { outputTokens: 4 } },
     ]);
   });
@@ -795,9 +805,9 @@ describe("AgentRuntime", () => {
       ]),
       { emit: (event) => invalidEvents.push(event) },
     );
-    await expect(invalidRuntime.run(userMessage, new AbortController().signal)).rejects.toBeInstanceOf(
-      InvalidModelUsageError,
-    );
+    await expect(
+      invalidRuntime.run(userMessage, new AbortController().signal),
+    ).rejects.toBeInstanceOf(InvalidModelUsageError);
     expect(invalidEvents.some((event) => event.type === "agent.usage")).toBe(false);
 
     const controller = new AbortController();

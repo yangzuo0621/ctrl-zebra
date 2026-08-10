@@ -334,8 +334,6 @@ export {
   sessionStatusSchema,
   sessionSummarySchema,
 } from "./session.js";
-export type { TokenUsage } from "./usage.js";
-export { hasTokenUsage, maxTokenCount, tokenCountSchema, tokenUsageSchema } from "./usage.js";
 export type {
   JsonValue,
   ToolCall,
@@ -362,3 +360,5 @@ export {
   toolRiskSchema,
   toolSuccessResultSchema,
 } from "./tool.js";
+export type { TokenUsage } from "./usage.js";
+export { hasTokenUsage, maxTokenCount, tokenCountSchema, tokenUsageSchema } from "./usage.js";

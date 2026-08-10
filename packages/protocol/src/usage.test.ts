@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  hasTokenUsage,
-  maxTokenCount,
-  tokenUsageSchema,
-} from "./index.js";
+import { hasTokenUsage, maxTokenCount, tokenUsageSchema } from "./index.js";
 
 describe("Provider token Usage DTO", () => {
   it("accepts complete and partial actual counts but keeps missing Usage distinguishable", () => {

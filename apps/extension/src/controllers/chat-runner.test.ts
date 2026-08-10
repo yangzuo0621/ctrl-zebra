@@ -62,7 +62,10 @@ describe("createChatRunner", () => {
       modelGateway: {
         async *stream() {
           yield { type: "text.delta", text: "One" } as const;
-          yield { type: "usage", usage: { inputTokens: 3, outputTokens: 2, totalTokens: 5 } } as const;
+          yield {
+            type: "usage",
+            usage: { inputTokens: 3, outputTokens: 2, totalTokens: 5 },
+          } as const;
           yield { type: "usage", usage: {} } as const;
           yield { type: "finish", reason: "stop" } as const;
         },

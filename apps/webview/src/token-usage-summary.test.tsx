@@ -12,10 +12,7 @@ describe("TokenUsageSummary", () => {
 
   it("labels partial actual provider usage and preserves unknown fields", () => {
     render(
-      <TokenUsageSummary
-        usage={{ inputTokens: 1_234, totalTokens: 2_000 }}
-        status="completed"
-      />,
+      <TokenUsageSummary usage={{ inputTokens: 1_234, totalTokens: 2_000 }} status="completed" />,
     );
 
     expect(screen.getByRole("complementary", { name: "Provider token usage" })).toBeVisible();
