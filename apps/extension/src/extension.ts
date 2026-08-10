@@ -58,7 +58,10 @@ import {
   createWorkspaceToolRegistryProvider,
   selectWorkspaceRoot,
 } from "./controllers/readonly-tool-registry.js";
-import { getRunFailureLogEntry } from "./controllers/run-error-mapper.js";
+import {
+  getAgentRuntimeDiagnosticLogEntry,
+  getRunFailureLogEntry,
+} from "./controllers/run-error-mapper.js";
 import { createSessionRecoveryActions } from "./controllers/session-recovery.js";
 import { ToolApprovalWorkflowRouter } from "./controllers/tool-approval-workflow.js";
 import {
@@ -235,6 +238,11 @@ export function activate(context: ExtensionContext): void {
     workspace.fs,
   );
   const chatRunner = createSelectingChatRunner({
+    diagnosticSink: {
+      emit: (diagnostic) => {
+        logger.error(getAgentRuntimeDiagnosticLogEntry(diagnostic));
+      },
+    },
     selectSessionRepository,
     async selectToolRegistry(signal) {
       const workspaceRegistry = await workspaceTools.get(signal);

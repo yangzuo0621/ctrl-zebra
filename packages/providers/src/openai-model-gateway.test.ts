@@ -392,6 +392,74 @@ describe("OpenAI ModelGateway", () => {
     });
   });
 
+  it("retains a private Provider cause while exposing only the stable category", async () => {
+    const failure = new APICallError({
+      isRetryable: false,
+      message: "provider secret response",
+      requestBodyValues: { apiKey: "secret-token" },
+      statusCode: 503,
+      url: "https://example.invalid?token=secret-token",
+    });
+    setStreamParts([{ type: "error", error: failure }]);
+    const gateway = createOpenAIModelGateway({ apiKey: "test-key", modelId: "gpt-test" });
+
+    const result = collectEvents(gateway.stream(request, new AbortController().signal));
+    await expect(result).rejects.toMatchObject({ code: "unavailable" });
+    try {
+      await result;
+    } catch (error) {
+      expect(error).toBeInstanceOf(ModelGatewayError);
+      expect((error as ModelGatewayError).cause).toBe(failure);
+      expect(JSON.stringify(error)).not.toContain("secret-token");
+    }
+  });
+
+  it.each([
+    { type: "tool-error", error: new Error("provider tool secret") },
+    { type: "tool-approval-request", approvalId: "approval-1", toolCall: {} },
+    { type: "tool-result", toolCallId: "call-1", toolName: "read_file", output: "secret" },
+  ] as const)("rejects provider-executed Tool event $type", async (part) => {
+    setStreamParts([part]);
+    const gateway = createOpenAIModelGateway({ apiKey: "test-key", modelId: "gpt-test" });
+
+    const result = collectEvents(gateway.stream(request, new AbortController().signal));
+    await expect(result).rejects.toMatchObject({ code: "malformed-response" });
+    try {
+      await result;
+    } catch (error) {
+      expect(JSON.stringify(error)).not.toContain("provider tool secret");
+      if (part.type === "tool-error") {
+        expect((error as ModelGatewayError).cause).toBe(part.error);
+      }
+    }
+  });
+
+  it("documents intentionally ignored SDK lifecycle metadata without emitting Core events", async () => {
+    setStreamParts([
+      { type: "start" },
+      { type: "start-step" },
+      { type: "text-start", id: "text-1" },
+      { type: "tool-input-start", toolCallId: "call-1", toolName: "read_file" },
+      { type: "tool-input-delta", toolCallId: "call-1", inputTextDelta: "{}" },
+      { type: "tool-input-end", toolCallId: "call-1" },
+      { type: "text-end", id: "text-1" },
+      { type: "finish-step" },
+      { type: "raw", rawValue: { secret: "provider-secret" } },
+      { type: "finish", finishReason: "stop", totalUsage: {} },
+    ]);
+    const gateway = createOpenAIModelGateway({ apiKey: "test-key", modelId: "gpt-test" });
+
+    await expect(
+      collectEvents(gateway.stream(request, new AbortController().signal)),
+    ).resolves.toEqual([
+      {
+        type: "usage",
+        usage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
+      },
+      { type: "finish", reason: "stop" },
+    ]);
+  });
+
   it("rejects malformed SDK parts at the provider boundary", async () => {
     setStreamParts([
       {

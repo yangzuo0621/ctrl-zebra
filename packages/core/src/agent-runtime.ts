@@ -116,6 +116,25 @@ export type AgentRuntimeEvent =
   | AgentApprovalStateEvent
   | SessionStatusChangedEvent;
 
+export type AgentRuntimeDiagnosticPhase = "prepare-approval" | "execute-tool";
+
+/**
+ * A local-only diagnostic. The cause is intentionally kept off the Runtime event stream so it
+ * cannot enter persistence, Protocol DTOs, or the Webview projection.
+ */
+export interface AgentRuntimeDiagnostic {
+  readonly type: "agent.internal-error";
+  readonly phase: AgentRuntimeDiagnosticPhase;
+  readonly sessionId: SessionId;
+  readonly runId: CheckpointRunId;
+  readonly toolCallId: ToolCall["id"];
+  readonly cause: unknown;
+}
+
+export interface AgentRuntimeDiagnosticSink {
+  emit(diagnostic: AgentRuntimeDiagnostic): void;
+}
+
 export interface AgentApprovalStateEvent extends DomainEvent {
   readonly type: "agent.approval-state";
   readonly sessionId: SessionId;
@@ -153,6 +172,7 @@ export interface AgentRuntimeOptions {
   readonly tokenCounter?: ModelMessageTokenCounter;
   readonly initialSessionStatus?: SessionStatus;
   readonly createRunId?: () => CheckpointRunId;
+  readonly diagnosticSink?: AgentRuntimeDiagnosticSink;
 }
 
 export interface AgentRuntimeRunOptions {
@@ -238,6 +258,7 @@ export class AgentRuntime {
   readonly #historyTokenBudget: number;
   readonly #initialSessionStatus: SessionStatus;
   readonly #createRunId: () => CheckpointRunId;
+  readonly #diagnosticSink: AgentRuntimeDiagnosticSink | undefined;
   #session: SessionStateMachine | undefined;
   #sessionId: SessionId | undefined;
 
@@ -271,6 +292,7 @@ export class AgentRuntime {
     this.#tokenCounter = options.tokenCounter ?? defaultModelMessageTokenCounter;
     this.#initialSessionStatus = options.initialSessionStatus ?? "idle";
     this.#createRunId = options.createRunId ?? createDefaultRunId;
+    this.#diagnosticSink = options.diagnosticSink;
   }
 
   async run(
@@ -667,7 +689,7 @@ export class AgentRuntime {
       );
     }
 
-    return this.#executeToolImplementation(toolCall, tool, input, signal);
+    return this.#executeToolImplementation(sessionId, runId, toolCall, tool, input, signal);
   }
 
   async #executeApprovalRequiredTool(
@@ -706,6 +728,14 @@ export class AgentRuntime {
           `Tool "${toolCall.name}" is no longer available.`,
         );
       }
+      this.#reportDiagnostic({
+        type: "agent.internal-error",
+        phase: "prepare-approval",
+        sessionId,
+        runId,
+        toolCallId: toolCall.id,
+        cause: error,
+      });
       return createToolErrorResult(
         toolCall,
         "failed",
@@ -791,7 +821,7 @@ export class AgentRuntime {
       this.#emitApprovalState(sessionId, approval, "consumed");
       signal.throwIfAborted();
       if (tool.risk === "execute") {
-        return this.#executeToolImplementation(toolCall, tool, input, signal);
+        return this.#executeToolImplementation(sessionId, runId, toolCall, tool, input, signal);
       }
 
       return createApprovedToolResult(toolCall);
@@ -801,6 +831,8 @@ export class AgentRuntime {
   }
 
   async #executeToolImplementation(
+    sessionId: SessionId,
+    runId: CheckpointRunId,
     toolCall: ToolCall,
     tool: NonNullable<ReturnType<ToolRegistry["get"]>>,
     input: unknown,
@@ -821,6 +853,14 @@ export class AgentRuntime {
       if (error instanceof ToolExecutionError) {
         return createToolErrorResult(toolCall, error.code, error.message);
       }
+      this.#reportDiagnostic({
+        type: "agent.internal-error",
+        phase: "execute-tool",
+        sessionId,
+        runId,
+        toolCallId: toolCall.id,
+        cause: error,
+      });
       return createToolErrorResult(
         toolCall,
         "failed",
@@ -856,6 +896,20 @@ export class AgentRuntime {
     }
 
     return result.data;
+  }
+
+  #reportDiagnostic(diagnostic: AgentRuntimeDiagnostic): void {
+    if (this.#diagnosticSink === undefined) {
+      return;
+    }
+
+    // Diagnostics are deliberately best-effort: a broken local log sink must not turn a safe Tool
+    // Result into a failed Run or change cancellation and approval semantics.
+    try {
+      this.#diagnosticSink.emit(diagnostic);
+    } catch {
+      // The owning Host controls the logger lifecycle; Runtime behavior remains authoritative.
+    }
   }
 
   #emitToolState(sessionId: SessionId, call: ToolCall, status: "pending" | "running"): void {

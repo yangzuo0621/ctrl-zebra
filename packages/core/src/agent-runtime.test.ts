@@ -1810,6 +1810,70 @@ describe("AgentRuntime", () => {
     });
   });
 
+  it("reports approval preparation causes without exposing them in the Tool Result", async () => {
+    const requests: ModelRequest[] = [];
+    const gateway = createScriptedModelGateway(
+      [
+        [
+          { type: "tool.call", call: { id: "call-approval-failed", name: "edit_file", input: {} } },
+          { type: "finish", reason: "tool-calls" },
+        ],
+        [
+          { type: "text.delta", text: "The approval preparation failed safely." },
+          { type: "finish", reason: "stop" },
+        ],
+      ],
+      requests,
+    );
+    const cause = new Error("private approval path");
+    const diagnostics: unknown[] = [];
+    const create = vi.fn(async () => {
+      throw new Error("Approval workflow should not be called.");
+    });
+    const registry = new ToolRegistry();
+    registry.register({
+      name: "edit_file",
+      description: "Edit a file.",
+      inputSchema: emptyInputSchema,
+      risk: "write",
+      parseInput: () => null,
+      execute: async () => ({ output: null, truncated: false }),
+      prepareApproval: async () => {
+        throw cause;
+      },
+    });
+    const runtime = new AgentRuntime(gateway, { emit: () => {} }, registry, {
+      approvalWorkflow: { create },
+      diagnosticSink: { emit: (diagnostic) => diagnostics.push(diagnostic) },
+    });
+
+    await runtime.run(userMessage, new AbortController().signal);
+
+    expect(create).not.toHaveBeenCalled();
+    expect(requests[1]?.messages.at(-1)).toMatchObject({
+      role: "tool",
+      result: {
+        callId: "call-approval-failed",
+        name: "edit_file",
+        status: "error",
+        error: {
+          code: "failed",
+          message: 'Tool "edit_file" failed while preparing approval.',
+        },
+      },
+    });
+    expect(diagnostics).toEqual([
+      expect.objectContaining({
+        type: "agent.internal-error",
+        phase: "prepare-approval",
+        sessionId: "session-1",
+        toolCallId: "call-approval-failed",
+        cause,
+      }),
+    ]);
+    expect(JSON.stringify(requests)).not.toContain("private approval path");
+  });
+
   it("invalidates an approval when the decision workflow fails before consumption", async () => {
     const requests: ModelRequest[] = [];
     const gateway = createScriptedModelGateway(
@@ -2110,6 +2174,7 @@ describe("AgentRuntime", () => {
       ],
       requests,
     );
+    const diagnostics: unknown[] = [];
     const registry = new ToolRegistry();
     registry.register({
       name: "failing_tool",
@@ -2122,7 +2187,9 @@ describe("AgentRuntime", () => {
       },
     });
     const events: AgentRuntimeEvent[] = [];
-    const runtime = new AgentRuntime(gateway, { emit: (event) => events.push(event) }, registry);
+    const runtime = new AgentRuntime(gateway, { emit: (event) => events.push(event) }, registry, {
+      diagnosticSink: { emit: (diagnostic) => diagnostics.push(diagnostic) },
+    });
 
     await runtime.run(userMessage, new AbortController().signal);
 
@@ -2139,6 +2206,16 @@ describe("AgentRuntime", () => {
       },
     });
     expect(JSON.stringify(requests)).not.toContain("private provider detail");
+    expect(diagnostics).toEqual([
+      expect.objectContaining({
+        type: "agent.internal-error",
+        phase: "execute-tool",
+        sessionId: "session-1",
+        toolCallId: "call-failed",
+        cause: expect.any(Error),
+      }),
+    ]);
+    expect(JSON.stringify(events)).not.toContain("private provider detail");
     expect(events.filter((event) => event.type === "agent.tool-state")).toEqual([
       expect.objectContaining({ type: "agent.tool-state", status: "pending" }),
       expect.objectContaining({ type: "agent.tool-state", status: "running" }),

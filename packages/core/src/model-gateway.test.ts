@@ -18,4 +18,12 @@ describe("ModelGatewayError", () => {
     expect(error.code).toBe(code);
     expect(error.message).toBe(`Model provider failed with category: ${code}.`);
   });
+
+  it("retains an internal cause without serializing it", () => {
+    const cause = new Error("provider secret");
+    const error = new ModelGatewayError("unavailable", { cause });
+
+    expect(error.cause).toBe(cause);
+    expect(JSON.stringify(error)).not.toContain("provider secret");
+  });
 });

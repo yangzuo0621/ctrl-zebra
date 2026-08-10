@@ -123,10 +123,25 @@ export type ModelGatewayErrorCode =
   | "unknown";
 
 export class ModelGatewayError extends Error {
-  constructor(readonly code: ModelGatewayErrorCode) {
+  constructor(
+    readonly code: ModelGatewayErrorCode,
+    options: ModelGatewayErrorOptions = {},
+  ) {
     super(`Model provider failed with category: ${code}.`);
     this.name = "ModelGatewayError";
+    if (options.cause !== undefined) {
+      Object.defineProperty(this, "cause", {
+        configurable: true,
+        enumerable: false,
+        value: options.cause,
+        writable: true,
+      });
+    }
   }
+}
+
+export interface ModelGatewayErrorOptions {
+  readonly cause?: unknown;
 }
 
 export interface ModelGateway {
