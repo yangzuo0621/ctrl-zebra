@@ -1,4 +1,5 @@
 import {
+  type AgentRuntimeDiagnostic,
   ContextOverflowRecoveryExhaustedError,
   EmptyAgentResponseError,
   InvalidContextRecoverySummaryError,
@@ -8,7 +9,9 @@ import {
   InvalidModelMessageTokenCountError,
   MaxToolStepsExceededError,
   ModelGatewayError,
+  ToolExecutionError,
   ToolRepetitionDetectedError,
+  ToolUnavailableError,
   UnexpectedToolCallError,
 } from "@ctrl-zebra/core";
 import type { RunErrorCode, RunErrorMessage } from "@ctrl-zebra/protocol";
@@ -77,6 +80,33 @@ export interface RunFailureLogEntry {
   readonly component: "agent_run";
   readonly outcome: "failure";
   readonly errorCode: string;
+}
+
+export interface AgentRuntimeDiagnosticLogEntry {
+  readonly event: "tool_approval_preparation_failed" | "tool_execution_failed";
+  readonly component: "agent_runtime";
+  readonly outcome: "failure";
+  readonly errorCode: string;
+  readonly sessionId: string;
+  readonly runId: string;
+  readonly toolCallId: string;
+}
+
+export function getAgentRuntimeDiagnosticLogEntry(
+  diagnostic: AgentRuntimeDiagnostic,
+): AgentRuntimeDiagnosticLogEntry {
+  return {
+    event:
+      diagnostic.phase === "prepare-approval"
+        ? "tool_approval_preparation_failed"
+        : "tool_execution_failed",
+    component: "agent_runtime",
+    outcome: "failure",
+    errorCode: classifyDiagnosticCause(diagnostic.cause),
+    sessionId: diagnostic.sessionId,
+    runId: diagnostic.runId,
+    toolCallId: diagnostic.toolCallId,
+  };
 }
 
 export function mapRunErrorToUi(error: unknown): RunErrorDto {
@@ -159,6 +189,22 @@ function classifyRunFailureForLog(error: unknown): string {
 
   if (error instanceof ProviderAdapterUnavailableError) {
     return "provider-adapter-unavailable";
+  }
+
+  return "internal";
+}
+
+function classifyDiagnosticCause(error: unknown): string {
+  if (error instanceof ModelGatewayError) {
+    return error.code;
+  }
+
+  if (error instanceof ToolExecutionError) {
+    return error.code;
+  }
+
+  if (error instanceof ToolUnavailableError) {
+    return "unknown-tool";
   }
 
   return "internal";

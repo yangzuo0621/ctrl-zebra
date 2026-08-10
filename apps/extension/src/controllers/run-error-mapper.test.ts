@@ -14,7 +14,11 @@ import {
   type ProviderConfigurationErrorCode,
 } from "../adapters/provider-configuration.js";
 import { MissingProviderApiKeyError } from "./model-gateway-selector.js";
-import { getRunFailureLogEntry, mapRunErrorToUi } from "./run-error-mapper.js";
+import {
+  getAgentRuntimeDiagnosticLogEntry,
+  getRunFailureLogEntry,
+  mapRunErrorToUi,
+} from "./run-error-mapper.js";
 
 describe("mapRunErrorToUi", () => {
   it.each([
@@ -165,5 +169,29 @@ describe("mapRunErrorToUi", () => {
       message:
         "The model used tools but did not provide a final response. Review the tool results and try again.",
     });
+  });
+
+  it("maps local Runtime causes to safe, owner-scoped diagnostic fields", () => {
+    const cause = new Error("private path and secret-token");
+    const entry = getAgentRuntimeDiagnosticLogEntry({
+      type: "agent.internal-error",
+      phase: "execute-tool",
+      sessionId: "session-1",
+      runId: "run-1",
+      toolCallId: "call-1",
+      cause,
+    });
+
+    expect(entry).toEqual({
+      event: "tool_execution_failed",
+      component: "agent_runtime",
+      outcome: "failure",
+      errorCode: "internal",
+      sessionId: "session-1",
+      runId: "run-1",
+      toolCallId: "call-1",
+    });
+    expect(JSON.stringify(entry)).not.toContain("private path");
+    expect(JSON.stringify(entry)).not.toContain("secret-token");
   });
 });

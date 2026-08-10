@@ -343,7 +343,13 @@ entry, not only the intermediate object.
   messages, status text, response bodies, headers, and stacks are excluded.
 - A third-party `cause` may be inspected only to classify it through documented type guards or
   stable SDK properties. The resulting stable category may be logged, but the original cause and
-  its recursively nested causes are discarded.
+  its recursively nested causes are discarded from diagnostic entries. A Provider `ModelGatewayError`
+  may retain a non-enumerable in-memory cause for the owning host to preserve failure causality;
+  that cause is never serialized, logged directly, persisted, or projected to the user.
+- Core approval-preparation and Tool-execution diagnostics use a separate injected local sink. The
+  Extension may inspect the in-memory cause only long enough to classify it into an allowlisted
+  error code; the raw cause is never emitted as a Runtime event or retained in Protocol, Session
+  persistence, model history, Tool Results, or Webview state.
 - Cancellation, timeout, provider failure, tool failure, and cleanup failure remain distinct
   outcomes. Logging must not convert one into another or replace the primary result.
 

@@ -77,7 +77,7 @@ export function createAISDKModelGateway(model: LanguageModel): ModelGateway {
           throw error;
         }
 
-        throw new ModelGatewayError(classifyProviderError(error));
+        throw new ModelGatewayError(classifyProviderError(error), { cause: error });
       }
     },
   };
@@ -271,15 +271,17 @@ function mapStreamPart(
     }
     case "abort":
       signal.throwIfAborted();
-      throw new ModelGatewayError("unknown");
+      throw new ModelGatewayError("unknown", { cause: part.reason });
     case "error":
-      throw new ModelGatewayError(classifyProviderError(part.error));
+      throw new ModelGatewayError(classifyProviderError(part.error), { cause: part.error });
     case "reasoning-start":
       return reasoning.start(readString(part, "id"));
     case "reasoning-delta":
       return reasoning.delta(readString(part, "id"), readString(part, "text"));
     case "reasoning-end":
       return reasoning.end(readString(part, "id"));
+    // These lifecycle/metadata parts carry no Core value. The final `tool-call` remains the only
+    // accepted Tool boundary, and `finish` remains the only terminal event that closes delivery.
     case "file":
     case "finish-step":
     case "raw":
@@ -289,14 +291,21 @@ function mapStreamPart(
     case "start-step":
     case "text-end":
     case "text-start":
-    case "tool-approval-request":
-    case "tool-error":
     case "tool-input-delta":
     case "tool-input-end":
     case "tool-input-start":
+      return [];
+    // Provider-executed Tool and approval events cannot be replayed into the host-owned Core
+    // Tool/approval lifecycle. Reject them instead of silently dropping failures or side effects.
+    case "tool-approval-request":
+    case "tool-approval-response":
     case "tool-output-denied":
     case "tool-result":
-      return [];
+      throw new ModelGatewayError("malformed-response", {
+        cause: "Unsupported provider-executed Tool event.",
+      });
+    case "tool-error":
+      throw new ModelGatewayError("malformed-response", { cause: part.error });
     default:
       throw new ModelGatewayError("malformed-response");
   }
@@ -497,6 +506,10 @@ function readString(record: Readonly<Record<string, unknown>>, key: string): str
 }
 
 function classifyProviderError(error: unknown): ModelGatewayErrorCode {
+  if (error instanceof ModelGatewayError) {
+    return error.code;
+  }
+
   if (LoadAPIKeyError.isInstance(error)) {
     return "authentication";
   }

@@ -52,7 +52,10 @@ This document defines the initial runtime boundaries for the CtrlZebra desktop V
 - `packages/core` owns the host- and vendor-independent `ModelGateway` contract and all values that cross it. Core code depends only on these internal types and never imports a model SDK.
 - `packages/providers` implements `ModelGateway`. A provider adapter is limited to translating Core requests into SDK calls and normalizing the resulting text deltas, tool calls, token usage, finish reasons, and failures into Core values in source order.
 - SDK output and failures are untrusted adapter-boundary input. Adapters narrow or validate them before creating Core values. Unsupported or malformed SDK data becomes a stable Core provider error rather than leaking an SDK object or relying on SDK error-message text.
-- Core defines a closed set of provider error categories suitable for runtime decisions. Adapter diagnostics may retain a redacted cause privately, but SDK error classes, status objects, response bodies, headers, and credentials never cross the `ModelGateway` boundary.
+- Core defines a closed set of provider error categories suitable for runtime decisions. Adapter
+  diagnostics may retain a non-enumerable cause privately for host-side classification, but SDK
+  error classes, status objects, response bodies, headers, and credentials never become ModelGateway
+  data, events, Protocol values, persistence, or user-facing content.
 - `context-overflow` is the stable Provider-neutral category for a structured provider response that
   rejects the request because the model context is too large. Adapters may classify only bounded,
   structured error fields; response text and third-party wording never control this decision. Other
@@ -190,6 +193,10 @@ This document defines the initial runtime boundaries for the CtrlZebra desktop V
   mutate Session status, emit lifecycle transitions, continue the model loop, approve an operation,
   or choose presentation state. Those responsibilities remain in the Core runtime and its injected
   services.
+- Core may report an approval-preparation or Tool-execution failure through an injected, local-only
+  diagnostic sink. The diagnostic carries the owning Session, Run, and Tool Call identities plus the
+  internal cause for host logging; it is not an `AgentRuntimeEvent` and therefore cannot enter the
+  Webview, Protocol, persistence, model history, or Tool Result.
 
 ## Context Budget and Recovery Boundary
 

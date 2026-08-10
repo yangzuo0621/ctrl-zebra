@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import {
   AgentRuntime,
+  type AgentRuntimeDiagnosticSink,
   type AgentRuntimeEvent,
   allocateTokenBudget,
   CorruptEventLogError,
@@ -69,6 +70,7 @@ export interface ChatRunner {
 
 interface ChatRunnerDependencies {
   readonly modelGateway: ModelGateway;
+  readonly diagnosticSink?: AgentRuntimeDiagnosticSink;
   readonly toolRegistry?: ToolRegistry;
   readonly createId?: () => string;
   readonly now?: () => Date;
@@ -84,6 +86,7 @@ interface SelectedToolRegistry {
 
 interface SelectingChatRunnerDependencies {
   readonly selectModelGateway: () => Promise<ModelGateway>;
+  readonly diagnosticSink?: AgentRuntimeDiagnosticSink;
   readonly selectToolRegistry?: (
     signal: AbortSignal,
   ) => Promise<ToolRegistry | SelectedToolRegistry>;
@@ -95,6 +98,7 @@ interface SelectingChatRunnerDependencies {
 
 export function createChatRunner({
   modelGateway,
+  diagnosticSink,
   toolRegistry,
   createId = randomUUID,
   now = () => new Date(),
@@ -186,6 +190,7 @@ export function createChatRunner({
           toolRegistry,
           {
             approvalWorkflow,
+            diagnosticSink,
           },
         );
         try {
@@ -286,6 +291,7 @@ export function createChatRunner({
         toolRegistry,
         {
           approvalWorkflow,
+          diagnosticSink,
           ...(existingRecord === undefined
             ? {}
             : {
@@ -353,6 +359,7 @@ function projectRuntimeEvent(
 
 export function createSelectingChatRunner({
   selectModelGateway,
+  diagnosticSink,
   selectToolRegistry = async () => new ToolRegistry(),
   createId,
   now,
@@ -376,6 +383,7 @@ export function createSelectingChatRunner({
         createId,
         now,
         approvalWorkflow,
+        diagnosticSink,
         sessionRepository,
         mcpToolSources: selection.mcpToolSources,
       }).run(content, signal, emit, externalResources, externalPrompts, sessionId);
