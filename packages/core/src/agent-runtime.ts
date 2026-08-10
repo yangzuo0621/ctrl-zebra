@@ -22,6 +22,7 @@ import { agentSystemInstruction, shouldOfferWorkspaceTools } from "./agent-behav
 import { BasicApprovalPolicy } from "./approval-policy.js";
 import type { DomainEvent, EventSink } from "./events.js";
 import { projectExternalMcpContext } from "./external-resource-context.js";
+import { defaultModelMessageTokenCounter } from "./heuristic-token-counter.js";
 import {
   InvalidModelHistoryError,
   type ModelMessageTokenCounter,
@@ -179,13 +180,6 @@ let nextDefaultRunId = 0;
 
 const maxHistoryMessageCharacters = 1_000_000;
 const maxHistoryMessages = 10_000;
-
-const defaultModelMessageTokenCounter: ModelMessageTokenCounter = {
-  count(message) {
-    const serialized = JSON.stringify(message);
-    return serialized === undefined ? 0 : [...serialized].length;
-  },
-};
 
 function createDefaultRunId(): CheckpointRunId {
   nextDefaultRunId += 1;
@@ -372,6 +366,7 @@ export class AgentRuntime {
       runOptions.externalResources ?? [],
       runOptions.externalPrompts ?? [],
       this.#filesTokenBudget,
+      this.#tokenCounter,
     );
     signal.throwIfAborted();
     return [...retainedHistory, ...externalContext, latestUser];

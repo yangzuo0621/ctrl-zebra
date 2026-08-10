@@ -144,6 +144,13 @@ export {
   projectExternalPromptContext,
   projectExternalResourceContext,
 } from "./external-resource-context.js";
+export {
+  defaultModelMessageTokenCounter,
+  HeuristicModelMessageTokenCounter,
+  heuristicBytesPerToken,
+  heuristicMessageOverheadTokens,
+  maxHeuristicSerializedBytes,
+} from "./heuristic-token-counter.js";
 export type { ModelMessageTokenCounter, PrunedModelHistory } from "./history-pruner.js";
 export {
   InvalidHistoryBudgetError,

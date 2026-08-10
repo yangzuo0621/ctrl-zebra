@@ -4,8 +4,10 @@ import {
   mcpPromptConfirmationSchema,
   mcpResourceAttachmentSchema,
 } from "@ctrl-zebra/protocol";
-
+import { defaultModelMessageTokenCounter } from "./heuristic-token-counter.js";
+import type { ModelMessageTokenCounter } from "./history-pruner.js";
 import type { ModelTextMessage } from "./model-gateway.js";
+import { maxModelContextWindowTokens } from "./token-budget.js";
 
 export const maxExternalResourceAttachments = 32;
 
@@ -19,10 +21,12 @@ export class ExternalResourceContextBudgetError extends Error {
 export function projectExternalResourceContext(
   attachments: readonly McpResourceAttachment[],
   filesTokenBudget: number,
+  tokenCounter: ModelMessageTokenCounter = defaultModelMessageTokenCounter,
 ): readonly ModelTextMessage[] {
   if (
     !Number.isSafeInteger(filesTokenBudget) ||
     filesTokenBudget < 0 ||
+    filesTokenBudget > maxModelContextWindowTokens ||
     attachments.length > maxExternalResourceAttachments
   ) {
     throw new ExternalResourceContextBudgetError();
@@ -43,23 +47,19 @@ export function projectExternalResourceContext(
       ].join("\n"),
     };
   });
-  const conservativeTokens = messages.reduce(
-    (total, { content }) => total + [...content].length,
-    0,
-  );
-  if (!Number.isSafeInteger(conservativeTokens) || conservativeTokens > filesTokenBudget) {
-    throw new ExternalResourceContextBudgetError();
-  }
+  assertWithinBudget(messages, filesTokenBudget, tokenCounter);
   return messages;
 }
 
 export function projectExternalPromptContext(
   confirmations: readonly McpPromptConfirmation[],
   filesTokenBudget: number,
+  tokenCounter: ModelMessageTokenCounter = defaultModelMessageTokenCounter,
 ): readonly ModelTextMessage[] {
   if (
     !Number.isSafeInteger(filesTokenBudget) ||
     filesTokenBudget < 0 ||
+    filesTokenBudget > maxModelContextWindowTokens ||
     confirmations.length > 32
   ) {
     throw new ExternalResourceContextBudgetError();
@@ -68,7 +68,7 @@ export function projectExternalPromptContext(
     role: "user" as const,
     content: mcpPromptConfirmationSchema.parse(confirmation).projectedText,
   }));
-  assertWithinBudget(messages, filesTokenBudget);
+  assertWithinBudget(messages, filesTokenBudget, tokenCounter);
   return messages;
 }
 
@@ -76,21 +76,35 @@ export function projectExternalMcpContext(
   resources: readonly McpResourceAttachment[],
   prompts: readonly McpPromptConfirmation[],
   filesTokenBudget: number,
+  tokenCounter: ModelMessageTokenCounter = defaultModelMessageTokenCounter,
 ): readonly ModelTextMessage[] {
   const messages = [
-    ...projectExternalResourceContext(resources, filesTokenBudget),
-    ...projectExternalPromptContext(prompts, filesTokenBudget),
+    ...projectExternalResourceContext(resources, filesTokenBudget, tokenCounter),
+    ...projectExternalPromptContext(prompts, filesTokenBudget, tokenCounter),
   ];
-  assertWithinBudget(messages, filesTokenBudget);
+  assertWithinBudget(messages, filesTokenBudget, tokenCounter);
   return messages;
 }
 
-function assertWithinBudget(messages: readonly ModelTextMessage[], filesTokenBudget: number): void {
-  const conservativeTokens = messages.reduce(
-    (total, { content }) => total + [...content].length,
-    0,
-  );
-  if (!Number.isSafeInteger(conservativeTokens) || conservativeTokens > filesTokenBudget) {
-    throw new ExternalResourceContextBudgetError();
+function assertWithinBudget(
+  messages: readonly ModelTextMessage[],
+  filesTokenBudget: number,
+  tokenCounter: ModelMessageTokenCounter,
+): void {
+  let estimatedTokens = 0;
+  for (const message of messages) {
+    const tokens = tokenCounter.count(message);
+    if (
+      !Number.isSafeInteger(tokens) ||
+      tokens < 0 ||
+      tokens > maxModelContextWindowTokens ||
+      !Number.isSafeInteger(estimatedTokens + tokens)
+    ) {
+      throw new ExternalResourceContextBudgetError();
+    }
+    estimatedTokens += tokens;
+    if (estimatedTokens > filesTokenBudget) {
+      throw new ExternalResourceContextBudgetError();
+    }
   }
 }

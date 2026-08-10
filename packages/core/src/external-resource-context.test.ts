@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   ExternalResourceContextBudgetError,
@@ -49,5 +49,17 @@ describe("external MCP Resource context", () => {
     expect(() => projectExternalResourceContext([attachment], 10)).toThrow(
       ExternalResourceContextBudgetError,
     );
+  });
+
+  it("uses the injected counter for the same Files-budget decision", () => {
+    const tokenCounter = { count: vi.fn(() => 0) };
+
+    expect(projectExternalMcpContext([attachment], [], 0, tokenCounter)).toEqual([
+      {
+        role: "user",
+        content: expect.stringContaining("External MCP Resource"),
+      },
+    ]);
+    expect(tokenCounter.count).toHaveBeenCalled();
   });
 });

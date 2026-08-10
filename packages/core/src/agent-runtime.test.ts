@@ -68,6 +68,38 @@ describe("AgentRuntime", () => {
     expect(requests[0]?.messages[1]).toEqual({ role: "user", content: "Keep my intent" });
   });
 
+  it("uses the injected token counter for external context budgeting", async () => {
+    const requests: ModelRequest[] = [];
+    const gateway = createModelGateway(
+      [
+        { type: "text.delta", text: "Done" },
+        { type: "finish", reason: "stop" },
+      ],
+      (request) => requests.push(request),
+    );
+    const tokenCounter = { count: vi.fn(() => 0) };
+    const runtime = new AgentRuntime(gateway, { emit: () => {} }, undefined, {
+      contextWindowTokens: 4,
+      tokenCounter,
+    });
+
+    await runtime.run({ ...userMessage, content: "Keep my intent" }, new AbortController().signal, {
+      externalResources: [
+        {
+          snapshotId: "snapshot-1",
+          serverId: "local_fixture",
+          uri: "memory://policy",
+          mimeType: "text/plain",
+          text: "A deliberately large external context value.",
+          truncated: false,
+        },
+      ],
+    });
+
+    expect(requests[0]?.messages).toHaveLength(2);
+    expect(tokenCounter.count).toHaveBeenCalled();
+  });
+
   it("keeps confirmed MCP Prompt roles as ordinary user context before the latest intent", async () => {
     const requests: ModelRequest[] = [];
     const gateway = createModelGateway(
