@@ -38,6 +38,7 @@ import {
 } from "./reasoning.js";
 import { sessionIdSchema, sessionStatusSchema, sessionSummarySchema } from "./session.js";
 import { toolCallSchema, toolErrorResultSchema, toolSuccessResultSchema } from "./tool.js";
+import { tokenUsageSchema } from "./usage.js";
 
 export const protocolVersion = 1 as const;
 
@@ -271,6 +272,12 @@ export const textDeltaMessageSchema = z.strictObject({
   text: z.string().min(1).max(1_000_000),
 });
 
+export const tokenUsageMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("extension/token-usage"),
+  usage: tokenUsageSchema,
+});
+
 export const reasoningStartMessageSchema = z.strictObject({
   ...protocolEnvelopeSchema.shape,
   type: z.literal("extension/reasoning-start"),
@@ -412,6 +419,7 @@ export const restoredSessionSchema = z.strictObject({
   status: sessionStatusSchema,
   messages: z.array(z.union([userMessageSchema, assistantMessageSchema])).max(10_000),
   eventLogTailDamaged: z.boolean(),
+  usage: tokenUsageSchema.optional(),
 });
 
 export const sessionRestoredMessageSchema = z.strictObject({
@@ -471,6 +479,7 @@ export const webviewToExtensionMessageSchema = z.discriminatedUnion("type", [
 export const extensionToWebviewMessageSchema = z.union([
   pongMessageSchema,
   textDeltaMessageSchema,
+  tokenUsageMessageSchema,
   reasoningStartMessageSchema,
   reasoningDeltaMessageSchema,
   reasoningEndMessageSchema,
@@ -525,6 +534,7 @@ export type ShowApprovalDiffMessage = z.infer<typeof showApprovalDiffMessageSche
 export type ApprovalDecisionIntent = z.infer<typeof approvalDecisionIntentSchema>;
 export type ApprovalDecisionMessage = z.infer<typeof approvalDecisionMessageSchema>;
 export type TextDeltaMessage = z.infer<typeof textDeltaMessageSchema>;
+export type TokenUsageMessage = z.infer<typeof tokenUsageMessageSchema>;
 export type ReasoningStartMessage = z.infer<typeof reasoningStartMessageSchema>;
 export type ReasoningDeltaMessage = z.infer<typeof reasoningDeltaMessageSchema>;
 export type ReasoningEndMessage = z.infer<typeof reasoningEndMessageSchema>;

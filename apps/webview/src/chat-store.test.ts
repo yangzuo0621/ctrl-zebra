@@ -227,6 +227,49 @@ describe("chat reasoning store", () => {
     expect(harness.store.getState().activeRequestId).toBeUndefined();
   });
 
+  it("accumulates partial provider usage during a run and fences terminal updates", () => {
+    const harness = createHarness();
+    startRun(harness);
+    harness.receive({
+      protocolVersion,
+      type: "extension/token-usage",
+      requestId: "request-1",
+      usage: { inputTokens: 7, totalTokens: 10 },
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/token-usage",
+      requestId: "request-1",
+      usage: { outputTokens: 3, totalTokens: 12 },
+    });
+
+    expect(harness.store.getState().usage).toEqual({
+      inputTokens: 7,
+      outputTokens: 3,
+      totalTokens: 22,
+    });
+
+    harness.receive({
+      protocolVersion,
+      type: "extension/run-status",
+      requestId: "request-1",
+      status: "completed",
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/token-usage",
+      requestId: "request-1",
+      usage: { inputTokens: 99, outputTokens: 99, totalTokens: 99 },
+    });
+
+    expect(harness.store.getState().usage).toEqual({
+      inputTokens: 7,
+      outputTokens: 3,
+      totalTokens: 22,
+    });
+    expect(harness.store.getState().activeRequestId).toBeUndefined();
+  });
+
   it("removes an empty completed lifecycle and defensively truncates oversized blocks", () => {
     const harness = createHarness();
     startRun(harness);
@@ -318,6 +361,7 @@ describe("chat reasoning store", () => {
         sessionId: "session-1",
         status: "interrupted",
         eventLogTailDamaged: false,
+        usage: { inputTokens: 10, totalTokens: 12 },
         messages: [
           {
             messageId: "user-1",
@@ -346,6 +390,7 @@ describe("chat reasoning store", () => {
       ],
     });
     expect(harness.store.getState().reasoningAnnouncement).toBe("");
+    expect(harness.store.getState().usage).toEqual({ inputTokens: 10, totalTokens: 12 });
   });
 
   it("discards a staged restore when the next message does not match", () => {
@@ -491,6 +536,12 @@ describe("chat reasoning store", () => {
     harness.flush();
     harness.receive({
       protocolVersion,
+      type: "extension/token-usage",
+      requestId: "request-1",
+      usage: { inputTokens: 4, outputTokens: 2, totalTokens: 6 },
+    });
+    harness.receive({
+      protocolVersion,
       type: "extension/run-status",
       requestId: "request-1",
       status: "completed",
@@ -505,6 +556,7 @@ describe("chat reasoning store", () => {
       sessionSelectionId: undefined,
       activeRequestId: undefined,
       restoring: false,
+      usage: undefined,
     });
 
     harness.receive({

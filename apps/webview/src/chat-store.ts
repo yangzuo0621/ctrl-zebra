@@ -5,10 +5,12 @@ import {
   maxReasoningBlockUtf8Bytes,
   maxReasoningRunCodePoints,
   maxReasoningRunUtf8Bytes,
+  maxTokenCount,
   measureReasoningText,
   type ReasoningRestoredMessage,
   type RunStatus,
   type SessionSummary,
+  type TokenUsage,
   type ToolCall,
   type ToolErrorResult,
   type ToolStateMessage,
@@ -36,6 +38,8 @@ export interface DisplayMessage {
   readonly reasoningBlocks: readonly DisplayReasoningBlock[];
   readonly reasoningRunTruncated: boolean;
 }
+
+export type DisplayTokenUsage = TokenUsage;
 
 export type DisplayToolCall =
   | {
@@ -69,6 +73,7 @@ interface ChatState {
   readonly runError?: string;
   readonly reasoningAnnouncement: string;
   readonly sessionAnnouncement: string;
+  readonly usage?: DisplayTokenUsage;
   submit(content: string): boolean;
   cancel(): void;
   newChat(): boolean;
@@ -301,6 +306,10 @@ export function createChatStore({
       }));
     };
 
+    const applyTokenUsage = (usage: TokenUsage) => {
+      set((state) => ({ usage: mergeTokenUsage(state.usage, usage) }));
+    };
+
     const restoreMessages = (
       message: Extract<ExtensionToWebviewMessage, { type: "extension/session-restored" }>,
       staged: ReasoningRestoredMessage | undefined,
@@ -356,6 +365,7 @@ export function createChatStore({
     return {
       messages: [],
       status: "idle",
+      usage: undefined,
       sessions: [],
       sessionSwitchPending: false,
       restoring: false,
@@ -403,6 +413,7 @@ export function createChatStore({
           status: "preparing",
           activeRequestId: requestId,
           runError: undefined,
+          usage: state.usage,
           reasoningAnnouncement: "",
           sessionAnnouncement:
             sessionId === undefined ? "Starting a new Session." : "Continuing the current Session.",
@@ -446,6 +457,7 @@ export function createChatStore({
           restoring: false,
           sessionError: undefined,
           runError: undefined,
+          usage: undefined,
           reasoningAnnouncement: "",
           sessionAnnouncement: "New chat ready.",
         });
@@ -610,6 +622,7 @@ export function createChatStore({
             sessionSwitchPending: false,
             restoring: false,
             runError: undefined,
+            usage: message.session.usage,
             reasoningAnnouncement: "",
             sessionError: message.session.eventLogTailDamaged
               ? "Recovered through the last valid event."
@@ -662,6 +675,13 @@ export function createChatStore({
         if (message.type === "extension/text-delta") {
           if (state.status === "preparing" || state.status === "streaming") {
             queueTextDelta(message.text);
+          }
+          return;
+        }
+
+        if (message.type === "extension/token-usage") {
+          if (state.status === "preparing" || state.status === "streaming") {
+            applyTokenUsage(message.usage);
           }
           return;
         }
@@ -820,4 +840,31 @@ function toDisplayToolCall(message: ToolStateMessage): DisplayToolCall {
   }
 
   return { call: message.call, source: message.source, status: "error", result: message.result };
+}
+
+function mergeTokenUsage(
+  current: TokenUsage | undefined,
+  next: TokenUsage,
+): DisplayTokenUsage {
+  return {
+    ...(mergeUsageValue(current?.inputTokens, next.inputTokens) === undefined
+      ? {}
+      : { inputTokens: mergeUsageValue(current?.inputTokens, next.inputTokens) }),
+    ...(mergeUsageValue(current?.outputTokens, next.outputTokens) === undefined
+      ? {}
+      : { outputTokens: mergeUsageValue(current?.outputTokens, next.outputTokens) }),
+    ...(mergeUsageValue(current?.totalTokens, next.totalTokens) === undefined
+      ? {}
+      : { totalTokens: mergeUsageValue(current?.totalTokens, next.totalTokens) }),
+  };
+}
+
+function mergeUsageValue(current: number | undefined, next: number | undefined): number | undefined {
+  if (next === undefined) {
+    return current;
+  }
+  if (current === undefined) {
+    return next;
+  }
+  return current > maxTokenCount - next ? maxTokenCount : current + next;
 }

@@ -56,6 +56,43 @@ describe("createChatRunner", () => {
     });
   });
 
+  it("persists Provider Usage in source order and omits missing reports", async () => {
+    const repository = new InMemorySessionRepository();
+    const runner = createChatRunner({
+      modelGateway: {
+        async *stream() {
+          yield { type: "text.delta", text: "One" } as const;
+          yield { type: "usage", usage: { inputTokens: 3, outputTokens: 2, totalTokens: 5 } } as const;
+          yield { type: "usage", usage: {} } as const;
+          yield { type: "finish", reason: "stop" } as const;
+        },
+      },
+      createId: (() => {
+        const ids = ["session-usage", "message-usage"];
+        return () => ids.shift() ?? "unexpected-id";
+      })(),
+      now: () => new Date("2026-08-10T00:00:00.000Z"),
+      sessionRepository: repository,
+    });
+
+    await runner.run("Count tokens.", new AbortController().signal, () => {});
+
+    const record = await repository.get("session-usage");
+    expect(record?.events.map(({ event }) => event.type)).toEqual([
+      "session.user-message",
+      "session.status-changed",
+      "session.status-changed",
+      "agent.text-delta",
+      "session.usage",
+      "session.status-changed",
+    ]);
+    expect(record?.events.find(({ event }) => event.type === "session.usage")?.event.data).toEqual({
+      inputTokens: 3,
+      outputTokens: 2,
+      totalTokens: 5,
+    });
+  });
+
   it("persists only the bounded reasoning projection in source order", async () => {
     const repository = new InMemorySessionRepository();
     const ids = ["session-reasoning", "message-reasoning"];

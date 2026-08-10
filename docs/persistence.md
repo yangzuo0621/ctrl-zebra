@@ -155,6 +155,23 @@ The existing `messages.jsonl` Chat Message schema is unchanged. Reasoning is not
 message, final answer, Tool message, context summary, or model-history item and is never copied into
 those records.
 
+#### Provider token usage events
+
+The Extension persists the bounded Provider Usage projection as the additive version `1` event
+`session.usage` with strict data `{ inputTokens?, outputTokens?, totalTokens? }`. Each present value
+is an actual non-negative Provider count no greater than `2,000,000`; an empty object preserves the
+fact that a step supplied no count but does not create a visible zero. Prices, billing data,
+estimates, SDK metadata, and raw responses are never persisted.
+
+Usage events retain their source order with text, reasoning, Tool, and status events, but remain
+outside model history. Recovery validates every recognized Usage payload and sums each field
+independently across the ordered Session records. A field absent from every record remains unknown;
+partial input/output/total values are not inferred from one another. A cumulative overflow or
+malformed recognized payload marks the Session corrupt rather than truncating or guessing. The
+recovered projection is sent with `extension/session-restored`; live `extension/token-usage`
+events are used only while the matching Run is preparing or streaming, and late or duplicate events
+do not mutate recovered state.
+
 ## Compatibility and migration
 
 - Readers select a decoder from the version directory and then require the manifest version to

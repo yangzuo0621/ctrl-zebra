@@ -12,6 +12,7 @@ import {
 } from "./reasoning.js";
 import { sessionIdSchema, sessionStatusSchema } from "./session.js";
 import { jsonValueSchema, toolCallSchema, toolNameSchema, toolResultSchema } from "./tool.js";
+import { tokenUsageSchema } from "./usage.js";
 
 export const persistenceFormatVersion = 1 as const;
 export const persistenceSessionsDirectory = "sessions" as const;
@@ -138,6 +139,10 @@ export const persistedMcpPromptEventPayloadSchema = z.strictObject({
   type: z.literal("session.mcp-prompt-confirmed"),
   data: mcpPromptConfirmationSchema,
 });
+export const persistedUsageEventPayloadSchema = z.strictObject({
+  type: z.literal("session.usage"),
+  data: tokenUsageSchema,
+});
 
 const persistedReasoningEventTypes = new Set([
   "session.reasoning-start",
@@ -148,6 +153,7 @@ const persistedReasoningEventTypes = new Set([
 const persistedMcpToolEventTypes = new Set(["session.mcp-tool-call", "session.mcp-tool-result"]);
 const persistedMcpResourceEventTypes = new Set(["session.mcp-resource-attached"]);
 const persistedMcpPromptEventTypes = new Set(["session.mcp-prompt-confirmed"]);
+const persistedUsageEventTypes = new Set(["session.usage"]);
 
 export const persistedEventPayloadSchema = genericPersistedEventPayloadSchema.superRefine(
   (payload, context) => {
@@ -187,6 +193,15 @@ export const persistedEventPayloadSchema = genericPersistedEventPayloadSchema.su
         message: "Persisted MCP Tool events must match their strict version 1 schema.",
       });
     }
+    if (
+      persistedUsageEventTypes.has(payload.type) &&
+      !persistedUsageEventPayloadSchema.safeParse(payload).success
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Persisted Usage events must match their strict version 1 schema.",
+      });
+    }
   },
 );
 
@@ -206,6 +221,7 @@ export type PersistedMcpResourceEventPayload = z.infer<
   typeof persistedMcpResourceEventPayloadSchema
 >;
 export type PersistedMcpPromptEventPayload = z.infer<typeof persistedMcpPromptEventPayloadSchema>;
+export type PersistedUsageEventPayload = z.infer<typeof persistedUsageEventPayloadSchema>;
 export type PersistedEventRecord = z.infer<typeof persistedEventRecordSchema>;
 
 export interface SessionPersistencePaths {

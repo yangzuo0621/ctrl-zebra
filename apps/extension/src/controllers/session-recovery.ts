@@ -16,7 +16,10 @@ import {
   maxReasoningRunCodePoints,
   maxReasoningRunUtf8Bytes,
   measureReasoningText,
+  maxTokenCount,
+  type TokenUsage,
   persistedReasoningEventPayloadSchema,
+  tokenUsageSchema,
   type RestoredReasoning,
   type RestoredSession,
   restoredReasoningSchema,
@@ -140,11 +143,52 @@ export function createSessionRecoveryActions(
           status,
           messages,
           eventLogTailDamaged: record.eventLogTailDamaged,
+          usage: recoverUsage(record),
         }),
         reasoning: recoverReasoning(record),
       };
     },
   };
+}
+
+function recoverUsage(record: SessionRecord): TokenUsage | undefined {
+  let inputTokens: number | undefined;
+  let outputTokens: number | undefined;
+  let totalTokens: number | undefined;
+
+  for (const persisted of record.events) {
+    if (persisted.event.type !== "session.usage") {
+      continue;
+    }
+    const parsed = tokenUsageSchema.safeParse(persisted.event.data);
+    if (!parsed.success) {
+      throw new SessionRecoveryError("corrupt");
+    }
+    const usage = parsed.data;
+    inputTokens = addUsageValue(inputTokens, usage.inputTokens);
+    outputTokens = addUsageValue(outputTokens, usage.outputTokens);
+    totalTokens = addUsageValue(totalTokens, usage.totalTokens);
+  }
+
+  const usage = {
+    ...(inputTokens === undefined ? {} : { inputTokens }),
+    ...(outputTokens === undefined ? {} : { outputTokens }),
+    ...(totalTokens === undefined ? {} : { totalTokens }),
+  } satisfies TokenUsage;
+  return Object.keys(usage).length === 0 ? undefined : usage;
+}
+
+function addUsageValue(current: number | undefined, next: number | undefined): number | undefined {
+  if (next === undefined) {
+    return current;
+  }
+  if (current === undefined) {
+    return next;
+  }
+  if (current > maxTokenCount - next) {
+    throw new SessionRecoveryError("corrupt");
+  }
+  return current + next;
 }
 
 interface RecoveredBlock {

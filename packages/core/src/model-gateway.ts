@@ -1,4 +1,10 @@
-import type { JsonValue, ToolCall, ToolName, ToolResult } from "@ctrl-zebra/protocol";
+import type {
+  JsonValue,
+  TokenUsage as ProtocolTokenUsage,
+  ToolCall,
+  ToolName,
+  ToolResult,
+} from "@ctrl-zebra/protocol";
 
 export type { ToolCall } from "@ctrl-zebra/protocol";
 
@@ -85,11 +91,7 @@ export interface ModelRequest {
   readonly tools?: readonly ToolDeclaration[];
 }
 
-export interface TokenUsage {
-  readonly inputTokens?: number;
-  readonly outputTokens?: number;
-  readonly totalTokens?: number;
-}
+export type TokenUsage = ProtocolTokenUsage;
 
 export type FinishReason = "stop" | "tool-calls" | "length" | "content-filter" | "other";
 

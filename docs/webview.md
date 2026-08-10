@@ -111,6 +111,20 @@ This document defines the React Webview constraints established before T0103. It
   page scrolling at approximately 300px width, 200% zoom, long localized labels, and all four
   supported VS Code theme classes. State is never communicated by color or motion alone.
 
+## Provider Usage Rendering
+
+- The chat store owns the validated `extension/token-usage` projection and accumulates each present
+  field independently for the active Run. Missing input, output, or total values remain unknown;
+  the Webview never derives one field from another and never displays prices, billing, or estimates.
+- Usage is shown in a semantic Provider-usage region after a response. Complete actual counts are
+  labelled normally; partial counts are labelled partial and unknown fields use an explicit em dash.
+  A terminal response without any Provider count says that usage is unavailable rather than showing
+  a fabricated zero. The component is presentation-only and receives store snapshots through props.
+- Live Usage is accepted only for the active request while preparing or streaming. Terminal,
+  cancellation, Session replacement, stale request, duplicate, and malformed messages cannot mutate
+  the display. A restored Session commits its bounded Usage projection atomically with the validated
+  `extension/session-restored` payload, and New chat clears it with the rest of the projection.
+
 ## Build and Resource Boundary
 
 - Vite builds the React application into reproducible static assets under the Extension build output.

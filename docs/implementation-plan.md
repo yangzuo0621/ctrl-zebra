@@ -65,11 +65,11 @@
 
 - 总任务：148
 - 已完成：106
-- 进行中：0
+- 进行中：1
 - 受阻：0
-- 待开始：42
-- 当前任务：无
-- 下一任务：T1509
+- 待开始：41
+- 当前任务：T1509
+- 下一任务：T1510
 - 最后更新：2026-08-10
 
 | 阶段 | 任务 | 状态 | 完成 PR | 完成日期 |
@@ -180,7 +180,7 @@
 | 15 | T1506 | 已完成 | [#160](https://github.com/yangzuo0621/ctrl-zebra/pull/160) | 2026-08-10 |
 | 15 | T1507 | 已完成 | [#161](https://github.com/yangzuo0621/ctrl-zebra/pull/161) | 2026-08-10 |
 | 15 | T1508 | 已完成 | [#162](https://github.com/yangzuo0621/ctrl-zebra/pull/162) | 2026-08-10 |
-| 15 | T1509 | 待开始 | — | — |
+| 15 | T1509 | 进行中 | — | — |
 | 15 | T1510 | 待开始 | — | — |
 | 15 | T1511 | 待开始 | — | — |
 | 16 | T1601 | 待开始 | — | — |
@@ -330,5 +330,5 @@ TypeScript 类型检查与 Biome 检查；Standards 与 Spec 独立审查均已�
 [#160](https://github.com/yangzuo0621/ctrl-zebra/pull/160) 交付。
 T1507 已由 [#161](https://github.com/yangzuo0621/ctrl-zebra/pull/161) 交付。T1508 已由
 [#162](https://github.com/yangzuo0621/ctrl-zebra/pull/162) 交付，统一 Core Token 估算、上下文预算
-与有界确定性计数。当前执行点为无，下一任务为
-[T1509：贯通 Token Usage 的持久化与展示](roadmap/phases/phase-15.md#t1509贯通-token-usage-的持久化与展示)。
+与有界确定性计数。当前执行点为
+[T1509：贯通 Token Usage 的持久化与展示](roadmap/phases/phase-15.md#t1509贯通-token-usage-的持久化与展示)，下一任务为 T1510。
