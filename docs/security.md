@@ -437,6 +437,42 @@ entry, not only the intermediate object.
   user-safe text and never include the submitted value, stored value, Secret name, or original
   backend error. The command does not initialize a Gemini client or make a network request.
 
+## Provider Model Selection Network Boundary
+
+- Model selection is an explicit Extension Host workflow. The `ctrlZebra.selectModel` command may
+  open a Quick Pick after the user invokes it, but activation, Webview creation, Session restore,
+  and chat execution never fetch a model list. The command is not a Tool or a model Run and does
+  not create an approval request.
+- T1602 permits a narrow network exception for bounded model metadata only. The only automatic list
+  requests are HTTPS `GET` requests to the fixed official endpoints documented by the providers:
+  [OpenAI `GET /v1/models`](https://developers.openai.com/api/reference/resources/models/methods/list)
+  and Gemini's OpenAI-compatible
+  [`GET /v1beta/openai/models`](https://ai.google.dev/gemini-api/docs/openai). The request has an
+  `Accept: application/json` header and an `Authorization: Bearer <API key>` header, no body, no
+  query or fragment, and redirects disabled. The API key is read from the matching SecretStorage
+  entry for this operation only; it is never placed in a URL, persisted, logged, or returned to a
+  caller.
+- A configured custom endpoint is not covered by those official guarantees. OpenAI-Compatible
+  endpoints, and custom endpoints configured for a dedicated Provider, never receive an automatic
+  list request in this task; the command must offer manual model-ID entry instead. Endpoint
+  validation remains structural and must complete before any SecretStorage read or network access.
+- A list request contains no workspace URI or text, Session, message, Tool definition, Tool input or
+  result, prompt, or other model context. It is a metadata-only request initiated by the user's
+  command. No provider response body, headers, authorization material, or SDK error text may enter
+  Webview state, Session persistence, diagnostics, or logs.
+- The response is untrusted third-party input. The Extension accepts only a bounded JSON list of
+  non-empty model IDs (each at most 256 Unicode code points and at most 256 entries), removes exact
+  duplicates, and discards all other metadata. Oversized, malformed, or unsupported responses are
+  treated as an unavailable list and never become configuration values.
+- Missing credentials, authentication failures, network/timeout failures, malformed or empty lists,
+  and cancellation are distinct outcomes. Missing credentials, an unavailable list, or an empty
+  list offer manual model-ID entry. Cancellation performs no write and shows no success message.
+  A failed request or a cancelled manual prompt leaves the existing model setting untouched.
+- The user must explicitly choose a Quick Pick item or submit a validated manual model ID before the
+  Extension updates `ctrlZebra.provider.model`. The update changes only that setting; it never
+  clears or rewrites Provider, endpoint, capability, or SecretStorage values. A configuration write
+  failure reports fixed user-safe text and preserves the prior model value.
+
 ## Controlled MCP Security Boundary
 
 This boundary applies to the exact stage 14 MCP `2026-07-28` contract. MCP Servers, descriptors,
