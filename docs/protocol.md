@@ -399,9 +399,11 @@ stderr, stack traces, and causes are forbidden.
   normal envelope. They cannot carry configuration, command, cwd, risk, approval state, Tool
   schema, Resource content, Prompt result, or capability declarations.
 - Extension state uses `extension/mcp-connection`, `extension/mcp-tools`,
-  `extension/mcp-resources`, `extension/mcp-prompts`, `extension/mcp-resource-preview`, and
-  `extension/mcp-prompt-preview`. A snapshot atomically replaces the matching Server/generation
-  view; it is never interpreted as an incremental patch.
+  `extension/mcp-tool-rejections`, `extension/mcp-resources`, `extension/mcp-prompts`,
+  `extension/mcp-resource-preview`, and `extension/mcp-prompt-preview`. The tools message retains
+  its strict accepted-catalog shape; the additive rejection message carries the matching bounded
+  rejection projection. A matching pair atomically replaces the Server/generation view; neither
+  message is interpreted as an incremental patch.
 - MCP Tool Calls continue to use the existing Core Tool Call/Result correlation. Their Webview
   projection adds a strict `source` object to the Tool-state contract only when the originating
   registered Tool is external: `{ kind: "mcp", server, generation, mcpToolName }`. Built-in Tools
@@ -438,6 +440,79 @@ reserves the `mcp_` prefix for this mapping. A duplicate external identity, a ha
 collision with any registered name rejects the complete incoming snapshot; no order-dependent
 suffix or partial registration is allowed. A rename is removal plus addition. Tool calls and
 approvals bind both names, Server ID, generation, and immutable schema identity.
+
+### Tool acceptance and rejection projection
+
+Tool discovery is a per-descriptor decision, but the wire projection is still a complete atomic
+snapshot. The accepted `extension/mcp-tools` catalog contains only Tools whose descriptor and
+compiled schema passed the MCP boundary. A schema rejection never removes an accepted sibling;
+malformed pages, duplicate identities, duplicate/reserved Registry names, and other identity or
+envelope failures reject the complete snapshot. A non-empty list in which every Tool is rejected
+remains the stable `invalid-schema` discovery failure; an actually empty Server list is valid.
+
+`McpToolRejectionReason` is a strict closed enum:
+
+```text
+"forbidden-keyword" | "unknown-keyword" | "invalid-reference" |
+"non-object-root" | "schema-invalid" | "limit-exceeded"
+```
+
+The reason is selected by CtrlZebra and never contains an external keyword, JSON Pointer, SDK
+message, numeric JSON-RPC code, or exception text. `McpRejectedToolDto` is the strict object
+`{ mcpToolName, reason }`, where `mcpToolName` uses the same well-formed Unicode and length bound as
+the accepted Tool descriptor. `McpToolRejectionCatalogDto` is:
+
+```text
+{
+  server: McpServerIdentityDto,
+  generation: positive safe integer,
+  rejectedTools: McpRejectedToolDto[0..256],
+  rejectedToolsTruncated: boolean
+}
+```
+
+The Extension sends this strict additive version `1` message:
+
+```text
+{
+  protocolVersion: 1,
+  type: "extension/mcp-tool-rejections",
+  requestId,
+  catalog: McpToolRejectionCatalogDto
+}
+```
+
+Its `requestId` is the same as the corresponding `extension/mcp-tools` snapshot. The projection
+contains no schema, command, environment, raw error, or arbitrary metadata. When more than 256 Tools
+are rejected in a mixed snapshot, entries are first sorted by exact `mcpToolName` in lexicographic
+Unicode scalar-value order (not UTF-16 code units or Server page order), then the first 256 form the
+deterministic prefix and `rejectedToolsTruncated` is `true`; accepted Tools are never truncated. An
+empty list sets the flag to `false` so a refresh can clear an earlier projection.
+
+New clients stage the two matching messages by `requestId`, Server identity, and generation and
+commit them together. Arrival order is irrelevant: the first half is held in one bounded,
+operation-scoped staging slot until its counterpart arrives. The Webview-local adapter-owned slot
+expires exactly 1,000 ms after the first half arrives; its timer is not extended by retries or later
+messages. The Extension Host remains responsible for generating and sending both messages with the
+matching request ID, Server identity, and generation, but cannot control Webview receipt timing. A
+missing counterpart never creates a new partial view. If this deadline expires, a newer refresh
+starts, the staged request is cancelled, or the connection disconnects/changes generation, the staged half is
+discarded and the last complete pair remains visible; no retry, persistence, or error echo is
+created. A stale or mismatched message is ignored before staging. An empty rejection message is the
+only way to clear an earlier rejection projection.
+
+When the complete non-empty Server list rejects every Tool, the Host returns the existing bounded
+`invalid-schema` discovery outcome, retains the prior complete pair, and emits neither an empty
+`extension/mcp-tools` catalog nor an `extension/mcp-tool-rejections` list. This preserves the
+all-failed failure test and prevents a misleading usable catalog. The future T1803 diagnostics task
+may add a separate reviewed, bounded failure projection for skipped names/reasons; it must not
+reuse this success-catalog message or expose raw schema data. Until then, the user-safe
+`invalid-schema` message is the only wire-visible all-failed detail.
+
+A version `1` client that does not recognize `extension/mcp-tool-rejections` ignores that additive
+message under the existing unknown-message rule and still receives the unchanged tools-only
+`extension/mcp-tools` message; it renders accepted Tools without rejection details. The Host never
+adds an unknown field to the strict legacy catalog to force an older client to parse it.
 
 ### Resource and Resource Template projections
 

@@ -732,6 +732,7 @@ Result ceiling.
 | One list operation | 100 pages and 1,000 entries |
 | One descriptor | 65,536 serialized UTF-8 bytes |
 | One complete list snapshot | 1,048,576 serialized UTF-8 bytes |
+| Rejected Tool projection | 256 entries, within the complete snapshot ceiling |
 | One Tool input or output schema | 65,536 bytes, depth 32, 4,096 nodes, 1,024 properties |
 | All schemas in one Tool snapshot | 524,288 serialized UTF-8 bytes |
 | Tool arguments before approval | 262,144 serialized UTF-8 bytes |
@@ -746,6 +747,39 @@ List collectors reject duplicate cursors, a cursor that does not advance, limit 
 identities, or a malformed page and retain no partial replacement snapshot. Resource text may keep
 the largest well-formed prefix only when the Protocol projection records `truncated: true`; Tool
 and Prompt data that exceed their applicable limit are rejected rather than silently omitted.
+
+### Tool rejection projection and atomic replacement (T1801)
+
+- Tool discovery classifies each bounded descriptor independently after the descriptor envelope and
+  identity have passed validation. A schema that is unsafe, unsupported, malformed, or over its
+  schema limit rejects only that Tool; accepted sibling Tools remain eligible for the replacement
+  snapshot. The rejection projection contains only the well-formed MCP Tool name and a closed
+  CtrlZebra reason (`forbidden-keyword`, `unknown-keyword`, `invalid-reference`, `non-object-root`,
+  `schema-invalid`, or `limit-exceeded`). It never contains a Server keyword, schema path, raw
+  schema, SDK/JSON-RPC error, stack, command, environment, or other untrusted diagnostic.
+- `rejectedTools` is independently bounded to 256 entries and to the one-mebibyte serialized
+  snapshot ceiling. Before taking the prefix, entries are sorted by exact MCP Tool name using
+  lexicographic Unicode scalar-value order (not UTF-16 code units or Server page order), so paging
+  and refresh order cannot change the reported prefix. When more entries are rejected in a mixed
+  snapshot, the adapter retains that deterministic prefix and sets `rejectedToolsTruncated: true`;
+  accepted Tools are never dropped to satisfy this diagnostic bound. An empty rejection list has
+  `rejectedToolsTruncated: false`.
+  If a non-empty input list has no accepted Tool, discovery fails with the existing stable
+  `invalid-schema` outcome instead of publishing a misleading empty catalog. A genuinely empty
+  Server list remains a valid empty catalog.
+- Malformed pages, malformed descriptor envelopes, duplicate MCP identities, duplicate or reserved
+  Registry names, and aggregate list/snapshot limit breaches are whole-operation failures. They
+  retain the last complete current-generation snapshot and never publish a partial mixture of new
+  and old entries. A successful replacement is committed only after all descriptors have been
+  classified and all accepted schemas compiled.
+- Every replacement and rejection projection is bound to the Server identity and generation that
+  requested it. Disconnect, cancellation, Trust loss, a newer generation, or a failed refresh closes
+  the delivery gate; late pages, validators, and rejection details are discarded before Core,
+  Protocol, Webview, persistence, or approval state can observe them. When the two additive wire
+  messages are staged for a Webview pair, the Webview-local adapter-owned staging slot expires
+  1,000 ms after the first half arrives; it is not extended or retried, and an unmatched half is
+  discarded with the prior complete pair retained. The Extension Host owns generation binding and
+  message emission, not the Webview timer or receipt lifecycle.
 
 Unsupported image, audio, Blob, embedded Resource, Resource Link, unknown content, task,
 `input_required`, progress, logging, completion, subscription, or experimental values produce

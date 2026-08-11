@@ -97,9 +97,12 @@ forbidden. Compiled validators live only with the current immutable Tool snapsho
 
 Core represents the result with a CtrlZebra-owned `external_json_schema_2020_12` Tool input-schema
 wrapper, distinct from the existing statically typed built-in Tool schema. The MCP adapter is the
-only producer and may construct it only after the complete snapshot passes validation. Provider
-adapters unwrap the bounded plain JSON value without translating it into, or silently narrowing it
-to, the built-in schema subset; no MCP SDK or Ajv type crosses the package boundary.
+only producer and may construct it only for an individual accepted Tool after that Tool's complete
+schema passes structural and compiled validation. A replacement snapshot may contain accepted
+Tools alongside bounded rejection records, but rejected descriptors never produce a Core Tool or
+wrapper. Provider adapters unwrap the bounded plain JSON value without translating it into, or
+silently narrowing it to, the built-in schema subset; no MCP SDK or Ajv type crosses the package
+boundary.
 
 Every MCP Tool is a trusted CtrlZebra `execute`-risk Tool with an additional unknown local/network
 side-effect warning. Server annotations cannot lower it. Each invocation uses a fresh single-use
@@ -190,6 +193,45 @@ to `server/discover → connected → operation → disconnect`, and the unimple
 `initialize-failed` is corrected to `connect-failed`. This is a factual compatibility correction;
 it does not change the accepted SDK version, protocol version, capability scope, transport, or
 security boundary.
+
+## T1801 supplement: per-Tool rejection and snapshot isolation
+
+T1801 refines the accepted MCP boundary without changing the pinned `2026-07-28` protocol, SDK
+version, package ownership, capability allowlist, process lifecycle, approval policy, or Core
+contract. A `tools/list` result is collected within the existing byte, page, entry, descriptor,
+schema, and snapshot limits and then evaluated one descriptor at a time.
+
+- An accepted descriptor produces an immutable Tool descriptor, schema identity, and compiled
+  validator. A rejected descriptor produces no Core Tool and only a bounded MCP Tool name plus one
+  closed CtrlZebra reason: `forbidden-keyword`, `unknown-keyword`, `invalid-reference`,
+  `non-object-root`, `schema-invalid`, or `limit-exceeded`. Reasons never echo Server keywords,
+  schema paths, SDK/JSON-RPC errors, or exception text. T1802 may refine keyword-to-reason mapping
+  within this closed boundary, but cannot admit unknown or dangerous schema behavior.
+- Schema failure is isolated to that Tool. Invalid descriptor envelopes, malformed pages, duplicate
+  MCP identities, duplicate or reserved Registry names, and aggregate limit breaches remain
+  whole-operation failures because they prevent a trustworthy identity or complete snapshot. A
+  non-empty list with no accepted Tool remains an `invalid-schema` discovery failure; an empty list
+  is a valid empty catalog.
+- The adapter constructs accepted Tools, validators, schema identities, and rejection details off
+  to the side and publishes one complete current-generation snapshot atomically. It retains the
+  previous complete snapshot on any whole-operation failure. Server identity, generation, and
+  discovery context fence every refresh; a late or cancelled result cannot replace a newer
+  snapshot or revive revoked approvals.
+- The protocol adds `extension/mcp-tool-rejections` rather than changing the strict legacy
+  `extension/mcp-tools` shape. The additive projection carries at most 256 rejected entries and a
+  `rejectedToolsTruncated` marker, within the existing serialized snapshot ceiling. Entries are
+  sorted by exact MCP Tool name in lexicographic Unicode scalar-value order before the first 256 are
+  selected, independent of page order. New clients stage the matching tools and rejection messages
+  atomically in one Webview-local adapter-owned slot that expires 1,000 ms after the first half
+  arrives; a missing half, refresh, cancellation, disconnect, or generation change discards the slot
+  without retry. The Extension Host owns generation binding and message emission, not Webview
+  receipt timing. Older clients ignore the unknown additive message and continue to receive accepted
+  Tools, losing only the optional diagnostics.
+
+This supplement records the single-Tool degradation and compatibility behavior required before
+T1801 implementation. It does not authorize T1802 Schema keyword reinterpretation, T1803
+diagnostic UX, or T1804–T1807 dual-era protocol behavior; those remain separate tasks and change
+control surfaces.
 
 ## Reviewed primary references
 
