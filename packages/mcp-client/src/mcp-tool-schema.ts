@@ -169,9 +169,6 @@ function walkSchema(
       wroteDefinitions = true;
       continue;
     }
-    if (key === "definitions") {
-      continue;
-    }
     if (safeStripKeywords.has(key)) {
       walkStrippedKeyword(key, nested, context, depth + 1, childPath, sourceAnchor);
       continue;
@@ -359,7 +356,7 @@ function walkStrippedKeyword(
     const entries = readRecord(value);
     for (const [name, child] of Object.entries(entries)) {
       assertWellFormed(name);
-      walkSchema(child, context, depth, `${path}/${escapePointer(name)}`, sourceAnchor);
+      walkSchema(child, context, depth + 1, `${path}/${escapePointer(name)}`, sourceAnchor);
     }
     return;
   }
