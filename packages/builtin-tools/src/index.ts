@@ -32,6 +32,19 @@ export {
   StaleFileRevisionError,
 } from "./propose-file-edit.js";
 export type {
+  IdeContextPort,
+  ReadEditorContextInput,
+  ReadEditorContextPort,
+  ReadEditorContextScope,
+} from "./read-editor-context.js";
+export {
+  createReadEditorContextTool,
+  EditorContextUnavailableError,
+  readEditorContextInputSchema,
+  readEditorContextToolDescription,
+  readEditorContextToolName,
+} from "./read-editor-context.js";
+export type {
   ReadFileBytes,
   ReadFileInput,
   ReadFileOutput,

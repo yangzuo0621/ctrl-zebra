@@ -1,9 +1,11 @@
 import {
   createListFilesTool,
   createProposeFileEditTool,
+  createReadEditorContextTool,
   createReadFileTool,
   createRunCommandTool,
   createSearchFilesTool,
+  type IdeContextPort,
   type ProposeFileEditWorkspace,
   type RunCommandExecutor,
 } from "@ctrl-zebra/builtin-tools";
@@ -51,6 +53,7 @@ interface WorkspaceToolRegistryDependencies {
   ) => ProposeFileEditWorkspace;
   readonly commandExecutor: RunCommandExecutor;
   readonly workspaceTrust: WorkspaceTrustPolicy;
+  readonly editorContext?: IdeContextPort;
 }
 
 export function createWorkspaceToolRegistryProvider({
@@ -64,6 +67,7 @@ export function createWorkspaceToolRegistryProvider({
   createProposeFileEditWorkspace,
   commandExecutor,
   workspaceTrust,
+  editorContext,
 }: WorkspaceToolRegistryDependencies): WorkspaceToolRegistryProvider {
   let initialization: Promise<ToolRegistry> | undefined;
   let disposed = false;
@@ -84,6 +88,9 @@ export function createWorkspaceToolRegistryProvider({
 
     registry.register(createListFilesTool(lister));
     registry.register(createReadFileTool(reader));
+    if (editorContext !== undefined) {
+      registry.register(createReadEditorContextTool(editorContext));
+    }
     registry.register(createSearchFilesTool(new WorkspaceSearchFiles(lister, reader)));
     if (workspaceTrust.isTrusted()) {
       registry.register(

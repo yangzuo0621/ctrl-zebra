@@ -1,4 +1,5 @@
 import type {
+  IdeContextPort,
   ListFilesInput,
   ProposeFileEditWorkspace,
   ReadFileInput,
@@ -72,6 +73,30 @@ describe("createWorkspaceToolRegistryProvider", () => {
     expect(dependencies.registerWorkspaceChange).toHaveBeenCalledOnce();
   });
 
+  it("composes the host editor context as a read-only Tool when supplied", async () => {
+    const editorContext: IdeContextPort = {
+      readEditorContext: async () => ({
+        source: {
+          uri: { scheme: "file", authority: "", path: "src/index.ts" },
+          stale: false,
+          truncated: false,
+        },
+        text: "text",
+      }),
+    };
+    const provider = createWorkspaceToolRegistryProvider(
+      createDependencies([uri("/workspace")], { editorContext }).values,
+    );
+
+    const registry = await provider.get(new AbortController().signal);
+    expect(registry.declarations().map(({ name }) => name)).toContain("read_editor_context");
+    await expect(
+      registry
+        .get("read_editor_context")
+        ?.execute({ scope: "active-editor" }, { signal: new AbortController().signal }),
+    ).resolves.toMatchObject({ output: { kind: "editor-context", context: { text: "text" } } });
+  });
+
   it("invalidates the cached composition when workspace folders change", async () => {
     const roots = [uri("/first")];
     const dependencies = createDependencies(roots);
@@ -140,6 +165,7 @@ function createDependencies(
     readonly findFiles?: WorkspaceFindFiles;
     readonly readPrefix?: ReadWorkspaceFilePrefix;
     readonly trusted?: boolean;
+    readonly editorContext?: IdeContextPort;
   } = {},
 ) {
   let trusted = overrides.trusted ?? true;
@@ -195,6 +221,7 @@ function createDependencies(
           }
         },
       },
+      editorContext: overrides.editorContext,
     },
     joinPath,
     registerWorkspaceChange,
