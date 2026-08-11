@@ -1,6 +1,8 @@
 import { ToolExecutionError, ToolUnavailableError } from "@ctrl-zebra/core";
 import {
   Client,
+  ProtocolError,
+  ProtocolErrorCode,
   SdkError,
   SdkErrorCode,
   type ServerCapabilities,
@@ -114,6 +116,13 @@ export class ControlledMcpClient {
       },
       createControlledSdkClientOptions(this.protocolMode),
     );
+    // Keep the SDK's bounded MethodNotFound response explicit at this boundary.
+    // No Server-initiated request is a CtrlZebra capability; the fallback must
+    // not inspect params or dispatch into Core, Provider, Workspace, approval,
+    // or persistence. The SDK still owns the JSON-RPC envelope and transport.
+    this.sdkClient.fallbackRequestHandler = () => {
+      throw new ProtocolError(ProtocolErrorCode.MethodNotFound, "Method not found");
+    };
     this.transport = new SdkStdioTransport(port, (code) => this.handleTransportFailure(code));
     this.sdkClient.setNotificationHandler("notifications/tools/list_changed", async () => {
       if (
