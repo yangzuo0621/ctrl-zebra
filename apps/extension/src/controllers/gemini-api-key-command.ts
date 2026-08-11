@@ -1,11 +1,12 @@
-import type { Disposable, InputBoxOptions } from "vscode";
+import type { Disposable, InputBoxOptions, MessageOptions } from "vscode";
 
+import type { ApiKeySecretStorage } from "../adapters/api-key-secret-storage.js";
 import {
-  type ApiKeySecretStorage,
-  ApiKeySecretStorageError,
-} from "../adapters/api-key-secret-storage.js";
+  registerProviderApiKeyCommand,
+  saveGeminiApiKeyCommandId,
+} from "./provider-api-key-command.js";
 
-export const saveGeminiApiKeyCommandId = "ctrlZebra.saveGeminiApiKey";
+export { saveGeminiApiKeyCommandId } from "./provider-api-key-command.js";
 
 interface RegisterGeminiApiKeyCommandOptions {
   readonly storage: ApiKeySecretStorage;
@@ -13,48 +14,37 @@ interface RegisterGeminiApiKeyCommandOptions {
   readonly showInputBox: (options: InputBoxOptions) => Thenable<string | undefined>;
   readonly showInformationMessage: (message: string) => Thenable<unknown>;
   readonly showErrorMessage: (message: string) => Thenable<unknown>;
+  readonly showWarningMessage?: (
+    message: string,
+    options: MessageOptions,
+    item: "Replace",
+  ) => Thenable<"Replace" | undefined>;
 }
 
+/**
+ * Backward-compatible single-provider registration kept for extensions that imported the original
+ * Gemini-only controller. New composition should register all providers through the parameterized
+ * provider command controller.
+ */
 export function registerGeminiApiKeyCommand({
   storage,
   registerCommand,
   showInputBox,
   showInformationMessage,
   showErrorMessage,
+  showWarningMessage = async () => "Replace",
 }: RegisterGeminiApiKeyCommandOptions): Disposable {
-  return registerCommand(saveGeminiApiKeyCommandId, async () => {
-    const apiKey = await showInputBox({
-      ignoreFocusOut: true,
-      password: true,
-      prompt: "Enter the Google Gemini API key to store securely on this machine.",
-      title: "CtrlZebra: Save Gemini API Key",
-      validateInput: validateGeminiApiKey,
-    });
-
-    if (apiKey === undefined) {
-      return;
-    }
-
-    if (validateGeminiApiKey(apiKey) !== undefined) {
-      await showErrorMessage("Enter a non-empty Gemini API key.");
-      return;
-    }
-
-    try {
-      await storage.save(apiKey);
-    } catch (error) {
-      if (error instanceof ApiKeySecretStorageError) {
-        await showErrorMessage(error.message);
-        return;
+  return registerProviderApiKeyCommand("gemini", {
+    storage,
+    registerCommand: (commandId, handler) => {
+      if (commandId !== saveGeminiApiKeyCommandId) {
+        throw new Error(`Unexpected command registration: ${commandId}`);
       }
-
-      throw error;
-    }
-
-    await showInformationMessage("Gemini API key saved securely.");
+      return registerCommand(commandId, handler);
+    },
+    showInputBox,
+    showWarningMessage,
+    showInformationMessage,
+    showErrorMessage,
   });
-}
-
-function validateGeminiApiKey(value: string): string | undefined {
-  return value.length === 0 ? "Enter a non-empty Gemini API key." : undefined;
 }

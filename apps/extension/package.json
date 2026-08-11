@@ -58,8 +58,18 @@
   "contributes": {
     "commands": [
       {
+        "command": "ctrlZebra.saveOpenAIApiKey",
+        "title": "Save OpenAI API Key",
+        "category": "CtrlZebra"
+      },
+      {
         "command": "ctrlZebra.saveGeminiApiKey",
         "title": "Save Gemini API Key",
+        "category": "CtrlZebra"
+      },
+      {
+        "command": "ctrlZebra.saveOpenAICompatibleApiKey",
+        "title": "Save OpenAI-Compatible API Key",
         "category": "CtrlZebra"
       },
       {

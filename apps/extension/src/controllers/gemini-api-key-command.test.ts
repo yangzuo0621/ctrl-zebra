@@ -70,15 +70,16 @@ describe("Gemini API key command", () => {
     expect(String(harness.showErrorMessage.mock.calls)).not.toContain("test-gemini-api-key");
   });
 
-  it("propagates an unexpected failure without presenting its message", async () => {
+  it("maps an unexpected failure without presenting its message", async () => {
     const harness = createHarness("test-gemini-api-key");
     const unexpected = new Error("unexpected failure containing test-gemini-api-key");
     harness.storage.save.mockRejectedValue(unexpected);
 
     registerGeminiApiKeyCommand(harness.options);
 
-    await expect(harness.runHandler()).rejects.toBe(unexpected);
-    expect(harness.showErrorMessage).not.toHaveBeenCalled();
+    await harness.runHandler();
+    expect(harness.showErrorMessage).toHaveBeenCalledWith("Unable to save the API key.");
+    expect(String(harness.showErrorMessage.mock.calls)).not.toContain("test-gemini-api-key");
     expect(harness.showInformationMessage).not.toHaveBeenCalled();
   });
 });
