@@ -5,6 +5,7 @@ import { ProviderConfigurationError } from "../adapters/provider-configuration.j
 import type { ChatRunnerEvent } from "./chat-runner.js";
 import { McpPromptActions } from "./mcp-prompt-actions.js";
 import { McpResourceActions } from "./mcp-resource-actions.js";
+import { ProviderOnboardingController } from "./provider-onboarding-controller.js";
 import type { SessionRecoveryActions, SessionRestoreProjection } from "./session-recovery.js";
 import { bindWebviewMessageController } from "./webview-message-controller.js";
 
@@ -1174,5 +1175,70 @@ describe("bindWebviewMessageController", () => {
         decision: "approved",
       },
     ]);
+  });
+
+  it("dispatches strict Provider onboarding intents to the Host controller", async () => {
+    let messageListener: ((message: unknown) => void) | undefined;
+    const postedMessages: unknown[] = [];
+    const actions: string[] = [];
+    const providerOnboarding = new ProviderOnboardingController({
+      readStatus: async () => ({
+        provider: "gemini" as const,
+        apiKeyConfigured: false,
+        modelConfigured: true,
+      }),
+      run: async (action) => {
+        actions.push(action);
+        return { status: "completed" as const };
+      },
+    });
+
+    bindWebviewMessageController({
+      channel: {
+        onDidReceiveMessage(listener) {
+          messageListener = listener;
+          return { dispose() {} };
+        },
+        postMessage(message) {
+          postedMessages.push(message);
+          return Promise.resolve(true);
+        },
+      },
+      lifetime: { onDidDispose: () => ({ dispose() {} }) },
+      reportDeliveryFailure: () => {},
+      chatRunner: idleChatRunner,
+      providerOnboarding,
+    });
+
+    messageListener?.({
+      protocolVersion,
+      type: "webview/provider-save-key",
+      requestId: "action-1",
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(actions).toEqual(["save-key"]);
+    expect(postedMessages).toEqual([
+      expect.objectContaining({
+        type: "extension/provider-action",
+        requestId: "action-1",
+        action: "save-key",
+        status: "completed",
+      }),
+      expect.objectContaining({
+        type: "extension/provider-status",
+        requestId: "action-1",
+        provider: "gemini",
+      }),
+    ]);
+
+    messageListener?.({
+      protocolVersion,
+      type: "webview/provider-open-settings",
+      requestId: "invalid",
+      extra: true,
+    });
+    await Promise.resolve();
+    expect(actions).toEqual(["save-key"]);
   });
 });
