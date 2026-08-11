@@ -9,8 +9,8 @@ import type {
   McpResourceCatalogDto,
   McpResourceSelectionDto,
   McpResourceSnapshotDto,
-  McpToolCatalogDto,
-  McpToolRejectionCatalogDto,
+  McpToolCatalogMessage,
+  McpToolCatalogProjectionDto,
 } from "@ctrl-zebra/protocol";
 import { createStore, type StoreApi } from "zustand/vanilla";
 
@@ -19,8 +19,7 @@ import type { WebviewHost } from "./vscode-api.js";
 
 export interface McpState {
   readonly connection: McpConnectionDto;
-  readonly tools?: McpToolCatalogDto;
-  readonly toolRejections?: McpToolRejectionCatalogDto;
+  readonly tools?: McpToolCatalogProjectionDto;
   readonly resources?: McpResourceCatalogDto;
   readonly prompts?: McpPromptCatalogDto;
   readonly selectedResourceKey?: string;
@@ -70,57 +69,51 @@ export function createMcpStore(
   let connectionRequest: string | undefined;
   let resourceRequest: string | undefined;
   let promptRequest: string | undefined;
-  let latestToolRequestId: string | undefined;
-  let pendingToolPair:
-    | {
-        readonly requestId: string;
-        readonly serverId: string;
-        readonly generation: number;
-        tools?: McpToolCatalogDto;
-        rejections?: McpToolRejectionCatalogDto;
-        timer: ReturnType<typeof setTimeout>;
-      }
-    | undefined;
+  let committedToolCatalog: ToolCatalogRecord | undefined;
+  let pendingToolCatalog: ToolCatalogRecord | undefined;
+  let toolCatalogDeliveryClosed = false;
 
-  const clearPendingToolPair = (): void => {
-    if (pendingToolPair !== undefined) clearTimeout(pendingToolPair.timer);
-    pendingToolPair = undefined;
+  const clearToolCatalogWatermarks = (): void => {
+    committedToolCatalog = undefined;
+    pendingToolCatalog = undefined;
   };
 
-  const stageToolPart = (
+  const stageToolCatalog = (
     setState: StoreApi<McpState>["setState"],
-    requestId: string,
-    value: McpToolCatalogDto | McpToolRejectionCatalogDto,
+    message: McpToolCatalogMessage,
   ): void => {
-    const serverId = value.server.serverId;
-    const generation = value.generation;
-    if (pendingToolPair !== undefined && pendingToolPair.requestId !== requestId) {
+    const record: ToolCatalogRecord = {
+      requestId: message.requestId,
+      serverId: message.catalog.server.serverId,
+      generation: message.catalog.generation,
+      catalogSequence: message.catalogSequence,
+      catalog: message.catalog,
+    };
+    if (pendingToolCatalog !== undefined) {
+      if (record.catalogSequence < pendingToolCatalog.catalogSequence) return;
+      if (record.catalogSequence === pendingToolCatalog.catalogSequence) {
+        if (sameToolCatalogPublication(pendingToolCatalog, record)) return;
+        return;
+      }
+      pendingToolCatalog = record;
+      setState({ tools: record.catalog });
+      if (pendingToolCatalog !== record) return;
+      committedToolCatalog = record;
+      pendingToolCatalog = undefined;
       return;
     }
-    if (
-      pendingToolPair !== undefined &&
-      (pendingToolPair.serverId !== serverId || pendingToolPair.generation !== generation)
-    ) {
-      clearPendingToolPair();
-      return;
+    if (committedToolCatalog !== undefined) {
+      if (record.catalogSequence < committedToolCatalog.catalogSequence) return;
+      if (record.catalogSequence === committedToolCatalog.catalogSequence) {
+        if (sameToolCatalogPublication(committedToolCatalog, record)) return;
+        return;
+      }
     }
-    if (pendingToolPair === undefined && latestToolRequestId !== requestId) {
-      latestToolRequestId = requestId;
-    }
-    if (latestToolRequestId === undefined) latestToolRequestId = requestId;
-    if (pendingToolPair === undefined) {
-      const timer = setTimeout(() => {
-        pendingToolPair = undefined;
-      }, 1_000);
-      pendingToolPair = { requestId, serverId, generation, timer };
-    }
-    if ("tools" in value) pendingToolPair.tools = value;
-    else pendingToolPair.rejections = value;
-    if (pendingToolPair.tools !== undefined && pendingToolPair.rejections !== undefined) {
-      const pair = pendingToolPair;
-      clearPendingToolPair();
-      setState({ tools: pair.tools, toolRejections: pair.rejections });
-    }
+    pendingToolCatalog = record;
+    setState({ tools: record.catalog });
+    if (pendingToolCatalog !== record) return;
+    committedToolCatalog = record;
+    pendingToolCatalog = undefined;
   };
 
   return createStore<McpState>()((set, get) => ({
@@ -139,8 +132,8 @@ export function createMcpStore(
       connectionRequest = createRequestId();
       resourceRequest = undefined;
       promptRequest = undefined;
-      clearPendingToolPair();
-      latestToolRequestId = undefined;
+      clearToolCatalogWatermarks();
+      toolCatalogDeliveryClosed = true;
       set({ busy: "disconnecting", announcement: strings.mcpAnnouncements.disconnecting });
       host.disconnectMcp?.(connectionRequest);
     },
@@ -286,8 +279,6 @@ export function createMcpStore(
     clearDraft() {
       resourceRequest = undefined;
       promptRequest = undefined;
-      clearPendingToolPair();
-      latestToolRequestId = undefined;
       set({
         attachments: [],
         confirmations: [],
@@ -301,29 +292,43 @@ export function createMcpStore(
       if (message.type === "extension/mcp-connection") {
         if (connectionRequest !== undefined && message.requestId !== connectionRequest) return;
         if (message.requestId === connectionRequest) connectionRequest = undefined;
-        clearPendingToolPair();
+        const previousConnection = get().connection;
         const active = message.connection.status === "connected";
-        latestToolRequestId = active ? message.requestId : undefined;
+        const previousScope =
+          previousConnection.status === "connected"
+            ? {
+                serverId: previousConnection.server.serverId,
+                generation: previousConnection.generation,
+              }
+            : undefined;
+        const nextScope =
+          message.connection.status === "connected"
+            ? {
+                serverId: message.connection.server.serverId,
+                generation: message.connection.generation,
+              }
+            : undefined;
+        const scopeChanged =
+          previousScope?.serverId !== nextScope?.serverId ||
+          previousScope?.generation !== nextScope?.generation;
+        if (scopeChanged) clearToolCatalogWatermarks();
+        toolCatalogDeliveryClosed = !active;
         set({
           connection: message.connection,
           busy: undefined,
           announcement: connectionAnnouncement(message.connection),
+          ...(active && scopeChanged ? { tools: undefined } : {}),
           ...(active ? {} : clearLiveState()),
         });
         return;
       }
-      if (message.type === "extension/mcp-tools") {
-        if (sameGeneration(get().connection, message.catalog)) {
-          stageToolPart(set, message.requestId, message.catalog);
+      if (message.type === "extension/mcp-tool-catalog") {
+        if (!toolCatalogDeliveryClosed && sameGeneration(get().connection, message.catalog)) {
+          stageToolCatalog(set, message);
         }
         return;
       }
-      if (message.type === "extension/mcp-tool-rejections") {
-        if (sameGeneration(get().connection, message.catalog)) {
-          stageToolPart(set, message.requestId, message.catalog);
-        }
-        return;
-      }
+      if (message.type === "extension/mcp-tools") return;
       if (message.type === "extension/mcp-resources") {
         if (!sameGeneration(get().connection, message.catalog)) return;
         const selected = get().selectedResourceKey;
@@ -426,7 +431,6 @@ export function createMcpStore(
 function clearLiveState() {
   return {
     tools: undefined,
-    toolRejections: undefined,
     resources: undefined,
     prompts: undefined,
     selectedResourceKey: undefined,
@@ -436,6 +440,34 @@ function clearLiveState() {
     promptArguments: {},
     promptPreview: undefined,
   } as const;
+}
+
+interface ToolCatalogRecord {
+  readonly requestId: string;
+  readonly serverId: string;
+  readonly generation: number;
+  readonly catalogSequence: number;
+  readonly catalog: McpToolCatalogProjectionDto;
+}
+
+function sameToolCatalogPublication(left: ToolCatalogRecord, right: ToolCatalogRecord): boolean {
+  return (
+    left.serverId === right.serverId &&
+    left.generation === right.generation &&
+    left.catalogSequence === right.catalogSequence &&
+    left.requestId === right.requestId &&
+    canonicalJson(left.catalog) === canonicalJson(right.catalog)
+  );
+}
+
+function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map((entry) => canonicalJson(entry)).join(",")}]`;
+  const record = value as Readonly<Record<string, unknown>>;
+  return `{${Object.keys(record)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`)
+    .join(",")}}`;
 }
 
 function connectionAnnouncement(connection: McpConnectionDto): string {

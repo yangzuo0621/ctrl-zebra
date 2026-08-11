@@ -5,7 +5,6 @@ import { toolNameSchema } from "./tool.js";
 
 export const mcpProtocolVersionSchema = z.literal("2026-07-28");
 const maxMcpToolNameCodePoints = 65_536;
-const maxMcpRejectionProjectionBytes = 1_048_576;
 const mcpToolNameSchema = z
   .string()
   .min(1)
@@ -104,21 +103,14 @@ export const mcpRejectedToolSchema = z.strictObject({
   mcpToolName: mcpToolNameSchema,
   reason: mcpToolRejectionReasonSchema,
 });
-export const mcpToolRejectionCatalogSchema = z
-  .strictObject({
-    server: mcpServerIdentitySchema,
-    generation: mcpGenerationSchema,
-    rejectedTools: z.array(mcpRejectedToolSchema).max(256),
-    rejectedToolsTruncated: z.boolean(),
-  })
-  .superRefine(({ rejectedTools }, context) => {
-    if (utf8ByteLength(JSON.stringify(rejectedTools)) > maxMcpRejectionProjectionBytes) {
-      context.addIssue({
-        code: "custom",
-        message: "MCP Tool rejection projection exceeds the serialized byte limit.",
-      });
-    }
-  });
+export const mcpCatalogSequenceSchema = z.number().int().positive().safe();
+export const mcpToolCatalogProjectionSchema = z.strictObject({
+  server: mcpServerIdentitySchema,
+  generation: mcpGenerationSchema,
+  tools: z.array(mcpToolDescriptorSchema).max(1_000),
+  rejectedTools: z.array(mcpRejectedToolSchema).max(256),
+  rejectedToolsTruncated: z.boolean(),
+});
 export const toolStateSourceSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("builtin") }),
   z.strictObject({
@@ -131,20 +123,11 @@ export const toolStateSourceSchema = z.discriminatedUnion("kind", [
 
 export type McpConnectionDto = z.infer<typeof mcpConnectionSchema>;
 export type McpToolCatalogDto = z.infer<typeof mcpToolCatalogSchema>;
+export type McpToolCatalogProjectionDto = z.infer<typeof mcpToolCatalogProjectionSchema>;
 export type McpToolRejectionReasonDto = z.infer<typeof mcpToolRejectionReasonSchema>;
 export type McpRejectedToolDto = z.infer<typeof mcpRejectedToolSchema>;
-export type McpToolRejectionCatalogDto = z.infer<typeof mcpToolRejectionCatalogSchema>;
 export type ToolStateSourceDto = z.infer<typeof toolStateSourceSchema>;
 export { mcpServerIdSchema };
-
-function utf8ByteLength(value: string): number {
-  let bytes = 0;
-  for (const character of value) {
-    const codePoint = character.codePointAt(0) ?? 0;
-    bytes += codePoint <= 0x7f ? 1 : codePoint <= 0x7ff ? 2 : codePoint <= 0xffff ? 3 : 4;
-  }
-  return bytes;
-}
 
 function isWellFormedUnicode(value: string): boolean {
   for (let index = 0; index < value.length; index += 1) {

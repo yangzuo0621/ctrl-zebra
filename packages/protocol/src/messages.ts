@@ -7,9 +7,10 @@ import {
 import { assistantMessageSchema, userMessageSchema } from "./chat-message.js";
 import { checkpointIdSchema, checkpointSummarySchema } from "./checkpoint.js";
 import {
+  mcpCatalogSequenceSchema,
   mcpConnectionSchema,
+  mcpToolCatalogProjectionSchema,
   mcpToolCatalogSchema,
-  mcpToolRejectionCatalogSchema,
   toolStateSourceSchema,
 } from "./mcp-connection.js";
 import {
@@ -200,11 +201,21 @@ export const mcpToolsMessageSchema = z.strictObject({
   type: z.literal("extension/mcp-tools"),
   catalog: mcpToolCatalogSchema,
 });
-export const mcpToolRejectionsMessageSchema = z.strictObject({
-  ...protocolEnvelopeSchema.shape,
-  type: z.literal("extension/mcp-tool-rejections"),
-  catalog: mcpToolRejectionCatalogSchema,
-});
+export const mcpToolCatalogMessageSchema = z
+  .strictObject({
+    ...protocolEnvelopeSchema.shape,
+    type: z.literal("extension/mcp-tool-catalog"),
+    catalogSequence: mcpCatalogSequenceSchema,
+    catalog: mcpToolCatalogProjectionSchema,
+  })
+  .superRefine((message, context) => {
+    if (utf8ByteLength(JSON.stringify(message)) > 1_048_576) {
+      context.addIssue({
+        code: "custom",
+        message: "MCP Tool catalog envelope exceeds the serialized byte limit.",
+      });
+    }
+  });
 
 export const mcpResourceReadMessageSchema = z.strictObject({
   ...protocolEnvelopeSchema.shape,
@@ -606,7 +617,7 @@ export const extensionToWebviewMessageSchema = z.union([
   checkpointErrorMessageSchema,
   mcpConnectionMessageSchema,
   mcpToolsMessageSchema,
-  mcpToolRejectionsMessageSchema,
+  mcpToolCatalogMessageSchema,
   mcpResourcesMessageSchema,
   mcpResourcePreviewMessageSchema,
   mcpPromptsMessageSchema,
@@ -634,7 +645,7 @@ export type McpDisconnectMessage = z.infer<typeof mcpDisconnectMessageSchema>;
 export type McpOpenSettingsMessage = z.infer<typeof mcpOpenSettingsMessageSchema>;
 export type McpConnectionMessage = z.infer<typeof mcpConnectionMessageSchema>;
 export type McpToolsMessage = z.infer<typeof mcpToolsMessageSchema>;
-export type McpToolRejectionsMessage = z.infer<typeof mcpToolRejectionsMessageSchema>;
+export type McpToolCatalogMessage = z.infer<typeof mcpToolCatalogMessageSchema>;
 export type McpResourceReadMessage = z.infer<typeof mcpResourceReadMessageSchema>;
 export type McpResourceAttachMessage = z.infer<typeof mcpResourceAttachMessageSchema>;
 export type McpResourceDetachMessage = z.infer<typeof mcpResourceDetachMessageSchema>;
@@ -675,4 +686,13 @@ export type CheckpointListMessage = z.infer<typeof checkpointListMessageSchema>;
 export type CheckpointRestoredMessage = z.infer<typeof checkpointRestoredMessageSchema>;
 export type CheckpointErrorMessage = z.infer<typeof checkpointErrorMessageSchema>;
 export type WebviewToExtensionMessage = z.infer<typeof webviewToExtensionMessageSchema>;
+
+function utf8ByteLength(value: string): number {
+  let bytes = 0;
+  for (const character of value) {
+    const codePoint = character.codePointAt(0) ?? 0;
+    bytes += codePoint <= 0x7f ? 1 : codePoint <= 0x7ff ? 2 : codePoint <= 0xffff ? 3 : 4;
+  }
+  return bytes;
+}
 export type ExtensionToWebviewMessage = z.infer<typeof extensionToWebviewMessageSchema>;

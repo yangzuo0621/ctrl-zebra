@@ -51,8 +51,9 @@ describe("MCP panel", () => {
     });
     store.getState().receive({
       protocolVersion,
-      type: "extension/mcp-tools",
+      type: "extension/mcp-tool-catalog",
       requestId: "catalog",
+      catalogSequence: 1,
       catalog: {
         server,
         generation: 1,
@@ -65,15 +66,6 @@ describe("MCP panel", () => {
             description: "Delete data",
           },
         ],
-      },
-    });
-    store.getState().receive({
-      protocolVersion,
-      type: "extension/mcp-tool-rejections",
-      requestId: "catalog",
-      catalog: {
-        server,
-        generation: 1,
         rejectedTools: [],
         rejectedToolsTruncated: false,
       },

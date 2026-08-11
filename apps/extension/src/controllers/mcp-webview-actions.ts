@@ -5,8 +5,10 @@ import {
   mcpConnectionSchema,
   mcpPromptCatalogSchema,
   mcpResourceCatalogSchema,
+  mcpToolCatalogMessageSchema,
+  mcpToolCatalogProjectionSchema,
   mcpToolCatalogSchema,
-  mcpToolRejectionCatalogSchema,
+  mcpToolsMessageSchema,
   protocolVersion,
 } from "@ctrl-zebra/protocol";
 
@@ -37,6 +39,9 @@ export class McpWebviewActions {
   #poll: ReturnType<typeof setInterval> | undefined;
   #connectionSignature: string | undefined;
   #toolSignature: string | undefined;
+  #catalogScope: string | undefined;
+  #catalogSequence = 0;
+  #catalogSequenceBlocked = false;
   #resourceSignature: string | undefined;
   #promptSignature: string | undefined;
 
@@ -84,11 +89,21 @@ export class McpWebviewActions {
       this.#connectionSignature = connectionSignature;
       post({ protocolVersion, type: "extension/mcp-connection", requestId, connection });
     }
-    if (snapshot.status !== "connected") {
+    if (snapshot.status !== "connected" || snapshot.server === undefined) {
       this.#toolSignature = undefined;
+      this.#catalogScope = undefined;
+      this.#catalogSequence = 0;
+      this.#catalogSequenceBlocked = false;
       this.#resourceSignature = undefined;
       this.#promptSignature = undefined;
       return;
+    }
+    const connectionScope = catalogScope(snapshot.server.serverId, snapshot.generation);
+    if (this.#catalogScope !== connectionScope) {
+      this.#catalogScope = connectionScope;
+      this.#catalogSequence = 0;
+      this.#catalogSequenceBlocked = false;
+      this.#toolSignature = undefined;
     }
     const tools = this.#connection.getToolSnapshot();
     if (tools !== undefined) {
@@ -104,22 +119,37 @@ export class McpWebviewActions {
           description,
         })),
       });
-      const rejectionCatalog = mcpToolRejectionCatalogSchema.parse({
+      const projection = mcpToolCatalogProjectionSchema.parse({
         server: tools.server,
         generation: tools.generation,
+        tools: catalog.tools,
         rejectedTools: tools.rejectedTools,
         rejectedToolsTruncated: tools.rejectedToolsTruncated,
       });
-      const signature = JSON.stringify({ catalog, rejectionCatalog });
+      const signature = JSON.stringify(projection);
       if (force || signature !== this.#toolSignature) {
-        this.#toolSignature = signature;
-        post({ protocolVersion, type: "extension/mcp-tools", requestId, catalog });
-        post({
-          protocolVersion,
-          type: "extension/mcp-tool-rejections",
-          requestId,
-          catalog: rejectionCatalog,
-        });
+        const catalogSequence = this.#nextCatalogSequence();
+        if (catalogSequence !== undefined) {
+          const combined = mcpToolCatalogMessageSchema.safeParse({
+            protocolVersion,
+            type: "extension/mcp-tool-catalog",
+            requestId,
+            catalogSequence,
+            catalog: projection,
+          });
+          if (combined.success) {
+            const legacy = mcpToolsMessageSchema.parse({
+              protocolVersion,
+              type: "extension/mcp-tools",
+              requestId,
+              catalog,
+            });
+            this.#toolSignature = signature;
+            this.#catalogSequence = catalogSequence;
+            post(combined.data);
+            post(legacy);
+          }
+        }
       }
     }
     const resources = this.#connection.getResourceCatalog();
@@ -141,6 +171,26 @@ export class McpWebviewActions {
       }
     }
   }
+
+  #nextCatalogSequence(): number | undefined {
+    const next = nextMcpCatalogSequence(this.#catalogSequence);
+    if (this.#catalogSequenceBlocked || next === undefined) {
+      this.#catalogSequenceBlocked = true;
+      return undefined;
+    }
+    return next;
+  }
+}
+
+export function nextMcpCatalogSequence(current: number): number | undefined {
+  if (!Number.isSafeInteger(current) || current < 0 || current >= Number.MAX_SAFE_INTEGER) {
+    return undefined;
+  }
+  return current + 1;
+}
+
+function catalogScope(serverId: string, generation: number): string {
+  return `${serverId}\u0000${generation}`;
 }
 
 function projectConnection(snapshot: McpConnectionSnapshot) {

@@ -1,9 +1,5 @@
-import {
-  type McpToolCatalogDto,
-  type McpToolRejectionCatalogDto,
-  protocolVersion,
-} from "@ctrl-zebra/protocol";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { type McpToolCatalogMessage, protocolVersion } from "@ctrl-zebra/protocol";
+import { describe, expect, it, vi } from "vitest";
 
 import { createMcpStore } from "./mcp-store.js";
 import type { WebviewHost } from "./vscode-api.js";
@@ -44,8 +40,6 @@ function host(): WebviewHost {
 }
 
 describe("unified MCP feature store", () => {
-  afterEach(() => vi.useRealTimers());
-
   it("gates Server generations and preserves only immutable draft context on disconnect", () => {
     const api = host();
     const ids = ["connect", "read", "attach", "preview", "confirm", "disconnect"];
@@ -222,256 +216,185 @@ describe("unified MCP feature store", () => {
     expect(store.getState().selectedResourceKey).toBe("template:memory://{name}");
   });
 
-  it("atomically commits an out-of-order Tool pair and retains the last pair across refresh races", () => {
+  it("commits one atomic catalog and ignores the unchanged legacy projection", () => {
     const store = createMcpStore(host(), () => "request");
+    receiveConnection(store, 1);
+    const catalog = toolCatalog(1, 1, "lookup");
     store.getState().receive({
       protocolVersion,
-      type: "extension/mcp-connection",
-      requestId: "initial",
-      connection: {
-        status: "connected",
-        server,
-        generation: 1,
-        configurationStale: false,
-        protocolVersion: "2026-07-28",
-        capabilities,
-      },
+      type: "extension/mcp-tool-catalog",
+      requestId: "catalog-a",
+      catalogSequence: 1,
+      catalog,
     });
-    const tools: McpToolCatalogDto = {
-      server,
-      generation: 1,
-      tools: [
-        {
-          server,
-          generation: 1,
-          registryName: "mcp_local_fixture_lookup",
-          mcpToolName: "lookup",
-        },
-      ],
-    };
-    const rejections: McpToolRejectionCatalogDto = {
-      server,
-      generation: 1,
-      rejectedTools: [{ mcpToolName: "unsafe", reason: "forbidden-keyword" as const }],
-      rejectedToolsTruncated: false,
-    };
-
-    store.getState().receive({
-      protocolVersion,
-      type: "extension/mcp-tool-rejections",
-      requestId: "catalog-1",
-      catalog: rejections,
-    });
-    expect(store.getState().tools).toBeUndefined();
+    expect(store.getState().tools).toEqual(catalog);
     store.getState().receive({
       protocolVersion,
       type: "extension/mcp-tools",
-      requestId: "catalog-1",
-      catalog: tools,
+      requestId: "catalog-a",
+      catalog: { server, generation: 1, tools: catalog.tools },
     });
-    expect(store.getState().tools).toEqual(tools);
-    expect(store.getState().toolRejections).toEqual(rejections);
-
-    const refreshedTools: McpToolCatalogDto = { ...tools, tools: [] };
-    store.getState().receive({
-      protocolVersion,
-      type: "extension/mcp-tools",
-      requestId: "catalog-2",
-      catalog: refreshedTools,
-    });
-    expect(store.getState().tools).toEqual(tools);
-    store.getState().receive({
-      protocolVersion,
-      type: "extension/mcp-tool-rejections",
-      requestId: "catalog-1",
-      catalog: rejections,
-    });
-    expect(store.getState().tools).toEqual(tools);
-    store.getState().receive({
-      protocolVersion,
-      type: "extension/mcp-tools",
-      requestId: "catalog-1",
-      catalog: tools,
-    });
-    expect(store.getState().tools).toEqual(tools);
-    store.getState().receive({
-      protocolVersion,
-      type: "extension/mcp-tool-rejections",
-      requestId: "catalog-2",
-      catalog: { ...rejections, rejectedTools: [] },
-    });
-    expect(store.getState().tools).toEqual(refreshedTools);
-    expect(store.getState().toolRejections?.rejectedTools).toEqual([]);
+    expect(store.getState().tools).toEqual(catalog);
   });
 
-  it("fences the opposite Tool-pair order against a late prior request", () => {
+  it("ignores post-commit stale A, commits legal higher C, and rejects conflicting duplicates", () => {
     const store = createMcpStore(host(), () => "request");
-    store.getState().receive({
-      protocolVersion,
-      type: "extension/mcp-connection",
-      requestId: "initial",
-      connection: {
-        status: "connected",
-        server,
-        generation: 1,
-        configurationStale: false,
-        protocolVersion: "2026-07-28",
-        capabilities,
-      },
-    });
-    const stableTools: McpToolCatalogDto = { server, generation: 1, tools: [] };
-    const refreshedTools: McpToolCatalogDto = {
-      server,
-      generation: 1,
-      tools: [
-        {
-          server,
-          generation: 1,
-          registryName: "mcp_local_fixture_lookup",
-          mcpToolName: "lookup",
-        },
-      ],
-    };
-    const emptyRejections: McpToolRejectionCatalogDto = {
-      server,
-      generation: 1,
-      rejectedTools: [],
-      rejectedToolsTruncated: false,
-    };
-    store.getState().receive({
-      protocolVersion,
-      type: "extension/mcp-tool-rejections",
-      requestId: "catalog-a",
-      catalog: emptyRejections,
-    });
-    store.getState().receive({
-      protocolVersion,
-      type: "extension/mcp-tools",
-      requestId: "catalog-a",
-      catalog: stableTools,
-    });
-    expect(store.getState().tools).toEqual(stableTools);
+    receiveConnection(store, 1);
+    const catalogA = toolCatalog(1, 1, "first");
+    const catalogB = toolCatalog(1, 1, "second");
+    const catalogC = toolCatalog(1, 1, "third");
 
-    store.getState().receive({
-      protocolVersion,
-      type: "extension/mcp-tool-rejections",
-      requestId: "catalog-b",
-      catalog: emptyRejections,
-    });
-    store.getState().receive({
-      protocolVersion,
-      type: "extension/mcp-tools",
-      requestId: "catalog-a",
-      catalog: stableTools,
-    });
-    store.getState().receive({
-      protocolVersion,
-      type: "extension/mcp-tool-rejections",
-      requestId: "catalog-a",
-      catalog: emptyRejections,
-    });
-    expect(store.getState().tools).toEqual(stableTools);
-    store.getState().receive({
-      protocolVersion,
-      type: "extension/mcp-tools",
-      requestId: "catalog-b",
-      catalog: refreshedTools,
-    });
-    expect(store.getState().tools).toEqual(refreshedTools);
+    receiveCatalog(store, "A", 1, catalogA);
+    receiveCatalog(store, "B", 2, catalogB);
+    receiveCatalog(store, "A", 1, catalogA);
+    expect(store.getState().tools).toEqual(catalogB);
+
+    receiveCatalog(store, "A-conflict", 1, catalogA);
+    expect(store.getState().tools).toEqual(catalogB);
+
+    receiveCatalog(store, "C", 3, catalogC);
+    expect(store.getState().tools).toEqual(catalogC);
   });
 
-  it("discards an unmatched half at the fixed deadline and on generation change", () => {
-    vi.useFakeTimers();
+  it("treats exact duplicates as no-ops at pending and committed watermarks", () => {
     const store = createMcpStore(host(), () => "request");
-    store.getState().receive({
-      protocolVersion,
-      type: "extension/mcp-connection",
-      requestId: "initial",
-      connection: {
-        status: "connected",
-        server,
-        generation: 1,
-        configurationStale: false,
-        protocolVersion: "2026-07-28",
-        capabilities,
-      },
+    receiveConnection(store, 1);
+    const catalog = toolCatalog(1, 1, "lookup");
+    let replayed = false;
+    const unsubscribe = store.subscribe((state) => {
+      if (!replayed && state.tools === catalog) {
+        replayed = true;
+        receiveCatalog(store, "A", 1, catalog);
+      }
     });
-    const tools: McpToolCatalogDto = {
-      server,
-      generation: 1,
-      tools: [],
-    };
-    store.getState().receive({
-      protocolVersion,
-      type: "extension/mcp-tools",
-      requestId: "expired",
-      catalog: tools,
+    receiveCatalog(store, "A", 1, catalog);
+    unsubscribe();
+    expect(store.getState().tools).toEqual(catalog);
+
+    receiveCatalog(store, "A", 1, catalog);
+    expect(store.getState().tools).toEqual(catalog);
+  });
+
+  it("discards pending conflicts and lets a reentrant higher sequence win", () => {
+    const conflictStore = createMcpStore(host(), () => "request");
+    receiveConnection(conflictStore, 1);
+    const first = toolCatalog(1, 1, "first");
+    const conflict = toolCatalog(1, 1, "conflict");
+    let replayedConflict = false;
+    const unsubscribeConflict = conflictStore.subscribe((state) => {
+      if (!replayedConflict && state.tools === first) {
+        replayedConflict = true;
+        receiveCatalog(conflictStore, "conflict", 1, conflict);
+      }
     });
-    vi.advanceTimersByTime(1_000);
-    store.getState().receive({
-      protocolVersion,
-      type: "extension/mcp-tool-rejections",
-      requestId: "expired",
-      catalog: { server, generation: 1, rejectedTools: [], rejectedToolsTruncated: false },
+    receiveCatalog(conflictStore, "A", 1, first);
+    unsubscribeConflict();
+    expect(conflictStore.getState().tools).toEqual(first);
+
+    const higherStore = createMcpStore(host(), () => "request");
+    receiveConnection(higherStore, 1);
+    const higher = toolCatalog(1, 2, "higher");
+    let replayedHigher = false;
+    const unsubscribeHigher = higherStore.subscribe((state) => {
+      if (!replayedHigher && state.tools === first) {
+        replayedHigher = true;
+        receiveCatalog(higherStore, "B", 2, higher);
+      }
     });
-    expect(store.getState().tools).toBeUndefined();
+    receiveCatalog(higherStore, "A", 1, first);
+    unsubscribeHigher();
+    expect(higherStore.getState().tools).toEqual(higher);
+  });
+
+  it("discards same-sequence conflicts without replacing the committed catalog", () => {
+    const store = createMcpStore(host(), () => "request");
+    receiveConnection(store, 1);
+    const catalog = toolCatalog(1, 1, "stable");
+    receiveCatalog(store, "A", 1, catalog);
+    receiveCatalog(store, "different-request", 1, toolCatalog(1, 1, "conflict"));
+    expect(store.getState().tools).toEqual(catalog);
+  });
+
+  it("resets sequence watermarks on generation change and disconnect", () => {
+    const store = createMcpStore(host(), () => "request");
+    receiveConnection(store, 1);
+    const first = toolCatalog(1, 1, "first");
+    receiveCatalog(store, "A", 9, first);
+    receiveConnection(store, 2);
+    const second = toolCatalog(2, 1, "second");
+    receiveCatalog(store, "B", 1, second);
+    expect(store.getState().tools).toEqual(second);
+
+    store.getState().disconnect();
+    receiveCatalog(store, "late-before-status", 2, second);
+    expect(store.getState().tools).toEqual(second);
 
     store.getState().receive({
       protocolVersion,
       type: "extension/mcp-connection",
-      requestId: "refresh",
-      connection: {
-        status: "connected",
-        server,
-        generation: 2,
-        configurationStale: false,
-        protocolVersion: "2026-07-28",
-        capabilities,
-      },
+      requestId: "request",
+      connection: { status: "disconnected", server, generation: 2, configurationStale: false },
     });
-    store.getState().receive({
-      protocolVersion,
-      type: "extension/mcp-tool-rejections",
-      requestId: "expired",
-      catalog: { server, generation: 1, rejectedTools: [], rejectedToolsTruncated: false },
-    });
+    receiveCatalog(store, "late", 2, second);
     expect(store.getState().tools).toBeUndefined();
   });
 
-  it("clears staged Tool halves on disconnect and ignores late messages", () => {
+  it("ignores a wrong-scope catalog before sequence handling", () => {
     const store = createMcpStore(host(), () => "request");
-    store.getState().receive({
-      protocolVersion,
-      type: "extension/mcp-connection",
-      requestId: "initial",
-      connection: {
-        status: "connected",
-        server,
-        generation: 1,
-        configurationStale: false,
-        protocolVersion: "2026-07-28",
-        capabilities,
-      },
-    });
-    store.getState().receive({
-      protocolVersion,
-      type: "extension/mcp-tools",
-      requestId: "late",
-      catalog: { server, generation: 1, tools: [] },
-    });
-    store.getState().receive({
-      protocolVersion,
-      type: "extension/mcp-connection",
-      requestId: "disconnect",
-      connection: { status: "disconnected", server, generation: 1, configurationStale: false },
-    });
-    store.getState().receive({
-      protocolVersion,
-      type: "extension/mcp-tool-rejections",
-      requestId: "late",
-      catalog: { server, generation: 1, rejectedTools: [], rejectedToolsTruncated: false },
-    });
+    receiveConnection(store, 1);
+    receiveCatalog(store, "wrong", 99, toolCatalog(2, 1, "wrong"));
     expect(store.getState().tools).toBeUndefined();
-    expect(store.getState().toolRejections).toBeUndefined();
   });
 });
+
+function receiveConnection(store: ReturnType<typeof createMcpStore>, generation: number): void {
+  store.getState().receive({
+    protocolVersion,
+    type: "extension/mcp-connection",
+    requestId: `connection-${generation}`,
+    connection: {
+      status: "connected",
+      server,
+      generation,
+      configurationStale: false,
+      protocolVersion: "2026-07-28",
+      capabilities,
+    },
+  });
+}
+
+function toolCatalog(
+  generation: number,
+  _sequenceHint: number,
+  name: string,
+): McpToolCatalogMessage["catalog"] {
+  return {
+    server,
+    generation,
+    tools: [
+      {
+        server,
+        generation,
+        registryName: `mcp_local_fixture_${name}`,
+        mcpToolName: name,
+      },
+    ],
+    rejectedTools: [],
+    rejectedToolsTruncated: false,
+  };
+}
+
+function receiveCatalog(
+  store: ReturnType<typeof createMcpStore>,
+  requestId: string,
+  catalogSequence: number,
+  catalog: McpToolCatalogMessage["catalog"],
+): void {
+  store.getState().receive({
+    protocolVersion,
+    type: "extension/mcp-tool-catalog",
+    requestId,
+    catalogSequence,
+    catalog,
+  });
+}
