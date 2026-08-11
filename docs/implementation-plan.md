@@ -65,12 +65,12 @@
 **进度摘要**：
 
 - 总任务：148
-- 已完成：116
-- 进行中：1
+- 已完成：117
+- 进行中：0
 - 受阻：0
 - 待开始：31
-- 当前任务：T1703
-- 下一任务：T1801
+- 当前任务：T1801
+- 下一任务：T1802
 - 最后更新：2026-08-11
 
 | 阶段 | 任务 | 状态 | 完成 PR | 完成日期 |
@@ -191,7 +191,7 @@
 | 16 | T1605 | 已完成 | [#181](https://github.com/yangzuo0621/ctrl-zebra/pull/181) | 2026-08-11 |
 | 17 | T1701 | 已完成 | [#183](https://github.com/yangzuo0621/ctrl-zebra/pull/183) | 2026-08-11 |
 | 17 | T1702 | 已完成 | [#184](https://github.com/yangzuo0621/ctrl-zebra/pull/184) | 2026-08-11 |
-| 17 | T1703 | 进行中 | — | — |
+| 17 | T1703 | 已完成 | [#185](https://github.com/yangzuo0621/ctrl-zebra/pull/185) | 2026-08-11 |
 | 18 | T1801 | 待开始 | — | — |
 | 18 | T1802 | 待开始 | — | — |
 | 18 | T1803 | 待开始 | — | — |
@@ -239,6 +239,13 @@
 - 完成证据：[PR #184](https://github.com/yangzuo0621/ctrl-zebra/pull/184)；聚焦测试 31/31、完整单元测试（125 个文件、1482 个测试）、类型检查、Biome 检查、Webview 构建、集成测试（exit 0）及 `git diff --check` 均通过；GitHub CI 的 Ubuntu、macOS、Windows 验证均通过。
 - 完成日期：2026-08-11
 - 下一任务：T1703
+
+### T1703 完成记录
+
+- 完成摘要：修复 assistant 消息气泡样式选择器与角色契约失配，并补充角色属性与布局回归覆盖。
+- 完成证据：[PR #185](https://github.com/yangzuo0621/ctrl-zebra/pull/185)；GitHub CI 的 Ubuntu、macOS、Windows 验证均通过（格式与 lint、类型检查、单元测试、构建；Ubuntu 另含集成测试与覆盖率门禁）；`git diff --check` 通过。
+- 完成日期：2026-08-11
+- 下一任务：T1801
 
 ---
 
