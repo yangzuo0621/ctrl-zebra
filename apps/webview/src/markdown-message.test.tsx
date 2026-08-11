@@ -62,6 +62,27 @@ describe("MarkdownMessage", () => {
     expect(screen.getByText("remote")).toBeVisible();
   });
 
+  it("keeps nested and malformed Markdown bounded to a stable React projection", () => {
+    const { container } = render(
+      <MarkdownMessage
+        content={[
+          "- outer",
+          "  - **nested**",
+          "    - `inline`",
+          "",
+          "Unclosed *emphasis and [link](https://example.test",
+          "<div>still inert</div>",
+        ].join("\n")}
+      />,
+    );
+
+    expect(container.querySelector("ul ul")).not.toBeNull();
+    expect(screen.getByText("nested").closest("strong")).not.toBeNull();
+    expect(screen.getByText("inline").closest("code")).not.toBeNull();
+    expect(screen.getByText("Unclosed *emphasis and [link](https://example.test")).toBeVisible();
+    expect(screen.getByText("<div>still inert</div>")).toBeVisible();
+  });
+
   it("opens only approved links through the Extension callback", async () => {
     const onOpenLink = vi.fn();
     const user = userEvent.setup();
@@ -94,6 +115,30 @@ describe("MarkdownMessage", () => {
     await waitFor(() => expect(screen.getByText(strings.markdown.copied)).toBeVisible());
     expect(document.activeElement).toBe(copy);
     expect(writeText).toHaveBeenCalledWith("const value = 1;\n");
+  });
+
+  it("activates copy and approved links from the keyboard", async () => {
+    const user = userEvent.setup();
+    const onOpenLink = vi.fn();
+    render(
+      <MarkdownMessage
+        content={["[safe](https://example.test/docs)", "", "```ts", "const value = 1;", "```"].join(
+          "\n",
+        )}
+        onOpenLink={onOpenLink}
+      />,
+    );
+
+    const copy = screen.getByRole("button", { name: strings.markdown.copy });
+    copy.focus();
+    await user.keyboard("{Enter}");
+    await waitFor(() => expect(screen.getByText(strings.markdown.copied)).toBeVisible());
+    expect(document.activeElement).toBe(copy);
+
+    const safe = screen.getByRole("link", { name: "safe" });
+    safe.focus();
+    await user.keyboard("{Enter}");
+    expect(onOpenLink).toHaveBeenCalledWith("https://example.test/docs");
   });
 
   it("bounds oversized and streaming-unclosed content before parsing", () => {

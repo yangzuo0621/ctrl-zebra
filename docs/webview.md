@@ -118,11 +118,20 @@ This document defines the React Webview constraints established before T0103. It
 - `MarkdownMessage` consumes the current validated assistant/user text projection and parses it with
   the pinned `markdown-it` configuration. It renders parser tokens as a fixed React tree; it never
   emits parser HTML or uses `dangerouslySetInnerHTML`, `innerHTML`, or a browser HTML parser.
-- Dependency record: `markdown-it` 14.3.0 is MIT-licensed, browser-compatible, and already present
-  in the repository lockfile; the Webview pins that version and adds no syntax-highlighting or
-  remote-resource plugin. The companion `@types/markdown-it` package is development-only. The
-  bounded parser/token projection keeps the runtime bundle and retained tree proportional to the
-  existing message limit.
+- Dependency record (audited 2026-08-11): [`markdown-it@14.3.0` npm metadata](https://registry.npmjs.org/markdown-it/14.3.0)
+  identifies the MIT license, the `14.3.0` release published 2026-07-02, and the upstream
+  [markdown-it repository](https://github.com/markdown-it/markdown-it). It is the latest 14.x
+  release; the upstream project is active (15.0.0 was published 2026-07-30), so this task pins the
+  compatible 14.x line rather than an unbounded range. The package exports ESM/CJS entry points,
+  declares no Node engine floor, and the repository's Vite Webview build plus browser-like Vitest
+  suite exercise the runtime path. No syntax-highlighting or remote-resource plugin is added; the
+  companion `@types/markdown-it` package is development-only.
+- Auditable size measurement from the same npm metadata and `pnpm build` (2026-08-11): the registry
+  tarball is 453,201 bytes (63 files) and unpacks to 1,679,991 bytes. The generated Webview bundle
+  is `main.js` 461,505 bytes (Vite-reported gzip 149.53 kB), alongside 27,804-byte CSS and a
+  362-byte HTML shell. The bounded parser/token projection keeps retained message trees
+  proportional to the existing message limit; rerun `pnpm view markdown-it@14.3.0 dist --json` and
+  `pnpm build` to reproduce the record after an upgrade.
 - The supported technical subset is headings, ordered/unordered lists, fenced or indented code,
   inline code, emphasis, block quotes, tables, and links. Raw HTML, images, automatic bare-URL
   linking, remote resources, and unsupported extensions remain escaped or inert text.

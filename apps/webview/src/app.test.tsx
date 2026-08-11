@@ -561,10 +561,16 @@ describe("App streaming chat", () => {
         protocolVersion,
         type: "extension/text-delta",
         requestId: "request-1",
-        text: "Before",
+        text: "```ts\nconst before = 1;",
       });
       animationFrames[0]?.(0);
     });
+    const assistantMessage = screen.getByRole("listitem", {
+      name: strings.app.assistantMessageLabel,
+    });
+    const projectionBeforeCancel = assistantMessage.textContent;
+    expect(screen.getByText("const before = 1;")).toBeVisible();
+    expect(screen.getByRole("button", { name: strings.markdown.copy })).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Cancel" }));
 
     expect(host.sent.at(-1)).toEqual({
@@ -584,12 +590,13 @@ describe("App streaming chat", () => {
         protocolVersion,
         type: "extension/text-delta",
         requestId: "request-1",
-        text: " after",
+        text: "\n```\n# late delta",
       });
     });
 
-    expect(screen.getByText("Before")).toBeVisible();
-    expect(screen.queryByText("Before after")).not.toBeInTheDocument();
+    expect(assistantMessage.textContent).toBe(projectionBeforeCancel);
+    expect(screen.getByText("const before = 1;")).toBeVisible();
+    expect(screen.queryByText("late delta")).not.toBeInTheDocument();
     expect(screen.getByRole("status", { name: "Run status" })).toHaveTextContent(
       "Response cancelled.",
     );
