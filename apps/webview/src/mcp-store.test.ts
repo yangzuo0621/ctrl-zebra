@@ -511,6 +511,17 @@ describe("unified MCP feature store", () => {
     });
     expect(failedStore.getState().diagnostics).toEqual(failedDiagnostic);
     expect(failedStore.getState().diagnosticAnnouncement).toBe(announcement);
+    failedStore.setState({ busy: "refresh-tools" });
+    failedStore.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-diagnostics",
+      requestId: "late-clear",
+      diagnosticSequence: 3,
+      diagnostic: { kind: "clear", server, generation: 4 },
+    });
+    expect(failedStore.getState().diagnostics).toEqual(failedDiagnostic);
+    expect(failedStore.getState().diagnosticAnnouncement).toBe(announcement);
+    expect(failedStore.getState().busy).toBe("refresh-tools");
 
     const connectedStore = createMcpStore(host(), () => "request");
     receiveConnection(connectedStore, 4);

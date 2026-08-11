@@ -625,6 +625,13 @@ function sameDiagnosticGeneration(
     readonly connectionStatus?: "connected" | "failed";
   },
 ): boolean {
+  if (value.connectionStatus === undefined) {
+    return (
+      connection.status === "connected" &&
+      connection.server?.serverId === value.server.serverId &&
+      connection.generation === value.generation
+    );
+  }
   return (
     (connection.status === "connected" || connection.status === "failed") &&
     connection.server?.serverId === value.server.serverId &&
