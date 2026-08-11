@@ -371,8 +371,9 @@ entry, not only the intermediate object.
   `ctrlZebra.provider.openai.apiKey`. Secret names are implementation contracts and must not be
   derived from Webview input, workspace content, model output, or the secret value itself.
 - Saving stores the supplied value exactly and replaces any value already held under that name.
-  Reading returns `undefined` when no value exists. Deleting is idempotent, including when the
-  value is already absent.
+  Reading returns `undefined` when no value exists. The VS Code API does not promise idempotent
+  deletion or a compare-and-swap/transaction boundary; the Host therefore checks presence before a
+  delete and does not call the adapter delete operation when the key is absent.
 - The Extension Host is the only owner of SecretStorage access. API keys must not enter Webview
   state, protocol messages, workspace or global state, persisted sessions, fixtures, snapshots,
   command arguments, environment variables, or model-visible content.
@@ -436,6 +437,68 @@ entry, not only the intermediate object.
 - Save success uses a credential-free confirmation. Input and storage failures use fixed,
   user-safe text and never include the submitted value, stored value, Secret name, or original
   backend error. The command does not initialize a Gemini client or make a network request.
+
+## Provider API Key Lifecycle (T1604)
+
+- Credential deletion and rotation are Extension Host-only Command Palette workflows. The stable
+  commands are `ctrlZebra.deleteOpenAIApiKey`, `ctrlZebra.deleteGeminiApiKey`,
+  `ctrlZebra.deleteOpenAICompatibleApiKey`, `ctrlZebra.rotateOpenAIApiKey`,
+  `ctrlZebra.rotateGeminiApiKey`, and `ctrlZebra.rotateOpenAICompatibleApiKey`. They are not
+  Webview actions, Protocol messages, Onboarding actions, model Tools, or settings values. T1603
+  onboarding remains limited to save-key, select-model, and open-settings.
+- A delete command shows a modal confirmation that names the Provider and explains that its saved
+  API key will be removed. It never reads or displays the Secret to construct the confirmation and
+  never reveals whether a value exists. Cancellation before any storage call performs no
+  SecretStorage operation and therefore leaves the state unchanged. After confirmation, the command
+  asks the existing Host-owned presence adapter once. An `absent` result performs a fixed safe no-op
+  and does not call the delete adapter; a `present` result permits exactly one existing
+  `ApiKeySecretStorage.delete` call; an `unavailable` result performs no mutation and returns fixed
+  safe indeterminate retry/settings guidance. A fulfilled adapter delete is a completed command
+  outcome, while a rejected call has an indeterminate state. The command must not claim that the old
+  value remains or that a rejected call removed it, perform a compensating mutation, or expose
+  backend details; it performs a fresh presence-only reconciliation and offers fixed safe
+  retry/settings guidance.
+- A rotation command always opens a new password-masked input with no prefilled value. It keeps the
+  input open across focus loss, rejects an empty submitted value before storage, and treats dismissal
+  as cancellation. After validation it invokes exactly one existing `ApiKeySecretStorage.save`,
+  including when no prior key exists; rotation is equivalent to a first save in that case. The adapter
+  delegates to the Provider's stable-key `SecretStorage.store`; it does not read, delete, or clear the
+  old value first. A fulfilled adapter save is the replacement commit boundary. A rejected write has an
+  indeterminate state because the VS Code API provides no
+  transaction, compare-and-swap, or rollback guarantee; the command must not read the Secret for
+  rollback or compensation, or claim that the old value remains. Only after the adapter call settles
+  may the dedicated presence adapter perform reconciliation; it compares the `get` result only with
+  `undefined` and immediately discards it. An unavailable reconciliation is indeterminate and gives
+  fixed safe retry/settings guidance. Cancellation before the store call guarantees no
+  storage side effect; once the call starts, cancellation is not reported as a reversible outcome.
+- Delete, rotation, existing save commands, and presence reads for one Provider share a Host-owned
+  serial coordinator. It covers the prompt, confirmation, adapter mutation settlement, presence-only
+  reconciliation, and result notification. The queue is released only after settlement and
+  reconciliation, preventing overlapping commands from observing or reporting an interleaved
+  lifecycle; this includes T1603 onboarding status reads. Operations for different Providers may
+  proceed independently. Queue state contains only operation promises, never Secret values.
+- Any credential presence/status projection uses a dedicated Host-owned presence adapter with an
+  internal tri-state result: `present` only when `get` fulfills with a non-`undefined` value, `absent`
+  only when `get` fulfills with `undefined`, and `unavailable` when `get` rejects. `unavailable` is
+  never converted to `absent`/`false`; a delete preflight does not invoke delete in that case and
+  instead returns a fixed safe indeterminate retry/settings outcome. Rotation has no presence
+  preflight; an unavailable post-save reconciliation makes its observed outcome indeterminate. The unavoidable
+  VS Code `SecretStorage.get` result is accepted inside the adapter, compared only with
+  `=== undefined`, and immediately discarded; the adapter never checks length, prefix, suffix, hash,
+  or content and never returns the string to its caller.
+- The public T1603 Webview projection remains Boolean-only. A fulfilled tri-state result may map to
+  `true`/`false`; an `unavailable` result uses the existing safe status-failure path and retains the
+  last valid projection (or emits no replacement), never publishing `false` as a fact. A rejected
+  post-mutation reconciliation is likewise indeterminate and cannot be used to claim the old/new
+  value state.
+- Controller disposal and generation changes close a notification gate. An awaited adapter operation
+  that settles after disposal or an obsolete generation is still observed by its owning coordinator,
+  but emits no user notification, Webview status, or diagnostic/log side effect. Queue cleanup is
+  idempotent. The underlying VS Code SecretStorage Thenable is not cancellable; cancellation only
+  prevents a not-yet-started call.
+- User-facing success and failure messages may name the Provider and operation, but never include a
+  Secret value, Secret name, authorization material, submitted input, or original SecretStorage
+  error. The commands do not initialize a model client or contact a Provider endpoint.
 
 ## Provider Model Selection Network Boundary
 

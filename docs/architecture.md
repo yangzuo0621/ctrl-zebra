@@ -165,6 +165,36 @@ This document defines the initial runtime boundaries for the CtrlZebra desktop V
   SecretStorage adapter, and expose no credential through Core, Protocol, Webview state, settings,
   command arguments, logs, or diagnostics. Command handlers remain thin composition points and do
   not initialize a model client or contact a Provider endpoint.
+- T1604 extends that same Host-only boundary with per-Provider delete and rotate commands. Delete
+  confirmation projects only the closed Provider display label and a generic consequence; it does
+  not read or display a Secret. Rotation collects a fresh password-masked value and invokes exactly
+  one `ApiKeySecretStorage.save` for the stable key without clearing the old value first, including
+  when no prior key exists (rotation is equivalent to a first save in that case). A fulfilled adapter
+  save is the replacement commit boundary; a rejected call is indeterminate because the VS Code API
+  exposes no transaction, compare-and-swap, or rollback guarantee.
+  Delete first asks the
+  existing Host-owned presence adapter; an `absent` result is a fixed no-op and does not invoke
+  `ApiKeySecretStorage.delete`, while a `present` result permits exactly one adapter delete call. A
+  presence `unavailable` result (including a rejected `get`) is never treated as absent: a delete
+  preflight invokes no delete and returns fixed safe indeterminate retry/settings guidance. Rotation
+  has no presence preflight; an unavailable post-save reconciliation makes the observed outcome
+  indeterminate. A fulfilled adapter delete is a completed command outcome; a rejected call is
+  indeterminate. After either mutation settles, the Host performs a presence-only reconciliation and
+  reports fixed safe retry/settings guidance when the state cannot be determined; it never reads or
+  compensates with a Secret value. Save, delete, rotate, and presence handlers for one Provider are
+  serialized by a Host-owned coordinator through mutation settlement and reconciliation; queue state
+  contains no credential material and different Providers do not block one another. A separate
+  presence projection returns only a boolean and never exposes length, prefix, suffix, hash, or other
+  Secret-derived data.
+- The presence adapter is the only place allowed to receive a `SecretStorage.get` string for status.
+  It returns an internal tri-state (`present` for fulfilled non-`undefined`, `absent` for fulfilled
+  `undefined`, `unavailable` for rejection), compares the value only with `=== undefined`, and
+  immediately discards it; no caller receives or inspects the value. The public T1603 Webview status
+  remains Boolean-only: `unavailable` takes the existing safe status-failure path and retains the last
+  valid projection (or emits no replacement), never publishing `false` as a fact. Controller disposal
+  and generation changes close a notification gate: late settlements remain observed for queue cleanup
+  but cannot emit notifications, Webview status, or diagnostics/logs. The underlying SecretStorage
+  Thenable is not cancellable, so cancellation can only prevent a not-yet-started adapter call.
 - T1603 Webview onboarding intents remain host-owned. The Extension maps the strict save-key,
   select-model, and open-settings messages to existing Provider workflows or the VS Code settings
   command; command IDs, VS Code objects, endpoint values, and credential material never cross the
