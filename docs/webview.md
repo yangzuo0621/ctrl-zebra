@@ -41,6 +41,21 @@ This document defines the React Webview constraints established before T0103. It
 - Reusable presentation components receive data and callbacks through typed props and do not acquire host capabilities.
 - Components do not parse protocol envelopes, perform persistence, or contain Extension workflow decisions.
 
+## Product Language and String Ownership (T1701)
+
+- The Marketplace target language is English (`en`). This is a minimum-localization policy: T1701 does not
+  add runtime locale negotiation, a localization service, or a translation dependency.
+- `apps/webview/src/strings.ts` owns every static user-visible Webview string, including headings, control
+  names, status and error copy, placeholders, and screen-reader labels/announcements. Components and feature
+  stores import that module instead of defining parallel literals. Formatting functions in the module may insert
+  bounded state values, identifiers, or counts without changing the selected language.
+- Dynamic user/model content, workspace paths, MCP names, and validated Host error details remain data. They are
+  rendered as text and are never guessed, translated, or treated as string-catalog entries. A dynamic value must
+  not provide an ARIA label or live-region policy by itself.
+- Visible text, ARIA names, polite status announcements, and actionable errors use the same English vocabulary.
+  A component may not introduce a second language for a screen-reader-only label or a transient state. Any future
+  locale must be selected at one boundary and provide complete coverage before it is exposed.
+
 ## Provider Onboarding Projection
 
 - The Extension Host remains the source of truth for Provider settings, model selection, and
