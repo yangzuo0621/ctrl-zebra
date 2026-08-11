@@ -104,7 +104,13 @@ describe("MCP connection controller", () => {
 
   it("fails and closes the connection when initial Tool discovery is rejected", async () => {
     const harness = createHarness();
-    harness.client.discoverTools.mockRejectedValueOnce(new McpToolDiscoveryError("invalid-schema"));
+    harness.client.discoverTools.mockRejectedValueOnce(
+      new McpToolDiscoveryError(
+        "invalid-schema",
+        [{ mcpToolName: "unsafe", reason: "forbidden-keyword" }],
+        true,
+      ),
+    );
     const controller = new McpConnectionController(harness.values);
 
     await expect(controller.connect()).resolves.toMatchObject({
@@ -112,6 +118,62 @@ describe("MCP connection controller", () => {
       error: { code: "invalid-schema" },
     });
     expect(harness.client.disconnect).toHaveBeenCalledTimes(1);
+    expect(controller.getToolDiagnostic()).toEqual({
+      kind: "rejections",
+      rejectedTools: [{ mcpToolName: "unsafe", reason: "forbidden-keyword" }],
+      rejectedToolsTruncated: true,
+    });
+  });
+
+  it("retains a bounded refresh failure and clears it after a successful refresh", async () => {
+    const harness = createHarness();
+    const controller = new McpConnectionController(harness.values);
+    await controller.connect();
+
+    harness.client.refreshTools.mockRejectedValueOnce(new McpToolDiscoveryError("limit-exceeded"));
+    await expect(controller.refreshTools("local_fixture", 1)).resolves.toBe(true);
+    expect(controller.getToolDiagnostic()).toEqual({
+      kind: "failure",
+      code: "limit-exceeded",
+    });
+
+    await expect(controller.refreshTools("local_fixture", 1)).resolves.toBe(true);
+    expect(controller.getToolDiagnostic()).toBeUndefined();
+  });
+
+  it("rejects stale refresh intents without invoking the MCP client", async () => {
+    const harness = createHarness();
+    const controller = new McpConnectionController(harness.values);
+    await controller.connect();
+
+    await expect(controller.refreshTools("other_server", 1)).resolves.toBe(false);
+    await expect(controller.refreshTools("local_fixture", 2)).resolves.toBe(false);
+    expect(harness.client.refreshTools).not.toHaveBeenCalled();
+  });
+
+  it("treats refresh cancellation and disconnect races as accepted no-ops", async () => {
+    const harness = createHarness();
+    const controller = new McpConnectionController(harness.values);
+    await controller.connect();
+
+    const cancelled = new Error("refresh cancelled");
+    cancelled.name = "AbortError";
+    harness.client.refreshTools.mockRejectedValueOnce(cancelled);
+    await expect(controller.refreshTools("local_fixture", 1)).resolves.toBe(false);
+
+    harness.client.refreshTools.mockRejectedValueOnce(new McpToolDiscoveryError("disconnected"));
+    await expect(controller.refreshTools("local_fixture", 1)).resolves.toBe(false);
+    expect(controller.getToolDiagnostic()).toBeUndefined();
+  });
+
+  it("does not swallow cancellation or unexpected refresh failures", async () => {
+    const harness = createHarness();
+    const controller = new McpConnectionController(harness.values);
+    await controller.connect();
+    const failure = new Error("refresh cancelled");
+    harness.client.refreshTools.mockRejectedValueOnce(failure);
+
+    await expect(controller.refreshTools("local_fixture", 1)).rejects.toBe(failure);
   });
 
   it("fails and closes the connection when initial Resource discovery is rejected", async () => {
@@ -400,6 +462,17 @@ function createHarness() {
       }),
     ),
     getToolSnapshot: vi.fn((): McpToolSnapshotView | undefined => undefined),
+    getToolDiagnostic: vi.fn(() => undefined),
+    refreshTools: vi.fn(
+      async (): Promise<McpToolSnapshotView> => ({
+        server: { serverId: "local_fixture", displayName: "Local fixture" },
+        generation: 1,
+        tools: [],
+        rejectedTools: [],
+        rejectedToolsTruncated: false,
+        registry: new ToolRegistry(),
+      }),
+    ),
     discoverResources: vi.fn(
       async (context: {
         server: { serverId: string; displayName: string };

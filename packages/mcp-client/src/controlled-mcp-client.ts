@@ -20,6 +20,7 @@ import {
   type McpServerCapabilities,
   type McpStderrSnapshot,
   type McpStdioPort,
+  type McpToolDiagnostic,
   type McpToolDiscoveryContext,
   maxMcpListEntries,
   maxMcpListPages,
@@ -73,6 +74,7 @@ export class ControlledMcpClient {
   private consumed = false;
   private toolContext: McpToolDiscoveryContext | undefined;
   private toolSnapshot: McpToolSnapshot | undefined;
+  private toolDiagnostic: McpToolDiagnostic | undefined;
   private toolRefreshPromise: Promise<McpToolSnapshotView> | undefined;
   private toolRefreshRequested = false;
   private toolController: AbortController | undefined;
@@ -159,6 +161,10 @@ export class ControlledMcpClient {
 
   getToolSnapshot(): McpToolSnapshotView | undefined {
     return this.toolSnapshot?.view;
+  }
+
+  getToolDiagnostic(): McpToolDiagnostic | undefined {
+    return this.toolDiagnostic;
   }
 
   getResourceCatalog(): McpResourceCatalogView | undefined {
@@ -332,6 +338,13 @@ export class ControlledMcpClient {
     return this.requestToolRefresh(signal);
   }
 
+  refreshTools(signal?: AbortSignal): Promise<McpToolSnapshotView> {
+    if (this.status !== "connected" || this.toolContext === undefined) {
+      return Promise.reject(new McpToolDiscoveryError("disconnected"));
+    }
+    return this.requestToolRefresh(signal);
+  }
+
   connect(signal?: AbortSignal): Promise<McpConnectOutcome> {
     if (this.status === "connected" && this.connectedState !== undefined) {
       return Promise.resolve({ kind: "connected", connection: this.connectedState });
@@ -488,10 +501,26 @@ export class ControlledMcpClient {
 
   private async runToolRefreshes(signal?: AbortSignal): Promise<McpToolSnapshotView> {
     let latest = this.toolSnapshot?.view;
-    do {
-      this.toolRefreshRequested = false;
-      latest = await this.refreshToolsOnce(signal);
-    } while (this.toolRefreshRequested);
+    try {
+      do {
+        this.toolRefreshRequested = false;
+        latest = await this.refreshToolsOnce(signal);
+      } while (this.toolRefreshRequested);
+      this.toolDiagnostic = undefined;
+    } catch (error) {
+      if (error instanceof McpToolDiscoveryError) {
+        this.toolDiagnostic = isToolDiagnosticCode(error.code)
+          ? error.rejectedTools.length === 0
+            ? { kind: "failure", code: error.code }
+            : {
+                kind: "rejections",
+                rejectedTools: error.rejectedTools,
+                rejectedToolsTruncated: error.rejectedToolsTruncated,
+              }
+          : undefined;
+      }
+      throw error;
+    }
     if (latest === undefined) {
       throw new McpToolDiscoveryError("internal");
     }
@@ -532,7 +561,11 @@ export class ControlledMcpClient {
       return replacement.view;
     } catch (error) {
       if (error instanceof McpToolSnapshotError) {
-        throw new McpToolDiscoveryError(error.code);
+        throw new McpToolDiscoveryError(
+          error.code,
+          error.rejectedTools,
+          error.rejectedToolsTruncated,
+        );
       }
       throw error;
     }
@@ -777,6 +810,7 @@ export class ControlledMcpClient {
     this.toolRefreshRequested = false;
     this.toolSnapshot?.revoke();
     this.toolSnapshot = undefined;
+    this.toolDiagnostic = undefined;
   }
 
   private clearResourceCatalog(): void {
@@ -797,10 +831,23 @@ export class ControlledMcpClient {
 }
 
 export class McpToolDiscoveryError extends Error {
-  constructor(readonly code: McpClientErrorCode) {
+  constructor(
+    readonly code: McpClientErrorCode,
+    readonly rejectedTools: readonly {
+      readonly mcpToolName: string;
+      readonly reason: import("./contracts.js").McpToolRejectionReason;
+    }[] = [],
+    readonly rejectedToolsTruncated = false,
+  ) {
     super(createMcpClientError(code).message);
     this.name = "McpToolDiscoveryError";
   }
+}
+
+function isToolDiagnosticCode(
+  code: McpClientErrorCode,
+): code is "invalid-schema" | "limit-exceeded" | "malformed-message" {
+  return code === "invalid-schema" || code === "limit-exceeded" || code === "malformed-message";
 }
 
 function readPage(value: unknown): Readonly<Record<string, unknown>> {

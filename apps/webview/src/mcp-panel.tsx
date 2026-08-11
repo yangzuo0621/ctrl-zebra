@@ -75,6 +75,63 @@ export function McpPanel({ store }: { readonly store: StoreApi<McpState> }) {
           </Button>
         </div>
 
+        {state.diagnostics === undefined ? null : (
+          <section aria-labelledby="mcp-diagnostics-title">
+            <h3 id="mcp-diagnostics-title">{strings.mcp.diagnostics}</h3>
+            {state.diagnostics.kind === "protocol-incompatible" ? (
+              <div>
+                <p>{strings.mcp.diagnosticConfiguredMode}</p>
+                <p>{strings.mcp.diagnosticSupportedVersion}</p>
+                <p>{strings.mcp.diagnosticNextStep}</p>
+                <Button size="sm" variant="secondary" onClick={() => state.openSettings()}>
+                  {strings.mcp.diagnosticOpenSettings}
+                </Button>
+              </div>
+            ) : (
+              <>
+                {state.diagnostics.kind === "tool-rejections" ? (
+                  <>
+                    <h4>{strings.mcp.diagnosticsSkipped}</h4>
+                    <ul className={styles.compactList}>
+                      {state.diagnostics.skippedTools.map((tool) => (
+                        <li key={`${tool.mcpToolName}:${tool.reason}`}>
+                          <span>{tool.mcpToolName}</span>
+                          <span aria-hidden="true">{" — "}</span>
+                          <span>{diagnosticReason(tool.reason)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    {state.diagnostics.skippedToolsTruncated ? (
+                      <p>{strings.mcp.diagnosticsTruncated}</p>
+                    ) : null}
+                  </>
+                ) : (
+                  <p>{diagnosticFailure(state.diagnostics.code)}</p>
+                )}
+                {state.diagnostics.recoveryAction === "refresh-tools" ? (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => state.refreshTools()}
+                    disabled={state.busy !== undefined || state.connection.status !== "connected"}
+                  >
+                    {strings.mcp.diagnosticRefresh}
+                  </Button>
+                ) : state.diagnostics.recoveryAction === "reconnect" ? (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => state.connect()}
+                    disabled={state.busy !== undefined}
+                  >
+                    {strings.mcp.diagnosticReconnect}
+                  </Button>
+                ) : null}
+              </>
+            )}
+          </section>
+        )}
+
         <section aria-labelledby="mcp-tools-title">
           <h3 id="mcp-tools-title">{strings.mcp.tools}</h3>
           {state.tools?.tools.length ? (
@@ -307,4 +364,25 @@ function findSelectedResource(state: McpState) {
 
 function yesNo(value: boolean): string {
   return value ? strings.mcp.yes : strings.mcp.no;
+}
+
+function diagnosticReason(reason: string): string {
+  const labels = {
+    "forbidden-keyword": "Unsupported schema feature.",
+    "unknown-keyword": "Unknown schema feature.",
+    "invalid-reference": "Invalid schema reference.",
+    "non-object-root": "Tool input schema must be an object.",
+    "schema-invalid": "Tool schema could not be accepted.",
+    "limit-exceeded": "Tool exceeded a safety limit.",
+  } as const;
+  return labels[reason as keyof typeof labels] ?? "Tool schema was not accepted.";
+}
+
+function diagnosticFailure(code: string): string {
+  const labels = {
+    "invalid-schema": "The Tool schema could not be accepted.",
+    "limit-exceeded": "The Tool list exceeded a safety limit.",
+    "malformed-message": "The Tool list was malformed.",
+  } as const;
+  return labels[code as keyof typeof labels] ?? "Tool discovery failed.";
 }

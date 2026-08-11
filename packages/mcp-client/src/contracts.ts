@@ -140,6 +140,20 @@ export interface McpToolDiscoveryContext {
   readonly reservedToolNames?: readonly string[];
 }
 
+export type McpToolDiagnostic =
+  | {
+      readonly kind: "rejections";
+      readonly rejectedTools: readonly {
+        readonly mcpToolName: string;
+        readonly reason: McpToolRejectionReason;
+      }[];
+      readonly rejectedToolsTruncated: boolean;
+    }
+  | {
+      readonly kind: "failure";
+      readonly code: "invalid-schema" | "limit-exceeded" | "malformed-message";
+    };
+
 export interface McpToolArguments {
   readonly [key: string]: import("@ctrl-zebra/core").JsonValue;
 }

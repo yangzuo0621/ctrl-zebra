@@ -1,4 +1,4 @@
-import { McpPromptError, McpResourceError } from "@ctrl-zebra/mcp-client";
+import { McpPromptError, McpResourceError, McpToolDiscoveryError } from "@ctrl-zebra/mcp-client";
 import {
   type ApprovalDecisionIntent,
   type ExtensionToWebviewMessage,
@@ -157,6 +157,14 @@ export function bindWebviewMessageController({
       case "webview/mcp-open-settings":
         mcpActions?.openSettings();
         return;
+      case "webview/mcp-refresh-tools":
+        void mcpActions
+          ?.refreshTools(data.requestId, data.serverId, data.generation)
+          .catch((error: unknown) => {
+            if (isMcpRefreshNoOp(error)) return;
+            reportRunFailure(error);
+          });
+        return;
       case "webview/mcp-prompt-preview":
         void promptActions
           ?.preview(data.serverId, data.generation, data.promptName, data.arguments)
@@ -308,6 +316,13 @@ export function bindWebviewMessageController({
     disposalSubscription?.dispose();
     disposalSubscription = undefined;
   });
+}
+
+function isMcpRefreshNoOp(error: unknown): boolean {
+  return (
+    (error instanceof McpToolDiscoveryError && error.code === "disconnected") ||
+    (error instanceof Error && error.name === "AbortError")
+  );
 }
 
 function postPromptError(

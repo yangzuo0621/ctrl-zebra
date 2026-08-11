@@ -113,7 +113,11 @@ export class McpToolSnapshot {
 }
 
 export class McpToolSnapshotError extends Error {
-  constructor(readonly code: "invalid-schema" | "limit-exceeded" | "malformed-message") {
+  constructor(
+    readonly code: "invalid-schema" | "limit-exceeded" | "malformed-message",
+    readonly rejectedTools: readonly McpRejectedTool[] = [],
+    readonly rejectedToolsTruncated = false,
+  ) {
     super("MCP Tool snapshot could not be accepted.");
     this.name = "McpToolSnapshotError";
   }
@@ -224,26 +228,10 @@ export function createMcpToolSnapshot(
     );
   }
 
+  const { rejectedTools: boundedRejectedTools, truncated: rejectedToolsTruncated } =
+    boundRejectedTools(rejectedTools);
   if (values.length > 0 && descriptors.length === 0) {
-    throw new McpToolSnapshotError("invalid-schema");
-  }
-
-  const sortedRejectedTools = [...rejectedTools].sort((left, right) =>
-    compareUnicodeScalars(left.mcpToolName, right.mcpToolName),
-  );
-  const boundedRejectedTools: McpRejectedTool[] = [];
-  let rejectedToolsTruncated = sortedRejectedTools.length > maxMcpRejectedTools;
-  for (const rejection of sortedRejectedTools) {
-    if (boundedRejectedTools.length >= maxMcpRejectedTools) {
-      rejectedToolsTruncated = true;
-      break;
-    }
-    const candidate = [...boundedRejectedTools, rejection];
-    if (utf8Bytes(JSON.stringify(candidate)) > maxMcpRejectedToolProjectionBytes) {
-      rejectedToolsTruncated = true;
-      break;
-    }
-    boundedRejectedTools.push(rejection);
+    throw new McpToolSnapshotError("invalid-schema", boundedRejectedTools, rejectedToolsTruncated);
   }
 
   snapshot = new McpToolSnapshot(
@@ -258,6 +246,30 @@ export function createMcpToolSnapshot(
     outputValidators,
   );
   return snapshot;
+}
+
+function boundRejectedTools(rejectedTools: readonly McpRejectedTool[]): {
+  readonly rejectedTools: McpRejectedTool[];
+  readonly truncated: boolean;
+} {
+  const sortedRejectedTools = [...rejectedTools].sort((left, right) =>
+    compareUnicodeScalars(left.mcpToolName, right.mcpToolName),
+  );
+  const boundedRejectedTools: McpRejectedTool[] = [];
+  let truncated = sortedRejectedTools.length > maxMcpRejectedTools;
+  for (const rejection of sortedRejectedTools) {
+    if (boundedRejectedTools.length >= maxMcpRejectedTools) {
+      truncated = true;
+      break;
+    }
+    const candidate = [...boundedRejectedTools, rejection];
+    if (utf8Bytes(JSON.stringify(candidate)) > maxMcpRejectedToolProjectionBytes) {
+      truncated = true;
+      break;
+    }
+    boundedRejectedTools.push(rejection);
+  }
+  return { rejectedTools: boundedRejectedTools, truncated };
 }
 
 function createExternalTool(

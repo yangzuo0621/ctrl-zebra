@@ -9,6 +9,7 @@ import { checkpointIdSchema, checkpointSummarySchema } from "./checkpoint.js";
 import {
   mcpCatalogSequenceSchema,
   mcpConnectionSchema,
+  mcpDiagnosticsProjectionSchema,
   mcpToolCatalogProjectionSchema,
   mcpToolCatalogSchema,
   toolStateSourceSchema,
@@ -191,6 +192,12 @@ export const mcpOpenSettingsMessageSchema = z.strictObject({
   ...protocolEnvelopeSchema.shape,
   type: z.literal("webview/mcp-open-settings"),
 });
+export const mcpRefreshToolsMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("webview/mcp-refresh-tools"),
+  serverId: mcpServerIdSchema,
+  generation: mcpGenerationSchema,
+});
 export const mcpConnectionMessageSchema = z.strictObject({
   ...protocolEnvelopeSchema.shape,
   type: z.literal("extension/mcp-connection"),
@@ -213,6 +220,22 @@ export const mcpToolCatalogMessageSchema = z
       context.addIssue({
         code: "custom",
         message: "MCP Tool catalog envelope exceeds the serialized byte limit.",
+      });
+    }
+  });
+
+export const mcpDiagnosticsMessageSchema = z
+  .strictObject({
+    ...protocolEnvelopeSchema.shape,
+    type: z.literal("extension/mcp-diagnostics"),
+    diagnosticSequence: mcpCatalogSequenceSchema,
+    diagnostic: mcpDiagnosticsProjectionSchema,
+  })
+  .superRefine((message, context) => {
+    if (utf8ByteLength(JSON.stringify(message)) > 1_048_576) {
+      context.addIssue({
+        code: "custom",
+        message: "MCP diagnostics envelope exceeds the serialized byte limit.",
       });
     }
   });
@@ -579,6 +602,7 @@ export const webviewToExtensionMessageSchema = z.discriminatedUnion("type", [
   mcpConnectMessageSchema,
   mcpDisconnectMessageSchema,
   mcpOpenSettingsMessageSchema,
+  mcpRefreshToolsMessageSchema,
   mcpResourceReadMessageSchema,
   mcpResourceAttachMessageSchema,
   mcpResourceDetachMessageSchema,
@@ -618,6 +642,7 @@ export const extensionToWebviewMessageSchema = z.union([
   mcpConnectionMessageSchema,
   mcpToolsMessageSchema,
   mcpToolCatalogMessageSchema,
+  mcpDiagnosticsMessageSchema,
   mcpResourcesMessageSchema,
   mcpResourcePreviewMessageSchema,
   mcpPromptsMessageSchema,
@@ -643,9 +668,11 @@ export type CancelMessage = z.infer<typeof cancelMessageSchema>;
 export type McpConnectMessage = z.infer<typeof mcpConnectMessageSchema>;
 export type McpDisconnectMessage = z.infer<typeof mcpDisconnectMessageSchema>;
 export type McpOpenSettingsMessage = z.infer<typeof mcpOpenSettingsMessageSchema>;
+export type McpRefreshToolsMessage = z.infer<typeof mcpRefreshToolsMessageSchema>;
 export type McpConnectionMessage = z.infer<typeof mcpConnectionMessageSchema>;
 export type McpToolsMessage = z.infer<typeof mcpToolsMessageSchema>;
 export type McpToolCatalogMessage = z.infer<typeof mcpToolCatalogMessageSchema>;
+export type McpDiagnosticsMessage = z.infer<typeof mcpDiagnosticsMessageSchema>;
 export type McpResourceReadMessage = z.infer<typeof mcpResourceReadMessageSchema>;
 export type McpResourceAttachMessage = z.infer<typeof mcpResourceAttachMessageSchema>;
 export type McpResourceDetachMessage = z.infer<typeof mcpResourceDetachMessageSchema>;

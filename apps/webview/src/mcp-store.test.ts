@@ -28,6 +28,7 @@ function host(): WebviewHost {
     subscribe: () => () => {},
     connectMcp: vi.fn(),
     disconnectMcp: vi.fn(),
+    refreshMcpTools: vi.fn(),
     openMcpSettings: vi.fn(),
     readMcpResource: vi.fn(),
     attachMcpResource: vi.fn(),
@@ -344,6 +345,220 @@ describe("unified MCP feature store", () => {
     receiveConnection(store, 1);
     receiveCatalog(store, "wrong", 99, toolCatalog(2, 1, "wrong"));
     expect(store.getState().tools).toBeUndefined();
+  });
+
+  it("keeps the ordinary connected path quiet when the diagnostic replacement is clear", () => {
+    const store = createMcpStore(host(), () => "request");
+    receiveConnection(store, 1);
+    const connectedAnnouncement = store.getState().announcement;
+    store.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-diagnostics",
+      requestId: "catalog",
+      diagnosticSequence: 1,
+      diagnostic: { kind: "clear", server, generation: 1 },
+    });
+    expect(store.getState().diagnostics).toBeUndefined();
+    expect(store.getState().announcement).toBe(connectedAnnouncement);
+    expect(store.getState().diagnosticAnnouncement).toBeUndefined();
+  });
+
+  it("clears retained recovery state synchronously when reconnect starts", () => {
+    const api = host();
+    const store = createMcpStore(api, () => "reconnect");
+    store.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-connection",
+      requestId: "failed",
+      connection: {
+        status: "failed",
+        server,
+        generation: 1,
+        configurationStale: false,
+        error: { code: "invalid-schema", message: "Tool schema was rejected." },
+      },
+    });
+    store.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-diagnostics",
+      requestId: "failed",
+      diagnosticSequence: 1,
+      diagnostic: {
+        kind: "tool-rejections",
+        outcome: "all-rejected",
+        server,
+        generation: 1,
+        connectionStatus: "failed",
+        skippedTools: [{ mcpToolName: "unsafe", reason: "forbidden-keyword" }],
+        skippedToolsTruncated: false,
+        recoveryAction: "reconnect",
+      },
+    });
+    expect(store.getState().diagnostics).toBeDefined();
+
+    store.getState().connect();
+
+    expect(store.getState().diagnostics).toBeUndefined();
+    expect(store.getState().busy).toBe("connecting");
+    expect(api.connectMcp).toHaveBeenCalledWith("reconnect");
+  });
+
+  it("sequences diagnostics, keeps conflicting duplicates local, and clears on connection cleanup", () => {
+    const api = host();
+    const store = createMcpStore(api, () => "refresh");
+    receiveConnection(store, 1);
+    expect(store.getState().refreshTools()).toBe(true);
+    expect(api.refreshMcpTools).toHaveBeenCalledWith("refresh", server.serverId, 1);
+    const diagnostic = {
+      kind: "tool-rejections" as const,
+      outcome: "degraded" as const,
+      server,
+      generation: 1,
+      connectionStatus: "connected" as const,
+      skippedTools: [{ mcpToolName: "unsafe", reason: "schema-invalid" as const }],
+      skippedToolsTruncated: false,
+      recoveryAction: "refresh-tools" as const,
+    };
+    store.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-diagnostics",
+      requestId: "refresh",
+      diagnosticSequence: 1,
+      diagnostic,
+    });
+    expect(store.getState().diagnostics).toEqual(diagnostic);
+    expect(store.getState().busy).toBeUndefined();
+    store.setState({ busy: "resource" });
+    store.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-diagnostics",
+      requestId: "poll",
+      diagnosticSequence: 2,
+      diagnostic,
+    });
+    expect(store.getState().busy).toBe("resource");
+    store.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-diagnostics",
+      requestId: "conflict",
+      diagnosticSequence: 1,
+      diagnostic: { kind: "clear", server, generation: 1 },
+    });
+    expect(store.getState().diagnostics).toEqual(diagnostic);
+    store.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-connection",
+      requestId: "disconnect",
+      connection: { status: "disconnected", server, generation: 1, configurationStale: false },
+    });
+    expect(store.getState().diagnostics).toBeUndefined();
+    store.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-diagnostics",
+      requestId: "late",
+      diagnosticSequence: 2,
+      diagnostic,
+    });
+    expect(store.getState().diagnostics).toBeUndefined();
+  });
+
+  it("drops same-generation diagnostics whose connection status is stale", () => {
+    const failedStore = createMcpStore(host(), () => "request");
+    failedStore.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-connection",
+      requestId: "failed",
+      connection: {
+        status: "failed",
+        server,
+        generation: 4,
+        configurationStale: false,
+        error: { code: "invalid-schema", message: "Tool schema was rejected." },
+      },
+    });
+    const failedDiagnostic = {
+      kind: "tool-rejections" as const,
+      outcome: "all-rejected" as const,
+      server,
+      generation: 4,
+      connectionStatus: "failed" as const,
+      skippedTools: [{ mcpToolName: "unsafe", reason: "schema-invalid" as const }],
+      skippedToolsTruncated: false,
+      recoveryAction: "reconnect" as const,
+    };
+    failedStore.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-diagnostics",
+      requestId: "failed",
+      diagnosticSequence: 1,
+      diagnostic: failedDiagnostic,
+    });
+    const announcement = failedStore.getState().diagnosticAnnouncement;
+    failedStore.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-diagnostics",
+      requestId: "late-connected",
+      diagnosticSequence: 2,
+      diagnostic: {
+        kind: "tool-discovery-failure",
+        outcome: "refresh",
+        server,
+        generation: 4,
+        connectionStatus: "connected",
+        code: "limit-exceeded",
+        recoveryAction: "refresh-tools",
+      },
+    });
+    expect(failedStore.getState().diagnostics).toEqual(failedDiagnostic);
+    expect(failedStore.getState().diagnosticAnnouncement).toBe(announcement);
+    failedStore.setState({ busy: "refresh-tools" });
+    failedStore.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-diagnostics",
+      requestId: "late-clear",
+      diagnosticSequence: 3,
+      diagnostic: { kind: "clear", server, generation: 4 },
+    });
+    expect(failedStore.getState().diagnostics).toEqual(failedDiagnostic);
+    expect(failedStore.getState().diagnosticAnnouncement).toBe(announcement);
+    expect(failedStore.getState().busy).toBe("refresh-tools");
+
+    const connectedStore = createMcpStore(host(), () => "request");
+    receiveConnection(connectedStore, 4);
+    const connectedDiagnostic = {
+      kind: "tool-rejections" as const,
+      outcome: "degraded" as const,
+      server,
+      generation: 4,
+      connectionStatus: "connected" as const,
+      skippedTools: [{ mcpToolName: "unsafe", reason: "schema-invalid" as const }],
+      skippedToolsTruncated: false,
+      recoveryAction: "refresh-tools" as const,
+    };
+    connectedStore.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-diagnostics",
+      requestId: "connected",
+      diagnosticSequence: 1,
+      diagnostic: connectedDiagnostic,
+    });
+    connectedStore.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-diagnostics",
+      requestId: "late-failed",
+      diagnosticSequence: 2,
+      diagnostic: {
+        kind: "tool-rejections",
+        outcome: "all-rejected",
+        server,
+        generation: 4,
+        connectionStatus: "failed",
+        skippedTools: [{ mcpToolName: "late", reason: "schema-invalid" }],
+        skippedToolsTruncated: false,
+        recoveryAction: "reconnect",
+      },
+    });
+    expect(connectedStore.getState().diagnostics).toEqual(connectedDiagnostic);
   });
 });
 

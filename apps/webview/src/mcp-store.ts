@@ -1,6 +1,8 @@
 import type {
   ExtensionToWebviewMessage,
   McpConnectionDto,
+  McpDiagnosticsMessage,
+  McpDiagnosticsProjectionDto,
   McpPromptArgumentsDto,
   McpPromptCatalogDto,
   McpPromptConfirmation,
@@ -20,6 +22,7 @@ import type { WebviewHost } from "./vscode-api.js";
 export interface McpState {
   readonly connection: McpConnectionDto;
   readonly tools?: McpToolCatalogProjectionDto;
+  readonly diagnostics?: Exclude<McpDiagnosticsProjectionDto, { kind: "clear" }>;
   readonly resources?: McpResourceCatalogDto;
   readonly prompts?: McpPromptCatalogDto;
   readonly selectedResourceKey?: string;
@@ -36,10 +39,12 @@ export interface McpState {
     readonly previewId: string;
     readonly value: McpPromptConfirmation;
   }[];
-  readonly busy?: "connecting" | "disconnecting" | "resource" | "prompt";
+  readonly busy?: "connecting" | "disconnecting" | "refresh-tools" | "resource" | "prompt";
   readonly announcement: string;
+  readonly diagnosticAnnouncement?: string;
   connect(): void;
   disconnect(): void;
+  refreshTools(): boolean;
   openSettings(): void;
   selectResource(key: string): void;
   setResourceArgument(name: string, value: string): void;
@@ -72,10 +77,21 @@ export function createMcpStore(
   let committedToolCatalog: ToolCatalogRecord | undefined;
   let pendingToolCatalog: ToolCatalogRecord | undefined;
   let toolCatalogDeliveryClosed = false;
+  let diagnosticScope: string | undefined;
+  let diagnosticSequence = 0;
+  let diagnosticPublication: DiagnosticRecord | undefined;
+  let diagnosticRequest: string | undefined;
 
   const clearToolCatalogWatermarks = (): void => {
     committedToolCatalog = undefined;
     pendingToolCatalog = undefined;
+  };
+
+  const clearDiagnosticWatermarks = (): void => {
+    diagnosticScope = undefined;
+    diagnosticSequence = 0;
+    diagnosticPublication = undefined;
+    diagnosticRequest = undefined;
   };
 
   const stageToolCatalog = (
@@ -116,6 +132,55 @@ export function createMcpStore(
     pendingToolCatalog = undefined;
   };
 
+  const receiveDiagnostic = (
+    setState: StoreApi<McpState>["setState"],
+    getState: StoreApi<McpState>["getState"],
+    message: McpDiagnosticsMessage,
+  ): void => {
+    const state = getState();
+    if (!sameDiagnosticGeneration(state.connection, message.diagnostic)) return;
+    const scope = `${message.diagnostic.server.serverId}\u0000${message.diagnostic.generation}`;
+    if (diagnosticScope !== scope) {
+      diagnosticScope = scope;
+      diagnosticSequence = 0;
+      diagnosticPublication = undefined;
+    }
+    if (message.diagnosticSequence < diagnosticSequence) return;
+    const record: DiagnosticRecord = {
+      requestId: message.requestId,
+      serverId: message.diagnostic.server.serverId,
+      generation: message.diagnostic.generation,
+      diagnosticSequence: message.diagnosticSequence,
+      diagnostic: message.diagnostic,
+    };
+    if (message.diagnosticSequence === diagnosticSequence && diagnosticPublication !== undefined) {
+      if (sameDiagnosticPublication(diagnosticPublication, record)) return;
+      return;
+    }
+    diagnosticSequence = message.diagnosticSequence;
+    diagnosticPublication = record;
+    const wasPendingRefresh = message.requestId === diagnosticRequest;
+    if (wasPendingRefresh) diagnosticRequest = undefined;
+    const clearsRefreshBusy = wasPendingRefresh && state.busy === "refresh-tools";
+    const display = message.diagnostic.kind === "clear" ? undefined : message.diagnostic;
+    const shouldAnnounce =
+      message.diagnostic.kind !== "clear" || state.diagnostics !== undefined || wasPendingRefresh;
+    setState({
+      diagnostics: display,
+      ...(clearsRefreshBusy ? { busy: undefined } : {}),
+      diagnosticAnnouncement: shouldAnnounce
+        ? message.diagnostic.kind === "clear"
+          ? strings.mcpAnnouncements.diagnosticsCleared
+          : strings.mcpAnnouncements.diagnosticsUpdated
+        : undefined,
+      announcement: shouldAnnounce
+        ? message.diagnostic.kind === "clear"
+          ? strings.mcpAnnouncements.diagnosticsCleared
+          : strings.mcpAnnouncements.diagnosticsUpdated
+        : state.announcement,
+    });
+  };
+
   return createStore<McpState>()((set, get) => ({
     connection: disconnected,
     resourceArguments: {},
@@ -125,7 +190,19 @@ export function createMcpStore(
     announcement: strings.mcpAnnouncements.disconnected,
     connect() {
       connectionRequest = createRequestId();
-      set({ busy: "connecting", announcement: strings.mcpAnnouncements.connecting });
+      const shouldClearLiveState = get().connection.status !== "connected";
+      if (shouldClearLiveState) {
+        resourceRequest = undefined;
+        promptRequest = undefined;
+        clearToolCatalogWatermarks();
+        clearDiagnosticWatermarks();
+        toolCatalogDeliveryClosed = true;
+      }
+      set({
+        ...(shouldClearLiveState ? clearLiveState() : {}),
+        busy: "connecting",
+        announcement: strings.mcpAnnouncements.connecting,
+      });
       host.connectMcp?.(connectionRequest);
     },
     disconnect() {
@@ -133,9 +210,30 @@ export function createMcpStore(
       resourceRequest = undefined;
       promptRequest = undefined;
       clearToolCatalogWatermarks();
+      clearDiagnosticWatermarks();
       toolCatalogDeliveryClosed = true;
       set({ busy: "disconnecting", announcement: strings.mcpAnnouncements.disconnecting });
       host.disconnectMcp?.(connectionRequest);
+    },
+    refreshTools() {
+      const state = get();
+      if (
+        state.connection.status !== "connected" ||
+        state.busy !== undefined ||
+        host.refreshMcpTools === undefined
+      )
+        return false;
+      diagnosticRequest = createRequestId();
+      set({
+        busy: "refresh-tools",
+        announcement: strings.mcpAnnouncements.refreshingTools,
+      });
+      host.refreshMcpTools(
+        diagnosticRequest,
+        state.connection.server.serverId,
+        state.connection.generation,
+      );
+      return true;
     },
     openSettings() {
       host.openMcpSettings?.(createRequestId());
@@ -311,15 +409,26 @@ export function createMcpStore(
         const scopeChanged =
           previousScope?.serverId !== nextScope?.serverId ||
           previousScope?.generation !== nextScope?.generation;
-        if (scopeChanged) clearToolCatalogWatermarks();
+        if (scopeChanged) {
+          clearToolCatalogWatermarks();
+          clearDiagnosticWatermarks();
+        }
+        if (!active) clearDiagnosticWatermarks();
         toolCatalogDeliveryClosed = !active;
         set({
           connection: message.connection,
-          busy: undefined,
+          busy: active && !scopeChanged ? get().busy : undefined,
           announcement: connectionAnnouncement(message.connection),
           ...(active && scopeChanged ? { tools: undefined } : {}),
           ...(active ? {} : clearLiveState()),
+          ...(!active || scopeChanged
+            ? { diagnostics: undefined, diagnosticAnnouncement: undefined }
+            : {}),
         });
+        return;
+      }
+      if (message.type === "extension/mcp-diagnostics") {
+        receiveDiagnostic(set, get, message);
         return;
       }
       if (message.type === "extension/mcp-tool-catalog") {
@@ -431,6 +540,8 @@ export function createMcpStore(
 function clearLiveState() {
   return {
     tools: undefined,
+    diagnostics: undefined,
+    diagnosticAnnouncement: undefined,
     resources: undefined,
     prompts: undefined,
     selectedResourceKey: undefined,
@@ -448,6 +559,24 @@ interface ToolCatalogRecord {
   readonly generation: number;
   readonly catalogSequence: number;
   readonly catalog: McpToolCatalogProjectionDto;
+}
+
+interface DiagnosticRecord {
+  readonly requestId: string;
+  readonly serverId: string;
+  readonly generation: number;
+  readonly diagnosticSequence: number;
+  readonly diagnostic: McpDiagnosticsProjectionDto;
+}
+
+function sameDiagnosticPublication(left: DiagnosticRecord, right: DiagnosticRecord): boolean {
+  return (
+    left.requestId === right.requestId &&
+    left.serverId === right.serverId &&
+    left.generation === right.generation &&
+    left.diagnosticSequence === right.diagnosticSequence &&
+    canonicalJson(left.diagnostic) === canonicalJson(right.diagnostic)
+  );
 }
 
 function sameToolCatalogPublication(left: ToolCatalogRecord, right: ToolCatalogRecord): boolean {
@@ -485,6 +614,29 @@ function sameGeneration(
     connection.status === "connected" &&
     connection.server.serverId === value.server.serverId &&
     connection.generation === value.generation
+  );
+}
+
+function sameDiagnosticGeneration(
+  connection: McpConnectionDto,
+  value: {
+    readonly server: { readonly serverId: string };
+    readonly generation: number;
+    readonly connectionStatus?: "connected" | "failed";
+  },
+): boolean {
+  if (value.connectionStatus === undefined) {
+    return (
+      connection.status === "connected" &&
+      connection.server?.serverId === value.server.serverId &&
+      connection.generation === value.generation
+    );
+  }
+  return (
+    (connection.status === "connected" || connection.status === "failed") &&
+    connection.server?.serverId === value.server.serverId &&
+    connection.generation === value.generation &&
+    (value.connectionStatus === undefined || connection.status === value.connectionStatus)
   );
 }
 
