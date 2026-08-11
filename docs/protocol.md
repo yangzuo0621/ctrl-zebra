@@ -332,8 +332,9 @@ same closed/discriminated-union model as the existing Tool contracts: a variant 
 
 ### Shared source and range values
 
-- `IdeUriDto` is the redacted workspace URI `{ scheme, authority, path }`. `scheme` and `authority`
-  are canonical bounded strings; `path` is a canonical forward-slash workspace-relative path of at
+- `IdeUriDto` is the redacted workspace URI `{ scheme, authority, path }`. `scheme` is a canonical
+  bounded string and `authority` is empty or the fixed non-host label `workspace`; the actual VS Code
+  authority remains Host-private. `path` is a canonical forward-slash workspace-relative path of at
   most 4,096 characters, with no leading slash, backslash, query, fragment, or dot segment. The Host
   keeps the complete `vscode.Uri` private and maps it to this DTO only after selected-root and
   canonical-identity checks. `fsPath`, `untitled:` documents, external files, and raw URI instances
