@@ -270,3 +270,51 @@ and descriptions without relying on placeholders. Layout uses existing semantic 
 variables, wraps long unbroken identities, and remains operable at approximately 300px width, 200%
 zoom, reduced motion, and light, dark, high-contrast, and high-contrast-light themes without
 horizontal page scrolling or color-only state.
+
+### MCP diagnostics and recovery (T1803)
+
+The MCP feature store owns one validated, generation-bound diagnostic projection in addition to the
+connection and catalog snapshots. It accepts only strict `extension/mcp-diagnostics` messages with
+the active Server identity, generation, and Host-owned `diagnosticSequence`. A lower sequence, wrong
+scope, exact duplicate, same-sequence conflict, malformed payload, cancellation, disconnect, or
+post-terminal message is ignored before state mutation. A successful Tool catalog replacement and
+its diagnostic replacement are rendered as separate complete values; the diagnostic is never treated
+as a second catalog half. A `clear` projection removes stale reasons synchronously while leaving the
+accepted catalog intact.
+
+The connection projection is an independent cleanup fence. When the store receives
+`extension/mcp-connection` with `disconnecting`, `disconnected`, or `failed`, or a connected
+projection for a different Server/generation, it synchronously clears the diagnostic list,
+truncation marker, pending diagnostic sequence, pending `refresh-tools` request, recovery controls,
+and diagnostic live-region text before applying the new connection state. This also covers the
+non-connected/failed projections emitted for cancellation, Workspace Trust loss, and disposal; the
+store never waits for a `kind: "clear"` message. If a refresh is cancelled while the connection
+remains connected, the Host emits `kind: "clear"` and the store invalidates the pending request.
+Late messages cannot recreate diagnostics or recovery controls. A normal connected projection with
+an empty diagnostic replacement renders no diagnostic region or recovery action.
+
+The panel renders only fixed localized text selected from the closed reason/code/action unions. It
+shows bounded skipped Tool names and reasons, a stable truncation marker, and one explicit recovery
+control (`Refresh tools`, `Reconnect`, or `Open settings`) appropriate to the projection. It never
+renders Schema values, keyword paths, JSON-RPC/SDK errors, commands, arguments, environment, stderr,
+stack traces, credentials, or arbitrary Server metadata. A protocol-incompatible diagnostic renders
+configured `modern-only`, supported `2026-07-28`, and the next step while the connection status remains
+failed; no probe/fallback/negotiated-success text is inferred in the Webview.
+
+The store validates the union combinations before rendering: degraded and refresh-all-rejected
+diagnostics are connected and expose only `Refresh tools`; initial all-rejected and initial
+whole-operation failures are failed and expose only `Reconnect`; refresh whole-operation failures
+are connected and expose only `Refresh tools`; protocol incompatibility is failed and exposes only
+`Open settings`; `clear` exposes no recovery action. Independent fields are never combined into a
+new action.
+
+Recovery controls dispatch only their strict Host intents. `Refresh tools` uses the current connected
+generation and does not start a process or reuse approval; `Reconnect` and `Open settings` reuse the
+existing explicit Host flows. Controls are disabled with a visible reason when the connection or
+generation is not eligible. Refresh success clears diagnostics and preserves focus; failure retains
+the last complete catalog and replaces only the bounded diagnostic state. One polite live region
+announces a discrete diagnostic replacement, clear, or recovery failure once; the diagnostic list is
+not itself a live region, so names and reasons are never read item-by-item. Keyboard focus, text
+selection, disclosure state, and scroll position remain stable during polling, refresh and stale
+message rejection. Normal connected operation with no diagnostics follows the same path without a
+diagnostic announcement or recovery control.

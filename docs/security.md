@@ -733,6 +733,7 @@ Result ceiling.
 | One descriptor | 65,536 serialized UTF-8 bytes |
 | One complete list snapshot | 1,048,576 serialized UTF-8 bytes |
 | Rejected Tool projection | 256 entries; the complete strict catalog envelope (wrapper plus catalog) is at most 1,048,576 UTF-8 bytes |
+| MCP diagnostic projection | 256 skipped entries; the complete strict diagnostic envelope is at most 1,048,576 UTF-8 bytes |
 | One Tool input or output schema | 65,536 bytes, depth 32, 4,096 nodes, 1,024 properties |
 | All schemas in one Tool snapshot | 524,288 serialized UTF-8 bytes |
 | Tool arguments before approval | 262,144 serialized UTF-8 bytes |
@@ -861,3 +862,47 @@ are not fetched, stringified, rendered, persisted, remotely loaded, or passed to
   accepting forbidden data.
 - MCP configuration and persisted provenance contain no credentials. SecretStorage values are never
   injected into the Server process in stage 14, and Server output cannot name or request a Secret.
+
+### MCP diagnostic projection and recovery (T1803)
+
+The user-facing `extension/mcp-diagnostics` projection is a separate bounded display surface, not a
+log, persisted record, Tool result, capability claim, or authorization artifact. It may carry only a
+validated MCP Tool name plus one existing `McpToolRejectionReason`, a closed discovery error code,
+or the fixed protocol-compatibility facts defined by Protocol. It never carries a schema, keyword,
+JSON Pointer, raw SDK/JSON-RPC/process error, response data, stderr, stack, command, arguments, cwd,
+environment, URI query/fragment, credentials, or arbitrary Server metadata.
+
+- Diagnostic entries are de-duplicated by exact `(boundedToolName, reason)` (the bounded
+  `mcpToolName` value) and sorted by the validated Tool name using Unicode scalar-value order before
+  the independent 256-entry prefix is
+  selected. The prefix and complete strict message are measured incrementally in UTF-8; omitted
+  entries set `skippedToolsTruncated: true`. The empty projection is an explicit bounded clear value,
+  not an absent/unknown state. A malformed or over-limit diagnostic is dropped as a stable local
+  protocol failure and cannot be replaced with an unbounded raw value.
+- Diagnostics are bound to the exact Server identity, connection generation, Host-owned
+  `diagnosticSequence`, and delivery gate. A lower sequence, wrong scope, cancelled request,
+  closed generation, or late refresh is ignored before Webview state mutation. Exact duplicates are
+  idempotent no-ops; same-sequence conflicting payloads are discarded. Disconnect, Trust loss,
+  disposal, and failed cleanup clear the delivery gate before cleanup and cannot leave a recovery
+  action that would reconnect or approve work. Independently of the gate, the Webview clears
+  diagnostics, pending refresh, recovery controls, sequence watermarks, and diagnostic live-region
+  text as soon as it receives `extension/mcp-connection` with `disconnecting`, `disconnected`, or
+  `failed`, or a connected Server/generation change. A connected cancelled refresh emits an explicit
+  `clear`; cleanup does not depend on waiting for that value.
+- `refresh-tools`, `reconnect`, and `open-settings` are display/recovery intents only. They must
+  repeat the ordinary explicit connection, Workspace Trust, startup approval, generation, and
+  cancellation checks. No diagnostic action can auto-connect, silently retry, downgrade protocol,
+  reuse an approval, invoke a Tool, read a Resource, or mutate persistence.
+- A protocol-incompatible diagnostic is emitted only alongside a failed connection projection and
+  says the configured mode is `modern-only`, the only supported version is `2026-07-28`, and the
+  fixed next action. It has no probe result, fallback flag, selected-era claim, or capability data;
+  those facts cannot be inferred before a successful handshake. A future dual-era expansion must
+  update this closed projection through T1804 change control.
+- A mixed accepted/rejected catalog may show the validated rejected names while retaining accepted
+  siblings. An all-rejected or failed refresh may show only its bounded validated rejection prefix
+  and stable recovery code while retaining the prior complete catalog. Whole-operation identity or
+  envelope failures show no untrusted Tool name. A successful refresh replaces diagnostics with
+  `clear`, and a disconnect/generation change clears them synchronously. The strict variants permit
+  only connected+`refresh-tools` for degraded or refresh failures, failed+`reconnect` for initial
+  all-rejected/whole-operation failure, failed+`open-settings` for protocol incompatibility, and no
+  recovery action for `clear`.
