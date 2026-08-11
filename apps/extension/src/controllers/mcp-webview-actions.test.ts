@@ -568,6 +568,66 @@ describe("MCP Webview actions", () => {
     actions.dispose();
   });
 
+  it("truncates diagnostic envelopes on UTF-8 boundaries without splitting multibyte names", () => {
+    const server = { serverId: "local_fixture", displayName: "Local fixture" } as const;
+    const snapshot: McpConnectionSnapshot = {
+      status: "failed",
+      generation: 3,
+      server,
+      configurationStale: false,
+      error: { code: "invalid-schema", message: "The MCP Server supplied an invalid schema." },
+    };
+    const post = vi.fn();
+    const actions = new McpWebviewActions({
+      connection: {
+        getState: () => snapshot,
+        getToolSnapshot: () => undefined,
+        getToolDiagnostic: () => ({
+          kind: "rejections",
+          rejectedTools: Array.from({ length: 64 }, (_, index) => ({
+            mcpToolName: `${index}-${"😀".repeat(5_000)}`,
+            reason: "schema-invalid" as const,
+          })),
+          rejectedToolsTruncated: false,
+        }),
+        getResourceCatalog: () => undefined,
+        getPromptCatalog: () => undefined,
+        connect: async () => snapshot,
+        disconnect: async () => snapshot,
+      },
+      openSettings: vi.fn(),
+    });
+    actions.bind(post);
+    actions.refresh("utf8-boundary");
+    const message = post.mock.calls
+      .map(([value]) => value)
+      .find((value) => value.type === "extension/mcp-diagnostics");
+    if (message === undefined) throw new Error("Expected a diagnostics publication.");
+    expect(message).toMatchObject({
+      diagnostic: {
+        kind: "tool-rejections",
+        outcome: "all-rejected",
+        skippedToolsTruncated: true,
+      },
+    });
+    const diagnostic = message.diagnostic as {
+      readonly skippedTools: readonly { readonly mcpToolName: string }[];
+    };
+    expect(diagnostic.skippedTools.length).toBeLessThan(64);
+    expect(
+      diagnostic.skippedTools.every(({ mcpToolName }) => {
+        const [prefix, emojiText] = mcpToolName.split("-", 2);
+        return (
+          /^\d+$/.test(prefix ?? "") &&
+          emojiText !== undefined &&
+          [...emojiText].every((char) => char === "😀")
+        );
+      }),
+    ).toBe(true);
+    expect(utf8Bytes(JSON.stringify(message))).toBeLessThanOrEqual(1_048_576);
+    actions.dispose();
+  });
+
   it("ignores stale refresh intents without publishing catalog or diagnostics", async () => {
     const server = { serverId: "local_fixture", displayName: "Local fixture" } as const;
     const snapshot: McpConnectionSnapshot = {
