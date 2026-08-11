@@ -87,6 +87,28 @@ or Session content.
   authorization material are never copied into a message. These messages do not create a Run error
   or Session event.
 
+## Restricted Markdown and external-link intent (T1702)
+
+Answer text is a bounded, untrusted display projection. The Webview parser uses the approved
+`markdown-it` 14.3.0 configuration (`html: false`, `linkify: false`, `breaks: true`, no images or
+unreviewed plugins) and maps tokens to fixed React elements. Parser HTML is never placed on the wire
+or passed to an HTML sink. Raw HTML, unsupported constructs, and dangerous destinations remain text.
+
+- `webview/open-external-link` is a strict Webview-to-Extension intent with the shape `{ protocolVersion,
+  type: "webview/open-external-link", requestId, href }`. `href` is at most 2,048 characters,
+  contains no control characters or spaces, and must be an absolute `http` or `https` URL. The
+  Schema rejects `javascript:`, `data:`, `file:`, `vscode:`, relative, protocol-relative, malformed,
+  and overlong values.
+- The Webview creates a fresh request ID for each user link activation, prevents default Webview
+  navigation, and does not wait for or display a response. The Host validates the same allowlist a
+  second time, then calls `vscode.env.openExternal` with the parsed URI. Missing Host capability,
+  stale/unknown envelopes, rejected schemes, and open failures produce no Webview navigation or
+  model/Session/Tool side effect.
+- Markdown rendering is bounded to a 262,144-code-point and 1,048,576-byte complete prefix before
+  tokenization. Streaming deltas may update the current display tree while a structure is unfinished,
+  but cancellation, terminal status, or Session replacement closes the display gate and accepts no
+  later delta or link action. Code-copy operations remain Webview-local and are not protocol messages.
+
 ## Session and Run Commands
 
 The multi-turn contract is additive within protocol version `1`. The Extension and Webview are shipped

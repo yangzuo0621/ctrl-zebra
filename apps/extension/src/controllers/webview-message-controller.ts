@@ -2,6 +2,7 @@ import { McpPromptError, McpResourceError } from "@ctrl-zebra/mcp-client";
 import {
   type ApprovalDecisionIntent,
   type ExtensionToWebviewMessage,
+  isApprovedExternalLink,
   protocolVersion,
   webviewToExtensionMessageSchema,
 } from "@ctrl-zebra/protocol";
@@ -55,6 +56,7 @@ interface BindWebviewMessageControllerOptions {
   readonly promptActions?: McpPromptActions;
   readonly mcpActions?: McpWebviewActions;
   readonly providerOnboarding?: ProviderOnboardingController;
+  readonly openExternalLink?: (href: string) => void;
 }
 
 export function bindWebviewMessageController({
@@ -70,6 +72,7 @@ export function bindWebviewMessageController({
   promptActions,
   mcpActions,
   providerOnboarding,
+  openExternalLink,
 }: BindWebviewMessageControllerOptions): void {
   let disposed = false;
   const post = (message: ExtensionToWebviewMessage) => {
@@ -120,6 +123,11 @@ export function bindWebviewMessageController({
         void providerOnboarding
           ?.action(data.requestId, "open-settings", post)
           .catch(reportRunFailure);
+        return;
+      case "webview/open-external-link":
+        if (isApprovedExternalLink(data.href)) {
+          openExternalLink?.(data.href);
+        }
         return;
       case "webview/submit":
         if (runMessages.canStart()) {

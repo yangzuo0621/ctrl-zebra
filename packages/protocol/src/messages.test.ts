@@ -95,6 +95,38 @@ describe("Webview protocol messages", () => {
     ).toEqual(pong);
   });
 
+  it("round-trips an Extension-mediated approved external link", () => {
+    const message = {
+      protocolVersion,
+      type: "webview/open-external-link",
+      requestId: "link-1",
+      href: "https://example.test/docs?q=markdown",
+    } as const;
+
+    expect(
+      webviewToExtensionMessageSchema.parse(JSON.parse(JSON.stringify(message)) as unknown),
+    ).toEqual(message);
+  });
+
+  it.each([
+    "javascript:alert(1)",
+    "data:text/html,<script>alert(1)</script>",
+    "file:///workspace/secret.txt",
+    "//example.test/path",
+    "https://example.test/with space",
+    "https://example.test/\u0000",
+    `https://example.test/${"x".repeat(2_049)}`,
+  ])("rejects external links outside the HTTP(S) boundary: %s", (href) => {
+    expect(
+      webviewToExtensionMessageSchema.safeParse({
+        protocolVersion,
+        type: "webview/open-external-link",
+        requestId: "link-invalid",
+        href,
+      }).success,
+    ).toBe(false);
+  });
+
   it("round-trips the strict Provider onboarding projection and action outcomes", () => {
     const statusRequest = {
       protocolVersion,

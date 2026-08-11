@@ -50,6 +50,34 @@ const submittedContentSchema = z
   .max(1_000_000)
   .refine((content) => content.trim().length > 0);
 
+export const maxExternalLinkCharacters = 2_048;
+const externalLinkSchemePattern = /^https?:\/\//iu;
+export const externalLinkSchema = z
+  .string()
+  .min(1)
+  .max(maxExternalLinkCharacters)
+  .url()
+  .refine((href) => externalLinkSchemePattern.test(href), {
+    message: "Only HTTP and HTTPS external links are allowed.",
+  })
+  .refine((href) => !hasExternalLinkControlCharacters(href), {
+    message: "External links must not contain control characters or spaces.",
+  });
+
+export function isApprovedExternalLink(href: string): boolean {
+  return externalLinkSchema.safeParse(href).success;
+}
+
+function hasExternalLinkControlCharacters(value: string): boolean {
+  for (const character of value) {
+    const codePoint = character.codePointAt(0) ?? 0;
+    if (codePoint <= 0x20 || codePoint === 0x7f) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export const protocolEnvelopeSchema = z.strictObject({
   protocolVersion: z.literal(protocolVersion),
   type: messageTypeSchema,
@@ -93,6 +121,12 @@ export const providerSelectModelMessageSchema = z.strictObject({
 export const providerOpenSettingsMessageSchema = z.strictObject({
   ...protocolEnvelopeSchema.shape,
   type: z.literal("webview/provider-open-settings"),
+});
+
+export const openExternalLinkMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("webview/open-external-link"),
+  href: externalLinkSchema,
 });
 
 export const providerStatusMessageSchema = z.strictObject({
@@ -524,6 +558,7 @@ export const webviewToExtensionMessageSchema = z.discriminatedUnion("type", [
   providerSaveKeyMessageSchema,
   providerSelectModelMessageSchema,
   providerOpenSettingsMessageSchema,
+  openExternalLinkMessageSchema,
   mcpConnectMessageSchema,
   mcpDisconnectMessageSchema,
   mcpOpenSettingsMessageSchema,
@@ -578,6 +613,7 @@ export type ProviderDisplayId = z.infer<typeof providerDisplayIdSchema>;
 export type ProviderAction = z.infer<typeof providerActionSchema>;
 export type ProviderActionErrorCode = z.infer<typeof providerActionErrorCodeSchema>;
 export type ProviderStatusRequestMessage = z.infer<typeof providerStatusRequestMessageSchema>;
+export type OpenExternalLinkMessage = z.infer<typeof openExternalLinkMessageSchema>;
 export type ProviderSaveKeyMessage = z.infer<typeof providerSaveKeyMessageSchema>;
 export type ProviderSelectModelMessage = z.infer<typeof providerSelectModelMessageSchema>;
 export type ProviderOpenSettingsMessage = z.infer<typeof providerOpenSettingsMessageSchema>;

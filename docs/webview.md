@@ -113,6 +113,41 @@ This document defines the React Webview constraints established before T0103. It
   A subsequent Run appends to the validated Session projection only after the Host has rebuilt bounded
   history.
 
+## Answer Markdown Rendering (T1702)
+
+- `MarkdownMessage` consumes the current validated assistant/user text projection and parses it with
+  the pinned `markdown-it` configuration. It renders parser tokens as a fixed React tree; it never
+  emits parser HTML or uses `dangerouslySetInnerHTML`, `innerHTML`, or a browser HTML parser.
+- Dependency record (audited 2026-08-11): [`markdown-it@14.3.0` npm metadata](https://registry.npmjs.org/markdown-it/14.3.0)
+  identifies the MIT license, the `14.3.0` release published 2026-07-02, and the upstream
+  [markdown-it repository](https://github.com/markdown-it/markdown-it). It is the latest 14.x
+  release; the upstream project is active (15.0.0 was published 2026-07-30), so this task pins the
+  compatible 14.x line rather than an unbounded range. The package exports ESM/CJS entry points,
+  declares no Node engine floor, and the repository's Vite Webview build plus browser-like Vitest
+  suite exercise the runtime path. No syntax-highlighting or remote-resource plugin is added; the
+  companion `@types/markdown-it` package is development-only.
+- Auditable size measurement from the same npm metadata and `pnpm build` (2026-08-11): the registry
+  tarball is 453,201 bytes (63 files) and unpacks to 1,679,991 bytes. The generated Webview bundle
+  is `main.js` 461,505 bytes (Vite-reported gzip 149.53 kB), alongside 27,804-byte CSS and a
+  362-byte HTML shell. The bounded parser/token projection keeps retained message trees
+  proportional to the existing message limit; rerun `pnpm view markdown-it@14.3.0 dist --json` and
+  `pnpm build` to reproduce the record after an upgrade.
+- The supported technical subset is headings, ordered/unordered lists, fenced or indented code,
+  inline code, emphasis, block quotes, tables, and links. Raw HTML, images, automatic bare-URL
+  linking, remote resources, and unsupported extensions remain escaped or inert text.
+- Only absolute `http`/`https` links are actionable. The component prevents default navigation and
+  sends the exact bounded destination through `WebviewHost.openExternal`; the Extension validates
+  it again and owns `vscode.env.openExternal`. No link can open a workspace file, command, Webview
+  route, or unapproved URI scheme.
+- Rendering applies the shared 262,144-code-point/1,048,576-byte prefix bound before parsing and
+  shows a stable shortened marker when the bound is reached. Stream updates preserve deterministic
+  block keys, code-copy focus, and text selection; unfinished fences are treated as the current
+  display projection and do not gain side effects. Cancellation or terminal completion accepts no
+  later delta and therefore cannot trigger a late link or copy action.
+- Code blocks expose a keyboard-operable Copy button. Clipboard success/failure is local UI state,
+  does not move focus, and never writes code to the Extension message protocol. Reasoning, MCP
+  Resource, Prompt, and Tool content intentionally bypasses this renderer and stays plain text.
+
 ## Reasoning Summary Rendering
 
 - The chat feature store, not a React component, owns reasoning assembly. It keys live blocks by the

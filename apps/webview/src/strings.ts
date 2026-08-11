@@ -220,6 +220,8 @@ export const strings = {
     code: "code",
     copy: "Copy",
     copied: "Copied!",
+    copyFailed: "Unable to copy code.",
+    truncated: "This message was shortened before rendering.",
   },
   onboarding: {
     examples: [
