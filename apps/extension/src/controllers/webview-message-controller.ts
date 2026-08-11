@@ -10,6 +10,7 @@ import type { CheckpointActions } from "./checkpoint-actions.js";
 import { type McpPromptActions, McpPromptPreviewCancelledError } from "./mcp-prompt-actions.js";
 import { type McpResourceActions, McpResourceReadCancelledError } from "./mcp-resource-actions.js";
 import type { McpWebviewActions } from "./mcp-webview-actions.js";
+import type { ProviderOnboardingController } from "./provider-onboarding-controller.js";
 import type { SessionRecoveryActions } from "./session-recovery.js";
 import { WebviewCheckpointMessageHandler } from "./webview-checkpoint-message-handler.js";
 import { WebviewRunMessageHandler } from "./webview-run-message-handler.js";
@@ -53,6 +54,7 @@ interface BindWebviewMessageControllerOptions {
   readonly resourceActions?: McpResourceActions;
   readonly promptActions?: McpPromptActions;
   readonly mcpActions?: McpWebviewActions;
+  readonly providerOnboarding?: ProviderOnboardingController;
 }
 
 export function bindWebviewMessageController({
@@ -67,6 +69,7 @@ export function bindWebviewMessageController({
   resourceActions,
   promptActions,
   mcpActions,
+  providerOnboarding,
 }: BindWebviewMessageControllerOptions): void {
   let disposed = false;
   const post = (message: ExtensionToWebviewMessage) => {
@@ -101,6 +104,22 @@ export function bindWebviewMessageController({
       case "webview/ping":
         post(createPong(data.requestId));
         mcpActions?.refresh(data.requestId);
+        return;
+      case "webview/provider-status":
+        void providerOnboarding?.status(data.requestId, post).catch(reportRunFailure);
+        return;
+      case "webview/provider-save-key":
+        void providerOnboarding?.action(data.requestId, "save-key", post).catch(reportRunFailure);
+        return;
+      case "webview/provider-select-model":
+        void providerOnboarding
+          ?.action(data.requestId, "select-model", post)
+          .catch(reportRunFailure);
+        return;
+      case "webview/provider-open-settings":
+        void providerOnboarding
+          ?.action(data.requestId, "open-settings", post)
+          .catch(reportRunFailure);
         return;
       case "webview/submit":
         if (runMessages.canStart()) {
@@ -276,6 +295,7 @@ export function bindWebviewMessageController({
     resourceActions?.dispose();
     promptActions?.dispose();
     mcpActions?.dispose();
+    providerOnboarding?.dispose();
     messageSubscription.dispose();
     disposalSubscription?.dispose();
     disposalSubscription = undefined;

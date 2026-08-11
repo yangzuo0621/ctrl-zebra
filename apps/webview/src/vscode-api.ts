@@ -30,6 +30,10 @@ export interface WebviewHost {
   connectMcp?(requestId: string): void;
   disconnectMcp?(requestId: string): void;
   openMcpSettings?(requestId: string): void;
+  requestProviderStatus?(requestId: string): void;
+  saveProviderKey?(requestId: string): void;
+  selectProviderModel?(requestId: string): void;
+  openProviderSettings?(requestId: string): void;
   readMcpResource?(
     requestId: string,
     serverId: string,
@@ -155,6 +159,34 @@ const webviewHost: WebviewHost = {
   },
   openMcpSettings(requestId) {
     getVsCodeApi().postMessage({ protocolVersion, type: "webview/mcp-open-settings", requestId });
+  },
+  requestProviderStatus(requestId) {
+    getVsCodeApi().postMessage({
+      protocolVersion,
+      type: "webview/provider-status",
+      requestId,
+    });
+  },
+  saveProviderKey(requestId) {
+    getVsCodeApi().postMessage({
+      protocolVersion,
+      type: "webview/provider-save-key",
+      requestId,
+    });
+  },
+  selectProviderModel(requestId) {
+    getVsCodeApi().postMessage({
+      protocolVersion,
+      type: "webview/provider-select-model",
+      requestId,
+    });
+  },
+  openProviderSettings(requestId) {
+    getVsCodeApi().postMessage({
+      protocolVersion,
+      type: "webview/provider-open-settings",
+      requestId,
+    });
   },
   readMcpResource(requestId, serverId, generation, selection) {
     getVsCodeApi().postMessage({

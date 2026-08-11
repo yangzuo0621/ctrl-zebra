@@ -14,6 +14,7 @@ import type {
   ProviderId,
   ProviderSelectionConfiguration,
 } from "../adapters/provider-configuration.js";
+import type { ProviderOnboardingActionResult } from "./provider-onboarding-controller.js";
 
 export const selectModelCommandId = "ctrlZebra.selectModel";
 
@@ -34,7 +35,10 @@ const providerLabels = {
 } as const satisfies Record<ProviderId, string>;
 
 export interface ModelSelectionCommandOptions {
-  readonly registerCommand: (commandId: string, handler: () => Promise<void>) => Disposable;
+  readonly registerCommand: (
+    commandId: string,
+    handler: () => Promise<ProviderOnboardingActionResult>,
+  ) => Disposable;
   readonly readConfiguration: () => ProviderSelectionConfiguration;
   readonly secrets: ProviderApiKeySecretReader;
   readonly updateModel: (modelId: string) => Thenable<void>;
@@ -71,7 +75,7 @@ export function registerModelSelectionCommand({
       await showErrorMessage(
         "The Provider configuration is invalid. Check the CtrlZebra settings.",
       );
-      return;
+      return { status: "failed", code: "configuration" };
     }
 
     const providerLabel = providerLabels[configuration.provider];
@@ -81,7 +85,7 @@ export function registerModelSelectionCommand({
       await showInformationMessage(
         `${providerLabel} model discovery is unavailable for this endpoint. Enter a model ID manually.`,
       );
-      await promptForModel({
+      return promptForModel({
         configuration,
         providerLabel,
         showInputBox,
@@ -89,7 +93,6 @@ export function registerModelSelectionCommand({
         showErrorMessage,
         updateModel,
       });
-      return;
     }
 
     const modelIds = await loadOfficialModelIds({
@@ -106,7 +109,7 @@ export function registerModelSelectionCommand({
           `No ${providerLabel} models are available from the configured API. Enter a model ID manually.`,
         );
       }
-      await promptForModel({
+      return promptForModel({
         configuration,
         providerLabel,
         showInputBox,
@@ -114,7 +117,6 @@ export function registerModelSelectionCommand({
         showErrorMessage,
         updateModel,
       });
-      return;
     }
 
     const selected = await showQuickPick(
@@ -127,10 +129,10 @@ export function registerModelSelectionCommand({
     );
 
     if (selected === undefined) {
-      return;
+      return { status: "cancelled" };
     }
 
-    await saveModelSelection({
+    return saveModelSelection({
       modelId: selected.label,
       providerLabel,
       updateModel,
@@ -244,7 +246,7 @@ async function promptForModel({
   showInformationMessage,
   showErrorMessage,
   updateModel,
-}: PromptForModelOptions): Promise<void> {
+}: PromptForModelOptions): Promise<ProviderOnboardingActionResult> {
   const modelId = await showInputBox({
     ignoreFocusOut: true,
     title: `CtrlZebra: Enter ${providerLabel} Model ID`,
@@ -254,16 +256,16 @@ async function promptForModel({
   });
 
   if (modelId === undefined) {
-    return;
+    return { status: "cancelled" };
   }
 
   const validationMessage = validateModelId(modelId);
   if (validationMessage !== undefined) {
     await showErrorMessage(validationMessage);
-    return;
+    return { status: "failed", code: "configuration" };
   }
 
-  await saveModelSelection({
+  return saveModelSelection({
     modelId,
     providerLabel,
     updateModel,
@@ -286,15 +288,16 @@ async function saveModelSelection({
   updateModel,
   showInformationMessage,
   showErrorMessage,
-}: SaveModelSelectionOptions): Promise<void> {
+}: SaveModelSelectionOptions): Promise<ProviderOnboardingActionResult> {
   try {
     await updateModel(modelId);
   } catch {
     await showErrorMessage("Unable to save the model selection. The existing model was kept.");
-    return;
+    return { status: "failed", code: "storage" };
   }
 
   await showInformationMessage(`${providerLabel} model saved: ${modelId}`);
+  return { status: "completed" };
 }
 
 function getOfficialModelListTarget(configuration: ProviderSelectionConfiguration):

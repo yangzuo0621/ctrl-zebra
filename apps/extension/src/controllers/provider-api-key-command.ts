@@ -5,6 +5,7 @@ import {
   ApiKeySecretStorageError,
 } from "../adapters/api-key-secret-storage.js";
 import type { ProviderId } from "../adapters/provider-configuration.js";
+import type { ProviderOnboardingActionResult } from "./provider-onboarding-controller.js";
 
 export const saveOpenAIApiKeyCommandId = "ctrlZebra.saveOpenAIApiKey";
 export const saveGeminiApiKeyCommandId = "ctrlZebra.saveGeminiApiKey";
@@ -42,7 +43,10 @@ export const providerApiKeyCommandDefinitions = [
 
 export interface RegisterProviderApiKeyCommandsOptions {
   readonly storages: Readonly<Record<ProviderId, ApiKeySecretStorage>>;
-  readonly registerCommand: (commandId: string, handler: () => Promise<void>) => Disposable;
+  readonly registerCommand: (
+    commandId: string,
+    handler: () => Promise<ProviderOnboardingActionResult>,
+  ) => Disposable;
   readonly showInputBox: (options: InputBoxOptions) => Thenable<string | undefined>;
   readonly showWarningMessage: (
     message: string,
@@ -78,8 +82,8 @@ export function registerProviderApiKeyCommand(
     throw new Error(`Unsupported provider API key command: ${provider}`);
   }
 
-  return registerCommand(definition.commandId, async () => {
-    await saveProviderApiKey({
+  return registerCommand(definition.commandId, () => {
+    return saveProviderApiKey({
       definition,
       storage,
       showInputBox,
@@ -134,7 +138,7 @@ async function saveProviderApiKey({
   showWarningMessage,
   showInformationMessage,
   showErrorMessage,
-}: SaveProviderApiKeyOptions): Promise<void> {
+}: SaveProviderApiKeyOptions): Promise<ProviderOnboardingActionResult> {
   const apiKey = await showInputBox({
     ignoreFocusOut: true,
     password: true,
@@ -144,13 +148,13 @@ async function saveProviderApiKey({
   });
 
   if (apiKey === undefined) {
-    return;
+    return { status: "cancelled" };
   }
 
   const validationMessage = validateApiKey(apiKey, definition.providerLabel);
   if (validationMessage !== undefined) {
     await showErrorMessage(validationMessage);
-    return;
+    return { status: "failed", code: "configuration" };
   }
 
   const confirmation = await showWarningMessage(
@@ -159,7 +163,7 @@ async function saveProviderApiKey({
     confirmSaveAction,
   );
   if (confirmation !== confirmSaveAction) {
-    return;
+    return { status: "cancelled" };
   }
 
   try {
@@ -167,16 +171,17 @@ async function saveProviderApiKey({
   } catch (error) {
     if (error instanceof ApiKeySecretStorageError) {
       await showErrorMessage(error.message);
-      return;
+      return { status: "failed", code: "storage" };
     }
 
     // Storage backends are untrusted host boundaries; never surface their error text because it
     // could contain the submitted credential or backend details.
     await showErrorMessage("Unable to save the API key.");
-    return;
+    return { status: "failed", code: "storage" };
   }
 
   await showInformationMessage(`${definition.providerLabel} API key saved securely.`);
+  return { status: "completed" };
 }
 
 function validateApiKey(value: string, providerLabel: string): string | undefined {

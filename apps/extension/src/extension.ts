@@ -37,6 +37,7 @@ import { NodeMcpStdioPort, selectMcpServerEnvironment } from "./adapters/mcp-std
 import { PerformanceBaselineRecorder } from "./adapters/performance-baseline.js";
 import {
   readProviderConfiguration,
+  readProviderOnboardingConfiguration,
   readProviderSelectionConfiguration,
 } from "./adapters/provider-configuration.js";
 import { SpawnCommandRunner } from "./adapters/spawn-command-runner.js";
@@ -65,8 +66,20 @@ import { McpStartupApproval } from "./controllers/mcp-startup-approval.js";
 import { McpToolApprovalWorkflow } from "./controllers/mcp-tool-approval-workflow.js";
 import { McpWebviewActions } from "./controllers/mcp-webview-actions.js";
 import { selectModelGateway } from "./controllers/model-gateway-selector.js";
-import { registerModelSelectionCommand } from "./controllers/model-selection-command.js";
-import { registerProviderApiKeyCommands } from "./controllers/provider-api-key-command.js";
+import {
+  registerModelSelectionCommand,
+  selectModelCommandId,
+} from "./controllers/model-selection-command.js";
+import {
+  registerProviderApiKeyCommands,
+  saveGeminiApiKeyCommandId,
+  saveOpenAIApiKeyCommandId,
+  saveOpenAICompatibleApiKeyCommandId,
+} from "./controllers/provider-api-key-command.js";
+import {
+  type ProviderOnboardingActionResult,
+  ProviderOnboardingController,
+} from "./controllers/provider-onboarding-controller.js";
 import {
   createWorkspaceToolRegistryProvider,
   selectWorkspaceRoot,
@@ -317,6 +330,91 @@ export function activate(context: ExtensionContext): void {
     },
   });
 
+  const createProviderOnboarding = () =>
+    new ProviderOnboardingController({
+      async readStatus() {
+        try {
+          const settings = workspace.getConfiguration("ctrlZebra.provider");
+          const configuration = readProviderOnboardingConfiguration({
+            get: (setting) => settings.get(setting),
+          });
+          const apiKeyConfigured = configuration.endpointValid
+            ? configuration.apiKeyRequired
+              ? await readApiKeyConfigured(configuration.provider)
+              : true
+            : false;
+          return {
+            provider: configuration.provider,
+            apiKeyConfigured,
+            modelConfigured: configuration.modelConfigured,
+          };
+        } catch {
+          return {
+            provider: "openai" as const,
+            apiKeyConfigured: false,
+            modelConfigured: false,
+          };
+        }
+      },
+      async run(action): Promise<ProviderOnboardingActionResult> {
+        if (action === "open-settings") {
+          try {
+            await commands.executeCommand("workbench.action.openSettings", "ctrlZebra.provider");
+            return { status: "completed" };
+          } catch {
+            return { status: "failed", code: "internal" };
+          }
+        }
+
+        if (action === "select-model") {
+          try {
+            return (
+              (await commands.executeCommand<ProviderOnboardingActionResult>(
+                selectModelCommandId,
+              )) ?? { status: "failed", code: "internal" }
+            );
+          } catch {
+            return { status: "failed", code: "internal" };
+          }
+        }
+
+        let commandId: string;
+        try {
+          const settings = workspace.getConfiguration("ctrlZebra.provider");
+          const provider = readProviderOnboardingConfiguration({
+            get: (setting) => settings.get(setting),
+          }).provider;
+          commandId = {
+            openai: saveOpenAIApiKeyCommandId,
+            gemini: saveGeminiApiKeyCommandId,
+            "openai-compatible": saveOpenAICompatibleApiKeyCommandId,
+          }[provider];
+        } catch {
+          return { status: "failed", code: "configuration" };
+        }
+
+        try {
+          return (
+            (await commands.executeCommand<ProviderOnboardingActionResult>(commandId)) ?? {
+              status: "failed",
+              code: "internal",
+            }
+          );
+        } catch {
+          return { status: "failed", code: "internal" };
+        }
+      },
+    });
+
+  async function readApiKeyConfigured(provider: Parameters<typeof secrets.read>[0]) {
+    try {
+      const apiKey = await secrets.read(provider);
+      return typeof apiKey === "string" && apiKey.length > 0;
+    } catch {
+      return false;
+    }
+  }
+
   context.subscriptions.push(
     logger,
     workspaceTools,
@@ -409,6 +507,7 @@ export function activate(context: ExtensionContext): void {
             void commands.executeCommand("workbench.action.openSettings", mcpServerSettingSection);
           },
         }),
+      createProviderOnboarding,
     }),
   );
 
