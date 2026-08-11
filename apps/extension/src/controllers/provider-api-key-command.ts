@@ -121,7 +121,15 @@ export class ProviderApiKeyOperationCoordinator {
       .catch(() => undefined)
       .then(async () => {
         if (!this.isCurrent(generation)) return undefined;
-        return operation({ isCurrent: () => this.isCurrent(generation) });
+        try {
+          const result = await operation({ isCurrent: () => this.isCurrent(generation) });
+          return this.isCurrent(generation) ? result : undefined;
+        } catch (error) {
+          // A late UI Thenable rejection is also suppressed. While current, preserve the
+          // rejection so the Host wrapper can map it to its fixed internal failure outcome.
+          if (!this.isCurrent(generation)) return undefined;
+          throw error;
+        }
       });
     const settled = current.then(
       () => undefined,
@@ -230,7 +238,7 @@ async function runProviderApiKeyCommand({
   showWarningMessage,
   showInformationMessage,
   showErrorMessage,
-}: RunProviderApiKeyCommandOptions): Promise<ProviderOnboardingActionResult> {
+}: RunProviderApiKeyCommandOptions): Promise<ProviderOnboardingActionResult | undefined> {
   if (definition.operation === "delete") {
     return deleteProviderApiKey({
       definition,
@@ -275,7 +283,7 @@ async function saveOrRotateProviderApiKey({
   showWarningMessage,
   showInformationMessage,
   showErrorMessage,
-}: SaveOrRotateProviderApiKeyOptions): Promise<ProviderOnboardingActionResult> {
+}: SaveOrRotateProviderApiKeyOptions): Promise<ProviderOnboardingActionResult | undefined> {
   const apiKey = await showInputBox({
     ignoreFocusOut: true,
     password: true,
@@ -284,7 +292,10 @@ async function saveOrRotateProviderApiKey({
     validateInput: (value) => validateApiKey(value, definition.providerLabel),
   });
 
-  if (apiKey === undefined || !context.isCurrent()) {
+  if (!context.isCurrent()) {
+    return undefined;
+  }
+  if (apiKey === undefined) {
     return { status: "cancelled" };
   }
 
@@ -301,7 +312,10 @@ async function saveOrRotateProviderApiKey({
     { modal: true },
     confirmSaveAction,
   );
-  if (confirmation !== confirmSaveAction || !context.isCurrent()) {
+  if (!context.isCurrent()) {
+    return undefined;
+  }
+  if (confirmation !== confirmSaveAction) {
     return { status: "cancelled" };
   }
 
@@ -369,19 +383,22 @@ async function deleteProviderApiKey({
   showWarningMessage,
   showInformationMessage,
   showErrorMessage,
-}: DeleteProviderApiKeyOptions): Promise<ProviderOnboardingActionResult> {
+}: DeleteProviderApiKeyOptions): Promise<ProviderOnboardingActionResult | undefined> {
   const confirmation = await showWarningMessage(
     `Delete the saved ${definition.providerLabel} API key from this machine?`,
     { modal: true },
     confirmDeleteAction,
   );
-  if (confirmation !== confirmDeleteAction || !context.isCurrent()) {
+  if (!context.isCurrent()) {
+    return undefined;
+  }
+  if (confirmation !== confirmDeleteAction) {
     return { status: "cancelled" };
   }
 
   const currentPresence = await readPresence(presence, definition.provider);
   if (!context.isCurrent()) {
-    return { status: "cancelled" };
+    return undefined;
   }
   if (currentPresence === "unavailable") {
     await notifyError(
