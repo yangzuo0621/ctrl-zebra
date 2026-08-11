@@ -97,9 +97,12 @@ forbidden. Compiled validators live only with the current immutable Tool snapsho
 
 Core represents the result with a CtrlZebra-owned `external_json_schema_2020_12` Tool input-schema
 wrapper, distinct from the existing statically typed built-in Tool schema. The MCP adapter is the
-only producer and may construct it only after the complete snapshot passes validation. Provider
-adapters unwrap the bounded plain JSON value without translating it into, or silently narrowing it
-to, the built-in schema subset; no MCP SDK or Ajv type crosses the package boundary.
+only producer and may construct it only for an individual accepted Tool after that Tool's complete
+schema passes structural and compiled validation. A replacement snapshot may contain accepted
+Tools alongside bounded rejection records, but rejected descriptors never produce a Core Tool or
+wrapper. Provider adapters unwrap the bounded plain JSON value without translating it into, or
+silently narrowing it to, the built-in schema subset; no MCP SDK or Ajv type crosses the package
+boundary.
 
 Every MCP Tool is a trusted CtrlZebra `execute`-risk Tool with an additional unknown local/network
 side-effect warning. Server annotations cannot lower it. Each invocation uses a fresh single-use
@@ -216,9 +219,13 @@ schema, and snapshot limits and then evaluated one descriptor at a time.
   snapshot or revive revoked approvals.
 - The protocol adds `extension/mcp-tool-rejections` rather than changing the strict legacy
   `extension/mcp-tools` shape. The additive projection carries at most 256 rejected entries and a
-  `rejectedToolsTruncated` marker, within the existing serialized snapshot ceiling. New clients
-  stage the matching tools and rejection messages atomically. Older clients ignore the unknown
-  additive message and continue to receive accepted Tools, losing only the optional diagnostics.
+  `rejectedToolsTruncated` marker, within the existing serialized snapshot ceiling. Entries are
+  sorted by exact MCP Tool name in lexicographic Unicode scalar-value order before the first 256 are
+  selected, independent of page order. New clients stage the matching tools and rejection messages
+  atomically in one Host-owned slot that expires 1,000 ms after the first half arrives; a missing
+  half, refresh, cancellation, disconnect, or generation change discards the slot without retry.
+  Older clients ignore the unknown additive message and continue to receive accepted Tools, losing
+  only the optional diagnostics.
 
 This supplement records the single-Tool degradation and compatibility behavior required before
 T1801 implementation. It does not authorize T1802 Schema keyword reinterpretation, T1803

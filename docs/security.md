@@ -758,9 +758,12 @@ and Prompt data that exceed their applicable limit are rejected rather than sile
   `schema-invalid`, or `limit-exceeded`). It never contains a Server keyword, schema path, raw
   schema, SDK/JSON-RPC error, stack, command, environment, or other untrusted diagnostic.
 - `rejectedTools` is independently bounded to 256 entries and to the one-mebibyte serialized
-  snapshot ceiling. When more entries are rejected in a mixed snapshot, the adapter retains a
-  deterministic prefix and sets `rejectedToolsTruncated: true`; accepted Tools are never dropped
-  to satisfy this diagnostic bound. An empty rejection list has `rejectedToolsTruncated: false`.
+  snapshot ceiling. Before taking the prefix, entries are sorted by exact MCP Tool name using
+  lexicographic Unicode scalar-value order (not UTF-16 code units or Server page order), so paging
+  and refresh order cannot change the reported prefix. When more entries are rejected in a mixed
+  snapshot, the adapter retains that deterministic prefix and sets `rejectedToolsTruncated: true`;
+  accepted Tools are never dropped to satisfy this diagnostic bound. An empty rejection list has
+  `rejectedToolsTruncated: false`.
   If a non-empty input list has no accepted Tool, discovery fails with the existing stable
   `invalid-schema` outcome instead of publishing a misleading empty catalog. A genuinely empty
   Server list remains a valid empty catalog.
@@ -772,7 +775,10 @@ and Prompt data that exceed their applicable limit are rejected rather than sile
 - Every replacement and rejection projection is bound to the Server identity and generation that
   requested it. Disconnect, cancellation, Trust loss, a newer generation, or a failed refresh closes
   the delivery gate; late pages, validators, and rejection details are discarded before Core,
-  Protocol, Webview, persistence, or approval state can observe them.
+  Protocol, Webview, persistence, or approval state can observe them. When the two additive wire
+  messages are staged for a Webview pair, the Host-owned staging slot expires 1,000 ms after the
+  first half arrives; it is not extended or retried, and an unmatched half is discarded with the
+  prior complete pair retained.
 
 Unsupported image, audio, Blob, embedded Resource, Resource Link, unknown content, task,
 `input_required`, progress, logging, completion, subscription, or experimental values produce

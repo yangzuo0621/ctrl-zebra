@@ -470,9 +470,11 @@ port.
   translated into Zod or executed as code.
 - The Core Tool declaration contract distinguishes the existing statically typed built-in schema
   from a CtrlZebra-owned `external_json_schema_2020_12` wrapper. Only the MCP boundary may create
-  that wrapper, and only after the complete schema has passed the structural and compiled
-  validation below. Provider adapters unwrap the already-validated plain JSON value without
-  narrowing it to the built-in schema subset; SDK JSON Schema types never enter Core.
+  that wrapper, and only for an individual accepted Tool after that Tool's complete schema has
+  passed the structural and compiled validation below. A replacement snapshot may contain accepted
+  entries alongside bounded rejection records; no wrapper or Core Tool is created for a rejected
+  descriptor. Provider adapters unwrap the already-validated plain JSON value without narrowing it
+  to the built-in schema subset; SDK JSON Schema types never enter Core.
 - T1404 must wrap the pinned SDK's documented `AjvJsonSchemaValidator` export behind an injected
   `ExternalJsonSchemaValidator` contract. A structural walker first accepts only JSON Schema Draft
   2020-12 and the closed keyword set `$schema`, `$defs`, local `$ref`, `type`, `properties`,
@@ -520,8 +522,18 @@ port.
   immutable snapshot and schema identity that created them.
 - The Webview receives accepted Tools and rejection details as an additive projection. Rejection
   details are bounded independently to at most 256 entries and carry an explicit truncation marker;
-  truncating diagnostics never truncates the accepted Tool catalog. The projection contains no
-  schema, keyword path, raw error, command, environment, or Server-provided metadata. A client that
-  does not understand the additive rejection message still receives the unchanged tools-only
-  `extension/mcp-tools` message and therefore keeps rendering accepted Tools; it merely cannot show
-  the optional rejection details.
+  before truncation, entries are sorted by the exact MCP Tool name using lexicographic Unicode
+  scalar-value order (not UTF-16 code units or Server page order), so pagination and refresh order
+  cannot change which prefix is shown. Truncating diagnostics never truncates the accepted Tool
+  catalog. The projection contains no schema, keyword path, raw error, command, environment, or
+  Server-provided metadata. A client that does not understand the additive rejection message still
+  receives the unchanged tools-only `extension/mcp-tools` message and therefore keeps rendering
+  accepted Tools; it merely cannot show the optional rejection details.
+- New consumers stage the accepted catalog and rejection projection in one bounded
+  operation-scoped slot. Either message may arrive first, but an unmatched half is discarded at the
+  Host-owned 1,000 ms correlation deadline measured from the first half, on a newer refresh,
+  cancellation, disconnect, or generation change; the timer is never extended or retried. The last
+  complete pair remains visible. A non-empty list with zero accepted Tools returns the
+  stable `invalid-schema` outcome and publishes neither an empty catalog nor a rejection event.
+  Names/reasons for that all-rejected case are reserved for a separately reviewed T1803 failure
+  diagnostic, not smuggled through the success-catalog projection.

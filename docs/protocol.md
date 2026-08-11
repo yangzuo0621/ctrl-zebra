@@ -484,13 +484,30 @@ The Extension sends this strict additive version `1` message:
 
 Its `requestId` is the same as the corresponding `extension/mcp-tools` snapshot. The projection
 contains no schema, command, environment, raw error, or arbitrary metadata. When more than 256 Tools
-are rejected in a mixed snapshot, the list is a deterministic prefix and `rejectedToolsTruncated` is
-`true`; accepted Tools are never truncated. An empty list sets the flag to `false` so a refresh can
-clear an earlier projection.
+are rejected in a mixed snapshot, entries are first sorted by exact `mcpToolName` in lexicographic
+Unicode scalar-value order (not UTF-16 code units or Server page order), then the first 256 form the
+deterministic prefix and `rejectedToolsTruncated` is `true`; accepted Tools are never truncated. An
+empty list sets the flag to `false` so a refresh can clear an earlier projection.
 
 New clients stage the two matching messages by `requestId`, Server identity, and generation and
-commit them together. A stale, mismatched, cancelled, or post-disconnect message is ignored. A
-version `1` client that does not recognize `extension/mcp-tool-rejections` ignores that additive
+commit them together. Arrival order is irrelevant: the first half is held in one bounded,
+operation-scoped staging slot until its counterpart arrives. The Host-owned slot expires exactly
+1,000 ms after the first half arrives; the timer is not extended by retries or later messages. A
+missing counterpart never creates a new partial view. If this deadline expires, a newer refresh
+starts, the staged request is cancelled, or the connection disconnects/changes generation, the staged half is
+discarded and the last complete pair remains visible; no retry, persistence, or error echo is
+created. A stale or mismatched message is ignored before staging. An empty rejection message is the
+only way to clear an earlier rejection projection.
+
+When the complete non-empty Server list rejects every Tool, the Host returns the existing bounded
+`invalid-schema` discovery outcome, retains the prior complete pair, and emits neither an empty
+`extension/mcp-tools` catalog nor an `extension/mcp-tool-rejections` list. This preserves the
+all-failed failure test and prevents a misleading usable catalog. The future T1803 diagnostics task
+may add a separate reviewed, bounded failure projection for skipped names/reasons; it must not
+reuse this success-catalog message or expose raw schema data. Until then, the user-safe
+`invalid-schema` message is the only wire-visible all-failed detail.
+
+A version `1` client that does not recognize `extension/mcp-tool-rejections` ignores that additive
 message under the existing unknown-message rule and still receives the unchanged tools-only
 `extension/mcp-tools` message; it renders accepted Tools without rejection details. The Host never
 adds an unknown field to the strict legacy catalog to force an older client to parse it.
