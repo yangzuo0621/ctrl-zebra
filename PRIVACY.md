@@ -78,17 +78,22 @@ manually. Cancelling or failing discovery leaves the existing model setting unch
 
 When a user explicitly runs the Provider connection-check command, the Extension Host may send one
 bounded, metadata-only request to the documented model-metadata endpoint for the active OpenAI or
-Gemini configuration. The request contains only the selected Provider/model identifier and the
-matching SecretStorage authorization header. It contains no prompt or instructions, workspace path
-or source text, Session/messages, Tool definition, Tool input/result, or other model context, and it
-does not ask the model to generate output or execute a Tool. The response is used transiently to
-classify authentication and model existence and any capability fields that the official contract
-explicitly exposes; unsupported or ambiguous capability facts are shown as unknown rather than
-inferred.
+Gemini configuration. OpenAI uses `GET /v1/models/{model}` with `Authorization: Bearer <key>`;
+Gemini uses `GET /v1beta/models/{model}` with `x-goog-api-key: <key>`. The selected model is one
+strictly validated path segment encoded exactly once; the request has an empty body, only `Accept`
+and the required authorization header, and never places a key in a query string. It contains no
+prompt or instructions, workspace path or source text, Session/messages, Tool definition, Tool
+input/result, or other model context, and it does not ask the model to generate output or execute a
+Tool. The response is used transiently to classify authentication and model existence and only
+explicitly documented capability fields; unsupported or ambiguous capability facts are shown as
+unknown rather than inferred. OpenAI retrieve metadata has no Tool Calling or streaming fields;
+Gemini streaming is supported only from a strict complete `supportedGenerationMethods` list containing
+`streamGenerateContent`, with no Tool Calling inference from `generateContent` or HTTP 200.
 
 Custom Provider endpoints and OpenAI-Compatible endpoints are not assumed to implement the OpenAI
-metadata route or authorization contract, so the check does not guess an undocumented request. It
-reports unknown for facts that cannot be safely verified. The request has a fixed timeout, no retry,
+metadata route or authorization contract. They are checked only when the validated normalized
+configuration explicitly owns a `models/{id}` metadata contract; otherwise the check does not guess
+or send an undocumented request and reports unknown. The request has a fixed timeout, no retry,
 and cancellation stops the local flow without changing configuration. Response bodies, headers,
 authorization material, SDK errors, and endpoint details are not persisted, logged, sent to the
 Webview, or retained by CtrlZebra. The configured provider service may observe and retain the

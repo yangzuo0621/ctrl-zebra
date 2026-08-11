@@ -552,9 +552,15 @@ entry, not only the intermediate object.
   or instructions, no workspace URI or text, Session/message history, Tool declaration, Tool input or
   result, and it cannot trigger model generation or a Tool side effect. Dedicated OpenAI and Gemini
   checks use only their documented [OpenAI model retrieve](https://developers.openai.com/api/reference/resources/models/methods/retrieve)
-  and [Gemini `models.get`](https://ai.google.dev/api/models#method:-models.get) routes and disable redirects. A custom endpoint or
-  OpenAI-Compatible endpoint has no assumed route or header contract; the command does not guess or
-  probe an undocumented path and reports unknown instead.
+  route (`GET /v1/models/{model}`, `Authorization: Bearer <key>`) and
+  [Gemini `models.get`](https://ai.google.dev/api/models#method:-models.get) route
+  (`GET /v1beta/models/{model}`, `x-goog-api-key: <key>`). The model is one strictly validated path
+  segment encoded exactly once; both requests have an empty body, only `Accept` plus the required
+  authorization header, no query credential, and redirects disabled. An OpenAI-Compatible endpoint
+  is checked only when the validated normalized configuration explicitly owns a `models/{id}`
+  metadata contract; its auth uses the existing configuration boundary. The Provider name alone
+  never grants an OpenAI route or header assumption, and without that owned contract the command
+  sends no undocumented probe and reports unknown.
 - The Host bounds the response before parsing (64 KiB maximum body, with a declared length rejected
   above that limit), accepts only the documented model identity and explicitly documented capability
   fields, and discards all other metadata. It uses one operation-wide `AbortSignal`, a fixed 10-second
@@ -563,9 +569,20 @@ entry, not only the intermediate object.
 - Authentication, model existence, text streaming, Tool Calling, and the required capabilities are
   represented as `supported`, `unsupported`, or `unknown`. `supported` or `unsupported` is allowed
   only when official metadata or an explicitly documented, side-effect-free probe proves the fact;
-  missing metadata, custom endpoints, and ambiguous responses remain `unknown`. A successful
-  metadata response proves authentication and model existence only when the Provider contract says
-  so; it does not imply streaming or Tool Calling support.
+  missing metadata, custom endpoints, and ambiguous responses remain `unknown`. OpenAI retrieve
+  metadata has no Tool Calling or streaming fields, so a successful response leaves both unknown.
+  Gemini streaming is supported only for a strict, bounded, complete `supportedGenerationMethods`
+  list containing `streamGenerateContent`; omission proves unsupported only when the official
+  complete-list semantics are valid, otherwise it remains unknown. No `generateContent` field or
+  HTTP 200 may be used to infer Tool Calling. The aggregate required-capability fact is unsupported
+  when any required capability is unsupported, supported only when all are supported, and unknown
+  otherwise. A successful metadata response proves authentication and model existence only when the
+  Provider contract says so; it does not imply streaming or Tool Calling support.
+- HTTP status classification is structural and allowlisted: `401`/`403` are authentication failure,
+  `404` is model not found, `429` is rate limited, `408`/`504` are timeout, other `5xx` and transport
+  failures are network/unavailable, and other statuses are unknown or invalid response according to
+  the documented route. The classifier never branches on response text, headers, URL, or SDK error
+  messages.
 - User-facing outcomes and diagnostics use fixed safe categories: authentication failure, model not
   found, rate limited, timeout, cancelled, network/unavailable, malformed response, configuration,
   and unknown. Raw response bodies, headers, authorization values, endpoint URLs (including query or
