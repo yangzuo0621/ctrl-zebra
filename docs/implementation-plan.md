@@ -65,12 +65,12 @@
 **进度摘要**：
 
 - 总任务：148
-- 已完成：122
+- 已完成：123
 - 进行中：0
 - 受阻：0
-- 待开始：26
-- 当前任务：T1806
-- 下一任务：T1807
+- 待开始：25
+- 当前任务：T1807
+- 下一任务：T1901
 - 最后更新：2026-08-12
 
 | 阶段 | 任务 | 状态 | 完成 PR | 完成日期 |
@@ -197,7 +197,7 @@
 | 18 | T1803 | 已完成 | [#193](https://github.com/yangzuo0621/ctrl-zebra/pull/193) | 2026-08-12 |
 | 18 | T1804 | 已完成 | [#195](https://github.com/yangzuo0621/ctrl-zebra/pull/195) | 2026-08-12 |
 | 18 | T1805 | 已完成 | [#197](https://github.com/yangzuo0621/ctrl-zebra/pull/197) | 2026-08-12 |
-| 18 | T1806 | 待开始 | — | — |
+| 18 | T1806 | 已完成 | [#198](https://github.com/yangzuo0621/ctrl-zebra/pull/198) | 2026-08-12 |
 | 18 | T1807 | 待开始 | — | — |
 | 19 | T1901 | 待开始 | — | — |
 | 19 | T1902 | 待开始 | — | — |
@@ -281,6 +281,13 @@
 - 完成证据：[PR #197](https://github.com/yangzuo0621/ctrl-zebra/pull/197)，实现 revision `83a1f136e9904e8e9e3e616385516094513912f2`；GitHub Actions run `31532442329` 的 Ubuntu、macOS、Windows 验证均通过；本地 MCP 聚焦测试 132 个、完整测试 1574 个、`pnpm typecheck`、`pnpm check`、构建、集成测试及 `git diff --check` 均通过。
 - 完成日期：2026-08-12
 - 下一任务：T1806
+
+### T1806 完成记录
+
+- 完成摘要：加固 legacy MCP 请求边界，拒绝不符合安全矩阵的 Server 请求并补齐边界验证。
+- 完成证据：[PR #198](https://github.com/yangzuo0621/ctrl-zebra/pull/198)，最终实现 revision `effe08d35c10014c4105dd54af292750984f4351`；GitHub Actions run `31534831357` 的 Ubuntu、macOS、Windows 验证均通过；本地 MCP 聚焦测试 138 个、完整测试 1580 个、`pnpm typecheck`、`pnpm check`、构建、集成测试及 `git diff --check` 均通过。
+- 完成日期：2026-08-12
+- 下一任务：T1807（阶段 18 全部任务完成后先进行阶段性归档校验，再进入阶段 19）
 
 ---
 
