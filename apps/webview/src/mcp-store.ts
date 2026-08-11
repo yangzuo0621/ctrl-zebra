@@ -372,7 +372,7 @@ function connectionAnnouncement(connection: McpConnectionDto): string {
   if (connection.status === "connected")
     return strings.mcpAnnouncements.connected(connection.server.displayName);
   if (connection.status === "failed") return connection.error.message;
-  return strings.mcpAnnouncements.status(connection.status);
+  return strings.mcpAnnouncements.status(strings.mcp.connectionStatus[connection.status]);
 }
 
 function sameGeneration(
