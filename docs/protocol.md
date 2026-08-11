@@ -471,12 +471,22 @@ the accepted Tool descriptor. `McpToolRejectionCatalogDto` is:
 }
 ```
 
-The Extension sends `extension/mcp-tool-rejections` as a strict additive version `1` message with
-that catalog and the same `requestId` as the corresponding `extension/mcp-tools` snapshot. The
-projection contains no schema, command, environment, raw error, or arbitrary metadata. When more
-than 256 Tools are rejected in a mixed snapshot, the list is a deterministic prefix and
-`rejectedToolsTruncated` is `true`; accepted Tools are never truncated. An empty list sets the flag
-to `false` so a refresh can clear an earlier projection.
+The Extension sends this strict additive version `1` message:
+
+```text
+{
+  protocolVersion: 1,
+  type: "extension/mcp-tool-rejections",
+  requestId,
+  catalog: McpToolRejectionCatalogDto
+}
+```
+
+Its `requestId` is the same as the corresponding `extension/mcp-tools` snapshot. The projection
+contains no schema, command, environment, raw error, or arbitrary metadata. When more than 256 Tools
+are rejected in a mixed snapshot, the list is a deterministic prefix and `rejectedToolsTruncated` is
+`true`; accepted Tools are never truncated. An empty list sets the flag to `false` so a refresh can
+clear an earlier projection.
 
 New clients stage the two matching messages by `requestId`, Server identity, and generation and
 commit them together. A stale, mismatched, cancelled, or post-disconnect message is ignored. A

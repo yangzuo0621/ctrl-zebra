@@ -498,6 +498,8 @@ port.
   `McpToolRejectionReason` set (`forbidden-keyword`, `unknown-keyword`, `invalid-reference`,
   `non-object-root`, `schema-invalid`, or `limit-exceeded`). A reason is a CtrlZebra classification,
   never a Server keyword, JSON Pointer, SDK error, or exception message.
+  The result is a discriminated value (`{ kind: "accepted", ... } | { kind: "rejected", ... }`),
+  not a thrown per-Tool exception that can abort sibling evaluation.
 - A schema rejection is local to that Tool. It must not abort, remove, or invalidate any sibling
   Tool whose descriptor and schema were accepted. Descriptor-envelope failures that make identity or
   trust impossible (`malformed-message`, an invalid or duplicate MCP name, a duplicate or reserved
