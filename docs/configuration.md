@@ -80,10 +80,14 @@ advertised list contains `2026-07-28`, the client continues modern; if the list 
 contains only unsupported/unknown future versions, the result is stable `protocol-incompatible` and
 never fallback. A recognized modern JSON-RPC error follows the same lock: a controlled advertised
 `2026-07-28` continues/selects modern, while a missing/unsupported advertised version is
-`protocol-incompatible` and never fallback. Malformed framing, overflow, cancellation, trust loss,
-process exit, or cleanup failure is terminal and never authorizes fallback. Late probe data is
-discarded by the connection generation gate. The complete eligible/forbidden matrix is authoritative
-in [Architecture](architecture.md#closed-modern-first-fallback-decision-matrix-t1804).
+`protocol-incompatible` and never fallback. After independent overflow checks, a syntactically or
+structurally malformed, or shape-validation-failing, response/error is `malformed-message`; a
+structurally valid response/error outside the closed recognized-modern or defined non-modern
+classifications (including unknown future or otherwise unclassified values) is
+`protocol-incompatible`. Neither outcome authorizes fallback. Cancellation, trust loss, process exit,
+or cleanup failure is terminal and never authorizes fallback. Late probe data is discarded by the
+connection generation gate. The complete eligible/forbidden matrix is authoritative in
+[Architecture](architecture.md#closed-modern-first-fallback-decision-matrix-t1804).
 
 The connected Protocol projection carries a CtrlZebra-owned negotiated value:
 
@@ -109,6 +113,9 @@ The Host keeps a closed, non-sensitive negotiation classification for diagnostic
 public error codes (`protocol-incompatible`, `malformed-message`, `capability-unsupported`, or the
 appropriate process/cleanup code) and fixed user-safe messages. They never carry a JSON-RPC code,
 Server text, probe timing, or a fallback-attempt flag across Protocol, Webview, persistence, or Core.
+For this negotiation boundary, shape-invalid response/error values use `malformed-message`, while
+structurally valid but closed-set-unrecognized values (including unknown future or unclassified
+values) use `protocol-incompatible`; both are no-fallback outcomes.
 
 ## Security and persistence boundaries
 

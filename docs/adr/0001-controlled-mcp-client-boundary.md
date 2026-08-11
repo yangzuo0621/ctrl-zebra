@@ -384,10 +384,14 @@ content, or persistence boundaries above.
   locks modern: a bounded advertised `2026-07-28` continues modern, while missing/unsupported
   versions fail `protocol-incompatible` without fallback. A recognized modern JSON-RPC error has
   the same lock: a controlled advertised `2026-07-28` continues/selects modern, while a
-  missing/unsupported version fails `protocol-incompatible` without fallback. Malformed framing,
-  overflow, cancellation, process exit, trust loss, and cleanup failure never authorize fallback. A
-  generation gate discards late probe data; the closed eligible/forbidden matrix is recorded in
-  Architecture and mirrored by Protocol/Security.
+  missing/unsupported version fails `protocol-incompatible` without fallback. After independent
+  overflow checks, a syntactically/structurally malformed or shape-validation-failing response/error
+  maps to `malformed-message`; a structurally valid response/error outside the closed recognized-
+  modern or defined non-modern classifications (including unknown future or otherwise unclassified
+  values) maps to `protocol-incompatible`. Neither authorizes fallback. Cancellation, process exit,
+  trust loss, and cleanup failure also never authorize fallback. A generation gate discards late
+  probe data; the closed eligible/forbidden matrix is recorded in Architecture and mirrored by
+  Protocol/Security.
 - A successful connected Protocol projection carries configured mode plus one exact negotiated
   `{ era, version }` pair (`modern/2026-07-28` or `legacy/2025-11-25`). Non-connected and failed
   projections carry no selected era or capabilities. Diagnostics expose only the closed configured
@@ -404,9 +408,13 @@ content, or persistence boundaries above.
   persistence.
 
 This is the T1804 documentation/configuration gate. Its implementation PR must add strict config and
-Protocol schemas plus modern/legacy compatibility fixtures; it must not implement SDK lifecycle in
-the constraint PR. T1805–T1807 remain responsible for runtime negotiation, legacy security handling,
-Extension migration, Webview integration, persistence wiring, and end-to-end evidence.
+Protocol schemas plus deterministic, no-network/no-secret modern/legacy compatibility fixtures and
+tests for the closed matrix: malformed/validation-failing response/error to `malformed-message`,
+structurally valid unknown/unclassified response/error to `protocol-incompatible`, recognized modern
+error version selection, defined non-modern fallback, and bounded-timeout fallback. It must not
+implement SDK lifecycle in the constraint PR. T1805–T1807 remain responsible for runtime negotiation,
+legacy security handling, Extension migration, Webview integration, persistence wiring, and
+end-to-end evidence.
 
 ## Reviewed primary references
 

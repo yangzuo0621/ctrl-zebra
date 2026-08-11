@@ -452,10 +452,14 @@ port.
   `2026-07-28` continues modern, while a missing/unsupported advertised version fails
   `protocol-incompatible` without fallback. A recognized modern JSON-RPC error also locks modern:
   a bounded advertised `2026-07-28` continues/selects modern, while a missing/unsupported version
-  fails `protocol-incompatible` without fallback. Malformed framing, overflow, cancellation,
-  process exit, trust loss, or cleanup failure is terminal and never authorizes fallback. Probe
-  correlation is closed before an eligible fallback; late results are discarded by the generation
-  gate. See the closed decision matrix below.
+  fails `protocol-incompatible` without fallback. After independent overflow checks, a syntactically
+  or structurally malformed, or shape-validation-failing, response/error maps to `malformed-message`;
+  a structurally valid response/error outside the closed recognized-modern or defined non-modern
+  classifications (including unknown future or otherwise unclassified values) maps to
+  `protocol-incompatible`. Neither classification authorizes fallback. Cancellation, process exit,
+  trust loss, or cleanup failure is terminal and never authorizes fallback. Probe correlation is
+  closed before an eligible fallback; late results are discarded by the generation gate. See the
+  closed decision matrix below.
 - The connected projection contains a CtrlZebra-owned `{ era, version }` pair: modern/
   `2026-07-28` or legacy/`2025-11-25`. Before this projection is valid, status may expose the
   configured mode but no selected era, version, capability, probe result, fallback result, timing,
@@ -510,7 +514,11 @@ request rejection rules. Negotiated era is evidence of a completed handshake, no
 The probe decision is a closed classification, not a generic “try the other handshake” rule. A
 recognized modern JSON-RPC error is modern evidence just like a `DiscoverResult`; it is never treated
 as an eligible legacy signal. The advertised-version value below means only a bounded, validated list
-from the recognized result/error, never an open Server field.
+from the recognized result/error, never an open Server field. After independent overflow checks,
+syntactically/structurally malformed or shape-validation-failing response/error values map only to
+`malformed-message`; structurally valid values outside the closed recognized-modern or defined
+non-modern classifications (including unknown future or otherwise unclassified values) map only to
+`protocol-incompatible`. Both are terminal and never authorize fallback.
 
 | Probe or handshake observation | `modern-only` | `dual` | Stable outcome / projection |
 |---|---|---|---|
@@ -520,15 +528,21 @@ from the recognized result/error, never an open Server field.
 | Recognized modern JSON-RPC error has no controlled supported version or omits `2026-07-28` | Lock modern; do not fallback | Lock modern; do not fallback | Failed `protocol-incompatible`; the error is not a legacy signal |
 | Specification-defined non-modern probe response | Fail; legacy is not allowed | Close probe, then run exactly one legacy `initialize` / `notifications/initialized` | Connected `legacy / 2025-11-25` only after the complete legacy handshake; otherwise stable `protocol-incompatible` |
 | Bounded probe timeout | Fail; legacy is not allowed | Close probe, then run exactly one legacy handshake | Connected legacy only after exact version validation; failed fallback is stable `protocol-incompatible` |
-| Malformed or unclassified response/error | Do not fallback | Do not fallback | Stable `malformed-message` or `protocol-incompatible`; no downgrade |
+| Syntactically/structurally malformed or shape-validation-failing response/error | Do not fallback | Do not fallback | Stable `malformed-message`; no downgrade |
+| Structurally valid response/error outside the closed recognized-modern or defined non-modern classifications (including unknown future or otherwise unclassified values) | Do not fallback | Do not fallback | Stable `protocol-incompatible`; no downgrade |
 | Message/stream/descriptor overflow | Do not fallback | Do not fallback | Stable `limit-exceeded`; generation closes |
 | Cancellation, trust loss, process exit, or cleanup failure | Do not fallback | Do not fallback | Cancellation/non-connected status, `workspace-untrusted`, `server-exited`, or `termination-unconfirmed` as applicable |
-| Legacy initialization advertises an unsupported/unknown version or is malformed | No second lifecycle | No second lifecycle or modern retry | Failed `protocol-incompatible` or `malformed-message`; one attempt only |
+| Legacy initialization advertises an unsupported/unknown version | No second lifecycle | No second lifecycle or modern retry | Failed `protocol-incompatible`; one attempt only |
+| Legacy initialization is syntactically/structurally malformed or shape-validation-failing | No second lifecycle | No second lifecycle or modern retry | Failed `malformed-message`; one attempt only |
 
 `DiscoverResult` and a recognized modern error therefore have distinct modern success/error branches,
 but share the same no-fallback lock. Only the two explicitly eligible rows (defined non-modern
-response and bounded timeout) can enter legacy in `dual`; unknown future versions, malformed data,
-oversize data, cancellation, process exit, trust loss, and cleanup failure are never fallback oracles.
+response and bounded timeout) can enter legacy in `dual`; unknown future versions, unclassified
+responses, malformed data, oversize data, cancellation, process exit, trust loss, and cleanup failure
+are never fallback oracles. The T1804 implementation gate must add deterministic, no-network/no-secret
+fixtures and tests for each closed classification, including malformed/validation-failing to
+`malformed-message`, structurally valid unknown/unclassified to `protocol-incompatible`, recognized
+modern error version selection, defined non-modern fallback, and bounded timeout fallback.
 The matrix is mirrored by Protocol’s closed DTOs and Security’s stable error classification. The
 Webview receives only the configured mode, closed supported-version list on failure, or negotiated
 era/version after success; it never receives the decision reason or fallback state.

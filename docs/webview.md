@@ -343,7 +343,11 @@ The connection card keeps the configured mode visible while `connecting`, but sh
 version or capabilities until `connected`. A failed connection exposes only the stable error,
 closed supported-version list, and fixed next action. DiscoverResult and recognized modern JSON-RPC
 errors are modern-locked; a missing/unsupported controlled `2026-07-28` produces only
-`protocol-incompatible` and never a legacy/fallback hint. Disconnect, cancellation, trust loss,
-cleanup failure, generation change, or configuration staleness clears the negotiated pair and all
-dependent catalog/recovery state synchronously. This is a presentation rule; the Extension remains
-the sole owner of negotiation, migration, process cleanup, and capability decisions.
+`protocol-incompatible` and never a legacy/fallback hint. Syntactically/structurally malformed or
+shape-validation-failing response/error renders `malformed-message`; structurally valid but outside
+the closed recognized-modern/defined-non-modern classifications (including unknown future or
+otherwise unclassified values) renders `protocol-incompatible`; neither renders a fallback hint.
+Disconnect, cancellation, trust loss, cleanup failure, generation change, or configuration staleness
+clears the negotiated pair and all dependent catalog/recovery state synchronously. This is a
+presentation rule; the Extension remains the sole owner of negotiation, migration, process cleanup,
+and capability decisions.

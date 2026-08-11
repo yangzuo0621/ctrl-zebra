@@ -788,14 +788,22 @@ negotiated pair or usable capabilities. A well-formed `DiscoverResult` locks mod
 `protocol-incompatible` with no fallback. A recognized modern JSON-RPC error also locks modern: a
 controlled advertised `2026-07-28` continues/selects modern, while a missing/unsupported advertised
 version is `protocol-incompatible` with no fallback. Only a specification-defined non-modern response
-or bounded probe timeout in `dual` can enter one legacy handshake; malformed framing, overflow,
-cancellation, process exit, trust loss, or cleanup failure cannot trigger fallback. Late probe results
-are ignored by generation. The complete eligible/forbidden decision matrix is authoritative in
+or bounded probe timeout in `dual` can enter one legacy handshake. After independent overflow checks,
+a syntactically/structurally malformed or shape-validation-failing response/error maps to
+`malformed-message`; a structurally valid response/error outside the closed recognized-modern or
+defined non-modern classifications (including unknown future or otherwise unclassified values) maps
+to `protocol-incompatible`. Both are no-fallback outcomes. Cancellation, process exit, trust loss, or
+cleanup failure cannot trigger fallback. Late probe results are ignored by generation. The complete
+eligible/forbidden decision matrix is authoritative in
 [Architecture](architecture.md#closed-modern-first-fallback-decision-matrix-t1804).
 
 `McpErrorDto` remains a closed, user-safe code/message object. Unsupported versions use
 `protocol-incompatible`; malformed protocol uses `malformed-message`; rejected capabilities use
 `capability-unsupported`; process, cleanup, and other failures use their existing stable codes.
+For the modern-first boundary, syntactically/structurally malformed or shape-validation-failing
+response/error values use `malformed-message`, while structurally valid values outside the closed
+recognized-modern or defined non-modern classifications (including unknown future or unclassified
+values) use `protocol-incompatible`; neither permits fallback.
 The Host may classify failures internally as `modern-version-unsupported`,
 `legacy-version-unsupported`, `probe-timeout-legacy-failed`, `malformed-protocol`, or
 `capability-rejected`, but these names are not open wire values. Internal probe/fallback

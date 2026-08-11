@@ -927,11 +927,15 @@ The configured mode is a user choice, not a Server capability. Version `1` setti
   advertised `2026-07-28` continues modern, while a missing/unsupported advertised version fails
   `protocol-incompatible` without fallback. A recognized modern JSON-RPC error also locks modern: a
   controlled advertised `2026-07-28` continues/selects modern, while a missing/unsupported version
-  fails `protocol-incompatible` without fallback. Malformed framing, message/stream overflow,
-  cancellation, process exit, trust loss, or cleanup failure is terminal and cannot become a
-  downgrade oracle. The probe request and correlation state are closed before an eligible fallback,
-  and the generation gate drops all late probe data. The closed decision matrix in Architecture is
-  authoritative; this section mirrors its stable outcome boundary.
+  fails `protocol-incompatible` without fallback. After independent overflow checks, a
+  syntactically/structurally malformed or shape-validation-failing response/error maps to
+  `malformed-message`; a structurally valid response/error outside the closed recognized-modern or
+  defined non-modern classifications (including unknown future or otherwise unclassified values)
+  maps to `protocol-incompatible`. Neither is a downgrade oracle. Message/stream overflow remains
+  `limit-exceeded`; cancellation, process exit, trust loss, or cleanup failure is terminal and cannot
+  become a downgrade oracle. The probe request and correlation state are closed before an eligible
+  fallback, and the generation gate drops all late probe data. The closed decision matrix in
+  Architecture is authoritative; this section mirrors its stable outcome boundary.
 - No capability, catalog, Tool, Resource, Prompt, approval, persistence, or Webview state is
   available until the selected handshake has validated its exact closed version. Both eras expose
   only the reviewed Tools, Resources, Resource Templates, Prompts, and list-change behavior. Roots,

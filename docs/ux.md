@@ -437,7 +437,9 @@ VS Code 主题下，原因、操作和失败状态必须可读且不依赖颜色
   era/version；失败只显示稳定错误、configured mode、支持版本和固定恢复动作，不显示探测
   响应、超时、回退尝试、时序、Server 原始错误或“回退成功”文案。DiscoverResult 或可识别
   modern JSON-RPC error 都锁定 modern；其缺少受支持 `2026-07-28` 时显示
-  `protocol-incompatible`，绝不暗示 legacy 回退。
+  `protocol-incompatible`，绝不暗示 legacy 回退。语法/结构错误或响应/错误形状校验失败显示
+  `malformed-message`；结构有效但不属于闭合的 recognized-modern/defined-non-modern 分类（含
+  unknown future 或未分类值）显示 `protocol-incompatible`；两者均不触发回退。
 - 连接状态与恢复组合保持严格：未连接/失败时没有可用能力；connected 才显示对应 era 的
   Tools、Resources/Templates、Prompts。取消、断开、Trust 丢失、清理失败或世代变化立即清空
   旧目录、诊断、恢复控件和 negotiated 值，迟到事件不改变界面。

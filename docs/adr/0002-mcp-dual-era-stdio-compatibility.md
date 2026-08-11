@@ -14,8 +14,11 @@ large installed base of Servers that still use the legacy `initialize` / `notifi
 The current MCP `2026-07-28` stdio specification defines an official dual-era compatibility algorithm. A client
 first probes `server/discover`. A successful `DiscoverResult` identifies a modern Server. A recognized modern
 JSON-RPC error also identifies a modern Server and must not cause legacy fallback; the client instead selects a
-mutually supported advertised modern version or disconnects. Other errors or a bounded timeout identify the
-legacy compatibility path, where the client may use `initialize` and then `notifications/initialized`.
+mutually supported advertised modern version or disconnects. Only a response explicitly classified by the
+specification as non-modern or a bounded timeout may identify the legacy compatibility path, where the client may
+use `initialize` and then `notifications/initialized`; structurally valid responses/errors outside the closed
+modern/non-modern classifications are `protocol-incompatible`, while syntactically/structurally malformed or
+validation-failing responses/errors are `malformed-message`. Neither class authorizes fallback.
 
 Supporting both eras expands protocol behavior, error classification, state ownership and security testing. In
 particular, timeout must not become an unrestricted downgrade oracle, a legacy Server must not acquire Client
@@ -42,8 +45,12 @@ capabilities that CtrlZebra does not authorize, and results from the probe canno
 - A recognized modern JSON-RPC error proves the Server is modern. CtrlZebra does not fall back; it accepts the
   closed supported modern version if advertised, otherwise disconnects with `protocol-incompatible`.
 - Only a bounded probe timeout or a response classified by the official SDK/specification as non-modern may enter
-  the legacy path. Malformed framing, output/resource overflow, process exit, cancellation, trust loss and cleanup
-  failure are terminal and never authorize fallback.
+  the legacy path. After independent output/resource overflow checks, syntactically/structurally malformed or
+  validation-failing responses/errors map to `malformed-message`; structurally valid responses/errors outside the
+  closed recognized-modern or defined non-modern classifications (including unknown future or otherwise
+  unclassified values) map to `protocol-incompatible`. Neither maps to legacy or authorizes fallback. Overflow
+  remains `limit-exceeded`; process exit, cancellation, trust loss and cleanup failure are terminal and never
+  authorize fallback.
 - Before fallback, the probe request and its correlation state are closed. Any late probe response is discarded by
   the current connection-generation gate and cannot mutate capabilities, catalogs, Protocol or UI.
 - Legacy negotiation sends `initialize` for `2025-11-25`, validates the complete `InitializeResult`, requires the
@@ -75,7 +82,9 @@ capabilities that CtrlZebra does not authorize, and results from the probe canno
   receive SDK enums, JSON-RPC errors, raw discovery/initialize data or fallback timing details.
 - Diagnostics distinguish unsupported modern version, unsupported legacy version, probe timeout followed by failed
   initialization, malformed protocol, capability rejection and process/cleanup failure without exposing raw Server
-  output or command details.
+  output or command details. For negotiation, malformed/validation-failing response/error is the stable
+  `malformed-message` code; a structurally valid but closed-set-unrecognized response/error is
+  `protocol-incompatible`; both are no-fallback outcomes.
 - The UI shows the configured mode and negotiated era. A legacy connection is never presented as modern, and a
   fallback is not described as a security guarantee or successful compatibility until initialization completes.
 

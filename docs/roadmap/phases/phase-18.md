@@ -58,6 +58,9 @@
 约束 PR 合入后实现配置/Protocol Schema 与兼容 fixture；不得在该 PR 中实现 SDK 生命周期。
 
 测试旧配置、显式 dual、未知模式、严格 Schema、连接状态组合、恢复投影、版本闭合集和额外字段拒绝。
+兼容 fixture/test 还必须固定唯一错误映射：语法/结构错误或响应/错误形状校验失败为
+`malformed-message`；结构有效但不属于闭合 recognized-modern/defined-non-modern 分类（含未知未来或
+未分类值）为 `protocol-incompatible`；两者均不得触发回退。Fixture 不访问网络、不含真实凭据且不进入发布产物。
 
 ### T1805：实现 stdio 双纪元探测与协商
 
@@ -67,7 +70,8 @@ legacy `initialize` / `notifications/initialized`。取消、malformed、超限�
 清理失败不得触发回退；迟到 probe 结果受 generation gate 丢弃。
 
 测试 modern 成功、modern 错误选择版本、modern 不兼容不回退、legacy 超时回退、非 modern 错误
-回退、malformed 不回退、取消、迟到响应、重复协商、进程退出和 closed version set。
+回退、语法/结构错误或校验失败映射 `malformed-message` 且不回退、结构有效的未知未来/未分类值映射
+`protocol-incompatible` 且不回退、取消、迟到响应、重复协商、进程退出和 closed version set。
 
 ### T1806：完成 legacy 安全矩阵与 Server 请求拒绝
 
