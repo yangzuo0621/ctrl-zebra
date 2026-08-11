@@ -95,8 +95,12 @@ CtrlZebra 应让用户在不理解内部 Agent 状态机的情况下完成以下
   或一次 HTTP 200 猜成能力事实。OpenAI 元数据没有 Tool Calling/流式字段，因此两项未知；
   Gemini 只有严格有效且完整的 `supportedGenerationMethods` 含 `streamGenerateContent` 时才
   显示流式支持，完整列表缺失时显示不支持，无法确认完整性时显示未知；Tool Calling 没有
-  官方字段时始终未知。所需能力任一不支持则不支持，全部支持才支持，否则未知。
-- 结果消息只说明 Provider、模型和固定安全错误类别：认证失败、模型不存在、限流、超时、
+  官方字段时始终未知。OpenAI-Compatible 只对已验证配置端点按 `models/{encodedModelId}` 的
+  有界 GET 契约检查；远端仅使用现有配置要求的 Bearer 认证，loopback 无 key 时不发送认证，
+  不把 Provider 名称当作 OpenAI 行为。其最小响应必须是含匹配 `id` 的有界 JSON，能力全部
+  未知；专用 Provider 的自定义端点不探测并显示未知。所需能力任一不支持则不支持，全部支持
+  才支持，否则未知。
+- 结果消息只说明 Provider、模型和固定安全错误类别：配置错误、认证失败、模型不存在、限流、超时、
   网络不可用、响应格式错误、已取消或未知。不得显示原始第三方错误、响应正文、请求头、
   授权材料、Secret、端点 URL 或内部堆栈。自定义端点明确显示能力未知并提示用户按其服务文档
   验证，不因“OpenAI-Compatible”名称假定 OpenAI 行为。

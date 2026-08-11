@@ -90,10 +90,13 @@ unknown rather than inferred. OpenAI retrieve metadata has no Tool Calling or st
 Gemini streaming is supported only from a strict complete `supportedGenerationMethods` list containing
 `streamGenerateContent`, with no Tool Calling inference from `generateContent` or HTTP 200.
 
-Custom Provider endpoints and OpenAI-Compatible endpoints are not assumed to implement the OpenAI
-metadata route or authorization contract. They are checked only when the validated normalized
-configuration explicitly owns a `models/{id}` metadata contract; otherwise the check does not guess
-or send an undocumented request and reports unknown. The request has a fixed timeout, no retry,
+OpenAI-Compatible endpoints use the validated normalized configured base URL and an explicitly bounded
+`GET` path formed by preserving its base path and appending exactly one `models/{encodedModelId}`
+segment. Remote endpoints receive one `Authorization: Bearer <key>` header; explicit loopback
+endpoints may omit that header when no key is configured and use it when a key is present. No query
+or cookie credential is sent, and the minimal response must contain a matching bounded `id` fact;
+capabilities remain unknown. Dedicated Provider custom endpoints are not assumed to implement an
+official metadata route and are not probed. The request has a fixed timeout, no retry,
 and cancellation stops the local flow without changing configuration. Response bodies, headers,
 authorization material, SDK errors, and endpoint details are not persisted, logged, sent to the
 Webview, or retained by CtrlZebra. The configured provider service may observe and retain the

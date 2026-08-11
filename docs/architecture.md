@@ -210,10 +210,15 @@ This document defines the initial runtime boundaries for the CtrlZebra desktop V
   OpenAI `GET /v1/models/{model}` with `Authorization: Bearer <key>` and Gemini
   `GET /v1beta/models/{model}` with `x-goog-api-key: <key>`; both use one strictly validated model
   path segment encoded exactly once, an empty body, `Accept` plus the required authorization header,
-  and no credential in a query string. An OpenAI-compatible endpoint is checked only when the
-  validated normalized configuration explicitly owns a `models/{id}` metadata contract; its auth
-  follows the existing configuration boundary and the Provider name never supplies an OpenAI
-  assumption. Without that owned contract the check reports unknown and sends no undocumented probe.
+  and no credential in a query string. For OpenAI-Compatible, the validated normalized endpoint is
+  the base URL owned by the existing configuration contract; the check appends exactly one
+  `models/{encodedModelId}` path segment (preserving the base path and adding one separator). The
+  request is `GET` with an empty body, `Accept: application/json`, redirects disabled, and no query
+  or cookie credential. A remote endpoint (`requiresApiKey`) receives exactly one
+  `Authorization: Bearer <key>` header; an explicit loopback endpoint may omit the header when no
+  key is configured and uses it when a key is present. No other auth form is accepted. The Provider
+  name never supplies an undocumented OpenAI assumption; a dedicated Provider custom endpoint has
+  no official route and reports unknown without a request.
 - The check returns an internal bounded report with tri-state facts for authentication, model
   existence, text streaming, Tool Calling, and the required capabilities. OpenAI's documented model
   retrieve metadata has no Tool Calling or streaming fields, so a successful response proves neither
@@ -221,8 +226,12 @@ This document defines the initial runtime boundaries for the CtrlZebra desktop V
   complete `supportedGenerationMethods` list contains `streamGenerateContent`; a documented complete
   list that omits it proves unsupported, while an absent, malformed, or non-complete field remains
   unknown. Neither `generateContent` nor a successful status proves Tool Calling; absent Tool Calling
-  metadata remains unknown. The aggregate required-capability fact is unsupported when any required
-  capability is unsupported, supported only when all are supported, and unknown otherwise. These
+  metadata remains unknown. The OpenAI-Compatible response contract is deliberately minimal: a
+  bounded JSON object must contain an `id` string exactly equal to the configured model ID; unknown
+  fields are discarded and no capability field is recognized, so all compatible capabilities remain
+  unknown. Missing/mismatched `id` is malformed rather than evidence of model absence. The aggregate
+  required-capability fact is unsupported when any required capability is unsupported, supported only
+  when all are supported, and unknown otherwise. These
   rules apply only to official metadata or a documented, side-effect-free probe; the check never
   infers a capability from a model name or HTTP 200. It does not mutate Provider, endpoint, model,
   capabilities, or SecretStorage configuration. Cancellation and timeout close the operation and

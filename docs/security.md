@@ -556,11 +556,15 @@ entry, not only the intermediate object.
   [Gemini `models.get`](https://ai.google.dev/api/models#method:-models.get) route
   (`GET /v1beta/models/{model}`, `x-goog-api-key: <key>`). The model is one strictly validated path
   segment encoded exactly once; both requests have an empty body, only `Accept` plus the required
-  authorization header, no query credential, and redirects disabled. An OpenAI-Compatible endpoint
-  is checked only when the validated normalized configuration explicitly owns a `models/{id}`
-  metadata contract; its auth uses the existing configuration boundary. The Provider name alone
-  never grants an OpenAI route or header assumption, and without that owned contract the command
-  sends no undocumented probe and reports unknown.
+  authorization header, no query credential, and redirects disabled. For OpenAI-Compatible, the
+  validated normalized endpoint is the base URL from the existing configuration contract; the Host
+  appends exactly one `models/{encodedModelId}` segment after preserving the base path and adding one
+  separator. The request is `GET` with an empty body, `Accept: application/json`, redirects disabled,
+  and no query or cookie credential. A remote endpoint (`requiresApiKey`) receives exactly one
+  `Authorization: Bearer <key>` header. An explicit loopback endpoint may omit that header when no
+  key is configured and uses it when a key is present. No other auth form is accepted. A dedicated
+  Provider custom endpoint has no official route and reports unknown without a request; the Provider
+  name never grants an undocumented OpenAI assumption.
 - The Host bounds the response before parsing (64 KiB maximum body, with a declared length rejected
   above that limit), accepts only the documented model identity and explicitly documented capability
   fields, and discards all other metadata. It uses one operation-wide `AbortSignal`, a fixed 10-second
@@ -576,8 +580,12 @@ entry, not only the intermediate object.
   complete-list semantics are valid, otherwise it remains unknown. No `generateContent` field or
   HTTP 200 may be used to infer Tool Calling. The aggregate required-capability fact is unsupported
   when any required capability is unsupported, supported only when all are supported, and unknown
-  otherwise. A successful metadata response proves authentication and model existence only when the
-  Provider contract says so; it does not imply streaming or Tool Calling support.
+  otherwise. The OpenAI-Compatible response contract is a bounded JSON object with a required `id`
+  string exactly equal to the configured model ID. Unknown fields are discarded, no capability field
+  is recognized, and all compatible capability facts remain unknown; missing or mismatched `id` is a
+  malformed response, not evidence of model absence. A successful metadata response proves
+  authentication and model existence only when the Provider contract says so; it does not imply
+  streaming or Tool Calling support.
 - HTTP status classification is structural and allowlisted: `401`/`403` are authentication failure,
   `404` is model not found, `429` is rate limited, `408`/`504` are timeout, other `5xx` and transport
   failures are network/unavailable, and other statuses are unknown or invalid response according to
