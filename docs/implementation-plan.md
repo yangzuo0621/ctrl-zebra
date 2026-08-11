@@ -65,8 +65,8 @@
 **进度摘要**：
 
 - 总任务：148
-- 已完成：115
-- 进行中：1
+- 已完成：116
+- 进行中：0
 - 受阻：0
 - 待开始：32
 - 当前任务：T1702
@@ -190,7 +190,7 @@
 | 16 | T1604 | 已完成 | [#179](https://github.com/yangzuo0621/ctrl-zebra/pull/179) | 2026-08-11 |
 | 16 | T1605 | 已完成 | [#181](https://github.com/yangzuo0621/ctrl-zebra/pull/181) | 2026-08-11 |
 | 17 | T1701 | 已完成 | [#183](https://github.com/yangzuo0621/ctrl-zebra/pull/183) | 2026-08-11 |
-| 17 | T1702 | 进行中 | — | — |
+| 17 | T1702 | 已完成 | [#184](https://github.com/yangzuo0621/ctrl-zebra/pull/184) | 2026-08-11 |
 | 17 | T1703 | 待开始 | — | — |
 | 18 | T1801 | 待开始 | — | — |
 | 18 | T1802 | 待开始 | — | — |
@@ -232,6 +232,13 @@
 - 完成证据：[PR #183](https://github.com/yangzuo0621/ctrl-zebra/pull/183)；单元测试（124 个文件、1466 个测试）、类型检查、Biome 检查（337 个文件）、Webview 构建及 `git diff --check` 均通过；GitHub CI 的 Ubuntu、macOS、Windows 验证均通过。
 - 完成日期：2026-08-11
 - 下一任务：T1702
+
+### T1702 完成记录
+
+- 完成摘要：实现受限的技术 Markdown 呈现，支持常用技术结构并阻断原始 HTML、危险链接协议与未授权资源；通过 Extension/VS Code 打开外链。
+- 完成证据：[PR #184](https://github.com/yangzuo0621/ctrl-zebra/pull/184)；聚焦测试 31/31、完整单元测试（125 个文件、1482 个测试）、类型检查、Biome 检查、Webview 构建、集成测试（exit 0）及 `git diff --check` 均通过；GitHub CI 的 Ubuntu、macOS、Windows 验证均通过。
+- 完成日期：2026-08-11
+- 下一任务：T1703
 
 ---
 
