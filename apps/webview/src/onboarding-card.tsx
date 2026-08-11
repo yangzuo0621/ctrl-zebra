@@ -105,6 +105,7 @@ export function OnboardingCard({
   return (
     <div className={styles.container}>
       <EmptyState
+        className={styles.emptyState}
         title={
           <h2 ref={headingRef} className={styles.title} tabIndex={-1}>
             Welcome to CtrlZebra

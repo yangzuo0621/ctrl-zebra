@@ -20,6 +20,17 @@ const onboardingCss = readFileSync(
   "utf8",
 );
 
+const appCss = readFileSync(
+  join(
+    process.cwd().endsWith("apps\\webview")
+      ? process.cwd()
+      : join(process.cwd(), "apps", "webview"),
+    "src",
+    "app.module.css",
+  ),
+  "utf8",
+);
+
 const themeMatrix = [
   ["light", "#ffffff", "#1f1f1f"],
   ["dark", "#1f1f1f", "#ffffff"],
@@ -85,8 +96,38 @@ describe("Onboarding responsive and theme acceptance matrix", () => {
     expect(screen.getByRole("button", { name: "Select model" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Open Provider settings" })).toBeVisible();
     expect(onboardingCss).toContain("@media (max-width: 26rem)");
+    expect(onboardingCss).toContain("box-sizing: border-box");
+    expect(onboardingCss).toContain(".emptyState");
+    expect(onboardingCss).toContain(".providerActions");
+    expect(onboardingCss).toContain(".examples");
     expect(onboardingCss).toContain("min-width: 0");
     expect(onboardingCss).toContain("var(--cz-color-error-fg)");
+
+    expect(appCss).toContain("flex-direction: column");
+    expect(appCss).toContain(".headerActions");
+    expect(appCss).toContain(".empty");
+    expect(appCss).toContain(".currentSession");
+    expect(appCss).toContain(".composerFooter");
+    expect(appCss).toContain(".composerHint");
+    expect(appCss).toContain(".actions > *");
+  });
+
+  it("bounds the onboarding content at a 150px effective sidebar width", () => {
+    document.documentElement.style.width = "150px";
+    render(
+      <OnboardingCard
+        status={noConfigStatus}
+        announcement="Narrow status"
+        onAction={(_action: ProviderAction) => true}
+        onSelectPrompt={() => {}}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Save API key" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Select model" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Open Provider settings" })).toBeVisible();
+    expect(onboardingCss).toContain("max-width: 100%");
+    expect(appCss).toContain("max-width: 100%");
   });
 });
 

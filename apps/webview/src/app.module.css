@@ -29,6 +29,10 @@
   min-width: 0;
 }
 
+.headerTitleGroup > div:last-child {
+  min-width: 0;
+}
+
 .headerActions {
   display: flex;
   align-items: center;
@@ -40,7 +44,8 @@
 .currentSession {
   min-width: 0;
   max-width: 24ch;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
   color: var(--cz-color-muted);
   font-size: var(--cz-font-size-xs);
 }
@@ -145,6 +150,10 @@
 
 .empty {
   margin: auto;
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  width: 100%;
   color: var(--cz-color-muted);
   font-size: var(--cz-font-size-sm);
 }
@@ -260,6 +269,7 @@
 }
 
 .composerHint {
+  min-width: 0;
   font-size: var(--cz-font-size-xs);
   color: var(--cz-color-muted);
 }
@@ -288,18 +298,26 @@
 
 @media (max-width: 420px) {
   .header {
-    align-items: flex-start;
-    flex-wrap: wrap;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--cz-space-2);
+  }
+
+  .headerTitleGroup {
+    width: 100%;
+    flex: 0 0 auto;
   }
 
   .headerActions {
-    flex: 1 1 100%;
+    width: 100%;
+    flex: 0 0 auto;
     justify-content: flex-start;
     flex-wrap: wrap;
   }
 
   .currentSession {
     flex: 1 1 100%;
+    width: 100%;
     max-width: none;
   }
 
@@ -309,6 +327,27 @@
 
   .sessionControls select {
     flex-basis: 100%;
+  }
+
+  .composerFooter {
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+  }
+
+  .composerHint {
+    width: 100%;
+    overflow-wrap: break-word;
+  }
+
+  .actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .actions > * {
+    flex: 1 1 7rem;
+    min-width: 0;
   }
 }
 
