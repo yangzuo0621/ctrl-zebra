@@ -14,6 +14,8 @@ export const apiKeySecretNames = {
 
 export type ApiKeySecretStorageOperation = "read" | "save" | "delete";
 
+export type ProviderApiKeyPresence = "present" | "absent" | "unavailable";
+
 export interface ApiKeySecretStorage {
   read(): Promise<string | undefined>;
   save(apiKey: string): Promise<void>;
@@ -22,6 +24,10 @@ export interface ApiKeySecretStorage {
 
 export interface ProviderApiKeySecretReader {
   read(provider: ProviderId): Promise<string | undefined>;
+}
+
+export interface ProviderApiKeyPresenceReader {
+  read(provider: ProviderId): Promise<ProviderApiKeyPresence>;
 }
 
 type SecretStorageBackend = Pick<SecretStorage, "get" | "store" | "delete">;
@@ -98,6 +104,23 @@ export function createProviderApiKeySecretReader(
         return await secretStorage.get(apiKeySecretNames[provider]);
       } catch {
         throw new ApiKeySecretStorageError("read");
+      }
+    },
+  };
+}
+
+export function createProviderApiKeyPresenceReader(
+  secretStorage: Pick<SecretStorageBackend, "get">,
+): ProviderApiKeyPresenceReader {
+  return {
+    async read(provider) {
+      try {
+        const value = await secretStorage.get(apiKeySecretNames[provider]);
+        // The host API necessarily returns the string to this adapter. Compare only the
+        // undefined sentinel and immediately discard it; presence must not inspect content.
+        return value === undefined ? "absent" : "present";
+      } catch {
+        return "unavailable";
       }
     },
   };

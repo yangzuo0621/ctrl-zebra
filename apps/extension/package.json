@@ -73,6 +73,36 @@
         "category": "CtrlZebra"
       },
       {
+        "command": "ctrlZebra.rotateOpenAIApiKey",
+        "title": "Rotate OpenAI API Key",
+        "category": "CtrlZebra"
+      },
+      {
+        "command": "ctrlZebra.rotateGeminiApiKey",
+        "title": "Rotate Gemini API Key",
+        "category": "CtrlZebra"
+      },
+      {
+        "command": "ctrlZebra.rotateOpenAICompatibleApiKey",
+        "title": "Rotate OpenAI-Compatible API Key",
+        "category": "CtrlZebra"
+      },
+      {
+        "command": "ctrlZebra.deleteOpenAIApiKey",
+        "title": "Delete OpenAI API Key",
+        "category": "CtrlZebra"
+      },
+      {
+        "command": "ctrlZebra.deleteGeminiApiKey",
+        "title": "Delete Gemini API Key",
+        "category": "CtrlZebra"
+      },
+      {
+        "command": "ctrlZebra.deleteOpenAICompatibleApiKey",
+        "title": "Delete OpenAI-Compatible API Key",
+        "category": "CtrlZebra"
+      },
+      {
         "command": "ctrlZebra.selectModel",
         "title": "Select Model",
         "category": "CtrlZebra"

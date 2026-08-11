@@ -15,4 +15,10 @@ export async function verifyExtensionActivation(): Promise<void> {
   assert.ok(commands.includes("ctrlZebra.connectMcpServer"));
   assert.ok(commands.includes("ctrlZebra.disconnectMcpServer"));
   assert.ok(commands.includes("ctrlZebra.selectModel"));
+  assert.ok(commands.includes("ctrlZebra.rotateOpenAIApiKey"));
+  assert.ok(commands.includes("ctrlZebra.rotateGeminiApiKey"));
+  assert.ok(commands.includes("ctrlZebra.rotateOpenAICompatibleApiKey"));
+  assert.ok(commands.includes("ctrlZebra.deleteOpenAIApiKey"));
+  assert.ok(commands.includes("ctrlZebra.deleteGeminiApiKey"));
+  assert.ok(commands.includes("ctrlZebra.deleteOpenAICompatibleApiKey"));
 }

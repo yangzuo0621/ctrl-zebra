@@ -27,6 +27,38 @@ describe("ProviderOnboardingController", () => {
     });
   });
 
+  it("retains the last projection when status is unavailable", async () => {
+    const post = vi.fn<(message: ExtensionToWebviewMessage) => void>();
+    const controller = new ProviderOnboardingController({
+      readStatus: async () => undefined,
+      run: async () => ({ status: "completed" }),
+    });
+
+    await controller.status("status-unavailable", post);
+
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it("does not replace the public status projection after an unavailable refresh", async () => {
+    const post = vi.fn<(message: ExtensionToWebviewMessage) => void>();
+    let statusRead = 0;
+    const controller = new ProviderOnboardingController({
+      readStatus: async () => {
+        statusRead += 1;
+        return statusRead === 1 ? readyStatus : undefined;
+      },
+      run: async () => ({ status: "completed" }),
+    });
+
+    await controller.status("status-1", post);
+    await controller.action("action-1", "open-settings", post);
+
+    expect(post.mock.calls.map(([message]) => message.type)).toEqual([
+      "extension/provider-status",
+      "extension/provider-action",
+    ]);
+  });
+
   it("settles an action before publishing the correlated fresh status", async () => {
     const post = vi.fn<(message: ExtensionToWebviewMessage) => void>();
     const controller = new ProviderOnboardingController({

@@ -22,6 +22,7 @@ import {
   createGeminiApiKeySecretStorage,
   createOpenAIApiKeySecretStorage,
   createOpenAICompatibleApiKeySecretStorage,
+  createProviderApiKeyPresenceReader,
   createProviderApiKeySecretReader,
 } from "./adapters/api-key-secret-storage.js";
 import { createLocalWorkspaceUriCanonicalizer } from "./adapters/canonicalize-local-workspace-uri.js";
@@ -71,6 +72,7 @@ import {
   selectModelCommandId,
 } from "./controllers/model-selection-command.js";
 import {
+  ProviderApiKeyOperationCoordinator,
   registerProviderApiKeyCommands,
   saveGeminiApiKeyCommandId,
   saveOpenAIApiKeyCommandId,
@@ -106,6 +108,8 @@ export function activate(context: ExtensionContext): void {
     logger,
   });
   const secrets = createProviderApiKeySecretReader(context.secrets);
+  const providerApiKeyPresence = createProviderApiKeyPresenceReader(context.secrets);
+  const providerApiKeyCoordinator = new ProviderApiKeyOperationCoordinator();
   const canonicalize = createLocalWorkspaceUriCanonicalizer(realpath, Uri.file);
   const getSelectedRoot = () =>
     selectWorkspaceRoot(workspace.workspaceFolders?.map((folder) => folder.uri) ?? []);
@@ -338,22 +342,18 @@ export function activate(context: ExtensionContext): void {
           const configuration = readProviderOnboardingConfiguration({
             get: (setting) => settings.get(setting),
           });
-          const apiKeyConfigured = configuration.endpointValid
-            ? configuration.apiKeyRequired
-              ? await readApiKeyConfigured(configuration.provider)
-              : true
-            : false;
+          if (!configuration.endpointValid) return undefined;
+          const apiKeyConfigured = configuration.apiKeyRequired
+            ? await readApiKeyConfigured(configuration.provider)
+            : true;
+          if (apiKeyConfigured === undefined) return undefined;
           return {
             provider: configuration.provider,
             apiKeyConfigured,
             modelConfigured: configuration.modelConfigured,
           };
         } catch {
-          return {
-            provider: "openai" as const,
-            apiKeyConfigured: false,
-            modelConfigured: false,
-          };
+          return undefined;
         }
       },
       async run(action): Promise<ProviderOnboardingActionResult> {
@@ -407,16 +407,20 @@ export function activate(context: ExtensionContext): void {
     });
 
   async function readApiKeyConfigured(provider: Parameters<typeof secrets.read>[0]) {
-    try {
-      const apiKey = await secrets.read(provider);
-      return typeof apiKey === "string" && apiKey.length > 0;
-    } catch {
-      return false;
-    }
+    const presence = await providerApiKeyCoordinator.run(provider, () =>
+      providerApiKeyPresence.read(provider),
+    );
+    if (presence === undefined || presence === "unavailable") return undefined;
+    return presence === "present";
   }
 
   context.subscriptions.push(
     logger,
+    {
+      dispose() {
+        providerApiKeyCoordinator.dispose();
+      },
+    },
     workspaceTools,
     diffPresenter,
     approvalWorkflow,
@@ -433,6 +437,9 @@ export function activate(context: ExtensionContext): void {
       },
     },
     workspace.onDidChangeConfiguration((event) => {
+      if (event.affectsConfiguration("ctrlZebra.provider")) {
+        providerApiKeyCoordinator.invalidate();
+      }
       if (event.affectsConfiguration(`${mcpServerSettingSection}.${mcpServerSettingName}`)) {
         mcpConnection.markConfigurationStale();
       }
@@ -444,11 +451,13 @@ export function activate(context: ExtensionContext): void {
       registerCommand: (commandId, handler) => commands.registerCommand(commandId, handler),
     }),
     registerProviderApiKeyCommands({
+      coordinator: providerApiKeyCoordinator,
       storages: {
         openai: createOpenAIApiKeySecretStorage(context.secrets),
         gemini: createGeminiApiKeySecretStorage(context.secrets),
         "openai-compatible": createOpenAICompatibleApiKeySecretStorage(context.secrets),
       },
+      presence: providerApiKeyPresence,
       registerCommand: (commandId, handler) => commands.registerCommand(commandId, handler),
       showInputBox: (options) => window.showInputBox(options),
       showWarningMessage: (message, options, item) =>

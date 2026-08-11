@@ -7,6 +7,7 @@ import {
   createGeminiApiKeySecretStorage,
   createOpenAIApiKeySecretStorage,
   createOpenAICompatibleApiKeySecretStorage,
+  createProviderApiKeyPresenceReader,
   createProviderApiKeySecretReader,
   geminiApiKeySecretName,
   openAIApiKeySecretName,
@@ -173,5 +174,35 @@ describe("Provider API key SecretStorage reader", () => {
 
     expect(error).toBeInstanceOf(ApiKeySecretStorageError);
     expect(String(error)).not.toContain("test-openai-api-key");
+  });
+});
+
+describe("Provider API key presence reader", () => {
+  it("returns only the tri-state presence result without exposing the stored value", async () => {
+    const backend = new InMemorySecretStorage();
+    backend.values.set(apiKeySecretNames.openai, "test-openai-api-key");
+
+    const presence = createProviderApiKeyPresenceReader(backend);
+
+    await expect(presence.read("openai")).resolves.toBe("present");
+    await expect(presence.read("gemini")).resolves.toBe("absent");
+  });
+
+  it("treats an empty stored value as present because it compares only with undefined", async () => {
+    const backend = new InMemorySecretStorage();
+    backend.values.set(apiKeySecretNames.gemini, "");
+
+    await expect(createProviderApiKeyPresenceReader(backend).read("gemini")).resolves.toBe(
+      "present",
+    );
+  });
+
+  it("returns unavailable when SecretStorage get rejects", async () => {
+    const backend = new InMemorySecretStorage();
+    backend.failure = "read";
+
+    await expect(createProviderApiKeyPresenceReader(backend).read("openai")).resolves.toBe(
+      "unavailable",
+    );
   });
 });

@@ -17,7 +17,11 @@ export interface ProviderOnboardingStatus {
 }
 
 export interface ProviderOnboardingHostActions {
-  readonly readStatus: () => Promise<ProviderOnboardingStatus>;
+  /**
+   * Returns undefined when the Host cannot establish a trustworthy status projection.
+   * Callers retain the last valid Webview projection rather than publishing false.
+   */
+  readonly readStatus: () => Promise<ProviderOnboardingStatus | undefined>;
   readonly run: (action: ProviderAction) => Promise<ProviderOnboardingActionResult>;
 }
 
@@ -42,8 +46,14 @@ export class ProviderOnboardingController {
   async status(requestId: string, post: PostMessage): Promise<void> {
     if (this.#disposed || this.#pendingActionRequestId !== undefined) return;
 
-    const status = await this.#actions.readStatus();
-    if (this.#disposed || this.#pendingActionRequestId !== undefined) return;
+    let status: ProviderOnboardingStatus | undefined;
+    try {
+      status = await this.#actions.readStatus();
+    } catch {
+      return;
+    }
+    if (this.#disposed || this.#pendingActionRequestId !== undefined || status === undefined)
+      return;
     post({ protocolVersion, type: "extension/provider-status", requestId, ...status });
   }
 
@@ -63,7 +73,7 @@ export class ProviderOnboardingController {
 
     try {
       const status = await this.#actions.readStatus();
-      if (!this.#disposed) {
+      if (!this.#disposed && status !== undefined) {
         post({ protocolVersion, type: "extension/provider-status", requestId, ...status });
       }
     } catch {

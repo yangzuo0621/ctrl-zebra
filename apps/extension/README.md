@@ -49,6 +49,16 @@ Repository maintainers can create a verified local artifact with `pnpm package:v
    - **CtrlZebra: Save OpenAI API Key**
    - **CtrlZebra: Save Gemini API Key**
    - **CtrlZebra: Save OpenAI-Compatible API Key**
+   - **CtrlZebra: Rotate OpenAI API Key**
+   - **CtrlZebra: Rotate Gemini API Key**
+   - **CtrlZebra: Rotate OpenAI-Compatible API Key**
+   - **CtrlZebra: Delete OpenAI API Key**
+   - **CtrlZebra: Delete Gemini API Key**
+   - **CtrlZebra: Delete OpenAI-Compatible API Key**
+   Rotation always asks for a fresh password-masked key and replaces the stable SecretStorage value
+   only after the save operation settles successfully. Delete commands confirm the Provider identity
+   and never display the key. These lifecycle commands are Host-only Command Palette actions; the
+   onboarding view continues to offer save, model selection, and settings actions only.
 4. For an explicit loopback OpenAI-compatible endpoint, a key is optional.
 5. Open the CtrlZebra Agent view, enter a request, and select **Send**.
 6. Review every file-change or command approval. The displayed operation is the operation that will
@@ -124,8 +134,9 @@ All settings have machine scope.
 | `ctrlZebra.mcp.server` | `null` | One local stdio Server object with `version: 1`, stable lower-snake-case `serverId`, bounded `displayName`, exact `command`, and ordered `args`. Credentials and shell command lines are forbidden. A trusted single-folder workspace and fresh startup approval are required. |
 
 OpenAI and Gemini always use their adapter-declared text-streaming and tool-calling capabilities.
-Remote providers require a corresponding API key. Save commands are available for all three
-supported Providers.
+Remote providers require a corresponding API key. Save, rotate, and delete commands are available
+for all three supported Providers. SecretStorage failures or an unavailable presence check produce a
+safe retry/settings message without claiming whether the previous value remains.
 
 ## Workspace tools and approvals
 
