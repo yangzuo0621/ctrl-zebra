@@ -94,7 +94,7 @@ describe("MCP Tool snapshot", () => {
         { name: "same", inputSchema: emptySchema },
       ],
     ],
-    [[{ name: "bad", inputSchema: { type: "object", format: "email" } }]],
+    [[{ name: "bad", inputSchema: { type: "object", pattern: "(a+)+$" } }]],
     [[{ name: "task", inputSchema: emptySchema, execution: { taskSupport: "optional" } }]],
   ])("rejects a suspicious snapshot without partial registration %#", (tools) => {
     expect(() => createMcpToolSnapshot(server, 1, tools, new Set(), validator)).toThrow(
@@ -111,7 +111,7 @@ describe("MCP Tool snapshot", () => {
       server,
       1,
       [
-        { name: "z-forbidden", inputSchema: { type: "object", format: "email" } },
+        { name: "z-forbidden", inputSchema: { type: "object", pattern: "(a+)+$" } },
         { name: "a-unknown", inputSchema: { type: "object", unknownKeyword: true } },
         { name: "m-reference", inputSchema: { type: "object", $ref: "https://example.com" } },
         { name: "b-root", inputSchema: true },
@@ -146,7 +146,7 @@ describe("MCP Tool snapshot", () => {
   it("sorts rejection names by Unicode scalar and truncates only the projection", () => {
     const rejected = Array.from({ length: 300 }, (_, index) => ({
       name: `rejected-${String(index).padStart(3, "0")}`,
-      inputSchema: { type: "object", format: "email" },
+      inputSchema: { type: "object", pattern: "(a+)+$" },
     }));
     const snapshot = createMcpToolSnapshot(
       server,
@@ -171,8 +171,8 @@ describe("MCP Tool snapshot", () => {
       server,
       1,
       [
-        { name: "😀", inputSchema: { type: "object", format: "email" } },
-        { name: "\ue000", inputSchema: { type: "object", format: "email" } },
+        { name: "😀", inputSchema: { type: "object", pattern: "(a+)+$" } },
+        { name: "\ue000", inputSchema: { type: "object", pattern: "(a+)+$" } },
         { name: "accepted", inputSchema: emptySchema },
       ],
       new Set(),
