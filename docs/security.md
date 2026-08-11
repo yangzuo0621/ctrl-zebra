@@ -772,14 +772,21 @@ and Prompt data that exceed their applicable limit are rejected rather than sile
   retain the last complete current-generation snapshot and never publish a partial mixture of new
   and old entries. A successful replacement is committed only after all descriptors have been
   classified and all accepted schemas compiled.
-- Every replacement and rejection projection is bound to the Server identity and generation that
-  requested it. Disconnect, cancellation, Trust loss, a newer generation, or a failed refresh closes
-  the delivery gate; late pages, validators, and rejection details are discarded before Core,
-  Protocol, Webview, persistence, or approval state can observe them. When the two additive wire
-  messages are staged for a Webview pair, the Webview-local adapter-owned staging slot expires
-  1,000 ms after the first half arrives; it is not extended or retried, and an unmatched half is
-  discarded with the prior complete pair retained. The Extension Host owns generation binding and
-  message emission, not the Webview timer or receipt lifecycle.
+- Every replacement is bound to the Server identity, connection generation, and a Host-owned
+  monotonic `catalogSequence`. Disconnect, cancellation, Trust loss, a newer generation, or a
+  failed refresh closes the delivery gate; late pages, validators, and catalog projections are
+  discarded before Core, Protocol, Webview, persistence, or approval state can observe them. The
+  sequence is scoped to `(server.serverId, generation)`, starts at `1`, is allocated once immediately
+  before emitting a fully validated projection, and never wraps a positive safe integer. Failed,
+  cancelled, and all-rejected discoveries allocate no sequence. On overflow the Host closes the
+  current generation and requires an explicit reconnect; the new generation resets the sequence
+  and Webview committed watermark. A sequence-aware Webview may hold only a transient pending
+  watermark during synchronous validation; it rejects a catalog whose sequence is at or below the
+  pending or committed watermark before mutation, commits a higher sequence only as one complete
+  atomic value, and advances the committed watermark after commit. An invalid candidate clears the
+  transient pending value without changing the committed view. Conflicting duplicates at an already
+  committed sequence are discarded. There is no unmatched-half timer, retry, or receipt-order
+  dependency.
 
 Unsupported image, audio, Blob, embedded Resource, Resource Link, unknown content, task,
 `input_required`, progress, logging, completion, subscription, or experimental values produce

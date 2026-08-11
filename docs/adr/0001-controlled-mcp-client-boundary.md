@@ -217,19 +217,31 @@ schema, and snapshot limits and then evaluated one descriptor at a time.
   previous complete snapshot on any whole-operation failure. Server identity, generation, and
   discovery context fence every refresh; a late or cancelled result cannot replace a newer
   snapshot or revive revoked approvals.
-- The protocol adds `extension/mcp-tool-rejections` rather than changing the strict legacy
-  `extension/mcp-tools` shape. The additive projection carries at most 256 rejected entries and a
-  `rejectedToolsTruncated` marker, within the existing serialized snapshot ceiling. Entries are
-  sorted by exact MCP Tool name in lexicographic Unicode scalar-value order before the first 256 are
-  selected, independent of page order. New clients stage the matching tools and rejection messages
-  atomically in one Webview-local adapter-owned slot that expires 1,000 ms after the first half
-  arrives; a missing half, refresh, cancellation, disconnect, or generation change discards the slot
-  without retry. The Extension Host owns generation binding and message emission, not Webview
-  receipt timing. Older clients ignore the unknown additive message and continue to receive accepted
-  Tools, losing only the optional diagnostics.
+- The protocol adds the strict atomic `extension/mcp-tool-catalog` envelope while keeping the
+  legacy `extension/mcp-tools` tools-only catalog unchanged. The combined catalog carries at most
+  256 rejected entries and a `rejectedToolsTruncated` marker, within the existing serialized
+  snapshot ceiling. Entries are sorted by exact MCP Tool name in lexicographic Unicode scalar-value
+  order before the deterministic prefix is selected, independent of page order. A Host-owned
+  positive-safe-integer `catalogSequence` is monotonic within each `(server.serverId, generation)`
+  scope, starts at `1` on a new generation, is allocated once immediately before each complete
+  valid emission, and never wraps. Failed, cancelled, and all-rejected discovery emits neither the
+  combined nor the unchanged legacy catalog and consumes no sequence; overflow closes the generation
+  and requires explicit reconnect.
+  The sequence-aware Webview uses a transient pending watermark during synchronous validation and
+  commits only a higher sequence than its current scope's pending or committed watermark; invalid
+  candidates clear only the transient value, while stale or conflicting duplicates are dropped
+  before mutation. Both watermarks reset on disconnect or generation change. There is no two-half
+  staging slot or timer. The superseded
+  `extension/mcp-tool-rejections` projection is non-authoritative and is not emitted by the amended
+  Host. Older clients ignore the unknown combined message and continue to receive accepted Tools
+  from the unchanged legacy catalog, losing only optional rejection details; sequence-aware clients
+  ignore legacy catalogs for state so delayed compatibility messages cannot overwrite a newer view.
 
 This supplement records the single-Tool degradation and compatibility behavior required before
-T1801 implementation. It does not authorize T1802 Schema keyword reinterpretation, T1803
+T1801 implementation. The implementation gate must cover mixed acceptance, all-rejected retention,
+whole-operation identity failures, deterministic bounded rejection ordering, refresh/disconnect
+fences, sequence overflow/reconnect reset, duplicate sequence handling, atomic publication, and
+legacy-client compatibility. It does not authorize T1802 Schema keyword reinterpretation, T1803
 diagnostic UX, or T1804–T1807 dual-era protocol behavior; those remain separate tasks and change
 control surfaces.
 
