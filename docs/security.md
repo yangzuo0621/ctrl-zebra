@@ -818,16 +818,23 @@ are not fetched, stringified, rendered, persisted, remotely loaded, or passed to
   `contentMediaType`, and `contentSchema`; their values are validated and then omitted. The
   legacy `definitions` map is not stripped: it is converted to `$defs`, and every local
   `#/definitions/...` reference is rewritten to `#/$defs/...` before reference resolution. A
-  collision between converted and native `$defs` names is rejected rather than choosing an
-  order-dependent meaning. Any key outside the allowed, stripped, or conversion classes is an
-  unknown keyword and is rejected.
-- `pattern` and `patternProperties` remain forbidden because compiling Server-provided regular
-  expressions for model-generated arguments creates a ReDoS attack surface. Remote, malformed,
-  unresolved, or otherwise non-local references remain rejected; direct recursion from a `$defs`
-  anchor back to that same anchor is allowed, while a cycle traversing two or more distinct
-  anchors is rejected. These rules preserve useful tree/AST schemas without allowing remote
-  loading or unbounded reference traversal. Limits remain hard failures and are never relaxed by
-  stripping or conversion.
+  collision between converted and native `$defs` names is `schema-invalid`, rather than choosing
+  an order-dependent meaning. A successful conversion itself produces no rejection entry. Any
+  key outside the allowed, stripped, conversion, and known-dangerous sets is an unknown keyword
+  and maps to `unknown-keyword`.
+- The known-dangerous keyword set is exactly `pattern`, `patternProperties`, `$dynamicRef`,
+  `$dynamicAnchor`, `$recursiveRef`, and `$recursiveAnchor`; each maps to `forbidden-keyword`.
+  Compiling Server-provided regular expressions for model-generated arguments creates a ReDoS
+  attack surface, while dynamic/recursive reference vocabularies have not been reviewed for this
+  boundary. The allowed `$ref` keyword must carry a local, well-formed, resolvable pointer to an
+  exact top-level `#/$defs/<name>` anchor (or a rewritten legacy `#/definitions/<name>` pointer).
+  Bare `#`, root/non-anchor targets, nested pointers below an anchor, remote/malformed/unresolved
+  targets, and every multi-anchor cycle map to `invalid-reference`. A direct self-reference is
+  only a `$ref` from within one anchor to that exact same anchor; it is allowed. The graph has one
+  vertex per `$defs` anchor and rejects every other cycle as `invalid-reference`, including root
+  self and nested/non-anchor mutual cycles. These rules preserve useful tree/AST schemas without allowing remote loading or
+  unbounded reference traversal. Limits remain hard `limit-exceeded` failures and are never relaxed
+  by stripping or conversion.
 - Stripping a known keyword can make CtrlZebra's local shape check less strict, but it does not
   grant authority. Draft 2020-12 `format` is annotation-only under the pinned validator unless a
   format-assertion vocabulary is explicitly enabled (which CtrlZebra does not enable), and the

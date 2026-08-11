@@ -568,17 +568,24 @@ projection is constructed. It is a closed, versioned policy and is not a Webview
   not part of the Webview DTO.
 - A legacy `definitions` object is converted to `$defs`; a local `#/definitions/...` JSON Pointer
   is rewritten to `#/$defs/...` with RFC 6901 escaping preserved. Native and converted definition
-  names must not collide. A missing, malformed, remote, or otherwise non-local reference is an
-  `invalid-reference` rejection. A direct recursive reference from a `$defs` anchor to itself is
-  valid; a cycle through two or more distinct anchors is invalid. This permits bounded tree/AST
-  arguments while keeping reference resolution local and finite.
-- `pattern` and `patternProperties` remain forbidden (`forbidden-keyword`) because Server-supplied
-  regular expressions are not compiled or executed by this boundary. Any byte, node, depth, or
-  property limit breach is `limit-exceeded`. A key outside the allowed, stripped, or conversion
-  classes is `unknown-keyword`; malformed values, conversion collisions, and Ajv compile failures
-  are `schema-invalid`. These classifications are selected by CtrlZebra and the wire reason stays
-  the closed enum above; no external keyword, path, raw Schema, SDK error, or exception text is
-  exposed.
+  names must not collide (`schema-invalid`); a successful conversion itself produces no rejection
+  entry. The allowed `$ref` keyword accepts only a local, well-formed, resolvable pointer to an
+  exact top-level `#/$defs/<name>` anchor (or a rewritten legacy `#/definitions/<name>` target). A
+  bare `#`, a root/non-anchor target, a nested pointer below an anchor, a malformed/remote target,
+  or a multi-anchor cycle is an
+  `invalid-reference` rejection. A direct recursive reference from a `$defs` anchor to that same
+  anchor is valid; every other cyclic form, including root self-reference and nested/non-anchor
+  mutual cycles, is an `invalid-reference`. This permits bounded tree/AST arguments while keeping reference
+  resolution local and finite.
+- The known-dangerous keyword set is exactly `pattern`, `patternProperties`, `$dynamicRef`,
+  `$dynamicAnchor`, `$recursiveRef`, and `$recursiveAnchor`; each is forbidden (`forbidden-keyword`)
+  because its behavior is not reviewed at this boundary (and Server-supplied regular expressions
+  are not compiled or executed here). Any byte, node, depth, or property limit breach is
+  `limit-exceeded`. A key outside the allowed, stripped, conversion, and known-dangerous sets is
+  `unknown-keyword`; malformed values, conversion collisions, and Ajv compile failures are
+  `schema-invalid`. These classifications are selected by CtrlZebra and the wire reason stays the
+  closed enum above; no
+  external keyword, path, raw Schema, SDK error, or exception text is exposed.
 - The normalized schema must compile through the pinned Ajv adapter. The same compiled validator
   validates Tool arguments immediately before approval construction and again before execution;
   validation is shape-only and performs no coercion, default insertion, or property removal.

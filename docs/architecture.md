@@ -496,20 +496,29 @@ port.
     or unsupported assertion semantics, not an admission of those keywords to Ajv.
   - **Definitions conversion**: a `definitions` object is normalized into `$defs`. If both names
     are present, entries are merged only when their decoded definition names do not collide; a
-    collision is `schema-invalid`. Every `#/definitions/...` local JSON Pointer is rewritten to
-    `#/$defs/...` while preserving RFC 6901 escaping. Missing targets, malformed pointers, remote
-    references, and non-local reference forms are rejected as `invalid-reference`.
-  - **Must reject**: regex-bearing `pattern` and `patternProperties`, `$dynamicRef`,
-    `$dynamicAnchor`, other unreviewed reference behavior, remote `$ref` targets, and any byte, node, depth, or property
-    limit breach. A key in none of these classes is an **unknown keyword** and is rejected; no
-    vendor extension is silently ignored. Known dangerous keywords map to `forbidden-keyword`,
-    unknown keys to `unknown-keyword`, reference failures to `invalid-reference`, and structural
-    or compilation failures to `schema-invalid` (limits remain `limit-exceeded`).
-  Local references are resolved after normalization. A direct recursive reference from a schema
-  under one `$defs` anchor back to that same anchor is supported by the pinned Ajv validator. A
-  cycle that traverses two or more distinct `$defs` anchors (for example `A -> B -> A`) is
-  rejected; a missing target is also rejected. This is the real recursion contract and replaces
-  the earlier blanket prohibition on cyclic references.
+    collision is `schema-invalid`; a successful conversion itself produces no rejection entry.
+    Every `#/definitions/<name>` local JSON Pointer is rewritten to
+    `#/$defs/<name>` while preserving RFC 6901 escaping. Reference targets are restricted to an
+    exact top-level `$defs` anchor: a bare `#`, a root/non-anchor pointer, or a nested pointer below
+    an anchor is not in the accepted scope. Missing targets, malformed pointers, and remote
+    references are rejected as `invalid-reference`.
+  - **Must reject (known dangerous keywords)**: `pattern`, `patternProperties`, `$dynamicRef`,
+    `$dynamicAnchor`, `$recursiveRef`, and `$recursiveAnchor`. These keywords are known but
+    unreviewed by this boundary and map to `forbidden-keyword`; no vendor extension is silently
+    ignored. Any keyword not listed in the allowed, stripped, conversion, or must-reject sets is an
+    **unknown keyword** and maps to `unknown-keyword`. The allowed `$ref` keyword is separately checked for a
+    local target: remote/malformed/unresolved targets and multi-anchor cycles map to
+    `invalid-reference`; structural or compilation failures map to `schema-invalid`; limits remain
+    `limit-exceeded`.
+  Local references are resolved after normalization. The reference graph has one vertex for each
+  top-level `$defs` anchor and one edge from the containing anchor to each referenced anchor; a
+  reference from the root schema is checked for target existence but is not a graph cycle source.
+  A direct recursive reference means a `$ref` anywhere below `#/$defs/name` whose exact target is
+  `#/$defs/name`; that self-edge is supported by the pinned Ajv validator. Every other cyclic form
+  is rejected as `invalid-reference`, including cycles through two or more distinct anchors
+  (`A -> B -> A`), a root self-reference (`$ref: "#"`), and cycles involving nested or non-anchor
+  pointers (which are outside the accepted target scope in any case). This is the real recursion
+  contract and replaces the earlier blanket prohibition on cyclic references.
   Validation does not coerce types, insert defaults, remove properties, or return all errors.
   The normalized schema must compile through the injected Ajv validator, and that same compiled
   validator must validate arguments immediately before approval construction and again before

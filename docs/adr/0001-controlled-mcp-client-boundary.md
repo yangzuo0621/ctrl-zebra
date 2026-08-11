@@ -93,9 +93,10 @@ the pinned SDK's public Ajv validator behind a CtrlZebra interface. Before compi
 normalizer accepts only the Draft 2020-12 baseline and the four closed keyword outcomes defined in
 Architecture: allowed/retained, safe-to-strip, known-dangerous rejection, and unknown-keyword
 rejection. A deterministic `definitions` → `$defs` conversion runs before reference analysis. A key
-in none of those outcomes is an unknown keyword and remains rejected. Remote references, regex-bearing `pattern`/
-`patternProperties`, malformed references, and byte/node/depth/property limit breaches remain
-rejected. A direct self-reference to one `$defs` anchor is supported; cycles through two or more
+accepted by none of those outcomes or the conversion pass is an unknown keyword and remains
+rejected. Remote references, regex-bearing `pattern`/
+`patternProperties`, `$dynamicRef`, `$dynamicAnchor`, `$recursiveRef`, `$recursiveAnchor`, malformed
+references, and byte/node/depth/property limit breaches remain rejected. A direct self-reference to one `$defs` anchor is supported; cycles through two or more
 distinct anchors are rejected. Stripped values are still recursively walked and bounded, and
 compiled validators live only with the current immutable Tool snapshot. Neither normalization nor
 Ajv validation coerces data, inserts defaults, removes properties, or replaces the approval and
@@ -276,25 +277,33 @@ produces the only schema value that can reach Core or a compiled validator.
   `maxContains`, `unevaluatedProperties`, `unevaluatedItems`, `contentEncoding`,
   `contentMediaType`, and `contentSchema`. Their values, including nested schemas, are still
   walked with the same limits and dangerous/unknown-keyword checks, then omitted from the
-  normalized schema. A key in neither class nor the conversion class is `unknown-keyword` and is
-  rejected; no vendor extension is silently ignored.
+  normalized schema. A key outside the allowed, stripped, conversion, and known-dangerous sets is
+  `unknown-keyword` and is rejected; no vendor extension is silently ignored.
 - The legacy `definitions` map is converted to `$defs` rather than stripped. The map must be a
   bounded object; native `$defs` and converted entries may be merged only when names do not
-  collide, otherwise normalization fails with `schema-invalid`. Every local `#/definitions/...`
-  JSON Pointer is rewritten to `#/$defs/...`, preserving RFC 6901 escaping. Remote, malformed,
-  unresolved, dynamic, or otherwise non-local references fail with `invalid-reference` and never
-  trigger loading or network access.
-- Reference analysis occurs after conversion. A `$ref` from a schema below a `$defs` anchor back to
-  that same anchor is an allowed direct recursive reference; a cycle that traverses two or more
-  distinct anchors (such as `A → B → A`) is rejected. This deliberate distinction corrects the
-  former blanket “cyclic references forbidden” wording and matches the pinned Ajv behavior for
-  bounded recursive trees. Ajv compilation remains mandatory and is the final unresolved-reference
-  check.
-- `pattern` and `patternProperties` remain `forbidden-keyword` because Server-provided regular
-  expressions would create a ReDoS surface when applied to model-generated arguments. Structural
-  byte/node/depth/property breaches remain `limit-exceeded`; malformed values, definition-name
-  collisions, or Ajv compile failures remain `schema-invalid`. Safe stripping and definitions
-  conversion never create a rejection entry; the accepted Tool carries only the normalized schema.
+  collide, otherwise normalization fails with `schema-invalid`. Every local `#/definitions/<name>`
+  JSON Pointer is rewritten to `#/$defs/<name>`, preserving RFC 6901 escaping. A successful
+  conversion itself produces no rejection entry.
+- The allowed `$ref` keyword accepts only a local, well-formed, resolvable pointer to an exact
+  top-level `#/$defs/<name>` anchor (or its rewritten legacy spelling). Bare `#`, root/non-anchor
+  targets, nested pointers below an anchor, malformed/remote/unresolved targets, and every
+  multi-anchor cycle fail with `invalid-reference` and never trigger loading or network access.
+  Reference analysis occurs after conversion. The graph has one vertex per `$defs` anchor and an
+  edge from the containing anchor to each referenced anchor; root-schema references are checked for
+  existence but are not graph cycle sources. A direct self-reference means a `$ref` anywhere below
+  `#/$defs/name` whose exact target is `#/$defs/name`; that self-edge is allowed. Every other
+  cyclic form, including `A → B → A`, root self-reference, and nested/non-anchor mutual cycles,
+  is rejected as `invalid-reference`. This deliberate distinction corrects the former blanket “cyclic references
+  forbidden” wording and matches the pinned Ajv behavior for bounded recursive trees. Ajv
+  compilation remains mandatory as the final unresolved-reference check.
+- The known-dangerous keyword set is exactly `pattern`, `patternProperties`, `$dynamicRef`,
+  `$dynamicAnchor`, `$recursiveRef`, and `$recursiveAnchor`; each maps to `forbidden-keyword`.
+  `pattern` and `patternProperties` would create a ReDoS surface when applied to model-generated
+  arguments, while dynamic/recursive reference vocabularies are not reviewed at this boundary.
+  Structural byte/node/depth/property breaches remain `limit-exceeded`; malformed values,
+  definition-name collisions, or Ajv compile failures remain `schema-invalid`. Safe stripping and
+  successful definitions conversion never create a rejection entry; the accepted Tool carries
+  only the normalized schema.
 - The same compiled validator validates arguments immediately before approval construction and
   again before execution, with no coercion, defaults, or property removal. The one-time approval
   remains the authority for side effects; normalization is a compatibility measure and cannot
