@@ -81,10 +81,17 @@ Host lifecycle and freshness are explicit:
 - Each capture and read-only Tool call owns an `AbortController` connected to the Run, Session switch,
   editor/workspace change, setting disable, Trust loss, and Extension disposal. The owner closes the
   delivery gate before cleanup. Cancellation is not a Tool Result: after it, no text, diagnostic,
-  language result, retry, persistence mutation, approval, or UI update may be emitted.
+  language result, retry, persistence mutation, approval, or Host/Webview message may be emitted. A
+  Webview cancel handler updates only its own local interaction state synchronously before it attempts
+  one cancel intent in the same event turn; if the Host gate is already closed, it posts no intent. It
+  cannot wait for or synthesize a Host cancellation outcome.
 - Read-only language-service calls use only the existing VS Code provider commands and return data;
   they never execute Code Actions, edits, commands, network requests, or an index. Provider output is
-  untrusted and is bounded, URI-validated, and source-labelled before it can become a Tool Result.
+  untrusted and is bounded, URI-validated, and source-labelled before it can become a Tool Result. A
+  non-empty mixed location set is filtered to in-scope items and marked with the closed
+  `out-of-workspace` omission reason; an all-filtered or malformed set returns stable `invalid-output`
+  with no path/detail, while an actually empty provider set remains a valid empty result. SDK symbol
+  kinds are mapped to the closed CtrlZebra `IdeSymbolKind` set with unknown values mapped to `unknown`.
 - The same ownership and gate apply in a limited untrusted workspace. Read-only capture may remain
   available when the Extension declares that capability, but it never grants Trust or enables a write,
   execute, MCP, or other side-effecting operation. If VS Code or a provider refuses an operation, the

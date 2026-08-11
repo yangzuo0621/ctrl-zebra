@@ -241,13 +241,16 @@ IDE 上下文是用户可以看见、关闭和控制的普通上下文，不是�
 - 只读诊断与语言服务结果在所属消息/Tool 卡附近显示来源、范围、severity、符号/目标和稳定
   `Stale`/`Truncated` 状态。Provider 消息按纯文本渲染，不解析 Markdown、HTML、链接或命令；
   不显示 `Code Action`、编辑、执行或审批控件。工作区外/不可信/不可用结果显示固定可操作
-  状态，而不是原始 Provider 错误。
+  状态，而不是原始 Provider 错误。混合结果中被工作区范围过滤的条目显示固定的
+  `Some results were omitted`/`Out of workspace` 状态，不显示被过滤路径；若全部结果被过滤或
+  Provider 形状无效，显示稳定 `No safe result available`（`invalid-output`），不伪装为空结果。
 - `get_diagnostics`、`find_definition`、`find_references` 和 `list_symbols` 是只读 Tool 结果，
   不能自动运行模型、改变输入、启动 Code Action、写文件或授予权限。编辑器入口填充 Composer
   后，内容保持可见、可编辑和可移除，发送前不创建 Run。
 - 关闭、取消、Session/Run 替换或 Extension disposal 后，迟到的上下文、诊断和语言结果均无 UI
-  效果。正常取消不播报失败；替换或一次性 stale/limit 结果用一个简短 polite live region 播报，
-  不逐项或逐字符朗读源码、诊断消息或符号列表。
+  效果。取消只允许 Webview 在取消控件事件中先同步更新自己的控件状态，再在同一事件回合尝试
+  一次取消请求；若 Host gate 已关闭则不发送请求，不等待或合成 Host 消息，也不产生 live-region 播报；替换或一次性 stale/limit/omission 结果才用一个简短
+  polite live region 播报，不逐项或逐字符朗读源码、诊断消息或符号列表。
 - 附件、刷新、移除、stale 决定和只读结果都必须有语义化可访问名称、键盘路径、可见焦点和禁用
   原因。刷新/移除不得抢焦点、重置 Composer 光标、选择或滚动；结果列表使用标题、`aria` 关系
   和稳定顺序，状态不能只靠颜色表达。在约 300px、200% 缩放、四类 VS Code 主题和长本地化文本

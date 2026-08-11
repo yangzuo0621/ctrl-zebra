@@ -61,21 +61,29 @@ decide whether a source is current, in scope, trusted, or authorized.
 - A stale attachment is rendered as a blocking, non-color-only state until the user explicitly refreshes
   or confirms `Use stale context`. A truncated attachment remains visibly truncated; the store never
   assumes an ellipsis is complete. Cancellation, disposal, Session/Run replacement, and close invalidate
-  pending context and accept no late message. Cancellation does not render a failure Tool Result.
+  pending context and accept no late message. Cancellation does not render a failure Tool Result or
+  accept a Host message after the gate closes.
 - Read-only diagnostics and language-service results are display-only. The Webview does not add Code
   Action, edit, command, approval, or automatic retry controls, and it never runs a model request when
   a result arrives. An editor command may fill the Composer only through a Host message; the text stays
   visible and editable until the user sends it.
+- An actually empty provider result renders as an empty result. A mixed result with locations omitted by
+  Host workspace validation renders the fixed `Some results were omitted`/`Out of workspace` status
+  without the rejected path; an all-filtered or malformed provider response renders fixed
+  `No safe result available` (`invalid-output`) rather than an indistinguishable empty state. Symbol
+  kinds are already mapped to the closed Protocol labels and never display SDK enum values.
 - IDE context is not placed in `getState`/`setState` as an authoritative snapshot. Restoration may retain
   only presentation choices such as an expanded source card; it must clear text, URI, document version,
   stale state, diagnostic content, and pending refresh. Explicitly submitted text is owned by the normal
   chat projection, not by an IDE feature store.
 - Source attachments, refresh/remove controls, stale decisions, diagnostic lists, and symbol lists use
   semantic elements, accessible names, visible focus, stable keys, and explicit disabled reasons. One
-  polite live region announces a discrete replacement, clear, stale, truncation, or cancellation outcome;
-  it never reads source text or every diagnostic/symbol item. Updates preserve Composer focus, selection,
-  disclosure state, and scroll position and remain operable at approximately 300px width, 200% zoom,
-  reduced motion, and all supported VS Code themes.
+  polite live region announces a discrete replacement, clear, stale, truncation, or omission outcome;
+  cancellation updates only the initiating control synchronously before one cancel intent is attempted
+  in the same event turn; an already-closed Host gate suppresses that intent and no late Host message
+  can announce it. The region never reads source text or every diagnostic/symbol item. Updates preserve
+  Composer focus, selection, disclosure state, and scroll position and remain operable at approximately
+  300px width, 200% zoom, reduced motion, and all supported VS Code themes.
 
 ## Product Language and String Ownership (T1701)
 
