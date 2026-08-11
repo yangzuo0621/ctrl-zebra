@@ -1,3 +1,4 @@
+import { McpToolDiscoveryError } from "@ctrl-zebra/mcp-client";
 import { protocolVersion } from "@ctrl-zebra/protocol";
 import { describe, expect, it, vi } from "vitest";
 
@@ -5,6 +6,7 @@ import { ProviderConfigurationError } from "../adapters/provider-configuration.j
 import type { ChatRunnerEvent } from "./chat-runner.js";
 import { McpPromptActions } from "./mcp-prompt-actions.js";
 import { McpResourceActions } from "./mcp-resource-actions.js";
+import type { McpWebviewActions } from "./mcp-webview-actions.js";
 import { ProviderOnboardingController } from "./provider-onboarding-controller.js";
 import type { SessionRecoveryActions, SessionRestoreProjection } from "./session-recovery.js";
 import { bindWebviewMessageController } from "./webview-message-controller.js";
@@ -14,6 +16,62 @@ const idleChatRunner = {
 };
 
 describe("bindWebviewMessageController", () => {
+  it("does not report or publish refresh cancellation, but reports unexpected failures", async () => {
+    let messageListener: ((message: unknown) => void) | undefined;
+    const postedMessages: unknown[] = [];
+    const reportedFailures: unknown[] = [];
+    const cancelled = new Error("refresh cancelled");
+    cancelled.name = "AbortError";
+    const refreshTools = vi
+      .fn()
+      .mockRejectedValueOnce(cancelled)
+      .mockRejectedValueOnce(new McpToolDiscoveryError("disconnected"))
+      .mockRejectedValueOnce(new Error("unexpected refresh failure"));
+    const mcpActions = {
+      bind: vi.fn(),
+      dispose: vi.fn(),
+      refreshTools,
+    } as unknown as McpWebviewActions;
+
+    bindWebviewMessageController({
+      channel: {
+        onDidReceiveMessage(listener) {
+          messageListener = listener;
+          return { dispose() {} };
+        },
+        postMessage(message) {
+          postedMessages.push(message);
+          return Promise.resolve(true);
+        },
+      },
+      lifetime: { onDidDispose: () => ({ dispose() {} }) },
+      chatRunner: idleChatRunner,
+      reportRunFailure: (error) => reportedFailures.push(error),
+      mcpActions,
+    });
+
+    const emitRefresh = (requestId: string) =>
+      messageListener?.({
+        protocolVersion,
+        type: "webview/mcp-refresh-tools",
+        requestId,
+        serverId: "local_fixture",
+        generation: 1,
+      });
+
+    emitRefresh("cancelled");
+    await Promise.resolve();
+    emitRefresh("disconnected");
+    await Promise.resolve();
+    emitRefresh("unexpected");
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(reportedFailures).toHaveLength(1);
+    expect(reportedFailures[0]).toMatchObject({ message: "unexpected refresh failure" });
+    expect(postedMessages).toEqual([]);
+  });
+
   it("routes Resource read, attach, and the immutable attachment into the next run", async () => {
     let messageListener: ((message: unknown) => void) | undefined;
     const postedMessages: unknown[] = [];

@@ -461,6 +461,94 @@ describe("unified MCP feature store", () => {
     });
     expect(store.getState().diagnostics).toBeUndefined();
   });
+
+  it("drops same-generation diagnostics whose connection status is stale", () => {
+    const failedStore = createMcpStore(host(), () => "request");
+    failedStore.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-connection",
+      requestId: "failed",
+      connection: {
+        status: "failed",
+        server,
+        generation: 4,
+        configurationStale: false,
+        error: { code: "invalid-schema", message: "Tool schema was rejected." },
+      },
+    });
+    const failedDiagnostic = {
+      kind: "tool-rejections" as const,
+      outcome: "all-rejected" as const,
+      server,
+      generation: 4,
+      connectionStatus: "failed" as const,
+      skippedTools: [{ mcpToolName: "unsafe", reason: "schema-invalid" as const }],
+      skippedToolsTruncated: false,
+      recoveryAction: "reconnect" as const,
+    };
+    failedStore.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-diagnostics",
+      requestId: "failed",
+      diagnosticSequence: 1,
+      diagnostic: failedDiagnostic,
+    });
+    const announcement = failedStore.getState().diagnosticAnnouncement;
+    failedStore.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-diagnostics",
+      requestId: "late-connected",
+      diagnosticSequence: 2,
+      diagnostic: {
+        kind: "tool-discovery-failure",
+        outcome: "refresh",
+        server,
+        generation: 4,
+        connectionStatus: "connected",
+        code: "limit-exceeded",
+        recoveryAction: "refresh-tools",
+      },
+    });
+    expect(failedStore.getState().diagnostics).toEqual(failedDiagnostic);
+    expect(failedStore.getState().diagnosticAnnouncement).toBe(announcement);
+
+    const connectedStore = createMcpStore(host(), () => "request");
+    receiveConnection(connectedStore, 4);
+    const connectedDiagnostic = {
+      kind: "tool-rejections" as const,
+      outcome: "degraded" as const,
+      server,
+      generation: 4,
+      connectionStatus: "connected" as const,
+      skippedTools: [{ mcpToolName: "unsafe", reason: "schema-invalid" as const }],
+      skippedToolsTruncated: false,
+      recoveryAction: "refresh-tools" as const,
+    };
+    connectedStore.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-diagnostics",
+      requestId: "connected",
+      diagnosticSequence: 1,
+      diagnostic: connectedDiagnostic,
+    });
+    connectedStore.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-diagnostics",
+      requestId: "late-failed",
+      diagnosticSequence: 2,
+      diagnostic: {
+        kind: "tool-rejections",
+        outcome: "all-rejected",
+        server,
+        generation: 4,
+        connectionStatus: "failed",
+        skippedTools: [{ mcpToolName: "late", reason: "schema-invalid" }],
+        skippedToolsTruncated: false,
+        recoveryAction: "reconnect",
+      },
+    });
+    expect(connectedStore.getState().diagnostics).toEqual(connectedDiagnostic);
+  });
 });
 
 function receiveConnection(store: ReturnType<typeof createMcpStore>, generation: number): void {

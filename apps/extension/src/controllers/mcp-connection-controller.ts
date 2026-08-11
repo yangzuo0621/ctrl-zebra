@@ -169,6 +169,13 @@ export class McpConnectionController {
       this.#toolDiagnostic = undefined;
       return true;
     } catch (error) {
+      // Refresh can race with disconnect/trust loss/disposal. Those lifecycle
+      // cancellations are not failures and must not reach the message route's
+      // run-failure reporter.
+      if (this.#snapshot.status !== "connected" || isAbortError(error)) return false;
+      if (error instanceof McpToolDiscoveryError && error.code === "disconnected") {
+        return false;
+      }
       if (error instanceof McpToolDiscoveryError) {
         const diagnostic = diagnosticFromToolError(error);
         if (diagnostic !== undefined) {
@@ -624,4 +631,8 @@ function diagnosticFromToolError(error: McpToolDiscoveryError): McpToolDiagnosti
         rejectedTools: error.rejectedTools,
         rejectedToolsTruncated: error.rejectedToolsTruncated,
       };
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
 }

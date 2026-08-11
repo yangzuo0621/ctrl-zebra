@@ -53,6 +53,7 @@ export class McpWebviewActions {
   #diagnosticSignature: string | undefined;
   #diagnosticSequence = 0;
   #diagnosticSequenceBlocked = false;
+  #catalogProjectionFailure: "limit-exceeded" | undefined;
 
   constructor(
     { connection, openSettings }: McpWebviewActionsDependencies,
@@ -117,6 +118,7 @@ export class McpWebviewActions {
       this.#catalogScope = undefined;
       this.#catalogSequence = 0;
       this.#catalogSequenceBlocked = false;
+      this.#catalogProjectionFailure = undefined;
       this.#resourceSignature = undefined;
       this.#promptSignature = undefined;
       if (snapshot.status === "failed" && snapshot.server !== undefined) {
@@ -131,6 +133,7 @@ export class McpWebviewActions {
       this.#catalogScope = connectionScope;
       this.#catalogSequence = 0;
       this.#catalogSequenceBlocked = false;
+      this.#catalogProjectionFailure = undefined;
       this.#toolSignature = undefined;
       this.#resetDiagnostics();
     }
@@ -157,6 +160,11 @@ export class McpWebviewActions {
         rejectedToolsTruncated: tools.rejectedToolsTruncated,
       });
       const signature = JSON.stringify(projection);
+      // A previously published complete snapshot can be restored after an
+      // oversized replacement. Its retained signature proves the current
+      // projection is already complete, so clear the transient failure even
+      // when no new catalog publication is needed.
+      if (signature === this.#toolSignature) this.#catalogProjectionFailure = undefined;
       if (force || signature !== this.#toolSignature) {
         const catalogSequence = this.#nextCatalogSequence();
         if (catalogSequence === undefined) {
@@ -179,8 +187,14 @@ export class McpWebviewActions {
           });
           this.#toolSignature = signature;
           this.#catalogSequence = catalogSequence;
+          this.#catalogProjectionFailure = undefined;
           post(combined.data);
           post(legacy);
+        } else {
+          // The strict envelope is measured as a whole. Keep the previous
+          // complete snapshot and expose only a bounded, actionable failure;
+          // never publish a partial or legacy catalog after this boundary.
+          this.#catalogProjectionFailure = "limit-exceeded";
         }
       }
     }
@@ -212,6 +226,7 @@ export class McpWebviewActions {
       snapshot,
       this.#connection.getToolSnapshot(),
       this.#connection.getToolDiagnostic?.(),
+      this.#catalogProjectionFailure,
     );
     if (projection === undefined) return;
     if (this.#diagnosticSequenceBlocked) return;
@@ -311,6 +326,7 @@ function projectDiagnostic(
   snapshot: McpConnectionSnapshot,
   tools: McpToolSnapshotView | undefined,
   retained: McpToolDiagnostic | undefined,
+  catalogProjectionFailure: "limit-exceeded" | undefined,
 ): McpDiagnosticsProjectionDto | undefined {
   if (snapshot.server === undefined) return undefined;
   const source = { server: snapshot.server, generation: snapshot.generation };
@@ -350,6 +366,16 @@ function projectDiagnostic(
     return undefined;
   }
   if (snapshot.status !== "connected") return undefined;
+  if (catalogProjectionFailure === "limit-exceeded") {
+    return {
+      kind: "tool-discovery-failure",
+      outcome: "refresh",
+      ...source,
+      connectionStatus: "connected",
+      code: "limit-exceeded",
+      recoveryAction: "refresh-tools",
+    };
+  }
   const diagnostic = retained;
   if (diagnostic?.kind === "failure") {
     return {

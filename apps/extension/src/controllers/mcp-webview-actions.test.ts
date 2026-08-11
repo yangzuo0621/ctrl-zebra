@@ -1,4 +1,5 @@
 import { ToolRegistry } from "@ctrl-zebra/core";
+import { protocolVersion } from "@ctrl-zebra/protocol";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { McpConnectionSnapshot } from "./mcp-connection-controller.js";
@@ -346,12 +347,135 @@ describe("MCP Webview actions", () => {
           message.type === "extension/mcp-tool-catalog" || message.type === "extension/mcp-tools",
       ),
     ).toBe(false);
+    expect(post.mock.calls.map(([message]) => message)).toContainEqual(
+      expect.objectContaining({
+        type: "extension/mcp-diagnostics",
+        requestId: "oversized",
+        diagnostic: expect.objectContaining({
+          kind: "tool-discovery-failure",
+          outcome: "refresh",
+          connectionStatus: "connected",
+          code: "limit-exceeded",
+          recoveryAction: "refresh-tools",
+        }),
+      }),
+    );
     tools = { ...tools, tools: [] };
     actions.refresh("valid");
     const combined = post.mock.calls
       .map(([message]) => message)
       .find((message) => message.type === "extension/mcp-tool-catalog");
     expect(combined).toMatchObject({ requestId: "valid", catalogSequence: 1 });
+    actions.dispose();
+  });
+
+  it("publishes an exactly bounded catalog, then retains it on an oversized replacement", () => {
+    vi.useFakeTimers();
+    const server = { serverId: "local_fixture", displayName: "Local fixture" } as const;
+    const snapshot: McpConnectionSnapshot = {
+      status: "connected",
+      generation: 3,
+      server,
+      configurationStale: false,
+      connection: {
+        status: "connected",
+        protocolVersion: "2026-07-28",
+        capabilities: {
+          tools: true,
+          toolsListChanged: false,
+          resources: false,
+          resourceTemplates: false,
+          resourcesListChanged: false,
+          prompts: false,
+          promptsListChanged: false,
+        },
+      },
+    };
+    const baseRejectedTools = Array.from({ length: 16 }, (_, index) => ({
+      mcpToolName: `${index}${"x".repeat(60_000)}`,
+      reason: "schema-invalid" as const,
+    }));
+    const baseEnvelope = {
+      protocolVersion,
+      type: "extension/mcp-tool-catalog" as const,
+      requestId: "exact",
+      catalogSequence: 1,
+      catalog: {
+        server,
+        generation: 3,
+        tools: [],
+        rejectedTools: baseRejectedTools,
+        rejectedToolsTruncated: false,
+      },
+    };
+    const remaining = 1_048_576 - utf8Bytes(JSON.stringify(baseEnvelope));
+    const perEntry = Math.floor(remaining / baseRejectedTools.length);
+    const remainder = remaining % baseRejectedTools.length;
+    const exactRejectedTools = baseRejectedTools.map((entry, index) => ({
+      ...entry,
+      mcpToolName: `${index}${"x".repeat(60_000 + perEntry + (index < remainder ? 1 : 0))}`,
+    }));
+    const oversizedRejectedTools = exactRejectedTools.map((entry, index) =>
+      index === 0 ? { ...entry, mcpToolName: `${entry.mcpToolName}x` } : entry,
+    );
+    let toolSnapshot = {
+      server,
+      generation: 3,
+      tools: [],
+      rejectedTools: exactRejectedTools,
+      rejectedToolsTruncated: false,
+      registry: new ToolRegistry(),
+    };
+    const post = vi.fn();
+    const actions = new McpWebviewActions({
+      connection: {
+        getState: () => snapshot,
+        getToolSnapshot: () => toolSnapshot,
+        getResourceCatalog: () => undefined,
+        getPromptCatalog: () => undefined,
+        connect: async () => snapshot,
+        disconnect: async () => snapshot,
+      },
+      openSettings: vi.fn(),
+    });
+    actions.bind(post);
+    actions.refresh("exact");
+    expect(utf8Bytes(JSON.stringify(post.mock.calls[1]?.[0]))).toBe(1_048_576);
+    expect(post.mock.calls.map(([message]) => message)).toContainEqual(
+      expect.objectContaining({ type: "extension/mcp-tools", requestId: "exact" }),
+    );
+
+    toolSnapshot = { ...toolSnapshot, rejectedTools: oversizedRejectedTools };
+    actions.refresh("oversized");
+    expect(
+      post.mock.calls
+        .map(([message]) => message)
+        .filter(
+          (message) =>
+            message.requestId === "oversized" &&
+            (message.type === "extension/mcp-tool-catalog" ||
+              message.type === "extension/mcp-tools"),
+        ),
+    ).toEqual([]);
+    expect(post.mock.calls.map(([message]) => message)).toContainEqual(
+      expect.objectContaining({
+        type: "extension/mcp-diagnostics",
+        requestId: "oversized",
+        diagnostic: expect.objectContaining({
+          kind: "tool-discovery-failure",
+          code: "limit-exceeded",
+        }),
+      }),
+    );
+    toolSnapshot = { ...toolSnapshot, rejectedTools: exactRejectedTools };
+    vi.advanceTimersByTime(500);
+    const latestDiagnostic = post.mock.calls
+      .map(([message]) => message)
+      .filter((message) => message.type === "extension/mcp-diagnostics")
+      .at(-1);
+    expect(latestDiagnostic).toMatchObject({
+      diagnostic: { kind: "tool-rejections", outcome: "degraded" },
+    });
     actions.dispose();
   });
 
@@ -610,3 +734,12 @@ describe("MCP Webview actions", () => {
     actions.dispose();
   });
 });
+
+function utf8Bytes(value: string): number {
+  let bytes = 0;
+  for (const character of value) {
+    const codePoint = character.codePointAt(0) ?? 0;
+    bytes += codePoint <= 0x7f ? 1 : codePoint <= 0x7ff ? 2 : codePoint <= 0xffff ? 3 : 4;
+  }
+  return bytes;
+}

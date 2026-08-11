@@ -619,12 +619,17 @@ function sameGeneration(
 
 function sameDiagnosticGeneration(
   connection: McpConnectionDto,
-  value: { readonly server: { readonly serverId: string }; readonly generation: number },
+  value: {
+    readonly server: { readonly serverId: string };
+    readonly generation: number;
+    readonly connectionStatus?: "connected" | "failed";
+  },
 ): boolean {
   return (
     (connection.status === "connected" || connection.status === "failed") &&
     connection.server?.serverId === value.server.serverId &&
-    connection.generation === value.generation
+    connection.generation === value.generation &&
+    (value.connectionStatus === undefined || connection.status === value.connectionStatus)
   );
 }
 

@@ -151,6 +151,21 @@ describe("MCP connection controller", () => {
     expect(harness.client.refreshTools).not.toHaveBeenCalled();
   });
 
+  it("treats refresh cancellation and disconnect races as accepted no-ops", async () => {
+    const harness = createHarness();
+    const controller = new McpConnectionController(harness.values);
+    await controller.connect();
+
+    const cancelled = new Error("refresh cancelled");
+    cancelled.name = "AbortError";
+    harness.client.refreshTools.mockRejectedValueOnce(cancelled);
+    await expect(controller.refreshTools("local_fixture", 1)).resolves.toBe(false);
+
+    harness.client.refreshTools.mockRejectedValueOnce(new McpToolDiscoveryError("disconnected"));
+    await expect(controller.refreshTools("local_fixture", 1)).resolves.toBe(false);
+    expect(controller.getToolDiagnostic()).toBeUndefined();
+  });
+
   it("does not swallow cancellation or unexpected refresh failures", async () => {
     const harness = createHarness();
     const controller = new McpConnectionController(harness.values);
