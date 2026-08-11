@@ -133,12 +133,12 @@ explicitly migrate the setting to version `2`, then choose the closed `protocolM
 
 `dual` supports exactly modern `2026-07-28` and legacy `2025-11-25` over local `stdio`. The full
 configuration, migration, and exclusion rules are in the [configuration contract](docs/configuration.md).
-The strict T1804 v1/v2 parser, normalized Protocol Schemas, bounded provenance, and deterministic
-compatibility fixtures are implemented. Live dual connection selection, probe/fallback lifecycle,
-Extension/Webview wiring, and explicit user migration activation remain gated by T1805–T1807.
-Until that wiring lands, a version `2` `dual` setting fails closed with stable
-`configuration-invalid` guidance before approval or process start; it is never silently treated as
-modern-only.
+The T1804 contract defines strict v1/v2 parsing, normalized Protocol Schemas, bounded provenance,
+and deterministic compatibility fixtures; those implementation changes remain pending in the T1804
+follow-up. Live dual connection selection, probe/fallback lifecycle, Extension/Webview wiring, and
+explicit user migration activation remain gated by T1805–T1807. After the follow-up parser accepts
+version `2`, `dual` must remain fail-closed with stable `configuration-invalid` guidance before
+approval or process start until that wiring lands; it is never silently treated as modern-only.
 
 Open one trusted workspace, review the exact executable, arguments, and canonical working directory,
 then run **CtrlZebra: Connect MCP Server** or select **Connect** in the Agent view. After connection:

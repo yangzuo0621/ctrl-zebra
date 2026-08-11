@@ -660,8 +660,11 @@ side effects independent of what it advertises.
   process spawn. It never treats `dual` as modern-only.
 - Configuration has no cwd, environment, shell, transport, endpoint, headers, credential,
   SecretStorage name, auto-start, retry, or capability fields. The canonical cwd is the exact
-  Extension-selected trusted workspace root at connect time. Version, identity, command, args, and
-  cwd form the effective immutable configuration for one connection attempt.
+  Extension-selected trusted workspace root at connect time. The normalized effective
+  `protocolMode`, Server identity, command, args, and cwd form the immutable configuration for one
+  connection attempt. Raw version is used only to normalize version `1` implicit `modern-only` and
+  version `2` explicit `modern-only`; those two representations have the same effective identity
+  when every other field matches.
 - API keys, bearer tokens, passwords, authorization headers, cookies, proxy credentials, and other
   secrets are forbidden in `command`, `args`, display values, or future ordinary settings. Stage 14
   provides no MCP Secret injection. A Server that requires credentials is unsupported until a

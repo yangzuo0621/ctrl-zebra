@@ -225,6 +225,14 @@ This boundary renders the validated stage 14/T1804 MCP projection and does not n
 capabilities in the browser. Modern/legacy selection, configuration migration, probing, fallback,
 and SDK lifecycle remain Host-owned.
 
+Before T1807 wiring lands, this boundary also reflects the T1804 interim activation guard: a normalized
+version `2` `dual` setting is rejected by the Host with stable `configuration-invalid` before workspace
+binding, startup approval, generation publication, or process start. The Webview receives only the
+bounded error and `open-settings` intent; it renders no approval card, connecting/connected state,
+negotiated era/version, capabilities, or legacy/fallback hint for that attempt. The dual-era connection
+and migration display below is the normative post-T1807 target after the guard is removed and the
+mode-aware lifecycle is wired.
+
 - One MCP feature store owns the current validated connection snapshot and generation-bound Tool,
   Resource, Resource Template, Prompt, Resource preview, and Prompt preview snapshots. Components
   receive immutable projections and callbacks; they do not parse JSON-RPC, compile Tool schemas,
@@ -331,6 +339,13 @@ message rejection. Normal connected operation with no diagnostics follows the sa
 diagnostic announcement or recovery control.
 
 ### Dual-era display and migration (T1804)
+
+The following display and migration journey is activated only after T1807 removes the interim Host
+guard and wires mode-aware connection lifecycle. During T1804, Protocol/configuration schemas may
+validate `dual` for migration and deterministic fixtures, but a live `dual` submit/start fails closed
+before workspace binding, approval, or process side effects. The Webview shows stable
+`configuration-invalid` guidance with `Open settings` only; it does not render an approval card,
+connecting/connected/negotiated UI, or a guessed modern/legacy state for the rejected attempt.
 
 The Webview renders configured mode as a setting fact and negotiated era/version as a successful
 connection fact. It uses fixed localized labels for `modern-only`, `dual`, `modern / 2026-07-28`, and

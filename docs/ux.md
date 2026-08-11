@@ -320,6 +320,10 @@ MCP 作为当前聊天的渐进披露辅助能力，不成为默认视觉焦点�
 （`modern-only` 或 `dual`）→ 显式选择“连接” → 查看完整 Server 启动操作和外部进程警告 →
 批准或拒绝 → 查看协商后的 Server 身份、era/version、能力和状态。配置缺失或无效时，连接
 入口解释具体缺失项并提供打开用户设置的操作，不要求用户阅读日志或手工编辑未知 JSON。
+在 T1807 wiring 合入前，T1804 的 interim activation guard 对有效 `dual` 配置在 workspace
+binding、启动审批和进程启动之前 fail-closed；此时只显示稳定的 `configuration-invalid` 和
+“打开设置”下一步，不显示审批卡、connecting/connected、协商 era/version 或能力。下述完整
+连接、审批和协商旅程是 T1807 移除 guard 后的规范目标，不得把 interim 拒绝呈现为一次连接尝试。
 
 - MCP 区域默认折叠或紧凑显示在对话次级位置；待处理启动审批、连接失败或清理失败可提高视觉
   优先级，但不覆盖 Composer、活动 Run 或普通聊天错误。
@@ -426,6 +430,11 @@ VS Code 主题下，原因、操作和失败状态必须可读且不依赖颜色
 
 ### 11.7 双纪元配置与迁移（T1804）
 
+- 本节分为两个阶段：T1804 只定义 strict parser/schema、规范化 DTO、provenance/recovery
+  fixture 与迁移契约；在 T1807 wiring 前，Host 对版本 `2` 的 `dual` submit/start 在 workspace
+  binding、审批或进程副作用前稳定返回 `configuration-invalid`，不创建 generation，不显示审批或
+  negotiated UI，也不进行 probe/fallback。以下 mode/era 选择和迁移旅程仅是 T1807 移除 interim
+  guard、完成 mode-aware lifecycle 后的规范目标。
 - 版本 `1` 的既有设置继续显示并运行 `modern-only`；升级不会自动写入版本 `2`，也不会因
   Server 响应而静默进入 dual。用户必须先确认迁移，再选择 `modern-only` 或 `dual`。
 - `modern-only` 的固定支持版本是 `2026-07-28`；`dual` 的闭合集是 `2026-07-28` 和
