@@ -9,7 +9,14 @@ import {
   createOpenAICompatibleModelGateway,
   createOpenAIModelGateway,
 } from "@ctrl-zebra/providers";
-import { commands, type ExtensionContext, Uri, window, workspace } from "vscode";
+import {
+  ConfigurationTarget,
+  commands,
+  type ExtensionContext,
+  Uri,
+  window,
+  workspace,
+} from "vscode";
 
 import {
   createGeminiApiKeySecretStorage,
@@ -28,7 +35,10 @@ import {
 } from "./adapters/mcp-server-configuration.js";
 import { NodeMcpStdioPort, selectMcpServerEnvironment } from "./adapters/mcp-stdio-port.js";
 import { PerformanceBaselineRecorder } from "./adapters/performance-baseline.js";
-import { readProviderConfiguration } from "./adapters/provider-configuration.js";
+import {
+  readProviderConfiguration,
+  readProviderSelectionConfiguration,
+} from "./adapters/provider-configuration.js";
 import { SpawnCommandRunner } from "./adapters/spawn-command-runner.js";
 import { createStructuredLogger } from "./adapters/structured-logger.js";
 import { createWorkspaceCheckpointStoreProvider } from "./adapters/vscode-checkpoint-storage.js";
@@ -55,6 +65,7 @@ import { McpStartupApproval } from "./controllers/mcp-startup-approval.js";
 import { McpToolApprovalWorkflow } from "./controllers/mcp-tool-approval-workflow.js";
 import { McpWebviewActions } from "./controllers/mcp-webview-actions.js";
 import { selectModelGateway } from "./controllers/model-gateway-selector.js";
+import { registerModelSelectionCommand } from "./controllers/model-selection-command.js";
 import { registerProviderApiKeyCommands } from "./controllers/provider-api-key-command.js";
 import {
   createWorkspaceToolRegistryProvider,
@@ -344,6 +355,24 @@ export function activate(context: ExtensionContext): void {
       showInputBox: (options) => window.showInputBox(options),
       showWarningMessage: (message, options, item) =>
         window.showWarningMessage(message, options, item),
+      showInformationMessage: (message) => window.showInformationMessage(message),
+      showErrorMessage: (message) => window.showErrorMessage(message),
+    }),
+    registerModelSelectionCommand({
+      readConfiguration() {
+        const settings = workspace.getConfiguration("ctrlZebra.provider");
+        return readProviderSelectionConfiguration({
+          get: (setting) => settings.get(setting),
+        });
+      },
+      secrets,
+      updateModel: (modelId) =>
+        workspace
+          .getConfiguration("ctrlZebra.provider")
+          .update("model", modelId, ConfigurationTarget.Global),
+      registerCommand: (commandId, handler) => commands.registerCommand(commandId, handler),
+      showInputBox: (options) => window.showInputBox(options),
+      showQuickPick: (items, options) => window.showQuickPick(items, options),
       showInformationMessage: (message) => window.showInformationMessage(message),
       showErrorMessage: (message) => window.showErrorMessage(message),
     }),

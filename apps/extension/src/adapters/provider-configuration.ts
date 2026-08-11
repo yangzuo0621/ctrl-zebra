@@ -17,6 +17,12 @@ export interface ConfigurationReader {
   get(setting: string): unknown;
 }
 
+export interface ProviderSelectionConfiguration {
+  readonly provider: ProviderId;
+  readonly modelId?: string;
+  readonly endpoint?: string;
+}
+
 interface BaseProviderConfiguration {
   readonly version: typeof providerConfigurationVersion;
   readonly modelId: string;
@@ -95,6 +101,36 @@ export function readProviderConfiguration(reader: ConfigurationReader): Provider
     modelId,
     endpoint: endpoint?.value,
     capabilities: standardProviderCapabilities,
+  };
+}
+
+/**
+ * Reads only the Provider values needed before a model has been selected. Unlike the runtime
+ * configuration reader, this intentionally tolerates a missing or malformed model so the selection
+ * command can repair it without touching the other settings.
+ */
+export function readProviderSelectionConfiguration(
+  reader: ConfigurationReader,
+): ProviderSelectionConfiguration {
+  const provider = readProviderId(reader.get(providerSettingNames.id));
+  const endpoint = readOptionalEndpoint(reader.get(providerSettingNames.endpoint));
+
+  if (provider === "openai-compatible" && endpoint === undefined) {
+    throw new ProviderConfigurationError(
+      "missing-endpoint",
+      providerSettingNames.endpoint,
+      "OpenAI-Compatible requires an endpoint URL.",
+    );
+  }
+
+  const model = reader.get(providerSettingNames.model);
+  const modelId =
+    typeof model === "string" && model.length > 0 && model.trim() === model ? model : undefined;
+
+  return {
+    provider,
+    modelId,
+    endpoint: endpoint?.value,
   };
 }
 
