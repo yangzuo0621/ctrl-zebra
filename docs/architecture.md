@@ -200,6 +200,21 @@ This document defines the initial runtime boundaries for the CtrlZebra desktop V
   command; command IDs, VS Code objects, endpoint values, and credential material never cross the
   Webview boundary. Completion, cancellation, and failure are returned as bounded user-safe action
   outcomes, while the Host remains the only source of configuration truth.
+- T1605 adds a Host-only, user-triggered connection-check command. The command is discoverable from
+  the Command Palette and is never started by activation, Webview creation, Session recovery, chat,
+  or a Tool. It reads the already validated active Provider and model configuration, obtains the
+  matching credential only for the check, and sends at most one metadata-only request to an endpoint
+  whose request shape is covered by the current official Provider contract. The request contains no
+  prompt, instructions, workspace URI or text, Session/message history, Tool declaration, Tool input
+  or result, and it cannot execute a model generation or Tool side effect. A custom endpoint or an
+  OpenAI-compatible endpoint without a documented metadata contract is not assumed to behave like
+  OpenAI; its check reports unknown rather than guessing or probing an undocumented path.
+- The check returns an internal bounded report with tri-state facts for authentication, model
+  existence, text streaming, Tool Calling, and the required capabilities. `supported` or
+  `unsupported` is used only when the official metadata response or an explicitly documented probe
+  proves that fact; all other cases are `unknown`. It does not mutate Provider, endpoint, model,
+  capabilities, or SecretStorage configuration. Cancellation and timeout close the operation and
+  prevent late notifications or follow-up requests; the check has no automatic retry.
 - Version `1` is the first Provider configuration format, so there is no legacy data to migrate.
   Future changes to identifiers, setting names, normalized shapes, defaults, or Secret names must
   define an explicit version transition. Migration reads exact prior keys through VS Code

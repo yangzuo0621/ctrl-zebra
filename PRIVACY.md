@@ -74,6 +74,26 @@ OpenAI-Compatible and custom endpoints are not queried automatically because the
 data handling are not covered by the official Provider guarantees; users enter those model IDs
 manually. Cancelling or failing discovery leaves the existing model setting unchanged.
 
+## User-triggered Provider connection checks
+
+When a user explicitly runs the Provider connection-check command, the Extension Host may send one
+bounded, metadata-only request to the documented model-metadata endpoint for the active OpenAI or
+Gemini configuration. The request contains only the selected Provider/model identifier and the
+matching SecretStorage authorization header. It contains no prompt or instructions, workspace path
+or source text, Session/messages, Tool definition, Tool input/result, or other model context, and it
+does not ask the model to generate output or execute a Tool. The response is used transiently to
+classify authentication and model existence and any capability fields that the official contract
+explicitly exposes; unsupported or ambiguous capability facts are shown as unknown rather than
+inferred.
+
+Custom Provider endpoints and OpenAI-Compatible endpoints are not assumed to implement the OpenAI
+metadata route or authorization contract, so the check does not guess an undocumented request. It
+reports unknown for facts that cannot be safely verified. The request has a fixed timeout, no retry,
+and cancellation stops the local flow without changing configuration. Response bodies, headers,
+authorization material, SDK errors, and endpoint details are not persisted, logged, sent to the
+Webview, or retained by CtrlZebra. The configured provider service may observe and retain the
+metadata request under its own terms and privacy policy.
+
 ## Workspace access and commands
 
 Read tools access only canonical UTF-8 text inside the single selected workspace. File changes and
