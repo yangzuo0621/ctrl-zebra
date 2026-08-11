@@ -14,6 +14,16 @@ const capabilities = {
   prompts: true,
   promptsListChanged: false,
 };
+const negotiated = { era: "modern" as const, version: "2026-07-28" as const };
+const unavailableCapabilities = {
+  tools: false,
+  toolsListChanged: false,
+  resources: false,
+  resourceTemplates: false,
+  resourcesListChanged: false,
+  prompts: false,
+  promptsListChanged: false,
+} as const;
 
 function host(): WebviewHost {
   return {
@@ -55,8 +65,9 @@ describe("unified MCP feature store", () => {
         status: "connected",
         server,
         generation: 3,
+        configuredMode: "modern-only",
         configurationStale: false,
-        protocolVersion: "2026-07-28",
+        negotiated,
         capabilities,
       },
     });
@@ -149,7 +160,14 @@ describe("unified MCP feature store", () => {
       protocolVersion,
       type: "extension/mcp-connection",
       requestId: "disconnect",
-      connection: { status: "disconnected", server, generation: 3, configurationStale: false },
+      connection: {
+        status: "disconnected",
+        server,
+        generation: 3,
+        configuredMode: "modern-only",
+        configurationStale: false,
+        capabilities: unavailableCapabilities,
+      },
     });
     expect(store.getState()).toMatchObject({
       resources: undefined,
@@ -186,8 +204,9 @@ describe("unified MCP feature store", () => {
         status: "connected",
         server,
         generation: 1,
+        configuredMode: "modern-only",
         configurationStale: false,
-        protocolVersion: "2026-07-28",
+        negotiated,
         capabilities,
       },
     });
@@ -334,7 +353,14 @@ describe("unified MCP feature store", () => {
       protocolVersion,
       type: "extension/mcp-connection",
       requestId: "request",
-      connection: { status: "disconnected", server, generation: 2, configurationStale: false },
+      connection: {
+        status: "disconnected",
+        server,
+        generation: 2,
+        configuredMode: "modern-only",
+        configurationStale: false,
+        capabilities: unavailableCapabilities,
+      },
     });
     receiveCatalog(store, "late", 2, second);
     expect(store.getState().tools).toBeUndefined();
@@ -374,7 +400,9 @@ describe("unified MCP feature store", () => {
         status: "failed",
         server,
         generation: 1,
+        configuredMode: "modern-only",
         configurationStale: false,
+        capabilities: unavailableCapabilities,
         error: { code: "invalid-schema", message: "Tool schema was rejected." },
       },
     });
@@ -449,7 +477,14 @@ describe("unified MCP feature store", () => {
       protocolVersion,
       type: "extension/mcp-connection",
       requestId: "disconnect",
-      connection: { status: "disconnected", server, generation: 1, configurationStale: false },
+      connection: {
+        status: "disconnected",
+        server,
+        generation: 1,
+        configuredMode: "modern-only",
+        configurationStale: false,
+        capabilities: unavailableCapabilities,
+      },
     });
     expect(store.getState().diagnostics).toBeUndefined();
     store.getState().receive({
@@ -472,7 +507,9 @@ describe("unified MCP feature store", () => {
         status: "failed",
         server,
         generation: 4,
+        configuredMode: "modern-only",
         configurationStale: false,
+        capabilities: unavailableCapabilities,
         error: { code: "invalid-schema", message: "Tool schema was rejected." },
       },
     });
@@ -571,8 +608,9 @@ function receiveConnection(store: ReturnType<typeof createMcpStore>, generation:
       status: "connected",
       server,
       generation,
+      configuredMode: "modern-only",
       configurationStale: false,
-      protocolVersion: "2026-07-28",
+      negotiated,
       capabilities,
     },
   });

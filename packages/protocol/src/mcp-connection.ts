@@ -105,16 +105,19 @@ const unavailableMcpCapabilitiesSchema = z.strictObject({
   prompts: z.literal(false),
   promptsListChanged: z.literal(false),
 });
+// The Extension can publish a safe, unconfigured boot/failure projection before
+// a validated Server identity exists. Connected projections remain strict below.
 const negotiatedConnectionBase = {
-  server: mcpServerIdentitySchema,
-  generation: mcpGenerationSchema,
+  server: mcpServerIdentitySchema.optional(),
+  generation: z.number().int().nonnegative().safe(),
   configuredMode: mcpProtocolModeSchema,
   configurationStale: z.boolean(),
 };
 
 /**
- * Additive T1804 projection contract. Live Extension/Webview consumers continue using
- * `mcpConnectionSchema` until the T1807 wiring task switches them to this shape.
+ * Negotiated T1807 projection contract. Inactive boot/failure states may omit
+ * the Server identity until configuration has been validated; no capabilities
+ * or negotiated era/version are exposed in those states.
  */
 export const mcpNegotiatedConnectionSchema = z
   .discriminatedUnion("status", [

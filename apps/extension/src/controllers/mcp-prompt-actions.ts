@@ -112,10 +112,19 @@ export class McpPromptActions {
     ) {
       throw new McpPromptError("prompt-unavailable");
     }
+    const provenance =
+      state.connection?.configuredMode !== undefined && state.connection.negotiated !== undefined
+        ? {
+            configuredMode: state.connection.configuredMode,
+            negotiatedEra: state.connection.negotiated.era,
+            negotiatedVersion: state.connection.negotiated.version,
+          }
+        : undefined;
     const confirmation = mcpPromptConfirmationSchema.parse({
       serverId,
       promptName: stored.preview.promptName,
       projectedText: projectPromptText(stored.preview),
+      ...(provenance === undefined ? {} : { provenance }),
     });
     projectExternalPromptContext(
       [...this.#confirmations.values(), confirmation],

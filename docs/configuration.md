@@ -1,10 +1,9 @@
 # CtrlZebra configuration contract
 
 This document defines the user-facing MCP setting that is shared by the Extension, Protocol,
-Security, Persistence, UX, and Webview contracts. It is the T1804 compatibility gate. The strict
-v1/v2 parser, normalized Protocol Schemas, and deterministic compatibility fixtures are implemented
-by the follow-up T1804 implementation; live dual connection selection and explicit user migration
-activation remain gated to T1805–T1807.
+Security, Persistence, UX, and Webview contracts. The strict v1/v2 parser, normalized Protocol
+Schemas, mode-aware lifecycle, negotiated projection, bounded provenance, and deterministic local
+fixtures are implemented. Migration remains explicit and live recovery never reconnects implicitly.
 
 ## Scope and ownership
 
@@ -73,24 +72,21 @@ revisions, unknown future versions, and every non-stdio transport remain unsuppo
   bounded configuration error. It cannot trigger a probe, legacy fallback, process start, retry, or
   automatic recovery.
 
-## Runtime activation gate
+## Runtime activation and change behavior
 
-The pure T1804 parser and Protocol Schemas accept version `2` `dual` so migration validation and
-closed compatibility fixtures can prove the complete contract. The current live startup path is
-owned by `apps/extension` and remains modern-only until T1807 wires mode selection and the dual-era
-Client lifecycle. Its controller must reject effective `dual` immediately after normalized
-configuration validation and before workspace binding, generation publication, startup approval,
-process creation, or any modern probe. The stable public outcome is
-`configuration-invalid` with fixed, user-safe guidance to keep version `1` or choose version `2`
-`modern-only`; the guard must not silently downgrade `dual` to modern-only or expose probe/fallback
-details. T1807 removes the guard only after its connection, Protocol, Webview, persistence, and
-integration evidence is complete.
+The Extension selects the normalized mode before workspace binding and passes it to the controlled
+Client lifecycle. Version `1` and explicit version `2` `modern-only` perform only the bounded modern
+probe; version `2` `dual` may perform one legacy handshake after the closed modern-first decision
+matrix authorizes it. The controller never silently downgrades a mode, probes more than once per
+explicit connection, or reconnects after recovery. Effective mode changes invalidate pending
+approval and require a fresh exact approval before process creation.
 
-The T1804 implementation test matrix covers both mode-change directions between the approval's first
-read and its pre-spawn second read, explicit retry, stale approval and generation invalidation,
-v1-implicit-modern-only versus v2-explicit-modern-only equivalence after normalization, and v2
-`dual` fail-closed behavior with no approval or process side effect. Existing executable, argument,
-identity, cwd, trust, scope, and exact-operation comparisons remain required.
+The implementation test matrix covers both mode-change directions between the approval's first read
+and its pre-spawn second read, explicit retry, stale approval and generation invalidation,
+v1-implicit-modern-only versus v2-explicit-modern-only equivalence after normalization, modern and
+legacy negotiated fixtures, malformed no-fallback cleanup, bounded provenance, and Webview
+projection. Existing executable, argument, identity, cwd, trust, scope, and exact-operation
+comparisons remain required.
 
 ## Negotiation and visible result
 
@@ -154,7 +150,6 @@ values are not persisted. Recovery never starts, reconnects, probes, renegotiate
 Server operation.
 
 The complete wire shape and status combinations live in [Protocol](protocol.md); lifecycle and
-security ownership live in [Architecture](architecture.md) and [Security](security.md). T1804
-implements parsing, normalized schemas, provenance, and fixtures; T1805–T1807 implement negotiation,
-legacy lifecycle, the fail-closed guard's removal, explicit migration activation, and user-facing
-integration.
+security ownership live in [Architecture](architecture.md) and [Security](security.md). The
+Extension, Webview, persistence, and local stdio fixture paths now consume the same negotiated
+projection; recovery remains an explicit user action and never starts a hidden reconnect.

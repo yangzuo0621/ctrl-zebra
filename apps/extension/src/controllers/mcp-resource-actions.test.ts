@@ -6,8 +6,24 @@ import { McpResourceActions } from "./mcp-resource-actions.js";
 const connected = {
   generation: 2,
   status: "connected",
+  configuredMode: "modern-only",
   server: { serverId: "local_fixture", displayName: "Local fixture" },
   configurationStale: false,
+  connection: {
+    status: "connected",
+    protocolVersion: "2026-07-28",
+    configuredMode: "modern-only",
+    negotiated: { era: "modern", version: "2026-07-28" },
+    capabilities: {
+      tools: false,
+      toolsListChanged: false,
+      resources: false,
+      resourceTemplates: false,
+      resourcesListChanged: false,
+      prompts: false,
+      promptsListChanged: false,
+    },
+  },
 } as const;
 const snapshot = {
   server: connected.server,
@@ -38,6 +54,11 @@ describe("MCP Resource actions", () => {
       mimeType: "text/plain",
       text: "ordinary context",
       truncated: false,
+      provenance: {
+        configuredMode: "modern-only",
+        negotiatedEra: "modern",
+        negotiatedVersion: "2026-07-28",
+      },
     });
     expect(actions.takeAttachments()).toHaveLength(1);
     expect(actions.takeAttachments()).toEqual([]);
@@ -46,8 +67,12 @@ describe("MCP Resource actions", () => {
   it("rejects attachment after disconnect without mutating the draft", async () => {
     let state:
       | ReturnType<typeof createConnectedState>
-      | { status: "disconnected"; generation: number; configurationStale: false } =
-      createConnectedState();
+      | {
+          status: "disconnected";
+          generation: number;
+          configuredMode: "modern-only";
+          configurationStale: false;
+        } = createConnectedState();
     const actions = new McpResourceActions({
       connection: {
         getState: () => state,
@@ -56,7 +81,12 @@ describe("MCP Resource actions", () => {
       createId: () => "snapshot-1",
     });
     await actions.read("local_fixture", 2, { kind: "resource", uri: "memory://note" });
-    state = { status: "disconnected", generation: 2, configurationStale: false };
+    state = {
+      status: "disconnected",
+      generation: 2,
+      configuredMode: "modern-only",
+      configurationStale: false,
+    };
 
     expect(() => actions.attach("local_fixture", 2, "snapshot-1")).toThrow(McpResourceError);
     expect(actions.takeAttachments()).toEqual([]);

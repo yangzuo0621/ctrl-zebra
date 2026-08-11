@@ -145,7 +145,7 @@ export function activate(context: ExtensionContext): void {
     environment: selectMcpServerEnvironment(env, platform),
     requestStartupApproval: (operation, signal) => mcpStartupApproval.request(operation, signal),
     createPort: (operation, onFailure) => new NodeMcpStdioPort(operation, { onFailure }),
-    createClient: (port) => new ControlledMcpClient(port),
+    createClient: (port, options) => new ControlledMcpClient(port, options),
     getReservedToolNames: () => [
       "list_files",
       "propose_file_edit",
@@ -287,16 +287,36 @@ export function activate(context: ExtensionContext): void {
         : {
             registry: combineToolRegistries(workspaceRegistry, mcpSnapshot.registry),
             mcpToolSources: new Map(
-              mcpSnapshot.tools.map((tool) => [
-                tool.registryName,
-                {
-                  serverId: mcpSnapshot.server.serverId,
-                  displayName: mcpSnapshot.server.displayName,
-                  registryName: tool.registryName,
-                  mcpToolName: tool.mcpToolName,
-                  generation: mcpSnapshot.generation,
-                },
-              ]),
+              mcpSnapshot.tools.map((tool) => {
+                const connection = mcpConnection.getState().connection;
+                const provenance =
+                  connection?.configuredMode === undefined || connection.negotiated === undefined
+                    ? undefined
+                    : connection.negotiated.era === "modern"
+                      ? {
+                          configuredMode: connection.configuredMode,
+                          negotiatedEra: "modern" as const,
+                          negotiatedVersion: "2026-07-28" as const,
+                        }
+                      : connection.configuredMode === "dual"
+                        ? {
+                            configuredMode: "dual" as const,
+                            negotiatedEra: "legacy" as const,
+                            negotiatedVersion: "2025-11-25" as const,
+                          }
+                        : undefined;
+                return [
+                  tool.registryName,
+                  {
+                    serverId: mcpSnapshot.server.serverId,
+                    displayName: mcpSnapshot.server.displayName,
+                    registryName: tool.registryName,
+                    mcpToolName: tool.mcpToolName,
+                    generation: mcpSnapshot.generation,
+                    ...(provenance === undefined ? {} : { provenance }),
+                  },
+                ] as const;
+              }),
             ),
           };
     },

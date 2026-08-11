@@ -26,6 +26,34 @@ afterEach(async () => {
 });
 
 describe("controlled MCP fixture end-to-end", () => {
+  it("negotiates the explicit modern fixture mode", async () => {
+    const fixture = await createFixture("modern", "modern-only");
+    await expect(fixture.client.connect()).resolves.toMatchObject({
+      kind: "connected",
+      connection: {
+        configuredMode: "modern-only",
+        negotiated: { era: "modern", version: "2026-07-28" },
+      },
+    });
+    expect(await readFile(fixture.eventsPath, "utf8")).toContain('"detail":"server/discover"');
+    await fixture.client.disconnect();
+  });
+
+  it("falls back once to the legacy fixture only in dual mode", async () => {
+    const fixture = await createFixture("legacy", "dual");
+    await expect(fixture.client.connect()).resolves.toMatchObject({
+      kind: "connected",
+      connection: {
+        configuredMode: "dual",
+        negotiated: { era: "legacy", version: "2025-11-25" },
+      },
+    });
+    const events = await readFile(fixture.eventsPath, "utf8");
+    expect(events).toContain('"detail":"server/discover"');
+    expect(events).toContain('"detail":"initialize"');
+    await fixture.client.disconnect();
+  });
+
   it("covers paginated Tools, Resources, Templates, Prompts, list changes, calls, and cleanup", async () => {
     const { client, eventsPath } = await connectFixture();
 
@@ -120,21 +148,24 @@ describe("controlled MCP fixture end-to-end", () => {
     ["malformed", "malformed-message"],
     ["exit", "server-exited"],
   ] as const)("classifies the %s fixture failure and cleans up", async (mode, code) => {
-    const { client, eventsPath } = await createFixture(mode);
+    const { client, eventsPath } = await createFixture(mode, "modern-only");
     await expect(client.connect()).resolves.toMatchObject({ kind: "failed", error: { code } });
     await vi.waitFor(async () =>
       expect(await readFile(eventsPath, "utf8")).toContain('"event":"exited"'),
     );
+    if (mode === "malformed") {
+      expect(await readFile(eventsPath, "utf8")).not.toContain('"detail":"initialize"');
+    }
   });
 });
 
 async function connectFixture() {
-  const fixture = await createFixture("normal");
+  const fixture = await createFixture("modern", "modern-only");
   await expect(fixture.client.connect()).resolves.toMatchObject({ kind: "connected" });
   return fixture;
 }
 
-async function createFixture(mode: string) {
+async function createFixture(mode: string, protocolMode: "modern-only" | "dual" = "modern-only") {
   const directory = await mkdtemp(join(tmpdir(), "ctrl-zebra-mcp-fixture-"));
   temporaryDirectories.push(directory);
   const eventsPath = join(directory, "events.jsonl");
@@ -144,5 +175,5 @@ async function createFixture(mode: string) {
     cwdPath: process.cwd(),
     environment: {},
   });
-  return { client: new ControlledMcpClient(port), eventsPath };
+  return { client: new ControlledMcpClient(port, { protocolMode }), eventsPath };
 }

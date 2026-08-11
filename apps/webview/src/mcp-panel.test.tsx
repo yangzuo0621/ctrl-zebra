@@ -16,6 +16,7 @@ const capabilities = {
   prompts: true,
   promptsListChanged: false,
 };
+const negotiated = { era: "modern" as const, version: "2026-07-28" as const };
 
 function createHost(): WebviewHost {
   return {
@@ -45,8 +46,9 @@ describe("MCP panel", () => {
         status: "connected",
         server,
         generation: 1,
+        configuredMode: "modern-only",
         configurationStale: false,
-        protocolVersion: "2026-07-28",
+        negotiated,
         capabilities,
       },
     });
@@ -76,6 +78,14 @@ describe("MCP panel", () => {
     expect(disclosure).not.toHaveAttribute("open");
     fireEvent.click(screen.getByText("MCP Server and context"));
     expect(screen.getByText("Server: Local fixture")).toBeVisible();
+    expect(
+      screen.getByText((_, element) => element?.textContent === "Configured mode: modern-only"),
+    ).toBeVisible();
+    expect(
+      screen.getByText(
+        (_, element) => element?.textContent === "Negotiated protocol: modern / 2026-07-28",
+      ),
+    ).toBeVisible();
     expect(screen.getByText("Action: delete")).toBeVisible();
     expect(screen.getByText(/side effects may be unknown/)).toBeVisible();
   });
@@ -90,8 +100,9 @@ describe("MCP panel", () => {
         status: "connected",
         server,
         generation: 1,
+        configuredMode: "modern-only",
         configurationStale: false,
-        protocolVersion: "2026-07-28",
+        negotiated,
         capabilities,
       },
     });
@@ -137,8 +148,9 @@ describe("MCP panel", () => {
         status: "connected",
         server,
         generation: 1,
+        configuredMode: "modern-only",
         configurationStale: false,
-        protocolVersion: "2026-07-28",
+        negotiated,
         capabilities,
       },
     });

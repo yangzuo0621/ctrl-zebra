@@ -154,6 +154,25 @@ describe("T1804 compatibility fixtures", () => {
         negotiated: { era: "modern", version: "2026-07-28" },
       }).success,
     ).toBe(false);
+    expect(
+      mcpNegotiatedConnectionSchema.parse({
+        generation: 0,
+        status: "disconnected",
+        configuredMode: "modern-only",
+        configurationStale: false,
+        capabilities: unavailableCapabilities,
+      }),
+    ).toMatchObject({ status: "disconnected", generation: 0 });
+    expect(
+      mcpNegotiatedConnectionSchema.parse({
+        generation: 0,
+        status: "failed",
+        configuredMode: "modern-only",
+        configurationStale: false,
+        capabilities: unavailableCapabilities,
+        error: { code: "configuration-invalid", message: "Configure one valid MCP Server." },
+      }),
+    ).toMatchObject({ status: "failed", generation: 0 });
   });
 
   it("keeps stable errors closed and bounded", () => {

@@ -13,6 +13,7 @@ describe("MCP Server commands", () => {
     const disconnected = {
       generation: 0,
       status: "disconnected" as const,
+      configuredMode: "modern-only" as const,
       configurationStale: false,
     };
     const connect = vi.fn(async () => disconnected);
