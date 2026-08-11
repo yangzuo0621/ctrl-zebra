@@ -66,6 +66,66 @@ export const pongMessageSchema = z.strictObject({
   type: z.literal("extension/pong"),
 });
 
+export const providerDisplayIdSchema = z.enum(["openai", "gemini", "openai-compatible"]);
+export const providerActionSchema = z.enum(["save-key", "select-model", "open-settings"]);
+export const providerActionErrorCodeSchema = z.enum([
+  "configuration",
+  "storage",
+  "unavailable",
+  "internal",
+]);
+
+export const providerStatusRequestMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("webview/provider-status"),
+});
+
+export const providerSaveKeyMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("webview/provider-save-key"),
+});
+
+export const providerSelectModelMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("webview/provider-select-model"),
+});
+
+export const providerOpenSettingsMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("webview/provider-open-settings"),
+});
+
+export const providerStatusMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("extension/provider-status"),
+  provider: providerDisplayIdSchema,
+  apiKeyConfigured: z.boolean(),
+  modelConfigured: z.boolean(),
+});
+
+export const providerActionMessageSchema = z.discriminatedUnion("status", [
+  z.strictObject({
+    ...protocolEnvelopeSchema.shape,
+    type: z.literal("extension/provider-action"),
+    action: providerActionSchema,
+    status: z.literal("completed"),
+  }),
+  z.strictObject({
+    ...protocolEnvelopeSchema.shape,
+    type: z.literal("extension/provider-action"),
+    action: providerActionSchema,
+    status: z.literal("cancelled"),
+  }),
+  z.strictObject({
+    ...protocolEnvelopeSchema.shape,
+    type: z.literal("extension/provider-action"),
+    action: providerActionSchema,
+    status: z.literal("failed"),
+    code: providerActionErrorCodeSchema,
+    message: z.string().min(1).max(256),
+  }),
+]);
+
 export const submitMessageSchema = z.strictObject({
   ...protocolEnvelopeSchema.shape,
   type: z.literal("webview/submit"),
@@ -460,6 +520,10 @@ export const webviewToExtensionMessageSchema = z.discriminatedUnion("type", [
   submitMessageSchema,
   newChatMessageSchema,
   cancelMessageSchema,
+  providerStatusRequestMessageSchema,
+  providerSaveKeyMessageSchema,
+  providerSelectModelMessageSchema,
+  providerOpenSettingsMessageSchema,
   mcpConnectMessageSchema,
   mcpDisconnectMessageSchema,
   mcpOpenSettingsMessageSchema,
@@ -479,6 +543,8 @@ export const webviewToExtensionMessageSchema = z.discriminatedUnion("type", [
 ]);
 export const extensionToWebviewMessageSchema = z.union([
   pongMessageSchema,
+  providerStatusMessageSchema,
+  providerActionMessageSchema,
   textDeltaMessageSchema,
   tokenUsageMessageSchema,
   reasoningStartMessageSchema,
@@ -508,6 +574,15 @@ export const extensionToWebviewMessageSchema = z.union([
 export type ProtocolEnvelope = z.infer<typeof protocolEnvelopeSchema>;
 export type PingMessage = z.infer<typeof pingMessageSchema>;
 export type PongMessage = z.infer<typeof pongMessageSchema>;
+export type ProviderDisplayId = z.infer<typeof providerDisplayIdSchema>;
+export type ProviderAction = z.infer<typeof providerActionSchema>;
+export type ProviderActionErrorCode = z.infer<typeof providerActionErrorCodeSchema>;
+export type ProviderStatusRequestMessage = z.infer<typeof providerStatusRequestMessageSchema>;
+export type ProviderSaveKeyMessage = z.infer<typeof providerSaveKeyMessageSchema>;
+export type ProviderSelectModelMessage = z.infer<typeof providerSelectModelMessageSchema>;
+export type ProviderOpenSettingsMessage = z.infer<typeof providerOpenSettingsMessageSchema>;
+export type ProviderStatusMessage = z.infer<typeof providerStatusMessageSchema>;
+export type ProviderActionMessage = z.infer<typeof providerActionMessageSchema>;
 export type SubmitMessage = z.infer<typeof submitMessageSchema>;
 export type NewChatMessage = z.infer<typeof newChatMessageSchema>;
 export type CancelMessage = z.infer<typeof cancelMessageSchema>;

@@ -11,6 +11,7 @@ import { MarkdownMessage } from "./markdown-message.js";
 import { McpPanel } from "./mcp-panel.js";
 import { createMcpStore } from "./mcp-store.js";
 import { OnboardingCard } from "./onboarding-card.js";
+import { createOnboardingStore } from "./onboarding-store.js";
 import { ReasoningSummary } from "./reasoning-summary.js";
 import { TokenUsageSummary } from "./token-usage-summary.js";
 import { ToolCallCard } from "./tool-call-card.js";
@@ -63,6 +64,9 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
   const [mcpStore] = useState(() =>
     createMcpStore(host, createRequestId ?? (() => crypto.randomUUID())),
   );
+  const [onboardingStore] = useState(() =>
+    createOnboardingStore(host, createRequestId ?? (() => crypto.randomUUID())),
+  );
   const [draft, setDraft] = useState("");
   const [showSessionsDrawer, setShowSessionsDrawer] = useState(false);
   const [isComposing, setIsComposing] = useState(false);
@@ -87,6 +91,10 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
   const usage = useStore(store, (state) => state.usage);
   const approval = useStore(approvalStore, (state) => state.current);
   const pendingDecision = useStore(approvalStore, (state) => state.pendingDecision);
+  const providerStatus = useStore(onboardingStore, (state) => state.status);
+  const providerPendingAction = useStore(onboardingStore, (state) => state.pendingAction);
+  const providerActionOutcome = useStore(onboardingStore, (state) => state.actionOutcome);
+  const providerAnnouncement = useStore(onboardingStore, (state) => state.announcement);
 
   useEffect(() => {
     const unsubscribe = host.subscribe((message) => {
@@ -94,13 +102,16 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
       approvalStore.getState().receive(message);
       checkpointStore.getState().receive(message);
       mcpStore.getState().receive(message);
+      onboardingStore.getState().receive(message);
     });
     host.ping?.(createRequestId?.() ?? crypto.randomUUID());
+    onboardingStore.getState().refresh();
     return () => {
       unsubscribe();
       store.getState().dispose();
+      onboardingStore.getState().dispose();
     };
-  }, [approvalStore, checkpointStore, createRequestId, host, mcpStore, store]);
+  }, [approvalStore, checkpointStore, createRequestId, host, mcpStore, onboardingStore, store]);
 
   // Scroll to bottom when new messages arrive unless user scrolled up
   // biome-ignore lint/correctness/useExhaustiveDependencies: scroll on message updates
@@ -274,7 +285,14 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
         <ol className={styles.transcript}>
           {messages.length === 0 ? (
             <li className={styles.empty}>
-              <OnboardingCard onSelectPrompt={(prompt) => setDraft(prompt)} />
+              <OnboardingCard
+                status={providerStatus}
+                pendingAction={providerPendingAction}
+                actionOutcome={providerActionOutcome}
+                announcement={providerAnnouncement}
+                onAction={(action) => onboardingStore.getState().runAction(action)}
+                onSelectPrompt={(prompt) => setDraft(prompt)}
+              />
               <p className={styles.emptyText}>No messages yet.</p>
             </li>
           ) : (

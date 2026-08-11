@@ -95,6 +95,125 @@ describe("Webview protocol messages", () => {
     ).toEqual(pong);
   });
 
+  it("round-trips the strict Provider onboarding projection and action outcomes", () => {
+    const statusRequest = {
+      protocolVersion,
+      type: "webview/provider-status",
+      requestId: "provider-status-1",
+    } as const;
+    const saveKey = {
+      protocolVersion,
+      type: "webview/provider-save-key",
+      requestId: "provider-save-1",
+    } as const;
+    const selectModel = {
+      protocolVersion,
+      type: "webview/provider-select-model",
+      requestId: "provider-model-1",
+    } as const;
+    const openSettings = {
+      protocolVersion,
+      type: "webview/provider-open-settings",
+      requestId: "provider-settings-1",
+    } as const;
+    const status = {
+      protocolVersion,
+      type: "extension/provider-status",
+      requestId: statusRequest.requestId,
+      provider: "gemini",
+      apiKeyConfigured: false,
+      modelConfigured: true,
+    } as const;
+    const completed = {
+      protocolVersion,
+      type: "extension/provider-action",
+      requestId: saveKey.requestId,
+      action: "save-key",
+      status: "completed",
+    } as const;
+    const cancelled = {
+      protocolVersion,
+      type: "extension/provider-action",
+      requestId: selectModel.requestId,
+      action: "select-model",
+      status: "cancelled",
+    } as const;
+    const failed = {
+      protocolVersion,
+      type: "extension/provider-action",
+      requestId: openSettings.requestId,
+      action: "open-settings",
+      status: "failed",
+      code: "internal",
+      message: "The Provider action failed unexpectedly. Try again.",
+    } as const;
+
+    for (const request of [statusRequest, saveKey, selectModel, openSettings]) {
+      expect(
+        webviewToExtensionMessageSchema.parse(JSON.parse(JSON.stringify(request)) as unknown),
+      ).toEqual(request);
+    }
+    for (const response of [status, completed, cancelled, failed]) {
+      expect(
+        extensionToWebviewMessageSchema.parse(JSON.parse(JSON.stringify(response)) as unknown),
+      ).toEqual(response);
+    }
+  });
+
+  it.each([
+    { type: "webview/provider-status", requestId: "provider-1", extra: true },
+    { type: "webview/provider-save-key", requestId: "provider-1", provider: "gemini" },
+    { type: "webview/provider-select-model", requestId: "provider-1", action: "select-model" },
+    {
+      type: "webview/provider-open-settings",
+      requestId: "provider-1",
+      endpoint: "https://example.test",
+    },
+  ])("rejects Provider onboarding intents with unreviewed fields %#", (message) => {
+    expect(webviewToExtensionMessageSchema.safeParse({ protocolVersion, ...message }).success).toBe(
+      false,
+    );
+  });
+
+  it.each([
+    { provider: "anthropic" },
+    { apiKeyConfigured: "false" },
+    { modelConfigured: 1 },
+    { unexpected: true },
+  ])("rejects invalid Provider status projections %#", (override) => {
+    expect(
+      extensionToWebviewMessageSchema.safeParse({
+        protocolVersion,
+        type: "extension/provider-status",
+        requestId: "provider-status-1",
+        provider: "openai",
+        apiKeyConfigured: true,
+        modelConfigured: false,
+        ...override,
+      }).success,
+    ).toBe(false);
+  });
+
+  it.each([
+    { status: "completed", code: "internal" },
+    { status: "cancelled", message: "should not be present" },
+    { status: "failed", code: "unknown", message: "Safe failure." },
+    { status: "failed", code: "internal", message: "" },
+    { status: "failed", code: "internal", message: "x".repeat(257) },
+    { status: "failed", code: "internal", message: "Safe failure.", extra: true },
+  ])("rejects invalid Provider action outcomes %#", (override) => {
+    expect(
+      extensionToWebviewMessageSchema.safeParse({
+        protocolVersion,
+        type: "extension/provider-action",
+        requestId: "provider-action-1",
+        action: "save-key",
+        status: "completed",
+        ...override,
+      }).success,
+    ).toBe(false);
+  });
+
   it("round-trips chat submission, cancellation, delta, and status messages", () => {
     const submit = {
       protocolVersion,

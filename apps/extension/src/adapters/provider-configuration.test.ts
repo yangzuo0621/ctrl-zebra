@@ -4,6 +4,7 @@ import {
   type ConfigurationReader,
   ProviderConfigurationError,
   readProviderConfiguration,
+  readProviderOnboardingConfiguration,
   readProviderSelectionConfiguration,
 } from "./provider-configuration.js";
 
@@ -65,6 +66,53 @@ describe("Provider configuration", () => {
     expect(
       readProviderSelectionConfiguration(configuration({ id: "openai", model: " invalid " })),
     ).toMatchObject({ provider: "openai", modelId: undefined });
+  });
+
+  it.each([
+    ["openai", { id: "openai", model: "gpt-test" }, true, true],
+    ["gemini without a model", { id: "gemini" }, true, false],
+    [
+      "remote OpenAI-Compatible",
+      { id: "openai-compatible", model: "compatible-test", endpoint: "https://models.example/v1" },
+      true,
+      true,
+    ],
+    [
+      "loopback OpenAI-Compatible",
+      { id: "openai-compatible", model: "compatible-test", endpoint: "http://127.0.0.1:11434/v1" },
+      false,
+      true,
+    ],
+    [
+      "OpenAI-Compatible without an endpoint",
+      { id: "openai-compatible", model: "compatible-test" },
+      true,
+      true,
+    ],
+  ] as const)("projects bounded onboarding facts for %s", (_name, values, apiKeyRequired, modelConfigured) => {
+    expect(readProviderOnboardingConfiguration(configuration(values))).toMatchObject({
+      provider: values.id,
+      apiKeyRequired,
+      modelConfigured,
+      endpointValid: values.id !== "openai-compatible" || "endpoint" in values,
+    });
+  });
+
+  it("tolerates malformed optional endpoints without returning their value", () => {
+    expect(
+      readProviderOnboardingConfiguration(
+        configuration({
+          id: "openai",
+          model: "gpt-test",
+          endpoint: "http://user:secret@example.test",
+        }),
+      ),
+    ).toEqual({
+      provider: "openai",
+      apiKeyRequired: true,
+      modelConfigured: true,
+      endpointValid: false,
+    });
   });
 
   it.each([

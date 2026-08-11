@@ -25,6 +25,14 @@ export interface ProviderSelectionConfiguration {
   readonly endpoint?: string;
 }
 
+export interface ProviderOnboardingConfiguration {
+  readonly provider: ProviderId;
+  readonly modelConfigured: boolean;
+  readonly apiKeyRequired: boolean;
+  /** False when the optional endpoint setting is malformed or a required compatible endpoint is absent. */
+  readonly endpointValid: boolean;
+}
+
 interface BaseProviderConfiguration {
   readonly version: typeof providerConfigurationVersion;
   readonly modelId: string;
@@ -133,6 +141,32 @@ export function readProviderSelectionConfiguration(
     modelId,
     endpoint: endpoint?.value,
   };
+}
+
+/**
+ * Reads only bounded readiness facts for the Webview onboarding projection. It deliberately does
+ * not return a model ID or endpoint value and tolerates a missing model so the user can repair it.
+ */
+export function readProviderOnboardingConfiguration(
+  reader: ConfigurationReader,
+): ProviderOnboardingConfiguration {
+  const provider = readProviderId(reader.get(providerSettingNames.id));
+  const model = reader.get(providerSettingNames.model);
+  const modelConfigured = typeof model === "string" && isValidSelectionModelId(model);
+
+  let endpointValid = true;
+  let apiKeyRequired = true;
+  try {
+    const endpoint = readOptionalEndpoint(reader.get(providerSettingNames.endpoint));
+    if (provider === "openai-compatible") {
+      endpointValid = endpoint !== undefined;
+      apiKeyRequired = endpoint === undefined || !endpoint.isLoopback;
+    }
+  } catch {
+    endpointValid = false;
+  }
+
+  return { provider, modelConfigured, apiKeyRequired, endpointValid };
 }
 
 function readProviderId(value: unknown): ProviderId {

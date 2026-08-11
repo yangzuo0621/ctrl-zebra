@@ -14,6 +14,7 @@ import type { CheckpointActions } from "./controllers/checkpoint-actions.js";
 import type { McpPromptActions } from "./controllers/mcp-prompt-actions.js";
 import type { McpResourceActions } from "./controllers/mcp-resource-actions.js";
 import type { McpWebviewActions } from "./controllers/mcp-webview-actions.js";
+import type { ProviderOnboardingController } from "./controllers/provider-onboarding-controller.js";
 import type { SessionRecoveryActions } from "./controllers/session-recovery.js";
 import {
   type ApprovalUiActions,
@@ -102,6 +103,7 @@ class AgentViewProvider implements WebviewViewProvider {
       resourceActions: this.options.createResourceActions?.(),
       promptActions: this.options.createPromptActions?.(),
       mcpActions: this.options.createMcpActions?.(),
+      providerOnboarding: this.options.createProviderOnboarding?.(),
     });
     this.options.reportDisplay?.();
   }
@@ -119,6 +121,7 @@ interface AgentViewProviderOptions {
   readonly createResourceActions?: () => McpResourceActions;
   readonly createPromptActions?: () => McpPromptActions;
   readonly createMcpActions?: () => McpWebviewActions;
+  readonly createProviderOnboarding?: () => ProviderOnboardingController;
 }
 
 interface RegisterAgentViewOptions extends AgentViewProviderOptions {
