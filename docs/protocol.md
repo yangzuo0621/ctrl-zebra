@@ -321,6 +321,90 @@ metadata bags are forbidden.
 - Cancellation is not a Tool Result status or error code. A cancelled run stops the tool through its
   `AbortSignal`, emits no later result, and is represented by the owning Agent lifecycle contract.
 
+## IDE context and read-only Tool DTOs (T1901)
+
+T1901 reserves a strict, additive DTO family for the IDE surface. It does not add runtime schemas or
+message handlers; T1902–T1904 may implement the DTOs only after this contract is merged. Every value
+enters the Protocol boundary as `unknown`, is validated with a strict Schema, and is rejected when an
+unknown property, invalid Unicode value, unsupported URI, or bound is encountered. The DTOs use the
+same closed/discriminated-union model as the existing Tool contracts: a variant is selected by its
+`kind`/`operation`, and no variant accepts extra properties.
+
+### Shared source and range values
+
+- `IdeUriDto` is the redacted workspace URI `{ scheme, authority, path }`. `scheme` and `authority`
+  are canonical bounded strings; `path` is a canonical forward-slash workspace-relative path of at
+  most 4,096 characters, with no leading slash, backslash, query, fragment, or dot segment. The Host
+  keeps the complete `vscode.Uri` private and maps it to this DTO only after selected-root and
+  canonical-identity checks. `fsPath`, `untitled:` documents, external files, and raw URI instances
+  never cross the boundary.
+- `IdePositionDto` uses zero-based `{ line, character }` values. `IdeRangeDto` contains `start` and
+  an exclusive `end` in the same document; reversed, non-finite, or out-of-document ranges are
+  rejected. Positions and ranges are bounded by the text and line limits in [Security](security.md).
+- `IdeSourceDto` contains `{ uri, range?, languageId?, documentVersion?, stale, truncated,
+  truncationReasons? }`. `languageId` is a bounded display hint, `documentVersion` is a non-negative
+  Host-observed revision, and `stale` means the source changed after capture. A stale value is data,
+  not permission to refresh or overwrite the current editor. `truncationReasons` is a closed set of
+  `code-points`, `utf8-bytes`, `lines`, `entries`, and `tokens` and is present whenever `truncated`
+  is true.
+- `IdeTextContextDto` contains one `source` and bounded plain-text `text`. Text is never Markdown,
+  HTML, a command, a prompt template, or an instruction-bearing Protocol field. `IdeDiagnosticDto`
+  contains a source/range, closed `severity` (`error | warning | information | hint`), bounded
+  untrusted `message`, and optional bounded `code`/`origin` display text. `IdeLanguageLocationDto`
+  contains a validated source and target range plus a closed `kind` (`definition | reference`);
+  `IdeSymbolDto` is flat and contains a bounded name, kind, range, optional selection range and
+  container label, never a recursive provider object.
+
+### Tool names, inputs, and outputs
+
+The reserved read-only Tool names and strict input shapes are:
+
+- `read_editor_context`: `{ scope: "active-editor" | "selection" }`; the model cannot supply a
+  URI, absolute path, document version, or replacement text. The Host resolves the current editor
+  and selection only after the user setting and ownership checks pass.
+- `get_diagnostics`: `{ scope: "active-file" | "workspace", path? }`; `path` is an optional
+  workspace-relative path, never a URI or host path. `workspace` scope is still the selected root
+  only and is bounded by the collection limit.
+- `find_definition` and `find_references`: `{ path, position }`, where `path` is a validated
+  workspace-relative path and `position` is an `IdePositionDto`. They call only the corresponding
+  VS Code provider command and return validated locations.
+- `list_symbols`: `{ path }` for one validated workspace-relative text document. Results are a flat,
+  bounded list and do not create an index or cache.
+
+Each input is a strict object with no additional properties. Every Tool has risk `read`; none can
+write, execute a command, invoke a Code Action, change a document, grant approval, broaden the
+workspace root, or select a different Session. The successful output is the strict union
+`IdeReadOnlyToolResultDto`:
+
+- `{ kind: "editor-context", context: IdeTextContextDto }`;
+- `{ kind: "diagnostics", source, diagnostics, stale, truncated, truncationReasons? }`;
+- `{ kind: "language-locations", operation: "definition" | "references", source, locations,
+  stale, truncated, truncationReasons? }`; or
+- `{ kind: "symbols", source, symbols, stale, truncated, truncationReasons? }`.
+
+The normal Tool Result envelope still owns call ID, name, success/error, and the one-mebibyte UTF-8
+ceiling. A cancelled operation emits no ordinary Tool Result. A provider failure maps to the existing
+bounded Tool error categories; provider objects, raw messages, stacks, commands, responses, and
+unvalidated locations are never included. `stale: true` is deterministic display information and
+never authorizes use of an old snapshot as a current editor state.
+
+### Context authority, source display, and delivery
+
+- An explicitly attached `IdeTextContextDto` is serialized as one ordinary user-context attachment
+  inside the current submission. It is not a System message, hidden policy, Tool definition, approval
+  scope, or capability declaration. Fixed source labels are provenance only; model and user text in
+  the attachment remain untrusted data.
+- The Host and Webview show the same source kind, workspace-relative path, range, language hint, and
+  stale/truncated marker before send. The Webview may remove or request a fresh capture but cannot edit
+  the URI, revision, or trust decision. Any future message carrying these DTOs must be additive and
+  correlated with the active request; an older client ignores the unknown message under the existing
+  rule rather than guessing a shape.
+- Pending context is ephemeral until the user explicitly sends it. Session persistence may retain text
+  that the user deliberately included in an ordinary user message or a non-IDE completed Tool Result
+  according to the existing persistence contract, but it never stores the live editor selection, Host
+  URI, document version, stale state, provider object, or an unsubmitted attachment as a separate
+  record. T1901 IDE Tool Results remain transient as defined by Persistence.
+
 ## Ownership
 
 - `packages/protocol` owns Schemas, inferred types, protocol constants, and public message names. It has no dependency on React, VS Code, Node.js host APIs, or model SDKs.

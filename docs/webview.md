@@ -41,6 +41,42 @@ This document defines the React Webview constraints established before T0103. It
 - Reusable presentation components receive data and callbacks through typed props and do not acquire host capabilities.
 - Components do not parse protocol envelopes, perform persistence, or contain Extension workflow decisions.
 
+## IDE context and read-only Tool projection (T1901)
+
+The Webview is a presentation surface for the T1901 IDE contract. It does not read VS Code state or
+decide whether a source is current, in scope, trusted, or authorized.
+
+- The Extension sends only Protocol-validated `Ide*Dto` projections. A feature store owns the current
+  pending attachment and read-only result projection; it never stores a `vscode.Uri`, document object,
+  provider instance, absolute `fsPath`, Trust capability, or a second host-authoritative copy.
+- The attachment card shows fixed source provenance (`Editor context`, source kind, workspace-relative
+  path, language, range, `Stale`, and `Truncated`/reason). Source text, diagnostic messages, symbol
+  names, and provider labels render as escaped plain text. They never enter the Markdown renderer,
+  `dangerouslySetInnerHTML`, URI/command handlers, dynamic styles, links, images, or fetch.
+- `Remove`, `Refresh`, `Use stale context`, and the setting toggle dispatch narrow intent-only messages.
+  The Webview cannot edit the URI, range, document version, selected root, Trust state, Tool name,
+  risk, or result. A missing/disabled setting clears the pending projection synchronously and does not
+  wait for a Host acknowledgement. An old or mismatched request, Session, Run, source, or generation
+  is ignored before state mutation.
+- A stale attachment is rendered as a blocking, non-color-only state until the user explicitly refreshes
+  or confirms `Use stale context`. A truncated attachment remains visibly truncated; the store never
+  assumes an ellipsis is complete. Cancellation, disposal, Session/Run replacement, and close invalidate
+  pending context and accept no late message. Cancellation does not render a failure Tool Result.
+- Read-only diagnostics and language-service results are display-only. The Webview does not add Code
+  Action, edit, command, approval, or automatic retry controls, and it never runs a model request when
+  a result arrives. An editor command may fill the Composer only through a Host message; the text stays
+  visible and editable until the user sends it.
+- IDE context is not placed in `getState`/`setState` as an authoritative snapshot. Restoration may retain
+  only presentation choices such as an expanded source card; it must clear text, URI, document version,
+  stale state, diagnostic content, and pending refresh. Explicitly submitted text is owned by the normal
+  chat projection, not by an IDE feature store.
+- Source attachments, refresh/remove controls, stale decisions, diagnostic lists, and symbol lists use
+  semantic elements, accessible names, visible focus, stable keys, and explicit disabled reasons. One
+  polite live region announces a discrete replacement, clear, stale, truncation, or cancellation outcome;
+  it never reads source text or every diagnostic/symbol item. Updates preserve Composer focus, selection,
+  disclosure state, and scroll position and remain operable at approximately 300px width, 200% zoom,
+  reduced motion, and all supported VS Code themes.
+
 ## Product Language and String Ownership (T1701)
 
 - The Marketplace target language is English (`en`). This is a minimum-localization policy: T1701 does not

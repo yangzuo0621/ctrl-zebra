@@ -39,6 +39,57 @@ This document defines the initial runtime boundaries for the CtrlZebra desktop V
 - Controllers coordinate a user interaction through internal ports. They must not leak VS Code types into Core or Protocol contracts.
 - `extension.ts` may construct adapters and controllers but must not become an alternate location for their behavior.
 
+## IDE context and read-only Tool boundary (T1901)
+
+T1901 establishes the boundary for editor, selection, diagnostic, and language-service data. It is a
+docs-only contract; T1902–T1905 add the individual adapters and user entry points only after this
+constraint is merged.
+
+- `apps/extension` is the sole owner of `window.activeTextEditor`, selections, `TextDocument` reads,
+  VS Code diagnostic and language-service commands, `vscode.Uri`, Workspace Trust, and the host
+  lifecycle. It maps those values into the strict `Ide*Dto` types in Protocol and never passes a VS
+  Code object, `fsPath`, provider object, or host exception to Core, Webview, persistence, or a Tool.
+- The workspace adapter keeps the canonical `vscode.Uri` private while it checks the selected root,
+  scheme, authority, URI path segments, symlinks/junctions, and the document revision. A returned
+  location that cannot be normalized and proven inside the selected root is discarded rather than
+  shown or inserted. Active editor changes never silently switch the selected root.
+- `packages/builtin-tools` owns only host-independent parsing, Tool names, result DTOs, and injected
+  `IdeContextPort`/language-service Ports. It may expose read-only Tools such as
+  `read_editor_context`, `get_diagnostics`, `find_definition`, `find_references`, and
+  `list_symbols`; it never imports VS Code or decides Trust, URI containment, freshness, or UI state.
+- `packages/core` treats an explicitly attached IDE snapshot as one ordinary, untrusted user-context
+  unit. It is never a System message, policy, Tool definition, approval scope, Workspace authorization,
+  or hidden instruction. Core budgets and truncates it with the existing Files/context budget and
+  never borrows System, History, or Tools budget to preserve it.
+- `apps/webview` receives only validated Protocol projections. It owns the visible attachment list,
+  remove/refresh interaction, and presentation state; it cannot read the editor, invoke a language
+  service, choose a URI, or turn a read-only result into a write, Code Action, command, or approval.
+- `packages/mcp-client` remains independent of VS Code and IDE context. `packages/testkit` supplies
+  deterministic Port fakes; no test or fixture starts a real language server or reads a developer
+  workspace.
+
+Host lifecycle and freshness are explicit:
+
+- Activation may register lightweight editor/diagnostic events, but it never reads the active document,
+  scans a workspace, starts a provider, or injects context in the background. An explicit user
+  attachment or model Tool call starts one bounded capture.
+- Each capture records the Host-owned source URI, selection/range, language identifier, and document
+  version privately before collecting text. Before a projection is delivered, the Host rechecks the
+  active editor/selection, selected root, Trust state, setting, and document version. A changed
+  source is marked `stale` and requires an explicit refresh or user decision; a pending capture that
+  loses its owner is dropped and cannot arrive as a late injection.
+- Each capture and read-only Tool call owns an `AbortController` connected to the Run, Session switch,
+  editor/workspace change, setting disable, Trust loss, and Extension disposal. The owner closes the
+  delivery gate before cleanup. Cancellation is not a Tool Result: after it, no text, diagnostic,
+  language result, retry, persistence mutation, approval, or UI update may be emitted.
+- Read-only language-service calls use only the existing VS Code provider commands and return data;
+  they never execute Code Actions, edits, commands, network requests, or an index. Provider output is
+  untrusted and is bounded, URI-validated, and source-labelled before it can become a Tool Result.
+- The same ownership and gate apply in a limited untrusted workspace. Read-only capture may remain
+  available when the Extension declares that capability, but it never grants Trust or enables a write,
+  execute, MCP, or other side-effecting operation. If VS Code or a provider refuses an operation, the
+  Host returns a stable unavailable outcome without a hidden fallback.
+
 ## Lazy Initialization
 
 - Activation creates only the registrations and lightweight state required to make the extension available.
@@ -311,6 +362,22 @@ This document defines the initial runtime boundaries for the CtrlZebra desktop V
   Provider retry policy may perform at most two retries after the initial attempt, and tool
   repetition detection must pause at a configured threshold no greater than 10 consecutive matching
   calls. Cancellation ends every recovery, retry, delay, summary, and tool-loop action immediately.
+
+IDE context uses the same budget authority rather than creating a second quota:
+
+- One editor/selection text value is bounded before allocation to at most 65,536 Unicode code points,
+  2,000 lines, and 262,144 UTF-8 bytes. A diagnostic or language-service collection is at most 256
+  entries; every message, label, path, symbol name, and range is independently bounded by the
+  Protocol/Security string limits. The complete normalized Tool Result remains at most the existing
+  1,048,576-byte UTF-8 ceiling.
+- The Host estimates tokens before context construction. IDE content may consume only the currently
+  allocated Files budget (at most 25% of the declared model window, never more than the existing
+  2,000,000-token context window); an unknown, invalid, or over-budget estimate follows the stable
+  bounded truncation/limit outcome and never spends another category's budget. DTOs do not expose a
+  token estimate as authority.
+- Every limit decision is represented by structured `truncated`/`truncationReasons` metadata. A text
+  ellipsis, omitted location, or shorter array without that metadata is invalid and cannot be treated
+  as complete source.
 
 ### Multi-turn history projection
 

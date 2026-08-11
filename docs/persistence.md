@@ -78,8 +78,9 @@ written and how they rebuild repository state.
   executes, retries, replays, or approves anything found in persistence.
 - The Host projects, in sequence order, every validated user message; assistant text only when the
   owning Run reached normal `completed`; and complete assistant Tool Call plus matching Tool Result
-  pairs. Reasoning, status, approval, usage, summary, MCP attachment metadata, and Webview-only
-  source fields are excluded from model history. A Tool pair is retained as one indivisible unit.
+  pairs. Reasoning, status, approval, usage, summary, MCP attachment metadata, Webview-only source
+  fields, and the T1901 IDE read-only Tool projections are excluded from model history. A retained
+  ordinary Tool pair is one indivisible unit.
 - A `truncated`, `cancelled`, `failed`, or recovery-`interrupted` Run keeps its user message. Partial or empty
   assistant text is not injected. A complete Tool pair committed before the terminal outcome may be
   retained; an open call, orphan Result, duplicate call ID, or mismatched call/name pair is dropped
@@ -88,6 +89,29 @@ written and how they rebuild repository state.
 - The newest user message is appended by the next Run after the prior projection has passed Schema,
   identity, pair, and bound checks. Context pruning may remove old units later, but it never rewrites
   persisted history or removes the newest user message to conceal an overflow.
+
+## IDE context and read-only Tool persistence (T1901)
+
+IDE observations are ephemeral by default and do not change the version `1` directory layout,
+manifest, JSONL envelope, or existing event meanings:
+
+- Pending or unsubmitted editor/selection attachments, active-editor identity, selected range,
+  document version, stale/truncation state, diagnostics, language-service results, provider objects,
+  and Host URI identity are never written to `manifest.json`, `messages.jsonl`, `events.jsonl`,
+  Webview restoration, logs, fixtures, or a new memory store. Closing the attachment, switching the
+  editor/Session, cancellation, Trust loss, or disposal discards it without a persistence side effect.
+- The reserved IDE read-only Tool Calls and Results are transient context projections, not durable
+  model-history Tool pairs. A completed Run may retain only the normal user message and existing
+  persisted events; IDE result text, source metadata, and provider output are not replayed on Session
+  recovery. This prevents a later Run from silently inheriting an editor snapshot that may no longer
+  exist or may have changed.
+- If the user explicitly copies or sends bounded IDE text as ordinary user content, that resulting
+  user message follows the existing Session persistence, deletion, and retention rules. The source
+  URI, document version, stale marker, and UI attachment metadata remain excluded unless a future
+  task defines a separately reviewed persisted projection.
+- No migration, retention timer, pruning rule, or format-version bump is introduced by T1901. A
+  future task that wants durable IDE provenance must add a strict version-compatible event, explicit
+  deletion behavior, privacy review, and fixtures before implementation.
 
 ### Corruption, tail damage, and compatibility
 

@@ -29,6 +29,9 @@
   和受限技术 Markdown。内容呈现不得扩大 CSP、命令、文件、网络、HTML 或未批准 URI 能力。
 - Extension 可以在用户控制和工作区范围内读取活动编辑器、选区、诊断及 VS Code 语言服务结果，
   作为有界、不可信、可关闭的上下文或只读 Tool Result；不建立自有语义、向量或代码索引。
+  这些能力只通过 Extension-owned Host adapter 接入；跨边界只允许 `Ide*Dto` 和普通用户上下文，
+  不把 VS Code 对象、绝对主机路径、编辑器快照或 Provider 结果变成 System 指令、授权材料或
+  跨会话记忆。
 - 一个用户显式配置并连接的本地 stdio MCP Server 可以提供 Tools、Resources（含 Templates）和
   Prompts。MCP Tool 进入现有 Core Tool、审批、取消和结果边界；Resource 与 Prompt 只通过用户或
   应用控制的有界路径进入普通不可信上下文。阶段 18 获准显式 `modern-only | dual` 模式，闭集支持
@@ -166,6 +169,10 @@ ctrl-zebra/
 - `propose_file_edit`
 - `run_command`
 
+T1901 还为后续阶段定义只读 IDE Tool 的 Host-independent 输入、输出和边界契约；这些工具只能
+依赖注入的 `IdeContextPort`/语言服务 Port，不得导入 VS Code、读取宿主 URI 或自行决定
+Workspace Trust。T1901 不实现这些工具；T1902–T1904 分别接入其宿主适配器和执行路径。
+
 实际文件操作由 Extension 中的适配器完成。
 
 ### 4.5 `apps/extension`
@@ -176,6 +183,8 @@ ctrl-zebra/
 - 依赖装配。
 - 验证并将 Webview 命令分派给拥有相应生命周期的控制器。
 - 实现文件、编辑器、Diff、存储、日志和密钥适配器。
+- 拥有活动编辑器/选区、诊断和语言服务的 VS Code API 调用、URI 规范化、Workspace Trust
+  检查、取消和 Disposable；只向 Core/Protocol 发布有界 `Ide*Dto`，不把 VS Code 类型下沉。
 - 管理 Disposable 和扩展生命周期。
 
 `extension.ts` 只允许做注册和装配，不放业务流程。
@@ -190,6 +199,7 @@ ctrl-zebra/
 - Tool Call 状态卡片。
 - 审批界面。
 - 会话选择和设置。
+- 显示用户可移除的 IDE 上下文来源、范围、陈旧/截断状态和只读 Tool 结果。
 
 约束：
 
@@ -264,6 +274,7 @@ mcp-client → extension
 | Session Repository、事件和恢复投影 | [`packages/core/src/session-repository.ts`](../../packages/core/src/session-repository.ts) 与 [`packages/protocol/src/persistence.ts`](../../packages/protocol/src/persistence.ts) | [Persistence Contract](../persistence.md) |
 | Approval 请求、决定、消费和失效 | [`packages/core`](../../packages/core/src/index.ts) 与 [`packages/protocol/src/approval.ts`](../../packages/protocol/src/approval.ts) | [Security：Approval Boundary](../security.md#approval-boundary) |
 | MCP Client、Tool、Resource 与 Prompt 投影 | [`packages/mcp-client`](../../packages/mcp-client/src/index.ts) 与 [`packages/protocol`](../../packages/protocol/src/index.ts) | Architecture、Security、Protocol、Persistence、Webview 和 UX 中各自拥有的 MCP 章节 |
+| IDE 上下文与只读 Tool DTO、来源和生命周期 | （T1902–T1904 的 Extension adapters、`packages/builtin-tools` 与 `packages/protocol` 公共入口） | [Architecture：IDE context and read-only Tool boundary](../architecture.md#ide-context-and-read-only-tool-boundary-t1901)、[Protocol：IDE context and read-only Tool DTOs](../protocol.md#ide-context-and-read-only-tool-dtos-t1901)、[Security](../security.md#ide-context-and-read-only-tool-boundary-t1901)、[Persistence](../persistence.md#ide-context-and-read-only-tool-persistence-t1901)、[UX](../ux.md#ide-context-and-read-only-tool-experience-t1901)、[Webview](../webview.md#ide-context-and-read-only-tool-projection-t1901) |
 
 跨模块契约共同遵守以下不变量：
 
@@ -272,6 +283,8 @@ mcp-client → extension
 - VS Code、Node Host 和具体 SDK 类型不越过声明的适配器或包公共入口。
 - Session 状态只经 Core 状态机改变；Tool、Provider、Webview 和持久化适配器不自行推进 Agent Loop。
 - Secret、授权材料、原始第三方错误和不可信无限内容不得进入 Webview、持久化、日志或测试 fixture。
+- 编辑器、选区、诊断和语言服务数据必须带有 Host-owned 来源和有界状态；它们是普通不可信用户
+  上下文或只读 Tool Result，不能成为 System 指令、能力声明、审批材料或隐式跨会话记忆。
 - 修改公共契约时先更新拥有其语义的领域文档；只有产品范围、技术基线或模块边界变化时才修改本
   文档。
 
