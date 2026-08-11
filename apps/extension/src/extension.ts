@@ -4,6 +4,7 @@ import { performance } from "node:perf_hooks";
 import { env, memoryUsage, platform } from "node:process";
 
 import { ControlledMcpClient } from "@ctrl-zebra/mcp-client";
+import { isApprovedExternalLink } from "@ctrl-zebra/protocol";
 import {
   createGeminiModelGateway,
   createOpenAICompatibleModelGateway,
@@ -15,6 +16,7 @@ import {
   type ExtensionContext,
   ProgressLocation,
   Uri,
+  env as vscodeEnv,
   window,
   workspace,
 } from "vscode";
@@ -557,6 +559,33 @@ export function activate(context: ExtensionContext): void {
           },
         }),
       createProviderOnboarding,
+      openExternalLink: (href) => {
+        if (!isApprovedExternalLink(href)) {
+          return;
+        }
+
+        try {
+          const uri = Uri.parse(href, true);
+          if (uri.scheme !== "http" && uri.scheme !== "https") {
+            return;
+          }
+          void vscodeEnv.openExternal(uri).then(undefined, () => {
+            logger.error({
+              event: "webview_external_link_failed",
+              component: "agent_view",
+              outcome: "failure",
+              errorCode: "external_open_failed",
+            });
+          });
+        } catch {
+          logger.error({
+            event: "webview_external_link_failed",
+            component: "agent_view",
+            outcome: "failure",
+            errorCode: "external_uri_invalid",
+          });
+        }
+      },
     }),
   );
 

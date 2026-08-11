@@ -104,6 +104,7 @@ class AgentViewProvider implements WebviewViewProvider {
       promptActions: this.options.createPromptActions?.(),
       mcpActions: this.options.createMcpActions?.(),
       providerOnboarding: this.options.createProviderOnboarding?.(),
+      openExternalLink: this.options.openExternalLink,
     });
     this.options.reportDisplay?.();
   }
@@ -122,6 +123,7 @@ interface AgentViewProviderOptions {
   readonly createPromptActions?: () => McpPromptActions;
   readonly createMcpActions?: () => McpWebviewActions;
   readonly createProviderOnboarding?: () => ProviderOnboardingController;
+  readonly openExternalLink?: (href: string) => void;
 }
 
 interface RegisterAgentViewOptions extends AgentViewProviderOptions {

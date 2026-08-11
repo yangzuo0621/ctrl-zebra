@@ -34,6 +34,7 @@ export interface WebviewHost {
   saveProviderKey?(requestId: string): void;
   selectProviderModel?(requestId: string): void;
   openProviderSettings?(requestId: string): void;
+  openExternal?(requestId: string, href: string): void;
   readMcpResource?(
     requestId: string,
     serverId: string,
@@ -186,6 +187,14 @@ const webviewHost: WebviewHost = {
       protocolVersion,
       type: "webview/provider-open-settings",
       requestId,
+    });
+  },
+  openExternal(requestId, href) {
+    getVsCodeApi().postMessage({
+      protocolVersion,
+      type: "webview/open-external-link",
+      requestId,
+      href,
     });
   },
   readMcpResource(requestId, serverId, generation, selection) {

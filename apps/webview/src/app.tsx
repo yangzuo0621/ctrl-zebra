@@ -166,6 +166,9 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
   const hasInlineApproval =
     approval !== undefined &&
     messages.some((m) => m.toolCalls.some((tc) => tc.call.id === approval.approval.scope.call.id));
+  const handleOpenLink = (href: string) => {
+    host.openExternal?.(createRequestId?.() ?? crypto.randomUUID(), href);
+  };
   return (
     <div className={styles.shell}>
       <header className={styles.header}>
@@ -327,7 +330,10 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
                     onReject={() => approvalStore.getState().decide("denied")}
                   />
                 ))}
-                <MarkdownMessage content={messageContent(message, status)} />
+                <MarkdownMessage
+                  content={messageContent(message, status)}
+                  onOpenLink={handleOpenLink}
+                />
               </li>
             ))
           )}

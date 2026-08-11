@@ -1241,4 +1241,40 @@ describe("bindWebviewMessageController", () => {
     await Promise.resolve();
     expect(actions).toEqual(["save-key"]);
   });
+
+  it("dispatches only validated HTTP(S) links to the Extension opener", () => {
+    let messageListener: ((message: unknown) => void) | undefined;
+    const opened: string[] = [];
+
+    bindWebviewMessageController({
+      channel: {
+        onDidReceiveMessage(listener) {
+          messageListener = listener;
+          return { dispose() {} };
+        },
+        postMessage() {
+          return Promise.resolve(true);
+        },
+      },
+      lifetime: { onDidDispose: () => ({ dispose() {} }) },
+      reportDeliveryFailure: () => {},
+      chatRunner: idleChatRunner,
+      openExternalLink: (href) => opened.push(href),
+    });
+
+    messageListener?.({
+      protocolVersion,
+      type: "webview/open-external-link",
+      requestId: "link-1",
+      href: "https://example.test/docs",
+    });
+    messageListener?.({
+      protocolVersion,
+      type: "webview/open-external-link",
+      requestId: "link-2",
+      href: "javascript:alert(1)",
+    });
+
+    expect(opened).toEqual(["https://example.test/docs"]);
+  });
 });

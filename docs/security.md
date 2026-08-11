@@ -36,6 +36,32 @@ This document defines the Webview security constraints established before T0104.
 - If a future feature must render formatted untrusted markup, it requires a narrowly configured, maintained sanitizer and tests for script elements, event-handler attributes, dangerous URLs, SVG, MathML, and mutation-based bypasses.
 - HTML attributes and CSP metadata assembled by the Extension are escaped before interpolation. Validation and sanitization complement CSP; CSP is not their replacement.
 
+## Restricted Markdown Boundary (T1702)
+
+- Answer messages use the pinned `markdown-it` 14.3.0 parser with `html: false`, `linkify: false`,
+  `breaks: true`, and `typographer: false`. The image rule is disabled, so model output cannot
+  create a remote image, media, or font request. No Markdown plugin may add a resource, HTML, or
+  executable surface without a new task-specific security review.
+- The Webview consumes parser tokens and creates a fixed React element tree. It never calls
+  `render()`, `dangerouslySetInnerHTML`, `innerHTML`, or an equivalent HTML sink. Raw HTML and
+  unsupported tokens remain escaped text; the supported presentation set is headings, ordered and
+  unordered lists, fenced/indented code, inline code, emphasis, block quotes, tables, and links.
+- A link is actionable only when its parsed destination is an absolute `http` or `https` URL within
+  the 2,048-character protocol bound and contains no control characters or spaces. `javascript:`,
+  `data:`, `file:`, `vscode:`, protocol-relative, relative, and malformed destinations are rendered
+  as non-actionable text. Bare URLs are not auto-linked. Link clicks never navigate the Webview:
+  the Webview sends a validated `webview/open-external-link` intent and the Extension re-validates
+  the destination before calling `vscode.env.openExternal`.
+- The renderer parses at most 262,144 Unicode code points and 1,048,576 UTF-8 bytes from one
+  message. It keeps the largest complete prefix, marks the visible projection as shortened, and
+  never builds a larger parsed tree merely to truncate it afterward. A streaming message may be
+  reparsed while a fence or inline construct is unfinished; cancellation, terminal status, or
+  Session replacement prevents further deltas and link actions from reaching the renderer.
+- Code-copy controls copy only the bounded code text through the Webview clipboard API. Copying
+  does not move focus, announce token fragments, or grant any host capability; failures remain a
+  local UI state. Reasoning, MCP Resource, Prompt, and Tool projections remain plain text and never
+  enter this answer Markdown renderer.
+
 ## Reasoning Summary Boundary
 
 - Reasoning summaries are untrusted model output with the same confidentiality and injection risk
