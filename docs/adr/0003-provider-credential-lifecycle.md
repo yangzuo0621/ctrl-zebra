@@ -33,19 +33,19 @@ settings field, or a new package boundary.
   `absent` result (fulfilled `get` with `undefined`) produces a fixed no-op and does not call
   `ApiKeySecretStorage.delete`; a `present` result (fulfilled `get` with a non-`undefined` value)
   permits exactly one adapter delete call. A rejected `get` is `unavailable`, never absent: no delete
-  or rotate mutation is invoked, and the command returns indeterminate with fixed safe retry/settings
-  guidance. The official API does not promise idempotent delete; a fulfilled adapter call is a
+  mutation is invoked, and the command returns indeterminate with fixed safe retry/settings guidance.
+  Rotation has no presence preflight. The official API does not promise idempotent delete; a fulfilled adapter call is a
   completed command outcome and a rejected call is indeterminate, followed by presence-only
   reconciliation and fixed safe retry/settings guidance.
 - Rotation uses a new password-masked input with no prefill. It invokes the existing
-  `ApiKeySecretStorage.save` once after validation. It first asks the presence adapter; `present` or
-  `absent` permits that one save, while `unavailable` invokes no rotation mutation and returns fixed
-  safe indeterminate retry/settings guidance. A fulfilled adapter save is the replacement commit
-  boundary; a rejected call is indeterminate because the official API only promises `Thenable<void>`
-  and offers no transaction, compare-and-swap, or rollback guarantee. The command does not read the
-  Secret, compensate, or claim that the old value remains; it performs presence-only reconciliation
-  and gives fixed safe retry/settings guidance. Cancellation before the adapter call guarantees no
-  side effect; once the call starts, it cannot be reported as a reversible cancellation.
+  `ApiKeySecretStorage.save` once after validation, including when no prior key exists (rotation is
+  equivalent to a first save). It performs no presence preflight. A fulfilled adapter save is the
+  replacement commit boundary; a rejected call is indeterminate because the official API only
+  promises `Thenable<void>` and offers no transaction, compare-and-swap, or rollback guarantee. The
+  command does not read the Secret, compensate, or claim that the old value remains; it performs
+  presence-only reconciliation after settlement and gives fixed safe retry/settings guidance when
+  that reconciliation is unavailable. Cancellation before the adapter call guarantees no side effect;
+  once the call starts, it cannot be reported as a reversible cancellation.
 - Save, delete, rotate, and presence operations are serialized per Provider from prompt start through
   mutation settlement, presence-only reconciliation, and result notification, including T1603 status
   reads. The queue is released only after settlement and reconciliation. It stores only promises;

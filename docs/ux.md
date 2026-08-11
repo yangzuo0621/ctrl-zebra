@@ -53,8 +53,8 @@ CtrlZebra 应让用户在不理解内部 Agent 状态机的情况下完成以下
   取消时保证没有调用和状态副作用；调用开始后不把取消伪装成可回滚结果。删除先执行 presence-only
   查询：fulfilled `undefined` 仅表示 absent，显示固定 no-op 且不调用 delete；fulfilled 非 `undefined`
   才表示 present 并允许一次 adapter delete；get rejected 为 unavailable，显示“状态无法确认”及固定
-  的重试或打开设置下一步，不调用 delete/rotate mutation。轮换输入验证后同样先读 presence，present/
-  absent 才允许一次 adapter save，unavailable 不写入。fulfilled 后显示对应的已提交/已删除结果；
+  的重试或打开设置下一步，不调用 delete mutation。轮换输入验证后直接调用一次 adapter save（无现有
+  key 时等价首次保存，不做 presence preflight）。fulfilled 后显示对应的已提交/已删除结果；
   mutation rejected 或 reconciliation unavailable 后显示“状态无法确认”，并仅使用 tri-state presence
   reconciliation，不声称旧值仍在或已删除。Provider 身份可显示在删除确认中，但 Secret、长度、前后缀和
   任何推断信息不可见。T1603 public status 的 unavailable 走 safe failure/retain-last-projection 路径，

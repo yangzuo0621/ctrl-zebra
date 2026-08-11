@@ -460,11 +460,10 @@ entry, not only the intermediate object.
   retry/settings guidance.
 - A rotation command always opens a new password-masked input with no prefilled value. It keeps the
   input open across focus loss, rejects an empty submitted value before storage, and treats dismissal
-  as cancellation. After validation, the coordinator reads presence once; `present` or `absent` may
-  proceed to exactly one existing `ApiKeySecretStorage.save`, while `unavailable` invokes no rotation
-  mutation and returns fixed safe indeterminate retry/settings guidance. The adapter delegates to the
-  Provider's stable-key `SecretStorage.store`; it does not read, delete, or clear the old value first.
-  A fulfilled adapter save is the replacement commit boundary. A rejected write has an
+  as cancellation. After validation it invokes exactly one existing `ApiKeySecretStorage.save`,
+  including when no prior key exists; rotation is equivalent to a first save in that case. The adapter
+  delegates to the Provider's stable-key `SecretStorage.store`; it does not read, delete, or clear the
+  old value first. A fulfilled adapter save is the replacement commit boundary. A rejected write has an
   indeterminate state because the VS Code API provides no
   transaction, compare-and-swap, or rollback guarantee; the command must not read the Secret,
   compensate, or claim that the old value remains. It performs a fresh presence-only reconciliation
@@ -479,8 +478,9 @@ entry, not only the intermediate object.
 - Any credential presence/status projection uses a dedicated Host-owned presence adapter with an
   internal tri-state result: `present` only when `get` fulfills with a non-`undefined` value, `absent`
   only when `get` fulfills with `undefined`, and `unavailable` when `get` rejects. `unavailable` is
-  never converted to `absent`/`false`; delete and rotation coordinators do not invoke their mutation
-  in that case and instead return a fixed safe indeterminate retry/settings outcome. The unavoidable
+  never converted to `absent`/`false`; a delete preflight does not invoke delete in that case and
+  instead returns a fixed safe indeterminate retry/settings outcome. Rotation has no presence
+  preflight; an unavailable post-save reconciliation makes its observed outcome indeterminate. The unavoidable
   VS Code `SecretStorage.get` result is accepted inside the adapter, compared only with
   `=== undefined`, and immediately discarded; the adapter never checks length, prefix, suffix, hash,
   or content and never returns the string to its caller.

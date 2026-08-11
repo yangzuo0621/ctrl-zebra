@@ -40,13 +40,12 @@ Provider、已配置/部分配置/无配置、键盘和焦点、错误恢复、�
 提供用户可发现的删除和替换入口；删除前显示 Provider 身份但不显示 Secret；轮换使用新的遮蔽输入，
 只有现有 `ApiKeySecretStorage.save` fulfilled 后才将新值视为提交。取消若发生在 storage side effect 前则
 不调用适配器；调用开始后的 rejected 结果为 indeterminate，不读取 Secret、不补偿写入或声称旧值仍在，
-而是进行 tri-state presence reconciliation 并给出固定安全重试/设置提示。轮换验证后先由现有 presence
-adapter 查询：`present` 或 `absent` 才允许调用一次现有 adapter save，`unavailable` 不调用 rotate mutation，
-直接返回 indeterminate 与固定安全重试/设置提示。删除确认后先由现有 presence
+而是进行 tri-state presence reconciliation 并给出固定安全重试/设置提示。轮换验证后直接调用一次现有
+adapter save（无现有 key 时等价首次保存，不做 presence preflight）。删除确认后先由现有 presence
 adapter 查询：fulfilled `undefined` 为 `absent`，返回固定 no-op 且不调用 delete；fulfilled 非 `undefined`
-为 `present`，才调用一次现有 adapter delete；get rejected 为 `unavailable`，不调用 delete 或 rotate mutation，
-直接返回 indeterminate 与固定安全重试/设置提示。VS Code API 不保证 delete 幂等，mutation rejected 同样
-是 indeterminate。状态查询只回答是否存在，presence adapter 只能将不可避免的 `get` 结果与 `undefined`
+为 `present`，才调用一次现有 adapter delete；get rejected 为 `unavailable`，不调用 delete mutation，
+直接返回 indeterminate 与固定安全重试/设置提示。VS Code API 不保证 delete 幂等，mutation rejected 或
+post-mutation reconciliation unavailable 同样是 indeterminate。状态查询只回答是否存在，presence adapter 只能将不可避免的 `get` 结果与 `undefined`
 比较后立即丢弃，不检查长度/前后缀/内容。删除和轮换为
 Extension Host-only Command Palette workflows，不扩展 T1603 Onboarding、Webview 或 Protocol；同一
 Provider 的 save/delete/rotate/presence 命令必须等待 mutation settlement 与 reconciliation 后再释放。

@@ -168,17 +168,17 @@ This document defines the initial runtime boundaries for the CtrlZebra desktop V
 - T1604 extends that same Host-only boundary with per-Provider delete and rotate commands. Delete
   confirmation projects only the closed Provider display label and a generic consequence; it does
   not read or display a Secret. Rotation collects a fresh password-masked value and invokes exactly
-  one `ApiKeySecretStorage.save` for the stable key without clearing the old value first. After
-  validation, rotation first asks the presence adapter: `present` or `absent` permits that one save,
-  while `unavailable` invokes no rotation mutation and returns fixed safe indeterminate retry/settings
-  guidance. A fulfilled adapter save is the replacement commit boundary; a rejected call is
-  indeterminate because the VS Code API exposes no transaction, compare-and-swap, or rollback guarantee.
+  one `ApiKeySecretStorage.save` for the stable key without clearing the old value first, including
+  when no prior key exists (rotation is equivalent to a first save in that case). A fulfilled adapter
+  save is the replacement commit boundary; a rejected call is indeterminate because the VS Code API
+  exposes no transaction, compare-and-swap, or rollback guarantee.
   Delete first asks the
   existing Host-owned presence adapter; an `absent` result is a fixed no-op and does not invoke
   `ApiKeySecretStorage.delete`, while a `present` result permits exactly one adapter delete call. A
-  presence `unavailable` result (including a rejected `get`) is never treated as absent: no delete or
-  rotate mutation is invoked, and the command returns fixed safe indeterminate retry/settings
-  guidance. A fulfilled adapter delete is a completed command outcome; a rejected call is
+  presence `unavailable` result (including a rejected `get`) is never treated as absent: a delete
+  preflight invokes no delete and returns fixed safe indeterminate retry/settings guidance. Rotation
+  has no presence preflight; an unavailable post-save reconciliation makes the observed outcome
+  indeterminate. A fulfilled adapter delete is a completed command outcome; a rejected call is
   indeterminate. After either mutation settles, the Host performs a presence-only reconciliation and
   reports fixed safe retry/settings guidance when the state cannot be determined; it never reads or
   compensates with a Secret value. Save, delete, rotate, and presence handlers for one Provider are
