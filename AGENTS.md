@@ -12,8 +12,10 @@ verifiable, and consistent with CtrlZebra's architecture.
 - The linked active phase specification owns each task's goal, deliverables, tests, exclusions,
   prerequisites, and phase gate. Active and planned phases live under `docs/roadmap/phases/`;
   completed specifications live under `docs/roadmap/archive/`.
-- `docs/roadmap/product-foundation.md` owns the first-phase product scope, technical baseline,
-  module boundaries, interface drafts, test layers, and definition of done.
+- `docs/roadmap/product-foundation.md` owns the current authorized product scope, technical
+  baseline, module boundaries, cross-module contract map, product-level verification requirements,
+  and definition of done. Exact interfaces and schemas remain owned by their package public entry
+  points and applicable domain documents.
 - Do not expand work through opportunistic refactoring, speculative abstractions, dependency
   upgrades, or later-task changes.
 
@@ -46,10 +48,9 @@ the conflict through change control rather than choosing the convenient rule.
 
 ### 1.2 Scope Limits and Maintenance
 
-Phase 1 remains limited to the desktop VS Code Extension in the product foundation. Unless the
-product foundation and roadmap are updated first, it excludes multi-agent features, MCP, browser
-automation, automatic Git commits or PRs, SQLite, vector databases, semantic indexes, Web
-Extensions, and cloud accounts, sync, or telemetry backends.
+The product remains limited to the authorized desktop VS Code Extension scope in the product
+foundation. Unless the product foundation and roadmap are updated first, its explicit exclusions
+remain out of scope.
 
 A small behavior-preserving cleanup may be a standalone maintenance change only when it does not
 change architecture, public contracts, persisted data, user behavior, or task order. Keep
@@ -63,9 +64,10 @@ Allowed dependency directions:
 
 ```text
 webview ───────────────→ protocol
-extension ─────────────→ protocol + core + providers + builtin-tools
+extension ─────────────→ protocol + core + providers + builtin-tools + mcp-client
 providers ─────────────→ core contracts
 builtin-tools ─────────→ core contracts + protocol DTOs
+mcp-client ────────────→ core contracts
 core ──────────────────→ protocol
 testkit ───────────────→ core contracts + protocol
 ```
@@ -82,6 +84,8 @@ testkit ───────────────→ core contracts + protoc
   boundary input as `unknown` and validate it before dispatch, persistence, or execution.
 - `packages/builtin-tools` depends only on Core contracts and Protocol DTOs; host adapters perform
   workspace operations.
+- Among CtrlZebra packages, `packages/mcp-client` depends only on Core contracts. Its MCP SDK types
+  remain private; Extension owns real process, configuration, Trust, and lifecycle adapters.
 - Import packages only through declared public entry points. Cross-package deep imports and
   circular dependencies are forbidden.
 - Cancellation is a distinct outcome, not an ordinary Provider or Tool failure. No deltas, tools,

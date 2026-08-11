@@ -1,108 +1,67 @@
 # CtrlZebra 产品与技术基础规格
 
-本文档保存第一阶段的产品范围、技术基线、模块边界、核心接口草案、测试分层和完成定义，
-并记录第一阶段完成后经过路线图批准的范围扩展。任务顺序与状态以
-[实施计划索引](../implementation-plan.md) 为准。
+本文档只保存当前获准的产品范围、技术基线、模块边界、跨模块契约地图、产品级验证要求和完成
+定义。任务顺序、实施状态和完成证据以[实施计划索引](../implementation-plan.md)为准；具体运行时、
+安全、协议、持久化、Webview 和体验语义由对应领域文档拥有；历史授权过程保留在阶段归档和 ADR，
+不在这里重复维护。
 
-## 1. 第一阶段产品范围
+## 1. 当前授权产品范围
 
-### 1.1 第一阶段必须实现
+本节同时包含已经实现和尚待路线图任务交付的获准能力。它只决定产品边界，不代表实施状态，也不
+提前批准 DTO、Tool 名称、持久化字段、状态转换、错误码、算法、依赖或安全实现。
 
-- VS Code Activity Bar 中的 Agent 侧边栏。
-- 创建本地会话并发送用户消息。
-- 使用一个模型供应商进行流式文本生成。
-- 当 Provider 正式流事件实际返回用户可见推理摘要时，在对话中以独立、可选且有界的“推理摘要”
-  展示；该内容不是模型原始、隐藏或完整思维链。
-- 取消正在进行的模型请求。
-- `list_files`、`read_file`、`search_files` 三个只读工具。
-- 模型发起 Tool Call 后，插件执行工具并继续模型循环。
-- 提出文本文件修改并显示 Diff。
-- 用户批准后通过 `WorkspaceEdit` 应用修改。
-- 会话消息和状态持久化。
-- VS Code 重启后恢复已完成或中断的会话。
-- API Key 使用 `SecretStorage` 保存。
-- 基础日志、错误处理和 Token 使用量显示。
+### 1.1 获准能力
 
-### 1.2 第一阶段明确不做
+- 产品形态保持为桌面 VS Code Extension，通过 Activity Bar Agent 侧边栏提供本地优先的对话和
+  工作区协作体验；不引入云账户、同步或遥测后端。
+- 用户可以创建、恢复和显式续接本地多轮 Session；历史重建、上下文裁剪、Token Usage、截断和
+  溢出恢复保持取消、审批、持久化兼容和资源上限。后续获准重新生成、编辑重发、工作区文件引用、
+  会话删除、历史清空、保留策略及全部 CtrlZebra-owned 本地数据清除。
+- OpenAI、Gemini 和 OpenAI-compatible 三个 Provider 通过统一的 Provider-neutral Runtime 提供
+  流式文本、Tool Calling、可选且有界的用户可见推理摘要、受控重试、稳定错误和 Token Usage。
+  用户可以保存、删除、轮换凭据，选择或手工配置模型，并主动执行不携带工作区或会话内容的最小
+  连接与能力检查；无法可靠判断的能力显示为未知。凭据只由 Extension-owned `SecretStorage` 保存。
+- 内置工作区能力包括有界文件列举、读取、搜索、正则搜索、文本修改提议、命令执行，以及后续获准
+  的创建、删除、重命名和多文件原子编辑。任何副作用继续服从 Workspace Trust、规范路径、精确
+  一次性审批、可审阅 Diff、`WorkspaceEdit` 或等价原子写入、取消、结果限额和可恢复 Checkpoint。
+  Model 发起的 Tool Call 经受控执行产生 Tool Result 后，才可继续 Agent Loop。
+- Webview 提供流式消息、Tool 和审批状态、Session 恢复、Token Usage、可访问交互、一致产品语言
+  和受限技术 Markdown。内容呈现不得扩大 CSP、命令、文件、网络、HTML 或未批准 URI 能力。
+- Extension 可以在用户控制和工作区范围内读取活动编辑器、选区、诊断及 VS Code 语言服务结果，
+  作为有界、不可信、可关闭的上下文或只读 Tool Result；不建立自有语义、向量或代码索引。
+- 一个用户显式配置并连接的本地 stdio MCP Server 可以提供 Tools、Resources（含 Templates）和
+  Prompts。MCP Tool 进入现有 Core Tool、审批、取消和结果边界；Resource 与 Prompt 只通过用户或
+  应用控制的有界路径进入普通不可信上下文。阶段 18 获准显式 `modern-only | dual` 模式，闭集支持
+  modern `2026-07-28` 与 legacy `2025-11-25`，并遵循
+  [ADR 0002](../adr/0002-mcp-dual-era-stdio-compatibility.md)；现有配置不静默启用 dual。Server 进程、
+  配置、Workspace Trust、启动批准和完整进程树清理继续由 Extension 拥有；Model、Webview 和
+  工作区内容不能创建或扩大 Server 配置。
+- Preview/GA 工程范围包括覆盖率与跨平台 CI、仓库治理、受审查依赖更新、数据迁移或只读降级、
+  单次 Run 成本护栏、用户主动脱敏诊断导出、性能与资源预算、许可证/SBOM/VSIX 内容审计、可重复
+  发布流水线和 Marketplace 证据。实际发布仍需单独明确授权。
 
-- 多 Agent 或子 Agent。
-- 第一阶段内不实现 MCP；第一阶段完成后的阶段 14 授权范围见 1.3。
-- 浏览器自动化。
-- 图片生成或多模态文件解析。
-- 通过提示词要求、额外模型调用或 Host 推断生成、补写或重建模型思维过程。
-- 自定义 Modes。
-- Git 自动提交或自动创建 PR。
-- 无审批的终端命令执行。
-- Web 版 VS Code Extension。
-- 云端账户、同步和遥测后端。
-- SQLite、向量数据库或代码语义索引。
+### 1.2 明确排除
 
-这些能力必须在基础 Agent Loop、审批、取消和会话恢复稳定后再评估。
+- 多 Agent、子 Agent、Skills、跨会话记忆、自定义 Modes、运行中插话和多模态输入或文件解析。
+- 浏览器自动化、自动 Git 提交或 PR、自动发布，以及无精确审批的命令或工作区副作用。
+- Web Extension、云端账户、同步、遥测后端、SQLite、向量数据库、自建语义或代码索引。
+- 通过提示词、额外模型调用或 Host 推断生成、补写或重建模型隐藏或完整思维过程。
+- 旧于 MCP `2025-11-25` 或未知未来版本、Streamable HTTP、旧 HTTP+SSE、远程 MCP、OAuth、多
+  Server、自动安装、服务器市场、工作区共享 Server 配置，以及 Roots、Sampling、Elicitation、
+  Tasks、`input_required` 续轮或未获准 Server-to-Client 能力。
 
-### 1.3 阶段 14 授权扩展：MCP Client
+外部 SDK、评估报告或候选清单出现某项能力不构成授权。扩大本节范围必须先更新本文档和路线图；
+涉及信任模型或长期架构时还需更新对应领域文档和 ADR。
 
-阶段 14 在已完成的基础 Agent Loop、审批、取消和会话恢复之上，引入受限的 MCP Client
-能力。首期产品范围仅包括：
+### 1.3 范围演进记录
 
-- 桌面 VS Code Extension 作为 MCP Host，为用户显式配置的首期单一服务器拥有一个独立
-  MCP Client 连接。
-- 以 MCP `2026-07-28` 规范作为设计与兼容性评审基线；首期只接受该精确协议版本，
-  不自动降级到旧协议或接受未知未来版本。实现任务开始时仍须通过 Context7 核对当前官方
-  SDK 和勘误，不以未固定的 `latest` 隐式改变协议行为。
-- 仅支持由用户显式配置并连接的本地 `stdio` MCP Server，以及服务器声明的 MCP Tools、
-  MCP Resources（含 Resource Templates）和 MCP Prompts 三类主要 Server 原语。
-- 发现、分页列举、变更通知和调用 MCP Tools，并将其适配到现有 Core Tool Registry、Agent
-  Loop、取消、结果限额、审批和展示边界；以应用/用户控制方式读取 Resources 并加入有界上下文，
-  以用户主动选择方式获取 Prompts 并加入对话输入。
-- 服务器进程和每次外部 Tool 调用均受 Extension-owned 生命周期、Workspace Trust、
-  明确用户授权和安全清理约束；模型、工作区内容和 Webview 不能创建或扩大服务器配置。
-
-阶段 14 不授权 Streamable HTTP、旧 HTTP+SSE 回退、远程服务器鉴权、OAuth、Sampling、
-Elicitation、Roots、Tasks、`input_required` 自动履行或手工续轮、MCP Server 托管、服务器市场、
-自动安装、工作区共享配置或多模态内容。SDK 或 Server 在 `2026-07-28` 下提供这些能力不代表
-CtrlZebra 声明、注册或处理它们；
-后续增加这些能力必须重新经过路线图和对应权威文档的变更控制。
-
-阶段 14 的具体模块边界、配置格式、Tool 命名、风险归类、协议 DTO 和用户体验由 T1401
-的独立 docs-only 约束门禁确定；本节只授权产品范围，不提前把尚未评审的实现草案变成公共
-契约。
-
-### 1.4 阶段 15–22 授权扩展：产品闭环与发布就绪
-
-阶段 15–22 在阶段 14 已完成的桌面 VS Code Extension 基线上，授权以下产品范围扩展：
-
-- 生产 Model Gateway 使用既有受控重试语义；多轮 Runtime 改造前建立覆盖率防回退和 Windows、
-  macOS、Linux 基础 CI 证据，并让内部错误因果保持安全可诊断。
-- 一个本地 Session 可以由用户显式续接多个有边界的回合；历史重建、上下文裁剪、Token 使用量、
-  截断和溢出恢复必须保持取消、审批、持久化兼容和资源上限。
-- 三个已支持 Provider 均提供可发现的密钥保存、删除、轮换、最小模型配置和用户触发的连接/能力
-  检查入口；任何 Provider 网络请求都不携带工作区或会话内容，无法可靠判断的能力显示为未知，
-  并允许退回手工配置。
-- Webview 使用一致的产品语言和受限的技术内容呈现；Markdown 或链接支持不能扩大 CSP、命令、
-  文件、网络或 HTML 执行能力。
-- MCP Tool 发现按单工具粒度处理不兼容 Schema，并向用户提供有界、枚举化诊断；阶段 18 授权
-  本地 stdio 的用户显式 `modern-only | dual` 模式，闭集支持 modern `2026-07-28` 和 legacy
-  `2025-11-25`，并遵循 [ADR 0002](../adr/0002-mcp-dual-era-stdio-compatibility.md) 的探测、回退和
-  安全边界。现有配置不静默启用 dual。
-- Extension 可以在用户控制和工作区范围内读取活动编辑器、选区、诊断和 VS Code 语言服务结果，
-  作为有界、不可信、可关闭的上下文或只读 Tool Result；不建立自有语义或向量索引。
-- 内置工作区工具可以在精确审批、Workspace Trust、规范路径、原子写入和可恢复 Checkpoint 约束
-  下提议创建、删除、重命名和多文件编辑，并可以执行有资源上限的正则搜索。
-- 用户可以重新生成、编辑重发、显式引用工作区文件、删除会话、清空历史并配置本地保留策略；
-  这些操作不复用旧批准、不重放旧副作用、不把工作区引用提升为可信指令；卸载前可以显式清除
-  全部 CtrlZebra-owned 本地数据而不触碰工作区或其他扩展状态。
-- Preview/GA 工程范围包括仓库治理、受审查依赖更新、旧会话迁移或只读降级、单次 Run 成本护栏、
-  用户主动脱敏诊断导出、性能与资源预算、第三方许可证/SBOM/VSIX 内容审计、可重复发布流水线和
-  Marketplace 证据；实际发布仍需单独明确授权。
-
-本授权只确定产品方向，不提前批准 DTO、Tool 名称、持久化字段、状态转换、错误码、Token 算法、
-Markdown 依赖或安全实现。每个阶段的首个契约任务必须先更新拥有该事实的领域文档；需要独立
-约束 PR 时，约束合入后才能实现。
-
-阶段 15–22 仍不授权旧于 `2025-11-25` 的 MCP、未知未来 MCP、远程 MCP/OAuth、Skills、
-跨会话记忆、多 Agent、多模态、运行中插话、浏览器自动化、自动 Git 提交/PR、自动发布、云账户、
-同步、遥测后端、Web Extension、SQLite、向量数据库或自建代码语义索引。这些能力不能因为出现
-在外部评估或候选清单中自动进入实施。
+- 阶段 0–13 的基础 Extension、Agent Loop、工作区工具、审批、持久化、Provider 与推理摘要范围见
+  实施计划中的[阶段规格索引](../implementation-plan.md#5-阶段规格索引)。
+- 阶段 14 的受控 MCP Client 授权与完成规格见[阶段 14 归档](archive/phase-14.md)和
+  [ADR 0001](../adr/0001-controlled-mcp-client-boundary.md)。
+- 阶段 15 的多轮对话与上下文生命周期见[阶段 15 归档](archive/phase-15.md)。
+- 阶段 16–22 的获准产品闭环和发布范围见实施计划中的[阶段规格索引](../implementation-plan.md#5-阶段规格索引)；
+  任务状态仍只由实施计划拥有。
 
 ## 2. 技术基线
 
@@ -126,45 +85,25 @@ Markdown 依赖或安全实现。每个阶段的首个契约任务必须先更�
 
 版本安装时选择相互兼容的稳定版本并提交 lockfile，不使用未固定的 `latest` 作为长期依赖声明。
 
-## 3. 目标项目结构
+## 3. Workspace 结构
 
 ```text
-vscode-agent/
+ctrl-zebra/
 ├─ apps/
-│  ├─ extension/
-│  │  ├─ src/
-│  │  │  ├─ extension.ts
-│  │  │  ├─ container.ts
-│  │  │  ├─ commands/
-│  │  │  ├─ controllers/
-│  │  │  ├─ views/
-│  │  │  ├─ adapters/
-│  │  │  └─ lifecycle/
-│  │  ├─ package.json
-│  │  └─ tsconfig.json
-│  └─ webview/
-│     ├─ src/
-│     │  ├─ components/
-│     │  ├─ features/
-│     │  ├─ state/
-│     │  ├─ vscode.ts
-│     │  └─ main.tsx
-│     ├─ index.html
-│     ├─ package.json
-│     └─ vite.config.ts
+│  ├─ extension/        # VS Code Host、组合根、适配器和控制器
+│  └─ webview/          # React 展示和用户交互
 ├─ packages/
-│  ├─ protocol/
-│  ├─ core/
-│  ├─ providers/
-│  ├─ builtin-tools/
-│  ├─ mcp-client/
-│  └─ testkit/
-├─ scripts/
-├─ package.json
-├─ pnpm-workspace.yaml
-├─ tsconfig.base.json
-└─ biome.json
+│  ├─ protocol/         # 跨边界 DTO 与 Schema
+│  ├─ core/             # Host-、Provider-neutral 业务逻辑
+│  ├─ providers/        # 具体模型 SDK 适配器
+│  ├─ builtin-tools/    # Host-independent 内置 Tool
+│  ├─ mcp-client/       # 受控 MCP SDK 边界
+│  └─ testkit/          # 跨包测试替身
+└─ docs/                # 路线图、领域规范、ADR 和发布文档
 ```
+
+本节只固定 Workspace 级模块，不规定包内文件夹或具体文件。实际源码树和各包公共 `exports` 是
+实现结构的事实来源；新增或移动 Workspace 模块仍需先更新本节和依赖规则。
 
 ## 4. 模块边界
 
@@ -225,6 +164,7 @@ vscode-agent/
 - `read_file`
 - `search_files`
 - `propose_file_edit`
+- `run_command`
 
 实际文件操作由 Extension 中的适配器完成。
 
@@ -234,7 +174,7 @@ vscode-agent/
 
 - 注册命令和 `WebviewViewProvider`。
 - 依赖装配。
-- 将 Webview 命令转发给 SessionManager。
+- 验证并将 Webview 命令分派给拥有相应生命周期的控制器。
 - 实现文件、编辑器、Diff、存储、日志和密钥适配器。
 - 管理 Disposable 和扩展生命周期。
 
@@ -259,16 +199,9 @@ vscode-agent/
 
 ### 4.7 `packages/testkit`
 
-提供稳定的测试替身：
-
-- `FakeModelGateway`
-- `FakeTool`
-- `InMemorySessionRepository`
-- `FakeApprovalService`
-- `CollectingEventSink`
-- 固定时钟和固定 ID 生成器
-
-测试中禁止依赖真实模型 API。
+提供跨包复用的稳定 Core contract 测试替身，例如确定性 Model Gateway、Summarizer 和事件收集器。
+具体替身名称及公共范围以该包 `exports` 为准；仅由单个包使用的 Fake 保留在该包测试中。测试中
+禁止依赖真实模型 API、用户凭据或机器状态。
 
 ### 4.8 `packages/mcp-client`
 
@@ -316,162 +249,54 @@ mcp-client → extension
 
 依赖规则应通过 lint 规则、路径约定或专门的架构测试保护。
 
-## 6. 核心接口草案
+## 6. 跨模块契约地图
 
-### 6.1 模型接口
+本节只定位契约所有者并保存跨模块稳定约束，不复制 TypeScript 签名、枚举成员或 Schema。精确公共
+接口以声明它的包公共入口为准；跨边界语义以对应领域文档为准。实现细节不得因为出现在代码中自动
+成为新的产品或公共契约。
 
-```ts
-export interface ModelGateway {
-  stream(
-    request: ModelRequest,
-    signal: AbortSignal,
-  ): AsyncIterable<ModelEvent>;
-}
+| 契约 | 代码事实来源 | 语义所有者 |
+|---|---|---|
+| Model 请求、事件、Usage、Finish 与稳定错误 | [`packages/core/src/model-gateway.ts`](../../packages/core/src/model-gateway.ts) | [Architecture：Model Provider Boundary](../architecture.md#model-provider-boundary) |
+| Agent Loop、Tool 生命周期和 Session 转换 | [`packages/core`](../../packages/core/src/index.ts) 与 [`packages/protocol/src/session.ts`](../../packages/protocol/src/session.ts) | [Architecture：Tool Contract、Context 与 Session](../architecture.md#tool-contract-boundary) |
+| Tool Call、Result、风险和 JSON 值 | [`packages/protocol/src/tool.ts`](../../packages/protocol/src/tool.ts) | [Protocol：Tool Data Contracts](../protocol.md#tool-data-contracts) 与 [Security：Tool Input and Output](../security.md#tool-input-and-output) |
+| Webview/Extension 消息和请求关联 | [`packages/protocol/src/messages.ts`](../../packages/protocol/src/messages.ts) | [Protocol Guidelines](../protocol.md) |
+| Session Repository、事件和恢复投影 | [`packages/core/src/session-repository.ts`](../../packages/core/src/session-repository.ts) 与 [`packages/protocol/src/persistence.ts`](../../packages/protocol/src/persistence.ts) | [Persistence Contract](../persistence.md) |
+| Approval 请求、决定、消费和失效 | [`packages/core`](../../packages/core/src/index.ts) 与 [`packages/protocol/src/approval.ts`](../../packages/protocol/src/approval.ts) | [Security：Approval Boundary](../security.md#approval-boundary) |
+| MCP Client、Tool、Resource 与 Prompt 投影 | [`packages/mcp-client`](../../packages/mcp-client/src/index.ts) 与 [`packages/protocol`](../../packages/protocol/src/index.ts) | Architecture、Security、Protocol、Persistence、Webview 和 UX 中各自拥有的 MCP 章节 |
 
-export type ModelEvent =
-  | { type: "text.delta"; text: string }
-  | { type: "reasoning.start"; blockId: string }
-  | { type: "reasoning.delta"; blockId: string; text: string }
-  | { type: "reasoning.end"; blockId: string }
-  | { type: "tool.call"; call: ToolCall }
-  | { type: "usage"; usage: TokenUsage }
-  | { type: "finish"; reason: FinishReason };
+跨模块契约共同遵守以下不变量：
 
-export type ModelGatewayErrorCode =
-  | "authentication"
-  | "rate-limit"
-  | "invalid-request"
-  | "unavailable"
-  | "malformed-response"
-  | "unknown";
-```
+- 外部或跨进程输入以 `unknown` 进入拥有该边界的模块，验证后才能成为领域值。
+- 取消是独立结果；取消后不得继续增量、Tool、重试、持久化副作用或用户不可见后台工作。
+- VS Code、Node Host 和具体 SDK 类型不越过声明的适配器或包公共入口。
+- Session 状态只经 Core 状态机改变；Tool、Provider、Webview 和持久化适配器不自行推进 Agent Loop。
+- Secret、授权材料、原始第三方错误和不可信无限内容不得进入 Webview、持久化、日志或测试 fixture。
+- 修改公共契约时先更新拥有其语义的领域文档；只有产品范围、技术基线或模块边界变化时才修改本
+  文档。
 
-`ModelRequest` 只包含 Core 模型消息，不复用持久化 Chat Message DTO。Provider 失败通过带有稳定
-`ModelGatewayErrorCode` 的 `ModelGatewayError` 抛出；取消保留调用方的取消原因，不转换为
-Provider 失败。
+## 7. 产品级验证要求
 
-Reasoning 事件是可选的 Provider-neutral 内容事件，只在底层 Provider 正式流实际产生用户可见
-reasoning 文本时出现。`blockId` 是 CtrlZebra 自有的关联标识，不承载 Provider metadata；
-reasoning 文本不进入 `ModelRequest`、Tool 输入、最终回答或后续模型上下文。精确生命周期、资源
-上限、持久化和展示规则分别由 [Architecture](../architecture.md)、
-[Protocol](../protocol.md)、[Persistence](../persistence.md)、[Security](../security.md)、
-[UX](../ux.md) 和 [Webview](../webview.md) 共同约束。
+[Testing Guidelines](../testing.md) 拥有测试层级、命名、Fake/Mock、确定性、回归和异步清理规则。
+本节只规定产品完成所需的证据类别，具体任务仍使用其阶段规格中的测试计划。
 
-### 6.2 工具接口
+| 证据 | 最低目的 |
+|---|---|
+| 包级单元测试 | 证明 Core、Protocol、Provider、Tool、MCP 和纯策略的正常路径、重要边界及预期失败 |
+| Webview 组件测试 | 从用户可见行为证明消息、流式状态、审批、恢复、可访问性和内容边界 |
+| Extension 集成测试 | 证明 VS Code 注册、适配器、生命周期、存储、SecretStorage、进程和 Trust 边界 |
+| VSIX smoke 与人工路径 | 证明打包产物可安装、激活并完成当前阶段声明的关键用户路径；不替代适用自动化测试 |
+| CI、覆盖率与资源门禁 | 防止受支持平台、关键行为、性能预算和发布产物发生未审查回退 |
 
-```ts
-export interface AgentTool<Input = unknown, Output = unknown> {
-  readonly name: string;
-  readonly risk: "read" | "write" | "execute" | "network";
-  parseInput(value: unknown): Input;
-  execute(
-    input: Input,
-    context: ToolExecutionContext,
-  ): Promise<Output>;
-}
-```
-
-### 6.3 Agent 状态
-
-```ts
-export type AgentStatus =
-  | "idle"
-  | "preparing"
-  | "streaming"
-  | "awaiting_approval"
-  | "executing_tool"
-  | "completed"
-  | "cancelled"
-  | "failed";
-```
-
-### 6.4 会话仓库
-
-```ts
-export interface SessionRepository {
-  create(session: SessionRecord): Promise<void>;
-  get(sessionId: string): Promise<SessionRecord | undefined>;
-  list(): Promise<SessionSummary[]>;
-  appendEvent(sessionId: string, event: PersistedEvent): Promise<void>;
-  updateMetadata(sessionId: string, patch: SessionMetadataPatch): Promise<void>;
-}
-```
-
-### 6.5 审批接口
-
-```ts
-export interface ApprovalService {
-  request(
-    request: ApprovalRequest,
-    signal: AbortSignal,
-  ): Promise<ApprovalDecision>;
-}
-```
-
-## 7. 测试分层
-
-### 7.1 纯单元测试
-
-适用模块：
-
-- Protocol Schema。
-- Agent Loop。
-- Tool Registry。
-- Approval Policy。
-- Context Budget。
-- Session 状态转换。
-- Provider 事件标准化。
-- 推理摘要 start/delta/end 生命周期、交错顺序、资源边界和取消。
-
-要求：
-
-- 不启动 VS Code。
-- 不访问网络。
-- 不依赖系统时间和随机 ID。
-- 单个测试文件应在秒级内完成。
-
-### 7.2 组件测试
-
-适用模块：
-
-- 消息列表。
-- 流式消息。
-- 推理摘要的折叠、截断、部分恢复和无内容降级。
-- Tool 卡片。
-- 审批按钮。
-- 错误和取消状态。
-
-使用 Testing Library，从用户行为而非组件内部实现进行断言。
-
-### 7.3 Extension 集成测试
-
-只验证 VS Code API 适配器：
-
-- 命令成功注册。
-- Webview View 可以解析。
-- Workspace 文件可读。
-- `WorkspaceEdit` 可以应用。
-- 存储目录可以创建和恢复。
-- SecretStorage 适配器行为正确。
-
-### 7.4 人工烟雾测试
-
-每个阶段结束时执行，不替代自动化测试：
-
-1. 在 Extension Development Host 中打开测试工作区。
-2. 打开 Agent 侧边栏。
-3. 执行该阶段定义的完整用户路径。
-4. 检查 Developer Tools 和 Output Channel 没有未处理错误。
+测试不访问真实模型、用户凭据或未受控网络，不依赖墙钟、随机值、执行顺序或用户机器状态。每个
+阶段门禁可以提高证据要求，但不能降低本节和 Testing Guidelines 的共同基线。
 
 ## 8. 完成定义
 
-每个任务只有同时满足以下条件才算完成：
+任务只有同时满足以下条件才可按路线图流程标记完成：
 
-- 代码通过 TypeScript 类型检查。
-- 新逻辑拥有对应自动化测试。
-- 全部已有测试通过。
-- lint 和格式检查通过。
-- 没有在任务范围之外增加功能。
-- 当前任务声明的约束门禁已在实现前完成并合入主干。
-- 必要的公共接口和设计决策已更新到本文档。
-- 如果涉及 UI 或 VS Code API，人工烟雾测试通过。
+- 当前任务的目标、产物、排除项、测试和阶段门禁全部满足，且没有夹带其他任务或能力。
+- 必需的约束 PR 已先合入；公共契约、配置、持久化、安全或用户体验变化已更新其事实所有者。
+- 新逻辑具有风险相称的自动化测试，既有测试、类型检查、Biome 和适用的集成或 smoke 验证通过。
+- 取消、失败、资源清理、安全边界和数据兼容性保留可验证证据。
+- 最终差异通过检查并经 PR 审查、squash merge 合入 `main`；未合入的分支或 PR 不算完成。
