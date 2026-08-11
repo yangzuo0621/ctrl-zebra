@@ -9,6 +9,7 @@ import type {
   McpResourceSelection,
   McpResourceSnapshotView,
   McpStdioPort,
+  McpToolDiagnostic,
   McpToolSnapshotView,
 } from "@ctrl-zebra/mcp-client";
 import { McpPromptError, McpResourceError, McpToolDiscoveryError } from "@ctrl-zebra/mcp-client";
@@ -56,6 +57,8 @@ interface ControlledMcpClientPort {
     signal?: AbortSignal,
   ): Promise<McpToolSnapshotView>;
   getToolSnapshot(): McpToolSnapshotView | undefined;
+  getToolDiagnostic?(): McpToolDiagnostic | undefined;
+  refreshTools?(signal?: AbortSignal): Promise<McpToolSnapshotView>;
   discoverResources?(
     context: {
       readonly server: { readonly serverId: string; readonly displayName: string };
@@ -130,6 +133,7 @@ export class McpConnectionController {
   #attemptController: AbortController | undefined;
   #disposed = false;
   #terminationBlocked = false;
+  #toolDiagnostic: McpToolDiagnostic | undefined;
 
   constructor(dependencies: McpConnectionControllerDependencies) {
     this.#dependencies = dependencies;
@@ -141,6 +145,33 @@ export class McpConnectionController {
 
   getToolSnapshot(): McpToolSnapshotView | undefined {
     return this.#client?.getToolSnapshot();
+  }
+
+  getToolDiagnostic(): McpToolDiagnostic | undefined {
+    return (
+      this.#toolDiagnostic ??
+      (this.#snapshot.status === "connected" ? this.#client?.getToolDiagnostic?.() : undefined)
+    );
+  }
+
+  async refreshTools(serverId: string, generation: number): Promise<void> {
+    const client = this.#client;
+    if (
+      client?.refreshTools === undefined ||
+      this.#snapshot.status !== "connected" ||
+      this.#snapshot.server?.serverId !== serverId ||
+      this.#snapshot.generation !== generation
+    ) {
+      return;
+    }
+    try {
+      await client.refreshTools();
+      this.#toolDiagnostic = undefined;
+    } catch (error) {
+      if (error instanceof McpToolDiscoveryError) {
+        this.#toolDiagnostic = diagnosticFromToolError(error);
+      }
+    }
   }
 
   getResourceCatalog(): McpResourceCatalogView | undefined {
@@ -315,6 +346,7 @@ export class McpConnectionController {
       this.#dependencies.workspaceTrust.requireTrusted();
 
       const generation = this.#snapshot.generation + 1;
+      this.#toolDiagnostic = undefined;
       this.#operation = operation;
       this.#snapshot = {
         generation,
@@ -363,8 +395,9 @@ export class McpConnectionController {
           throw signal.reason;
         }
         if (error instanceof McpToolDiscoveryError) {
+          this.#toolDiagnostic = diagnosticFromToolError(error);
           await this.#client.disconnect();
-          return this.#failAndNotify(error.code, operation.configuration);
+          return this.#failAndNotify(error.code, operation.configuration, true);
         }
         if (error instanceof McpResourceError) {
           await this.#client.disconnect();
@@ -473,21 +506,32 @@ export class McpConnectionController {
     }
     const outcome = await this.#client.dispose();
     if (outcome.kind === "failed" && outcome.error.code === "termination-unconfirmed") {
+      this.#toolDiagnostic = undefined;
       this.#terminationBlocked = true;
       throw new Error("MCP Server process termination is unconfirmed.");
     }
     this.#client = undefined;
     this.#port = undefined;
     this.#operation = undefined;
+    this.#toolDiagnostic = undefined;
   }
 
-  #failAndNotify(code: McpHostErrorCode, configuration?: McpServerConfiguration) {
-    const failed = this.#fail(code, configuration);
+  #failAndNotify(
+    code: McpHostErrorCode,
+    configuration?: McpServerConfiguration,
+    preserveToolDiagnostic = false,
+  ) {
+    const failed = this.#fail(code, configuration, preserveToolDiagnostic);
     this.#dependencies.notifyError(failed.error?.message ?? mcpHostErrorMessages.internal);
     return failed;
   }
 
-  #fail(code: McpHostErrorCode, configuration?: McpServerConfiguration): McpConnectionSnapshot {
+  #fail(
+    code: McpHostErrorCode,
+    configuration?: McpServerConfiguration,
+    preserveToolDiagnostic = false,
+  ): McpConnectionSnapshot {
+    if (!preserveToolDiagnostic) this.#toolDiagnostic = undefined;
     const server = configuration === undefined ? this.#snapshot.server : identity(configuration);
     this.#snapshot = {
       generation: this.#snapshot.generation,
@@ -511,6 +555,7 @@ export class McpConnectionController {
     this.#client = undefined;
     this.#port = undefined;
     this.#operation = undefined;
+    this.#toolDiagnostic = undefined;
     this.#snapshot = {
       generation: this.#snapshot.generation,
       status: "disconnected",
@@ -553,4 +598,24 @@ export class McpConnectionDisposalError extends Error {
     super("The MCP Server process could not be confirmed as terminated during disposal.");
     this.name = "McpConnectionDisposalError";
   }
+}
+
+function diagnosticFromToolError(error: McpToolDiscoveryError): McpToolDiagnostic | undefined {
+  if (
+    error.code !== "invalid-schema" &&
+    error.code !== "limit-exceeded" &&
+    error.code !== "malformed-message"
+  ) {
+    return undefined;
+  }
+  return error.rejectedTools.length === 0
+    ? {
+        kind: "failure",
+        code: error.code,
+      }
+    : {
+        kind: "rejections",
+        rejectedTools: error.rejectedTools,
+        rejectedToolsTruncated: error.rejectedToolsTruncated,
+      };
 }

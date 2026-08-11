@@ -354,4 +354,93 @@ describe("MCP Webview actions", () => {
     expect(combined).toMatchObject({ requestId: "valid", catalogSequence: 1 });
     actions.dispose();
   });
+
+  it("publishes protocol incompatibility diagnostics without probe or fallback claims", () => {
+    const server = { serverId: "local_fixture", displayName: "Local fixture" } as const;
+    const snapshot: McpConnectionSnapshot = {
+      status: "failed",
+      generation: 3,
+      server,
+      configurationStale: false,
+      error: {
+        code: "protocol-incompatible",
+        message: "The MCP Server does not support the required protocol version.",
+      },
+    };
+    const post = vi.fn();
+    const actions = new McpWebviewActions({
+      connection: {
+        getState: () => snapshot,
+        getToolSnapshot: () => undefined,
+        getResourceCatalog: () => undefined,
+        getPromptCatalog: () => undefined,
+        connect: async () => snapshot,
+        disconnect: async () => snapshot,
+      },
+      openSettings: vi.fn(),
+    });
+    actions.bind(post);
+    actions.refresh("incompatible");
+    const diagnostic = post.mock.calls
+      .map(([message]) => message)
+      .find((message) => message.type === "extension/mcp-diagnostics");
+    expect(diagnostic).toMatchObject({
+      diagnostic: {
+        kind: "protocol-incompatible",
+        configuredMode: "modern-only",
+        supportedVersions: ["2026-07-28"],
+        connectionEstablished: false,
+        nextStep: "open-settings",
+      },
+    });
+    expect(JSON.stringify(diagnostic)).not.toMatch(/probe|fallback|negotiated/i);
+    actions.dispose();
+  });
+
+  it("publishes bounded all-rejected diagnostics after failed initial discovery", () => {
+    const server = { serverId: "local_fixture", displayName: "Local fixture" } as const;
+    const snapshot: McpConnectionSnapshot = {
+      status: "failed",
+      generation: 3,
+      server,
+      configurationStale: false,
+      error: { code: "invalid-schema", message: "The MCP Server supplied an invalid schema." },
+    };
+    const post = vi.fn();
+    const actions = new McpWebviewActions({
+      connection: {
+        getState: () => snapshot,
+        getToolSnapshot: () => undefined,
+        getToolDiagnostic: () => ({
+          kind: "rejections",
+          rejectedTools: [
+            { mcpToolName: "unsafe", reason: "forbidden-keyword" as const },
+            { mcpToolName: "unsafe", reason: "forbidden-keyword" as const },
+          ],
+          rejectedToolsTruncated: true,
+        }),
+        getResourceCatalog: () => undefined,
+        getPromptCatalog: () => undefined,
+        connect: async () => snapshot,
+        disconnect: async () => snapshot,
+      },
+      openSettings: vi.fn(),
+    });
+    actions.bind(post);
+    actions.refresh("initial-failure");
+    const diagnostic = post.mock.calls
+      .map(([message]) => message)
+      .find((message) => message.type === "extension/mcp-diagnostics");
+    expect(diagnostic).toMatchObject({
+      diagnostic: {
+        kind: "tool-rejections",
+        outcome: "all-rejected",
+        connectionStatus: "failed",
+        skippedTools: [{ mcpToolName: "unsafe", reason: "forbidden-keyword" }],
+        skippedToolsTruncated: true,
+        recoveryAction: "reconnect",
+      },
+    });
+    actions.dispose();
+  });
 });

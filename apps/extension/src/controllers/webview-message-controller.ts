@@ -157,6 +157,11 @@ export function bindWebviewMessageController({
       case "webview/mcp-open-settings":
         mcpActions?.openSettings();
         return;
+      case "webview/mcp-refresh-tools":
+        void mcpActions
+          ?.refreshTools(data.requestId, data.serverId, data.generation)
+          .catch(reportRunFailure);
+        return;
       case "webview/mcp-prompt-preview":
         void promptActions
           ?.preview(data.serverId, data.generation, data.promptName, data.arguments)

@@ -28,6 +28,7 @@ function host(): WebviewHost {
     subscribe: () => () => {},
     connectMcp: vi.fn(),
     disconnectMcp: vi.fn(),
+    refreshMcpTools: vi.fn(),
     openMcpSettings: vi.fn(),
     readMcpResource: vi.fn(),
     attachMcpResource: vi.fn(),
@@ -344,6 +345,81 @@ describe("unified MCP feature store", () => {
     receiveConnection(store, 1);
     receiveCatalog(store, "wrong", 99, toolCatalog(2, 1, "wrong"));
     expect(store.getState().tools).toBeUndefined();
+  });
+
+  it("keeps the ordinary connected path quiet when the diagnostic replacement is clear", () => {
+    const store = createMcpStore(host(), () => "request");
+    receiveConnection(store, 1);
+    const connectedAnnouncement = store.getState().announcement;
+    store.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-diagnostics",
+      requestId: "catalog",
+      diagnosticSequence: 1,
+      diagnostic: { kind: "clear", server, generation: 1 },
+    });
+    expect(store.getState().diagnostics).toBeUndefined();
+    expect(store.getState().announcement).toBe(connectedAnnouncement);
+    expect(store.getState().diagnosticAnnouncement).toBeUndefined();
+  });
+
+  it("sequences diagnostics, keeps conflicting duplicates local, and clears on connection cleanup", () => {
+    const api = host();
+    const store = createMcpStore(api, () => "refresh");
+    receiveConnection(store, 1);
+    expect(store.getState().refreshTools()).toBe(true);
+    expect(api.refreshMcpTools).toHaveBeenCalledWith("refresh", server.serverId, 1);
+    const diagnostic = {
+      kind: "tool-rejections" as const,
+      outcome: "degraded" as const,
+      server,
+      generation: 1,
+      connectionStatus: "connected" as const,
+      skippedTools: [{ mcpToolName: "unsafe", reason: "schema-invalid" as const }],
+      skippedToolsTruncated: false,
+      recoveryAction: "refresh-tools" as const,
+    };
+    store.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-diagnostics",
+      requestId: "refresh",
+      diagnosticSequence: 1,
+      diagnostic,
+    });
+    expect(store.getState().diagnostics).toEqual(diagnostic);
+    expect(store.getState().busy).toBeUndefined();
+    store.setState({ busy: "resource" });
+    store.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-diagnostics",
+      requestId: "poll",
+      diagnosticSequence: 2,
+      diagnostic,
+    });
+    expect(store.getState().busy).toBe("resource");
+    store.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-diagnostics",
+      requestId: "conflict",
+      diagnosticSequence: 1,
+      diagnostic: { kind: "clear", server, generation: 1 },
+    });
+    expect(store.getState().diagnostics).toEqual(diagnostic);
+    store.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-connection",
+      requestId: "disconnect",
+      connection: { status: "disconnected", server, generation: 1, configurationStale: false },
+    });
+    expect(store.getState().diagnostics).toBeUndefined();
+    store.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-diagnostics",
+      requestId: "late",
+      diagnosticSequence: 2,
+      diagnostic,
+    });
+    expect(store.getState().diagnostics).toBeUndefined();
   });
 });
 

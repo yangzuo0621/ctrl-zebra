@@ -29,6 +29,7 @@ function createHost(): WebviewHost {
     restoreCheckpoint: vi.fn(),
     subscribe: () => () => {},
     connectMcp: vi.fn(),
+    refreshMcpTools: vi.fn(),
     readMcpResource: vi.fn(),
   };
 }
@@ -124,5 +125,43 @@ describe("MCP panel", () => {
     render(<McpPanel store={store} />);
     expect(screen.getByText('<img src="https://example.invalid/a.png">')).toBeInTheDocument();
     expect(document.querySelector("img")).toBeNull();
+  });
+
+  it("renders bounded diagnostic recovery with fixed reason text", () => {
+    const store = createMcpStore(createHost(), () => "refresh");
+    store.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-connection",
+      requestId: "initial",
+      connection: {
+        status: "connected",
+        server,
+        generation: 1,
+        configurationStale: false,
+        protocolVersion: "2026-07-28",
+        capabilities,
+      },
+    });
+    store.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-diagnostics",
+      requestId: "diagnostic",
+      diagnosticSequence: 1,
+      diagnostic: {
+        kind: "tool-rejections",
+        outcome: "degraded",
+        server,
+        generation: 1,
+        connectionStatus: "connected",
+        skippedTools: [{ mcpToolName: "unsafe", reason: "forbidden-keyword" }],
+        skippedToolsTruncated: false,
+        recoveryAction: "refresh-tools",
+      },
+    });
+    render(<McpPanel store={store} />);
+    fireEvent.click(screen.getByText("MCP Server and context"));
+    expect(screen.getByRole("heading", { name: "MCP diagnostics" })).toBeVisible();
+    expect(screen.getByText("Unsupported schema feature.")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Refresh Tools" })).toBeVisible();
   });
 });

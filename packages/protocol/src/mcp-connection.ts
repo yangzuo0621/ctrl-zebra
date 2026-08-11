@@ -111,6 +111,88 @@ export const mcpToolCatalogProjectionSchema = z.strictObject({
   rejectedTools: z.array(mcpRejectedToolSchema).max(256),
   rejectedToolsTruncated: z.boolean(),
 });
+
+export const maxMcpDiagnosticSkippedTools = 256;
+export const mcpDiagnosticRecoveryActionSchema = z.enum([
+  "refresh-tools",
+  "reconnect",
+  "open-settings",
+]);
+export const mcpDiagnosticToolEntrySchema = mcpRejectedToolSchema;
+const mcpDiagnosticSourceShape = {
+  server: mcpServerIdentitySchema,
+  generation: mcpGenerationSchema,
+};
+const mcpDiagnosticSkippedToolsShape = {
+  skippedTools: z.array(mcpDiagnosticToolEntrySchema).max(maxMcpDiagnosticSkippedTools),
+  skippedToolsTruncated: z.boolean(),
+};
+const mcpToolDiscoveryFailureCodeSchema = z.enum([
+  "invalid-schema",
+  "limit-exceeded",
+  "malformed-message",
+]);
+const mcpToolRejectionsDiagnosticSchema = z.discriminatedUnion("outcome", [
+  z.strictObject({
+    kind: z.literal("tool-rejections"),
+    outcome: z.literal("degraded"),
+    ...mcpDiagnosticSourceShape,
+    connectionStatus: z.literal("connected"),
+    ...mcpDiagnosticSkippedToolsShape,
+    recoveryAction: z.literal("refresh-tools"),
+  }),
+  z.strictObject({
+    kind: z.literal("tool-rejections"),
+    outcome: z.literal("all-rejected"),
+    ...mcpDiagnosticSourceShape,
+    connectionStatus: z.literal("failed"),
+    ...mcpDiagnosticSkippedToolsShape,
+    recoveryAction: z.literal("reconnect"),
+  }),
+  z.strictObject({
+    kind: z.literal("tool-rejections"),
+    outcome: z.literal("refresh-all-rejected"),
+    ...mcpDiagnosticSourceShape,
+    connectionStatus: z.literal("connected"),
+    ...mcpDiagnosticSkippedToolsShape,
+    recoveryAction: z.literal("refresh-tools"),
+  }),
+]);
+const mcpToolDiscoveryFailureDiagnosticSchema = z.discriminatedUnion("outcome", [
+  z.strictObject({
+    kind: z.literal("tool-discovery-failure"),
+    outcome: z.literal("initial"),
+    ...mcpDiagnosticSourceShape,
+    connectionStatus: z.literal("failed"),
+    code: mcpToolDiscoveryFailureCodeSchema,
+    recoveryAction: z.literal("reconnect"),
+  }),
+  z.strictObject({
+    kind: z.literal("tool-discovery-failure"),
+    outcome: z.literal("refresh"),
+    ...mcpDiagnosticSourceShape,
+    connectionStatus: z.literal("connected"),
+    code: mcpToolDiscoveryFailureCodeSchema,
+    recoveryAction: z.literal("refresh-tools"),
+  }),
+]);
+export const mcpDiagnosticsProjectionSchema = z.union([
+  mcpToolRejectionsDiagnosticSchema,
+  mcpToolDiscoveryFailureDiagnosticSchema,
+  z.strictObject({
+    kind: z.literal("protocol-incompatible"),
+    ...mcpDiagnosticSourceShape,
+    connectionStatus: z.literal("failed"),
+    configuredMode: z.literal("modern-only"),
+    supportedVersions: z.tuple([mcpProtocolVersionSchema]),
+    connectionEstablished: z.literal(false),
+    nextStep: z.literal("open-settings"),
+  }),
+  z.strictObject({
+    kind: z.literal("clear"),
+    ...mcpDiagnosticSourceShape,
+  }),
+]);
 export const toolStateSourceSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("builtin") }),
   z.strictObject({
@@ -126,6 +208,9 @@ export type McpToolCatalogDto = z.infer<typeof mcpToolCatalogSchema>;
 export type McpToolCatalogProjectionDto = z.infer<typeof mcpToolCatalogProjectionSchema>;
 export type McpToolRejectionReasonDto = z.infer<typeof mcpToolRejectionReasonSchema>;
 export type McpRejectedToolDto = z.infer<typeof mcpRejectedToolSchema>;
+export type McpDiagnosticRecoveryActionDto = z.infer<typeof mcpDiagnosticRecoveryActionSchema>;
+export type McpDiagnosticToolEntryDto = z.infer<typeof mcpDiagnosticToolEntrySchema>;
+export type McpDiagnosticsProjectionDto = z.infer<typeof mcpDiagnosticsProjectionSchema>;
 export type ToolStateSourceDto = z.infer<typeof toolStateSourceSchema>;
 export { mcpServerIdSchema };
 

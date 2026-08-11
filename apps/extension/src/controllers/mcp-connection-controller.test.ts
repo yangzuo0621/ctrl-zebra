@@ -104,7 +104,13 @@ describe("MCP connection controller", () => {
 
   it("fails and closes the connection when initial Tool discovery is rejected", async () => {
     const harness = createHarness();
-    harness.client.discoverTools.mockRejectedValueOnce(new McpToolDiscoveryError("invalid-schema"));
+    harness.client.discoverTools.mockRejectedValueOnce(
+      new McpToolDiscoveryError(
+        "invalid-schema",
+        [{ mcpToolName: "unsafe", reason: "forbidden-keyword" }],
+        true,
+      ),
+    );
     const controller = new McpConnectionController(harness.values);
 
     await expect(controller.connect()).resolves.toMatchObject({
@@ -112,6 +118,27 @@ describe("MCP connection controller", () => {
       error: { code: "invalid-schema" },
     });
     expect(harness.client.disconnect).toHaveBeenCalledTimes(1);
+    expect(controller.getToolDiagnostic()).toEqual({
+      kind: "rejections",
+      rejectedTools: [{ mcpToolName: "unsafe", reason: "forbidden-keyword" }],
+      rejectedToolsTruncated: true,
+    });
+  });
+
+  it("retains a bounded refresh failure and clears it after a successful refresh", async () => {
+    const harness = createHarness();
+    const controller = new McpConnectionController(harness.values);
+    await controller.connect();
+
+    harness.client.refreshTools.mockRejectedValueOnce(new McpToolDiscoveryError("limit-exceeded"));
+    await controller.refreshTools("local_fixture", 1);
+    expect(controller.getToolDiagnostic()).toEqual({
+      kind: "failure",
+      code: "limit-exceeded",
+    });
+
+    await controller.refreshTools("local_fixture", 1);
+    expect(controller.getToolDiagnostic()).toBeUndefined();
   });
 
   it("fails and closes the connection when initial Resource discovery is rejected", async () => {
@@ -400,6 +427,17 @@ function createHarness() {
       }),
     ),
     getToolSnapshot: vi.fn((): McpToolSnapshotView | undefined => undefined),
+    getToolDiagnostic: vi.fn(() => undefined),
+    refreshTools: vi.fn(
+      async (): Promise<McpToolSnapshotView> => ({
+        server: { serverId: "local_fixture", displayName: "Local fixture" },
+        generation: 1,
+        tools: [],
+        rejectedTools: [],
+        rejectedToolsTruncated: false,
+        registry: new ToolRegistry(),
+      }),
+    ),
     discoverResources: vi.fn(
       async (context: {
         server: { serverId: string; displayName: string };

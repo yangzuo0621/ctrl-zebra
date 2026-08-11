@@ -8,6 +8,7 @@ import {
 } from "./mcp-connection.js";
 import {
   extensionToWebviewMessageSchema,
+  mcpDiagnosticsMessageSchema,
   mcpToolCatalogMessageSchema,
   protocolVersion,
   webviewToExtensionMessageSchema,
@@ -68,6 +69,15 @@ describe("MCP connection Protocol", () => {
           .success,
       ).toBe(true);
     }
+    expect(
+      webviewToExtensionMessageSchema.safeParse({
+        protocolVersion,
+        type: "webview/mcp-refresh-tools",
+        requestId: "refresh",
+        serverId: server.serverId,
+        generation: 2,
+      }).success,
+    ).toBe(true);
   });
 
   it("accepts one strict sequence-bearing catalog envelope", () => {
@@ -85,6 +95,39 @@ describe("MCP connection Protocol", () => {
       },
     } as const;
     expect(mcpToolCatalogMessageSchema.parse(message)).toEqual(message);
+    expect(extensionToWebviewMessageSchema.safeParse({ ...message, extra: true }).success).toBe(
+      false,
+    );
+  });
+
+  it("accepts strict diagnostics and rejects illegal recovery combinations", () => {
+    const message = {
+      protocolVersion,
+      type: "extension/mcp-diagnostics" as const,
+      requestId: "diagnostic",
+      diagnosticSequence: 1,
+      diagnostic: {
+        kind: "tool-rejections" as const,
+        outcome: "degraded" as const,
+        server,
+        generation: 2,
+        connectionStatus: "connected" as const,
+        skippedTools: [{ mcpToolName: "unsafe", reason: "schema-invalid" as const }],
+        skippedToolsTruncated: false,
+        recoveryAction: "refresh-tools" as const,
+      },
+    };
+    expect(mcpDiagnosticsMessageSchema.parse(message)).toEqual(message);
+    expect(
+      mcpDiagnosticsMessageSchema.safeParse({
+        ...message,
+        diagnostic: {
+          ...message.diagnostic,
+          connectionStatus: "failed",
+          recoveryAction: "reconnect",
+        },
+      }).success,
+    ).toBe(false);
     expect(extensionToWebviewMessageSchema.safeParse({ ...message, extra: true }).success).toBe(
       false,
     );

@@ -118,6 +118,11 @@ describe("ControlledMcpClient Tool discovery", () => {
 
     await expect(client.discoverTools(context)).rejects.toMatchObject({ code: "invalid-schema" });
     expect(client.getToolSnapshot()).toBe(stable);
+    expect(client.getToolDiagnostic()).toEqual({
+      kind: "rejections",
+      rejectedTools: [{ mcpToolName: "unsafe", reason: "forbidden-keyword" }],
+      rejectedToolsTruncated: false,
+    });
     await client.disconnect();
   });
 

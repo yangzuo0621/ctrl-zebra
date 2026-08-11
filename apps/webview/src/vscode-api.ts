@@ -29,6 +29,7 @@ export interface WebviewHost {
   restoreCheckpoint(requestId: string, checkpointId: string): void;
   connectMcp?(requestId: string): void;
   disconnectMcp?(requestId: string): void;
+  refreshMcpTools?(requestId: string, serverId: string, generation: number): void;
   openMcpSettings?(requestId: string): void;
   requestProviderStatus?(requestId: string): void;
   saveProviderKey?(requestId: string): void;
@@ -157,6 +158,15 @@ const webviewHost: WebviewHost = {
   },
   disconnectMcp(requestId) {
     getVsCodeApi().postMessage({ protocolVersion, type: "webview/mcp-disconnect", requestId });
+  },
+  refreshMcpTools(requestId, serverId, generation) {
+    getVsCodeApi().postMessage({
+      protocolVersion,
+      type: "webview/mcp-refresh-tools",
+      requestId,
+      serverId,
+      generation,
+    });
   },
   openMcpSettings(requestId) {
     getVsCodeApi().postMessage({ protocolVersion, type: "webview/mcp-open-settings", requestId });

@@ -16,6 +16,7 @@ export {
   type McpStderrSnapshot,
   type McpStdioPort,
   type McpStdioPortHandlers,
+  type McpToolDiagnostic,
   type McpToolDiscoveryContext,
   type McpToolRejectionReason,
   maxMcpDescriptorBytes,
