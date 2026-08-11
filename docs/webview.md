@@ -52,8 +52,10 @@ This document defines the React Webview constraints established before T0103. It
   message. Save-key, select-model, and open-settings controls send separate intent-only messages;
   they do not invoke VS Code APIs or carry Provider/Secret arguments. The Host maps those intents to
   its existing command workflows and sends a correlated bounded action outcome, then a fresh status
-  projection. The Webview ignores malformed, stale, or mismatched responses after Protocol Schema
-  validation.
+  projection reusing that action's `requestId`. The Webview accepts the post-action projection only
+  after the matching terminal action outcome for its pending action; a normal status request uses
+  only its own `requestId`. Malformed, stale, or mismatched responses are ignored after Protocol
+  Schema validation.
 - `apiKeyConfigured: false` is rendered as a missing credential requirement, not as a prompt to
   inspect or replace a value. The Host may report it as configured for a validated local
   OpenAI-Compatible endpoint that does not require a key. The Webview never infers credential state

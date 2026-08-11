@@ -76,12 +76,16 @@ or Session content.
   `"configuration" | "storage" | "unavailable" | "internal"` and a fixed, user-safe message of
   at most 256 characters; completed and cancelled responses carry no error details. Cancellation
   is distinct from failure and performs no configuration or SecretStorage side effect. The Host
-  sends a fresh `extension/provider-status` snapshot after an action settles without exposing the
-  action's input or third-party response.
-- The Host maps invalid input, configuration errors, SecretStorage failures, unavailable model
-  discovery, and unexpected failures to those fixed categories. Raw Provider responses, SDK errors,
-  endpoint URLs, settings values, credentials, and authorization material are never copied into a
-  message. These messages do not create a Run error or Session event.
+  sends a fresh `extension/provider-status` snapshot after an action settles, reusing that action's
+  `requestId`. The Webview accepts that snapshot only after the matching terminal action outcome for
+  its pending action; a normal status request is correlated only to its own `requestId`. Neither
+  response exposes the action's input or a third-party response.
+- A malformed, unknown, unsupported-version, or wrong-direction envelope is ignored during Schema
+  validation and never produces a Provider action outcome. Only a strictly validated and dispatched
+  intent whose Host workflow fails is mapped to `configuration`, `storage`, `unavailable`, or
+  `internal`. Raw Provider responses, SDK errors, endpoint URLs, settings values, credentials, and
+  authorization material are never copied into a message. These messages do not create a Run error
+  or Session event.
 
 ## Session and Run Commands
 
