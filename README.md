@@ -38,18 +38,22 @@ be restored with their local Session.
 Repository maintainers can create a verified local artifact with `pnpm package:vsix`. See
 [the packaging contract](docs/packaging.md) for provenance and content checks.
 
-## Quick start with Gemini
+## Quick start with a Provider
 
-Gemini is the complete credential-onboarding path in this Phase 1 build.
-
-1. Open VS Code Settings and set **CtrlZebra › Provider: Id** to `gemini`.
-2. Set **CtrlZebra › Provider: Model** to an exact Gemini model ID available to your account.
-3. Run **CtrlZebra: Save Gemini API Key** from the Command Palette and enter the key in the
-   password-masked prompt. The key is stored in VS Code SecretStorage.
-4. Open the CtrlZebra Agent view, enter a request, and select **Send**.
-5. Review every file-change or command approval. The displayed operation is the operation that will
+1. Open VS Code Settings and set **CtrlZebra › Provider: Id** to `openai`, `gemini`, or
+   `openai-compatible`.
+2. Set **CtrlZebra › Provider: Model** to the exact model ID available to your account or local
+   service.
+3. For a remote Provider, run the matching command from the Command Palette and enter the key in
+   the password-masked prompt. The key is stored in VS Code SecretStorage:
+   - **CtrlZebra: Save OpenAI API Key**
+   - **CtrlZebra: Save Gemini API Key**
+   - **CtrlZebra: Save OpenAI-Compatible API Key**
+4. For an explicit loopback OpenAI-compatible endpoint, a key is optional.
+5. Open the CtrlZebra Agent view, enter a request, and select **Send**.
+6. Review every file-change or command approval. The displayed operation is the operation that will
    execute; denying it causes no write or command side effect.
-6. Use **Saved sessions** to inspect interrupted history and **Agent changes** to restore a
+7. Use **Saved sessions** to inspect interrupted history and **Agent changes** to restore a
    conflict-free Checkpoint.
 
 Do not paste API keys into chat, workspace files, settings, logs, or command arguments.
@@ -120,8 +124,8 @@ All settings have machine scope.
 | `ctrlZebra.mcp.server` | `null` | One local stdio Server object with `version: 1`, stable lower-snake-case `serverId`, bounded `displayName`, exact `command`, and ordered `args`. Credentials and shell command lines are forbidden. A trusted single-folder workspace and fresh startup approval are required. |
 
 OpenAI and Gemini always use their adapter-declared text-streaming and tool-calling capabilities.
-Remote providers require a corresponding API key. This release exposes a user-facing save command
-only for Gemini; see [known limitations](#known-limitations).
+Remote providers require a corresponding API key. Save commands are available for all three
+supported Providers.
 
 ## Workspace tools and approvals
 
@@ -166,8 +170,6 @@ Read the full [Privacy Notice](PRIVACY.md) and [security contract](docs/security
 - Desktop VS Code only; Web Extensions are not supported.
 - Exactly one workspace folder is supported. Empty windows and multi-root workspaces cannot start an
   Agent run.
-- Gemini is the only remote provider with a user-facing API-key save command. OpenAI and authenticated
-  remote OpenAI-compatible onboarding are not complete in this build.
 - Provider and model configuration is manual; there is no model discovery or account sign-in.
 - MCP supports exactly one user-configured local stdio Server and exact protocol version
   `2026-07-28`. There is no HTTP transport, OAuth, credential injection, multi-server operation,

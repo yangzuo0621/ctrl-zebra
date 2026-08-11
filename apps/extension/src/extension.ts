@@ -13,6 +13,8 @@ import { commands, type ExtensionContext, Uri, window, workspace } from "vscode"
 
 import {
   createGeminiApiKeySecretStorage,
+  createOpenAIApiKeySecretStorage,
+  createOpenAICompatibleApiKeySecretStorage,
   createProviderApiKeySecretReader,
 } from "./adapters/api-key-secret-storage.js";
 import { createLocalWorkspaceUriCanonicalizer } from "./adapters/canonicalize-local-workspace-uri.js";
@@ -45,7 +47,6 @@ import { createCheckpointActions } from "./controllers/checkpoint-actions.js";
 import { combineToolRegistries } from "./controllers/combine-tool-registries.js";
 import { CommandApprovalWorkflow } from "./controllers/command-approval-workflow.js";
 import { FileEditApprovalWorkflow } from "./controllers/file-edit-approval-workflow.js";
-import { registerGeminiApiKeyCommand } from "./controllers/gemini-api-key-command.js";
 import { McpConnectionController } from "./controllers/mcp-connection-controller.js";
 import { McpPromptActions } from "./controllers/mcp-prompt-actions.js";
 import { McpResourceActions } from "./controllers/mcp-resource-actions.js";
@@ -54,6 +55,7 @@ import { McpStartupApproval } from "./controllers/mcp-startup-approval.js";
 import { McpToolApprovalWorkflow } from "./controllers/mcp-tool-approval-workflow.js";
 import { McpWebviewActions } from "./controllers/mcp-webview-actions.js";
 import { selectModelGateway } from "./controllers/model-gateway-selector.js";
+import { registerProviderApiKeyCommands } from "./controllers/provider-api-key-command.js";
 import {
   createWorkspaceToolRegistryProvider,
   selectWorkspaceRoot,
@@ -332,10 +334,16 @@ export function activate(context: ExtensionContext): void {
       controller: mcpConnection,
       registerCommand: (commandId, handler) => commands.registerCommand(commandId, handler),
     }),
-    registerGeminiApiKeyCommand({
-      storage: createGeminiApiKeySecretStorage(context.secrets),
+    registerProviderApiKeyCommands({
+      storages: {
+        openai: createOpenAIApiKeySecretStorage(context.secrets),
+        gemini: createGeminiApiKeySecretStorage(context.secrets),
+        "openai-compatible": createOpenAICompatibleApiKeySecretStorage(context.secrets),
+      },
       registerCommand: (commandId, handler) => commands.registerCommand(commandId, handler),
       showInputBox: (options) => window.showInputBox(options),
+      showWarningMessage: (message, options, item) =>
+        window.showWarningMessage(message, options, item),
       showInformationMessage: (message) => window.showInformationMessage(message),
       showErrorMessage: (message) => window.showErrorMessage(message),
     }),

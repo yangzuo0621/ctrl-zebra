@@ -417,18 +417,19 @@ entry, not only the intermediate object.
   how to correct it, but must not include credential values, authorization material, third-party
   response bodies, or unredacted SDK errors.
 
-## Gemini API Key Entry
+## Provider API Key Entry
 
-- The stable command `ctrlZebra.saveGeminiApiKey` is the only T0308 user-facing entry point for a
-  Gemini credential. Renaming it is a public-contract change. The command is contributed to the
-  Command Palette and its registration is owned by `ExtensionContext.subscriptions`.
-- The command collects the value with VS Code's password-masked input. It does not prefill an
+- The stable user-facing commands are `ctrlZebra.saveOpenAIApiKey`,
+  `ctrlZebra.saveGeminiApiKey`, and `ctrlZebra.saveOpenAICompatibleApiKey`. Renaming one is a
+  public-contract change. Each command is contributed to the Command Palette and its registration
+  is owned by `ExtensionContext.subscriptions`.
+- Each command collects the value with VS Code's password-masked input. It does not prefill an
   existing credential, does not reveal whether a prior value exists, and keeps the prompt open on
   focus loss so the value is not accidentally submitted to another UI surface.
-- Canceling the prompt performs no SecretStorage write and shows no success message. An empty value
-  is rejected before storage. A non-empty value is stored exactly as entered under
-  `ctrlZebra.provider.gemini.apiKey`, replacing any prior value according to the existing
-  SecretStorage contract.
+- Canceling the prompt or the credential-free overwrite confirmation performs no SecretStorage
+  write and shows no success message. An empty value is rejected before storage. A non-empty value
+  is stored exactly as entered under the Provider's Extension-owned SecretStorage name, replacing
+  any prior value according to the existing SecretStorage contract.
 - The submitted value remains local to the command invocation and SecretStorage adapter. It must
   not enter configuration, command arguments, Webview messages or state, persistence, logs,
   diagnostics, snapshots, fixtures, or error text.

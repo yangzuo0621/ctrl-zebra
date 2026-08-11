@@ -54,6 +54,12 @@ export function createGeminiApiKeySecretStorage(
   return createApiKeySecretStorage(secretStorage, geminiApiKeySecretName);
 }
 
+export function createOpenAICompatibleApiKeySecretStorage(
+  secretStorage: SecretStorageBackend,
+): ApiKeySecretStorage {
+  return createApiKeySecretStorage(secretStorage, openAICompatibleApiKeySecretName);
+}
+
 function createApiKeySecretStorage(
   secretStorage: SecretStorageBackend,
   secretName: string,
