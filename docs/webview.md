@@ -138,7 +138,7 @@ This document defines the React Webview constraints established before T0103. It
   mismatch, Session switch, or disposal discards it. Restored complete and partial blocks are
   ordered by their persisted sequence and default to collapsed; an empty snapshot renders nothing,
   and restoration never replays start/delta animations or live announcements.
-- The presentation uses a semantic region labelled “推理摘要” with a concise Provider-source label.
+- The presentation uses a semantic region labelled “Reasoning summary” with a concise Provider-source label.
   Each visible block has a keyboard-operable disclosure button with an accessible name and
   `aria-expanded`; new deltas never force a user-collapsed block open. Stable block keys prevent
   transcript replacement, focus loss, and text-selection reset.
