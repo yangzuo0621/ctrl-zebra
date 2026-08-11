@@ -13,6 +13,7 @@ import {
   ConfigurationTarget,
   commands,
   type ExtensionContext,
+  ProgressLocation,
   Uri,
   window,
   workspace,
@@ -78,6 +79,7 @@ import {
   saveOpenAIApiKeyCommandId,
   saveOpenAICompatibleApiKeyCommandId,
 } from "./controllers/provider-api-key-command.js";
+import { registerProviderConnectionCheckCommand } from "./controllers/provider-connection-check-command.js";
 import {
   type ProviderOnboardingActionResult,
   ProviderOnboardingController,
@@ -492,6 +494,34 @@ export function activate(context: ExtensionContext): void {
       showQuickPick: (items, options) => window.showQuickPick(items, options),
       showInformationMessage: (message) => window.showInformationMessage(message),
       showErrorMessage: (message) => window.showErrorMessage(message),
+    }),
+    registerProviderConnectionCheckCommand({
+      readConfiguration() {
+        const settings = workspace.getConfiguration("ctrlZebra.provider");
+        return readProviderConfiguration({
+          get: (setting) => settings.get(setting),
+        });
+      },
+      secrets,
+      registerCommand: (commandId, handler) => commands.registerCommand(commandId, handler),
+      runWithProgress: (task) =>
+        window.withProgress(
+          {
+            location: ProgressLocation.Notification,
+            cancellable: true,
+            title: "CtrlZebra: Check Provider Connection",
+          },
+          (_progress, token) => task(token),
+        ),
+      showInformationMessage: (message) => window.showInformationMessage(message),
+      showErrorMessage: (message) => window.showErrorMessage(message),
+      log: (entry) => {
+        if (entry.outcome === "failure") {
+          logger.error(entry);
+        } else {
+          logger.info(entry);
+        }
+      },
     }),
     registerAgentView({
       extensionUri: context.extensionUri,

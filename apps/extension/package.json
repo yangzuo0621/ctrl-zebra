@@ -108,6 +108,11 @@
         "category": "CtrlZebra"
       },
       {
+        "command": "ctrlZebra.checkProviderConnection",
+        "title": "Check Provider Connection",
+        "category": "CtrlZebra"
+      },
+      {
         "command": "ctrlZebra.connectMcpServer",
         "title": "Connect MCP Server",
         "category": "CtrlZebra"
