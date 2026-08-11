@@ -624,7 +624,9 @@ describe("App streaming chat", () => {
       });
     });
 
-    expect(screen.getAllByRole("article", { name: "read_file" })).toHaveLength(1);
+    expect(
+      screen.getAllByRole("article", { name: `${strings.tool.cardLabel}: read_file` }),
+    ).toHaveLength(1);
     expect(screen.getByLabelText("Tool status")).toHaveTextContent("Pending");
 
     act(() => {
@@ -638,7 +640,9 @@ describe("App streaming chat", () => {
       });
     });
 
-    expect(screen.getAllByRole("article", { name: "read_file" })).toHaveLength(1);
+    expect(
+      screen.getAllByRole("article", { name: `${strings.tool.cardLabel}: read_file` }),
+    ).toHaveLength(1);
     expect(screen.getByLabelText("Tool status")).toHaveTextContent("Running");
 
     act(() => {
@@ -659,7 +663,9 @@ describe("App streaming chat", () => {
       });
     });
 
-    expect(screen.getAllByRole("article", { name: "read_file" })).toHaveLength(1);
+    expect(
+      screen.getAllByRole("article", { name: `${strings.tool.cardLabel}: read_file` }),
+    ).toHaveLength(1);
     expect(screen.getByLabelText("Tool status")).toHaveTextContent("Success");
     await user.click(screen.getByRole("button", { name: "Details" }));
     expect(screen.getByRole("group", { name: "Result" })).toHaveTextContent("Hello");
@@ -818,7 +824,9 @@ describe("App streaming chat", () => {
     expect(screen.getByRole("region", { name: strings.reasoning.regionLabel })).toBeVisible();
     expect(screen.getByText("Inspect contracts.")).toBeVisible();
     expect(screen.getByText("Final answer.")).toBeVisible();
-    expect(screen.getByRole("article", { name: "read_file" })).toBeVisible();
+    expect(
+      screen.getByRole("article", { name: `${strings.tool.cardLabel}: read_file` }),
+    ).toBeVisible();
     expect(
       screen.getByRole("status", { name: strings.app.reasoningStatusLabel }),
     ).toHaveTextContent(strings.reasoning.started);

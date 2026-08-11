@@ -37,9 +37,15 @@ export function ApprovalCard({
           : strings.approval.status[item.status];
 
   const cardClassName = embedded ? styles.embeddedCard : styles.card;
+  const accessibleLabel = commandApproval
+    ? strings.approval.commandApproval
+    : strings.approval.fileChangeApproval;
 
   return (
-    <article className={cardClassName} aria-labelledby={titleId}>
+    <article
+      className={cardClassName}
+      aria-label={`${accessibleLabel}: ${item.approval.presentation.title}`}
+    >
       {embedded ? (
         <div className={styles.embeddedHeader}>
           <span className={styles.detailLabel}>{strings.approval.riskLevel}</span>

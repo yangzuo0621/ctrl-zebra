@@ -39,5 +39,8 @@ describe("Webview product language", () => {
     expect(strings.mcpAnnouncements.connected("local-tools")).toBe(
       "Connected to MCP Server local-tools.",
     );
+    expect(strings.command.name).toBe("run_command");
+    expect(strings.onboarding.joiner).toBe(" and ");
+    expect(strings.onboarding.pendingSuffix).toBe("…");
   });
 });

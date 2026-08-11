@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { DisplayApproval } from "./approval-store.js";
 import type { DisplayToolCall } from "./chat-store.js";
 import { CommandToolCard } from "./command-tool-card.js";
+import { strings } from "./strings.js";
 
 const call = {
   id: "call-command",
@@ -29,7 +30,11 @@ describe("CommandToolCard", () => {
       />,
     );
 
-    expect(screen.getByRole("article", { name: "run_command" })).toBeVisible();
+    expect(
+      screen.getByRole("article", {
+        name: `${strings.command.eyebrow}: ${strings.command.name}`,
+      }),
+    ).toBeVisible();
     expect(screen.getByLabelText("Command status")).toHaveTextContent("Pending");
     expect(screen.getByRole("group", { name: "Command request" })).toHaveTextContent(
       '"command": "node"',

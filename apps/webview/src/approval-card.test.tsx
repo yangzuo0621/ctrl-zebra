@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ApprovalCard } from "./approval-card.js";
 import type { DisplayApproval } from "./approval-store.js";
+import { strings } from "./strings.js";
 
 const approval = {
   requestId: "request-1",
@@ -43,9 +44,11 @@ describe("ApprovalCard", () => {
     const onApprove = vi.fn();
     renderCard("pending", { onViewDiff, onApprove });
 
-    expect(screen.getByRole("article", { name: "Update example.ts" })).toHaveTextContent(
-      "workspace/src/example.ts",
-    );
+    expect(
+      screen.getByRole("article", {
+        name: `${strings.approval.fileChangeApproval}: Update example.ts`,
+      }),
+    ).toHaveTextContent("workspace/src/example.ts");
     expect(screen.getByText("Replace one line in example.ts.")).toBeVisible();
     expect(screen.getByText("write")).toBeVisible();
 

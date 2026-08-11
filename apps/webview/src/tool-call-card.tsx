@@ -72,7 +72,11 @@ export function ToolCallCard({
     : strings.tool.status[toolCall.status];
 
   return (
-    <article aria-labelledby={headingId} className={styles.card} data-status={toolCall.status}>
+    <article
+      aria-label={`${strings.tool.cardLabel}: ${toolCall.call.name}`}
+      className={styles.card}
+      data-status={toolCall.status}
+    >
       <header className={styles.header}>
         <div className={styles.headerTitleGroup}>
           <h3 className={styles.title} id={headingId}>
@@ -153,5 +157,5 @@ function summarizeJson(value: JsonValue): string {
   if (formatted.length <= 1200) {
     return formatted;
   }
-  return `${formatted.slice(0, 1200)}\n… (truncated)`;
+  return `${formatted.slice(0, 1200)}\n${strings.tool.jsonTruncated}`;
 }

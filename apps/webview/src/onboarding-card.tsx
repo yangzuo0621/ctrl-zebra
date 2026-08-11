@@ -79,7 +79,7 @@ export function OnboardingCard({
       ? strings.onboarding.checking
       : missingItems.length === 0
         ? strings.onboarding.ready(providerLabel)
-        : strings.onboarding.finishSetup(missingItems.join(" and "));
+        : strings.onboarding.finishSetup(missingItems.join(strings.onboarding.joiner));
 
   return (
     <div className={styles.container}>
@@ -125,7 +125,7 @@ export function OnboardingCard({
                       onClick={(event) => handleAction(action, event)}
                     >
                       {pendingAction?.action === action
-                        ? `${strings.onboarding.actionLabels[action]}…`
+                        ? `${strings.onboarding.actionLabels[action]}${strings.onboarding.pendingSuffix}`
                         : strings.onboarding.actionLabels[action]}
                     </Button>
                   ))}

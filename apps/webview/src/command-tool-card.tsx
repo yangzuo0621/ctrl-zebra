@@ -95,12 +95,16 @@ export function CommandToolCard({
   };
 
   return (
-    <article aria-labelledby={headingId} className={styles.card} data-status={visualStatus}>
+    <article
+      aria-label={`${strings.command.eyebrow}: ${strings.command.name}`}
+      className={styles.card}
+      data-status={visualStatus}
+    >
       <header className={styles.header}>
         <div>
           <p className={styles.eyebrow}>{strings.command.eyebrow}</p>
           <h3 className={styles.title} id={headingId}>
-            run_command
+            {strings.command.name}
           </h3>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>

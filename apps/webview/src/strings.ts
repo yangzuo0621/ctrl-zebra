@@ -121,6 +121,7 @@ export const strings = {
   },
   command: {
     eyebrow: "Command Tool",
+    name: "run_command",
     statusLabel: "Command status",
     awaitingDecision: "Awaiting Decision",
     terminated: "Terminated",
@@ -259,6 +260,8 @@ export const strings = {
     modelNotSelected: "Model not selected.",
     actionsLegend: "Provider actions",
     sampleTasks: "Sample tasks",
+    joiner: " and ",
+    pendingSuffix: "…",
     actionInProgress: (action: string) => `${action} in progress.`,
     actionCompleted: (action: string) => `${action} completed.`,
     actionCancelled: (action: string) => `${action} cancelled.`,
@@ -299,6 +302,7 @@ export const strings = {
     unknown: "—",
   },
   tool: {
+    cardLabel: "Tool",
     statusLabel: "Tool status",
     status: {
       pending: "Pending",
@@ -316,6 +320,7 @@ export const strings = {
     arguments: "Arguments",
     result: "Result",
     resultTruncated: "Result truncated.",
+    jsonTruncated: "… (truncated)",
   },
   chat: {
     usageLimit: "Provider usage exceeded the supported Session limit.",
