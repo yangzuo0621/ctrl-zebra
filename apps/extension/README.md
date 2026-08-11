@@ -113,9 +113,39 @@ lines, environment overrides, credentials, and workspace-scoped MCP configuratio
 }
 ```
 
+This existing `version: 1` setting remains `modern-only` and accepts only MCP `2026-07-28`. It is
+not silently migrated or broadened on upgrade. To opt into the reviewed compatibility path, first
+explicitly migrate the setting to version `2`, then choose the closed `protocolMode` value
+`"modern-only"` or `"dual"`:
+
+```json
+{
+  "ctrlZebra.mcp.server": {
+    "version": 2,
+    "protocolMode": "dual",
+    "serverId": "local_docs",
+    "displayName": "Local docs",
+    "command": "/absolute/path/to/the-server",
+    "args": ["--stdio"]
+  }
+}
+```
+
+`dual` supports exactly modern `2026-07-28` and legacy `2025-11-25` over local `stdio`. The full
+configuration, migration, and exclusion rules are in the [configuration contract](docs/configuration.md).
+The T1804 contract defines strict v1/v2 parsing, normalized Protocol Schemas, bounded provenance,
+and deterministic compatibility fixtures; those implementation changes remain pending in the T1804
+follow-up. Live dual connection selection, probe/fallback lifecycle, Extension/Webview wiring, and
+explicit user migration activation remain gated by T1805–T1807. After the follow-up parser accepts
+version `2`, `dual` must remain fail-closed with stable `configuration-invalid` guidance before
+approval or process start until that wiring lands; it is never silently treated as modern-only.
+
 Open one trusted workspace, review the exact executable, arguments, and canonical working directory,
 then run **CtrlZebra: Connect MCP Server** or select **Connect** in the Agent view. After connection:
 
+- **Configured mode and negotiated protocol** are shown separately. A connected modern Server is
+  shown as `modern / 2026-07-28`; a connected legacy Server is shown as `legacy / 2025-11-25`.
+  Before the handshake completes, the UI shows no selected era, version, probe, or fallback result.
 - **Tools** are available to the model, but every call has trusted `execute` risk and requires a new
   exact single-use approval showing the Server, Tool, arguments, and external-side-effect warning.
 - **Resources** and **Resource Templates** are read only after you select them. Previewed bounded text
@@ -137,7 +167,7 @@ All settings have machine scope.
 | `ctrlZebra.provider.model` | empty | Required exact model ID. Surrounding whitespace is rejected. |
 | `ctrlZebra.provider.endpoint` | empty | Optional override for OpenAI/Gemini; required for OpenAI-compatible. Remote URLs must use HTTPS. Plain HTTP is allowed only for `localhost`, `127.0.0.0/8`, or `::1`. User info, query strings, and fragments are rejected. |
 | `ctrlZebra.provider.capabilities` | `["text-streaming"]` | Used only by OpenAI-compatible endpoints. Values are `text-streaming` and `tool-calling`, without duplicates. CtrlZebra currently requires both to start an Agent run. |
-| `ctrlZebra.mcp.server` | `null` | One local stdio Server object with `version: 1`, stable lower-snake-case `serverId`, bounded `displayName`, exact `command`, and ordered `args`. Credentials and shell command lines are forbidden. A trusted single-folder workspace and fresh startup approval are required. |
+| `ctrlZebra.mcp.server` | `null` | One local stdio Server object. Existing `version: 1` means modern-only; explicit `version: 2` adds `protocolMode: "modern-only" | "dual"`. Stable lower-snake-case `serverId`, bounded `displayName`, exact `command`, and ordered `args` are required; credentials and shell command lines are forbidden. A trusted single-folder workspace and fresh startup approval are required. See the [configuration contract](docs/configuration.md). |
 
 OpenAI and Gemini always use their adapter-declared text-streaming and tool-calling capabilities.
 Remote providers require a corresponding API key. Save, rotate, and delete commands are available
@@ -171,7 +201,9 @@ CtrlZebra has no accounts, cloud sync, advertising, or telemetry backend. It sto
 - bounded structured diagnostics in the local CtrlZebra VS Code log channel.
 
 MCP configuration remains in VS Code machine settings and is not copied into Sessions. Live Server
-catalogs, raw protocol messages, stderr, and process details are not persisted. Attached Resource
+catalogs, raw protocol messages, stderr, process details, and negotiation attempts are not persisted.
+Completed MCP outcomes may retain bounded configured-mode and negotiated-era/version provenance only;
+that provenance cannot reconnect or authorize a Server. Attached Resource
 text, confirmed Prompt text, and bounded Tool outcomes can become conversation context and may be
 sent to the configured model provider. The external Server itself runs outside CtrlZebra's privacy
 boundary and may perform local or network activity under its own behavior.
@@ -189,8 +221,9 @@ Read the full [Privacy Notice](PRIVACY.md) and [security contract](docs/security
   Agent run.
 - Model discovery is user-triggered for the official OpenAI and Gemini endpoints only. OpenAI-Compatible
   and custom endpoints use manual model IDs; there is no account sign-in.
-- MCP supports exactly one user-configured local stdio Server and exact protocol version
-  `2026-07-28`. There is no HTTP transport, OAuth, credential injection, multi-server operation,
+- MCP supports exactly one user-configured local stdio Server. Version `1` settings remain
+  modern-only (`2026-07-28`); explicit version `2` dual mode additionally supports legacy
+  `2025-11-25`. There is no HTTP transport, OAuth, credential injection, multi-server operation,
   automatic install, automatic connection, retry, or restart recovery.
 - MCP supports Tools, bounded text Resources/Resource Templates, and bounded text Prompts only.
   Sampling, Elicitation, Roots, Tasks, subscriptions, binary or multimodal content, and
@@ -213,8 +246,17 @@ Read the full [Privacy Notice](PRIVACY.md) and [security contract](docs/security
   fields, uses an absolute or otherwise directly executable command, and separates every argument.
 - **Workspace must be trusted**: open exactly one local folder and grant VS Code Workspace Trust;
   MCP process startup is disabled in untrusted, empty, remote-only, or multi-root windows.
-- **Protocol or capability failure**: update the Server to exact MCP `2026-07-28`. CtrlZebra does not
-  negotiate down to an older version or enable undeclared Client capabilities.
+- **Protocol or capability failure**: check the configured mode. Modern-only requires MCP
+  `2026-07-28`; dual supports only `2026-07-28` and `2025-11-25`. CtrlZebra never accepts unknown
+  versions, exposes probe/fallback details before a successful handshake, or enables undeclared
+  Client capabilities. A well-formed modern DiscoverResult or recognized modern JSON-RPC error
+  never falls back; if it does not advertise controlled `2026-07-28`, the stable result is
+  `protocol-incompatible`. Syntactically/structurally malformed or validation-failing response/error
+  uses `malformed-message`; structurally valid unknown-future or otherwise unclassified response/error
+  uses `protocol-incompatible`; neither falls back. Dual fallback is limited to a defined non-modern
+  response or bounded timeout. A version-1 setting must be explicitly migrated before dual can be
+  selected. Until T1807 runtime wiring lands, configured `dual` is rejected before startup approval
+  with stable `configuration-invalid` guidance; no modern probe or fallback is attempted.
 - **Server exited or malformed output**: disconnect, inspect the Server outside CtrlZebra without
   sharing secrets, correct its stdout protocol behavior, then reconnect explicitly. CtrlZebra never
   treats stderr or raw protocol data as user-visible content.

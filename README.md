@@ -133,8 +133,12 @@ explicitly migrate the setting to version `2`, then choose the closed `protocolM
 
 `dual` supports exactly modern `2026-07-28` and legacy `2025-11-25` over local `stdio`. The full
 configuration, migration, and exclusion rules are in the [configuration contract](docs/configuration.md).
-Version `2` parsing and migration are gated by the reviewed T1804 constraint and are enabled only by
-the subsequent implementation tasks.
+The T1804 contract defines strict v1/v2 parsing, normalized Protocol Schemas, bounded provenance,
+and deterministic compatibility fixtures; those implementation changes remain pending in the T1804
+follow-up. Live dual connection selection, probe/fallback lifecycle, Extension/Webview wiring, and
+explicit user migration activation remain gated by T1805–T1807. After the follow-up parser accepts
+version `2`, `dual` must remain fail-closed with stable `configuration-invalid` guidance before
+approval or process start until that wiring lands; it is never silently treated as modern-only.
 
 Open one trusted workspace, review the exact executable, arguments, and canonical working directory,
 then run **CtrlZebra: Connect MCP Server** or select **Connect** in the Agent view. After connection:
@@ -251,7 +255,8 @@ Read the full [Privacy Notice](PRIVACY.md) and [security contract](docs/security
   uses `malformed-message`; structurally valid unknown-future or otherwise unclassified response/error
   uses `protocol-incompatible`; neither falls back. Dual fallback is limited to a defined non-modern
   response or bounded timeout. A version-1 setting must be explicitly migrated before dual can be
-  selected.
+  selected. Until T1807 runtime wiring lands, configured `dual` is rejected before startup approval
+  with stable `configuration-invalid` guidance; no modern probe or fallback is attempted.
 - **Server exited or malformed output**: disconnect, inspect the Server outside CtrlZebra without
   sharing secrets, correct its stdout protocol behavior, then reconnect explicitly. CtrlZebra never
   treats stderr or raw protocol data as user-visible content.

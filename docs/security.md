@@ -207,7 +207,10 @@ risk calls to avoid the matrix is forbidden.
 - The bound operation is compared structurally from validated values, not from display text or raw
   JSON spelling. Any change to the tool name, input, selected root, target URI, resource set,
   expected version or content hash, effect, or risk creates a different operation and requires a
-  new request.
+  new request. MCP startup additionally binds the normalized effective `protocolMode`, Server
+  identity, executable, ordered arguments, and canonical cwd. Version `1` without a mode and
+  version `2` with explicit `modern-only` have the same startup identity when those effective
+  fields match; `dual` is different.
 - File targets retain URI identity at the Extension boundary. A request for a file mutation binds
   the canonical target and the exact pre-operation version or content hash. Canonicalization or
   revision checks are repeated immediately before consumption.
@@ -650,11 +653,18 @@ side effects independent of what it advertises.
 - Reading a version `1` object never writes a version `2` object or silently enables dual behavior.
   Migration and selection of `protocolMode: "dual"` are explicit user actions. A change while
   connected marks the configuration stale and requires disconnect, a new generation, and fresh
-  startup approval; it cannot mutate the live process or switch era in place.
+  startup approval; it cannot mutate the live process or switch era in place. The pure T1804
+  parser/schema may recognize `dual` for strict migration validation and fixtures, but the current
+  live Extension path remains fail-closed until T1807 wiring: it rejects effective `dual` with the
+  stable `configuration-invalid` outcome and fixed guidance before workspace binding, approval, or
+  process spawn. It never treats `dual` as modern-only.
 - Configuration has no cwd, environment, shell, transport, endpoint, headers, credential,
   SecretStorage name, auto-start, retry, or capability fields. The canonical cwd is the exact
-  Extension-selected trusted workspace root at connect time. Version, identity, command, args, and
-  cwd form the effective immutable configuration for one connection attempt.
+  Extension-selected trusted workspace root at connect time. The normalized effective
+  `protocolMode`, Server identity, command, args, and cwd form the immutable configuration for one
+  connection attempt. Raw version is used only to normalize version `1` implicit `modern-only` and
+  version `2` explicit `modern-only`; those two representations have the same effective identity
+  when every other field matches.
 - API keys, bearer tokens, passwords, authorization headers, cookies, proxy credentials, and other
   secrets are forbidden in `command`, `args`, display values, or future ordinary settings. Stage 14
   provides no MCP Secret injection. A Server that requires credentials is unsupported until a
@@ -666,12 +676,15 @@ side effects independent of what it advertises.
 ### Startup and process containment
 
 - Server startup is a distinct `execute` operation, not `run_command` and not a Tool Call. It
-  requires a fresh single-use approval that displays and binds Server identity, complete executable,
+  requires a fresh single-use approval that displays and binds the normalized effective mode,
+  Server identity, complete executable,
   ordered arguments, canonical selected-workspace cwd, the external-process warning, creation and
   expiry times, and the current trusted-workspace decision. It uses the existing host-owned
   five-minute approval lifetime; configuration or trust changes can invalidate it earlier.
-- The Extension revalidates configuration scope, Workspace Trust, approval, executable/arguments,
-  canonical cwd, and operation equality immediately before direct spawn. Shell interpretation,
+- The Extension revalidates configuration scope, Workspace Trust, approval, normalized effective
+  mode, executable/arguments, canonical cwd, and operation equality immediately before direct
+  spawn. A mode change between the approval request and this second read, or during an explicit
+  retry, invalidates the old approval and generation; it cannot be reused. Shell interpretation,
   string command lines, profile loading, variable/glob expansion, aliases, pipes, redirects,
   command substitution, and model- or Server-selected executables are forbidden.
 - The process receives a new allowlisted environment rather than the Host environment. Both
