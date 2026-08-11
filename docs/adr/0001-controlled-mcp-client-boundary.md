@@ -89,11 +89,18 @@ never become System authority.
 ### Tool schemas and policy
 
 Static CtrlZebra boundary values use strict Zod schemas. Dynamic Server-supplied Tool schemas wrap
-the pinned SDK's public Ajv validator behind a CtrlZebra interface. Before compilation, a structural
-pass accepts only Draft 2020-12 and the closed non-regex keyword subset defined in Architecture,
-then applies byte, node, depth, property, and local-reference limits. Remote/cyclic references,
-patterns, formats, custom behavior, data coercion/defaulting/removal, and unknown keywords are
-forbidden. Compiled validators live only with the current immutable Tool snapshot.
+the pinned SDK's public Ajv validator behind a CtrlZebra interface. Before compilation, a bounded
+normalizer accepts only the Draft 2020-12 baseline and the four closed keyword outcomes defined in
+Architecture: allowed/retained, safe-to-strip, known-dangerous rejection, and unknown-keyword
+rejection. A deterministic `definitions` → `$defs` conversion runs before reference analysis. A key
+accepted by none of those outcomes or the conversion pass is an unknown keyword and remains
+rejected. Remote references, regex-bearing `pattern`/
+`patternProperties`, `$dynamicRef`, `$dynamicAnchor`, `$recursiveRef`, `$recursiveAnchor`, malformed
+references, and byte/node/depth/property limit breaches remain rejected. A direct self-reference to one `$defs` anchor is supported; cycles through two or more
+distinct anchors are rejected. Stripped values are still recursively walked and bounded, and
+compiled validators live only with the current immutable Tool snapshot. Neither normalization nor
+Ajv validation coerces data, inserts defaults, removes properties, or replaces the approval and
+runtime validation boundaries.
 
 Core represents the result with a CtrlZebra-owned `external_json_schema_2020_12` Tool input-schema
 wrapper, distinct from the existing statically typed built-in Tool schema. The MCP adapter is the
@@ -255,6 +262,59 @@ reset, exact duplicate no-op at both pending and committed watermarks, same-sequ
 discard at either watermark, atomic publication, and legacy-client compatibility. It does not
 authorize T1802 Schema keyword reinterpretation, T1803 diagnostic UX, or T1804–T1807 dual-era
 protocol behavior; those remain separate tasks and change control surfaces.
+
+## T1802 supplement: Schema keyword classes and local reference normalization
+
+T1802 refines only the dynamic MCP Tool Schema policy. It does not change the pinned
+`2026-07-28` protocol, SDK version, Tool approval, generation, resource limits, or T1801
+per-Tool rejection/snapshot contract. The normalizer runs before the injected Ajv validator and
+produces the only schema value that can reach Core or a compiled validator.
+
+- The **allowed/retained** class is the closed Draft 2020-12 subset in Architecture. Values are
+  narrowed and recursively bounded, then retained. The **safe-to-strip** class is
+  `format`, `$id`, `$comment`, `readOnly`, `writeOnly`, `deprecated`, `nullable`, `if`, `then`,
+  `else`, `dependentSchemas`, `dependentRequired`, `propertyNames`, `contains`, `minContains`,
+  `maxContains`, `unevaluatedProperties`, `unevaluatedItems`, `contentEncoding`,
+  `contentMediaType`, and `contentSchema`. Their values, including nested schemas, are still
+  walked with the same limits and dangerous/unknown-keyword checks, then omitted from the
+  normalized schema. A key outside the allowed, stripped, conversion, and known-dangerous sets is
+  `unknown-keyword` and is rejected; no vendor extension is silently ignored.
+- The legacy `definitions` map is converted to `$defs` rather than stripped. The map must be a
+  bounded object; native `$defs` and converted entries may be merged only when names do not
+  collide, otherwise normalization fails with `schema-invalid`. Every local `#/definitions/<name>`
+  JSON Pointer is rewritten to `#/$defs/<name>`, preserving RFC 6901 escaping. A successful
+  conversion itself produces no rejection entry.
+- The allowed `$ref` keyword accepts only a local, well-formed, resolvable pointer to an exact
+  top-level `#/$defs/<name>` anchor (or its rewritten legacy spelling). Bare `#`, root/non-anchor
+  targets, nested pointers below an anchor, malformed/remote/unresolved targets, and every
+  multi-anchor cycle fail with `invalid-reference` and never trigger loading or network access.
+  Reference analysis occurs after conversion. The graph has one vertex per `$defs` anchor and an
+  edge from the containing anchor to each referenced anchor; root-schema references are checked for
+  existence but are not graph cycle sources. A direct self-reference means a `$ref` anywhere below
+  `#/$defs/name` whose exact target is `#/$defs/name`; that self-edge is allowed. Every other
+  cyclic form, including `A → B → A`, root self-reference, and nested/non-anchor mutual cycles,
+  is rejected as `invalid-reference`. This deliberate distinction corrects the former blanket “cyclic references
+  forbidden” wording and matches the pinned Ajv behavior for bounded recursive trees. Ajv
+  compilation remains mandatory as the final unresolved-reference check.
+- The known-dangerous keyword set is exactly `pattern`, `patternProperties`, `$dynamicRef`,
+  `$dynamicAnchor`, `$recursiveRef`, and `$recursiveAnchor`; each maps to `forbidden-keyword`.
+  `pattern` and `patternProperties` would create a ReDoS surface when applied to model-generated
+  arguments, while dynamic/recursive reference vocabularies are not reviewed at this boundary.
+  Structural byte/node/depth/property breaches remain `limit-exceeded`; malformed values,
+  definition-name collisions, or Ajv compile failures remain `schema-invalid`. Safe stripping and
+  successful definitions conversion never create a rejection entry; the accepted Tool carries
+  only the normalized schema.
+- The same compiled validator validates arguments immediately before approval construction and
+  again before execution, with no coercion, defaults, or property removal. The one-time approval
+  remains the authority for side effects; normalization is a compatibility measure and cannot
+  authorize an invocation or expose raw Server data.
+
+This supplement is the T1802 documentation gate. Its implementation must add focused tests for
+each stripped keyword and for nested dangerous/unknown keywords, dangerous regex and remote
+reference rejection, byte/node/depth/property limits, definitions conversion and collision,
+direct self-recursion, mutual-reference rejection, Draft differences, Ajv compile/runtime
+validation, and preservation of the T1801 all-rejected and mixed-catalog behavior. It does not
+authorize T1803 diagnostics or T1804–T1807 dual-era behavior.
 
 ## Reviewed primary references
 

@@ -553,6 +553,45 @@ and committed watermarks, same-sequence conflicting discard at either watermark,
 publication without partial state, and an older client that ignores the additive message while
 continuing to render the unchanged legacy catalog.
 
+### Tool Schema keyword classes and reference normalization (T1802)
+
+The schema policy is evaluated in the Extension/MCP boundary before any Core Tool or catalog
+projection is constructed. It is a closed, versioned policy and is not a Webview responsibility:
+
+- Allowed keywords are the retained Draft 2020-12 subset already listed by Architecture. Known
+  annotation or unsupported-assertion keywords (`format`, `$id`, `$comment`, `readOnly`,
+  `writeOnly`, `deprecated`, `nullable`, `if`, `then`, `else`, `dependentSchemas`,
+  `dependentRequired`, `propertyNames`, `contains`, `minContains`, `maxContains`,
+  `unevaluatedProperties`, `unevaluatedItems`, `contentEncoding`, `contentMediaType`, and
+  `contentSchema`) are safely stripped after their bounded values and nested schemas are walked.
+  Stripped keywords never appear in a rejected-tool reason or a wire schema because schemas are
+  not part of the Webview DTO.
+- A legacy `definitions` object is converted to `$defs`; a local `#/definitions/...` JSON Pointer
+  is rewritten to `#/$defs/...` with RFC 6901 escaping preserved. Native and converted definition
+  names must not collide (`schema-invalid`); a successful conversion itself produces no rejection
+  entry. The allowed `$ref` keyword accepts only a local, well-formed, resolvable pointer to an
+  exact top-level `#/$defs/<name>` anchor (or a rewritten legacy `#/definitions/<name>` target). A
+  bare `#`, a root/non-anchor target, a nested pointer below an anchor, a malformed/remote target,
+  or a multi-anchor cycle is an
+  `invalid-reference` rejection. A direct recursive reference from a `$defs` anchor to that same
+  anchor is valid; every other cyclic form, including root self-reference and nested/non-anchor
+  mutual cycles, is an `invalid-reference`. This permits bounded tree/AST arguments while keeping reference
+  resolution local and finite.
+- The known-dangerous keyword set is exactly `pattern`, `patternProperties`, `$dynamicRef`,
+  `$dynamicAnchor`, `$recursiveRef`, and `$recursiveAnchor`; each is forbidden (`forbidden-keyword`)
+  because its behavior is not reviewed at this boundary (and Server-supplied regular expressions
+  are not compiled or executed here). Any byte, node, depth, or property limit breach is
+  `limit-exceeded`. A key outside the allowed, stripped, conversion, and known-dangerous sets is
+  `unknown-keyword`; malformed values, conversion collisions, and Ajv compile failures are
+  `schema-invalid`. These classifications are selected by CtrlZebra and the wire reason stays the
+  closed enum above; no
+  external keyword, path, raw Schema, SDK error, or exception text is exposed.
+- The normalized schema must compile through the pinned Ajv adapter. The same compiled validator
+  validates Tool arguments immediately before approval construction and again before execution;
+  validation is shape-only and performs no coercion, default insertion, or property removal.
+  Compilation and runtime validation are mandatory even when a keyword was stripped or renamed;
+  compatibility handling must never bypass either stage.
+
 ### Resource and Resource Template projections
 
 `McpResourceDescriptorDto` is the strict bounded projection `{ server, generation, uri, name,

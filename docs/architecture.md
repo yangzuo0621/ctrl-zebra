@@ -476,17 +476,54 @@ port.
   descriptor. Provider adapters unwrap the already-validated plain JSON value without narrowing it
   to the built-in schema subset; SDK JSON Schema types never enter Core.
 - T1404 must wrap the pinned SDK's documented `AjvJsonSchemaValidator` export behind an injected
-  `ExternalJsonSchemaValidator` contract. A structural walker first accepts only JSON Schema Draft
-  2020-12 and the closed keyword set `$schema`, `$defs`, local `$ref`, `type`, `properties`,
-  `required`, `additionalProperties`, `items`, `prefixItems`, `minItems`, `maxItems`,
-  `uniqueItems`, `minProperties`, `maxProperties`, `minimum`, `maximum`, `exclusiveMinimum`,
-  `exclusiveMaximum`, `multipleOf`, `minLength`, `maxLength`, `enum`, `const`, `allOf`, `anyOf`,
-  `oneOf`, `not`, `title`, `description`, `default`, and `examples`. It rejects remote or cyclic
-  references, unknown dialects/keywords, `pattern`, `patternProperties`, `format`, content and
-  unevaluated keywords, custom formats/keywords, excessive bytes, nodes, depth, and properties.
+  `ExternalJsonSchemaValidator` contract. Before compilation, a bounded structural normalizer
+  accepts only the Draft 2020-12 baseline (an omitted `$schema` is treated as that baseline) and
+  applies four closed keyword outcomes (allowed, safely stripped, known-dangerous rejection, and
+  unknown-keyword rejection). The legacy `definitions` spelling is normalized in a deterministic
+  conversion pass before reference analysis:
+  - **Allowed and retained**: `$schema`, `$defs`, local `$ref`, `type`, `properties`, `required`,
+    `additionalProperties`, `items`, `prefixItems`, `minItems`, `maxItems`, `uniqueItems`,
+    `minProperties`, `maxProperties`, `minimum`, `maximum`, `exclusiveMinimum`,
+    `exclusiveMaximum`, `multipleOf`, `minLength`, `maxLength`, `enum`, `const`, `allOf`, `anyOf`,
+    `oneOf`, `not`, `title`, `description`, `default`, and `examples`. Their values are narrowed,
+    recursively walked, and retained in the normalized schema.
+  - **Known and safely stripped**: `format`, `$id`, `$comment`, `readOnly`, `writeOnly`,
+    `deprecated`, `nullable`, `if`, `then`, `else`, `dependentSchemas`, `dependentRequired`,
+    `propertyNames`, `contains`, `minContains`, `maxContains`, `unevaluatedProperties`,
+    `unevaluatedItems`, `contentEncoding`, `contentMediaType`, and `contentSchema`. Their values
+    are still recursively walked and bounded (so a dangerous or unknown nested keyword cannot be
+    hidden), then omitted from the normalized schema. Stripping is a deliberate loss of annotation
+    or unsupported assertion semantics, not an admission of those keywords to Ajv.
+  - **Definitions conversion**: a `definitions` object is normalized into `$defs`. If both names
+    are present, entries are merged only when their decoded definition names do not collide; a
+    collision is `schema-invalid`; a successful conversion itself produces no rejection entry.
+    Every `#/definitions/<name>` local JSON Pointer is rewritten to
+    `#/$defs/<name>` while preserving RFC 6901 escaping. Reference targets are restricted to an
+    exact top-level `$defs` anchor: a bare `#`, a root/non-anchor pointer, or a nested pointer below
+    an anchor is not in the accepted scope. Missing targets, malformed pointers, and remote
+    references are rejected as `invalid-reference`.
+  - **Must reject (known dangerous keywords)**: `pattern`, `patternProperties`, `$dynamicRef`,
+    `$dynamicAnchor`, `$recursiveRef`, and `$recursiveAnchor`. These keywords are known but
+    unreviewed by this boundary and map to `forbidden-keyword`; no vendor extension is silently
+    ignored. Any keyword not listed in the allowed, stripped, conversion, or must-reject sets is an
+    **unknown keyword** and maps to `unknown-keyword`. The allowed `$ref` keyword is separately checked for a
+    local target: remote/malformed/unresolved targets and multi-anchor cycles map to
+    `invalid-reference`; structural or compilation failures map to `schema-invalid`; limits remain
+    `limit-exceeded`.
+  Local references are resolved after normalization. The reference graph has one vertex for each
+  top-level `$defs` anchor and one edge from the containing anchor to each referenced anchor; a
+  reference from the root schema is checked for target existence but is not a graph cycle source.
+  A direct recursive reference means a `$ref` anywhere below `#/$defs/name` whose exact target is
+  `#/$defs/name`; that self-edge is supported by the pinned Ajv validator. Every other cyclic form
+  is rejected as `invalid-reference`, including cycles through two or more distinct anchors
+  (`A -> B -> A`), a root self-reference (`$ref: "#"`), and cycles involving nested or non-anchor
+  pointers (which are outside the accepted target scope in any case). This is the real recursion
+  contract and replaces the earlier blanket prohibition on cyclic references.
   Validation does not coerce types, insert defaults, remove properties, or return all errors.
-  Compiled validators are cached only for the immutable current-generation Tool snapshot and
-  disposed with it.
+  The normalized schema must compile through the injected Ajv validator, and that same compiled
+  validator must validate arguments immediately before approval construction and again before
+  execution. Compiled validators are cached only for the immutable current-generation Tool
+  snapshot and disposed with it.
 - The same compiled input schema validates Tool arguments immediately before approval construction
   and again before execution. An advertised output schema, when present, validates normalized
   structured output. Validation proves shape only; it never proves safety, read-only behavior,
