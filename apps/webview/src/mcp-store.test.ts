@@ -363,6 +363,46 @@ describe("unified MCP feature store", () => {
     expect(store.getState().diagnosticAnnouncement).toBeUndefined();
   });
 
+  it("clears retained recovery state synchronously when reconnect starts", () => {
+    const api = host();
+    const store = createMcpStore(api, () => "reconnect");
+    store.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-connection",
+      requestId: "failed",
+      connection: {
+        status: "failed",
+        server,
+        generation: 1,
+        configurationStale: false,
+        error: { code: "invalid-schema", message: "Tool schema was rejected." },
+      },
+    });
+    store.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-diagnostics",
+      requestId: "failed",
+      diagnosticSequence: 1,
+      diagnostic: {
+        kind: "tool-rejections",
+        outcome: "all-rejected",
+        server,
+        generation: 1,
+        connectionStatus: "failed",
+        skippedTools: [{ mcpToolName: "unsafe", reason: "forbidden-keyword" }],
+        skippedToolsTruncated: false,
+        recoveryAction: "reconnect",
+      },
+    });
+    expect(store.getState().diagnostics).toBeDefined();
+
+    store.getState().connect();
+
+    expect(store.getState().diagnostics).toBeUndefined();
+    expect(store.getState().busy).toBe("connecting");
+    expect(api.connectMcp).toHaveBeenCalledWith("reconnect");
+  });
+
   it("sequences diagnostics, keeps conflicting duplicates local, and clears on connection cleanup", () => {
     const api = host();
     const store = createMcpStore(api, () => "refresh");

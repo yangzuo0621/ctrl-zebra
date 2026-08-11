@@ -190,7 +190,19 @@ export function createMcpStore(
     announcement: strings.mcpAnnouncements.disconnected,
     connect() {
       connectionRequest = createRequestId();
-      set({ busy: "connecting", announcement: strings.mcpAnnouncements.connecting });
+      const shouldClearLiveState = get().connection.status !== "connected";
+      if (shouldClearLiveState) {
+        resourceRequest = undefined;
+        promptRequest = undefined;
+        clearToolCatalogWatermarks();
+        clearDiagnosticWatermarks();
+        toolCatalogDeliveryClosed = true;
+      }
+      set({
+        ...(shouldClearLiveState ? clearLiveState() : {}),
+        busy: "connecting",
+        announcement: strings.mcpAnnouncements.connecting,
+      });
       host.connectMcp?.(connectionRequest);
     },
     disconnect() {
