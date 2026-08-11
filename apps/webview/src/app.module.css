@@ -187,7 +187,7 @@
   border-bottom-right-radius: var(--cz-radius-sm);
 }
 
-.message[data-role="agent"] {
+.message[data-role="assistant"] {
   align-self: flex-start;
   background-color: var(--vscode-editor-background);
   border-color: var(--cz-color-border);

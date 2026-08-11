@@ -224,6 +224,9 @@ describe("App streaming chat", () => {
 
     expect(screen.getByText("Saved question")).toBeVisible();
     expect(screen.getByText("Saved answer")).toBeVisible();
+    expect(
+      screen.getByRole("listitem", { name: strings.app.assistantMessageLabel }),
+    ).toHaveAttribute("data-role", "assistant");
   });
 
   it("shows the confirmed current Session and carries it into the next submit", async () => {
