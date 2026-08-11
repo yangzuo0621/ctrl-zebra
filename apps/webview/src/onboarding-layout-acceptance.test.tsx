@@ -129,6 +129,11 @@ describe("Onboarding responsive and theme acceptance matrix", () => {
     expect(onboardingCss).toContain("max-width: 100%");
     expect(appCss).toContain("max-width: 100%");
   });
+
+  it("keeps the assistant message styling selector aligned with the role contract", () => {
+    expect(appCss).toContain('.message[data-role="assistant"]');
+    expect(appCss).not.toContain('.message[data-role="agent"]');
+  });
 });
 
 import { readFileSync } from "node:fs";
