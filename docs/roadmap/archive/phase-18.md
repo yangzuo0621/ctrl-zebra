@@ -1,5 +1,15 @@
 # 阶段 18：MCP Schema 与双纪元兼容性
 
+> **归档状态：阶段性归档校验通过**
+>
+> - 归档日期：2026-08-12
+> - 完成任务：T1801–T1807；任务实现已通过 PR #188、#191、#193、#195、#197、#198、#199 合并到 `main`。
+> - 归档基线：`d261a754693420ff62bfa02c418183933ae9f416`（`main` 与 `origin/main` 一致且工作区 clean）。
+> - 阶段门禁：单工具 Schema 隔离、危险/未知 Schema 拒绝、递归引用一致性、稳定诊断、双纪元闭合集、modern-first 无误回退、统一审批/Trust/generation/资源/清理边界，以及 Server-to-Client 请求前置拒绝均已由实现、协议 Schema、领域文档和测试覆盖。
+> - 跨边界一致性：`docs/architecture.md`、`docs/security.md`、`docs/protocol.md`、`docs/persistence.md`、`docs/ux.md`、`docs/webview.md`、`docs/configuration.md`、README、ADR 0001 补充说明与 ADR 0002 的模式、版本、错误、持久化和排除项一致。
+> - 验证证据：`pnpm check`（345 files）、`pnpm typecheck`、`pnpm test:unit`（130 files/1585 tests）、`pnpm build`、`pnpm test:integration`、`pnpm package:vsix` 和针对该 commit 的 `pnpm smoke:vsix` 均通过。VSIX 为 12 个 allowlisted entries（807093 compressed bytes、3667482 uncompressed bytes）；README/license parity、fixture/credential/network 排除和无 fixture 入包由 packaging verifier 与 fixture 审计确认。
+> - 后续门禁：归档 PR 合并前不得开始 T1901；归档后执行点为 T1901。
+
 ## 1. 阶段目标
 
 在不放宽危险 Schema、审批或资源边界的前提下，把 MCP Tool 发现从“一个工具失败导致整个目录
