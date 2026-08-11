@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { chatMessageSchema } from "./chat-message.js";
 import { checkpointIdSchema } from "./checkpoint.js";
+import { mcpNegotiatedProvenanceSchema } from "./mcp-negotiation.js";
 import { mcpPromptConfirmationSchema } from "./mcp-prompt.js";
 import { mcpResourceAttachmentSchema } from "./mcp-resource.js";
 import {
@@ -25,6 +26,7 @@ export const persistenceCheckpointsDirectory = "checkpoints" as const;
 export const maxPersistedCheckpointIdBytes = 100;
 
 const persistenceFormatVersionSchema = z.literal(persistenceFormatVersion);
+export const persistedMcpProvenanceSchema = mcpNegotiatedProvenanceSchema;
 
 export const persistedSessionIdSchema = sessionIdSchema.superRefine((sessionId, context) => {
   const bytes = encodeUtf8(sessionId);
@@ -112,11 +114,19 @@ export const persistedMcpToolEventPayloadSchema = z
   .discriminatedUnion("type", [
     z.strictObject({
       type: z.literal("session.mcp-tool-call"),
-      data: z.strictObject({ call: toolCallSchema, source: persistedMcpToolSourceSchema }),
+      data: z.strictObject({
+        call: toolCallSchema,
+        source: persistedMcpToolSourceSchema,
+        provenance: mcpNegotiatedProvenanceSchema.optional(),
+      }),
     }),
     z.strictObject({
       type: z.literal("session.mcp-tool-result"),
-      data: z.strictObject({ result: toolResultSchema, source: persistedMcpToolSourceSchema }),
+      data: z.strictObject({
+        result: toolResultSchema,
+        source: persistedMcpToolSourceSchema,
+        provenance: mcpNegotiatedProvenanceSchema.optional(),
+      }),
     }),
   ])
   .superRefine((payload, context) => {
@@ -213,6 +223,7 @@ export const persistedEventRecordSchema = z.strictObject({
 
 export type SessionManifest = z.infer<typeof sessionManifestSchema>;
 export type PersistedMessageRecord = z.infer<typeof persistedMessageRecordSchema>;
+export type PersistedMcpProvenance = z.infer<typeof mcpNegotiatedProvenanceSchema>;
 export type PersistedEventPayload = z.infer<typeof persistedEventPayloadSchema>;
 export type PersistedReasoningEventPayload = z.infer<typeof persistedReasoningEventPayloadSchema>;
 export type PersistedMcpToolSource = z.infer<typeof persistedMcpToolSourceSchema>;

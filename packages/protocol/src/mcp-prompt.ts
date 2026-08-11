@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { mcpNegotiatedProvenanceSchema } from "./mcp-negotiation.js";
+
 import { mcpGenerationSchema, mcpServerIdentitySchema, mcpServerIdSchema } from "./mcp-resource.js";
 
 export const maxMcpPromptDescriptors = 1_000;
@@ -90,6 +92,7 @@ export const mcpPromptConfirmationSchema = z.strictObject({
       });
     }
   }),
+  provenance: mcpNegotiatedProvenanceSchema.optional(),
 });
 
 export type McpPromptArgumentsDto = z.infer<typeof mcpPromptArgumentsSchema>;

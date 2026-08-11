@@ -185,13 +185,53 @@
             "command",
             "args"
           ],
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "properties": {
+                "version": {
+                  "enum": [
+                    1
+                  ]
+                }
+              },
+              "not": {
+                "required": [
+                  "protocolMode"
+                ]
+              }
+            },
+            {
+              "required": [
+                "protocolMode"
+              ],
+              "properties": {
+                "version": {
+                  "enum": [
+                    2
+                  ]
+                }
+              }
+            }
+          ],
           "properties": {
             "version": {
               "type": "number",
               "enum": [
-                1
+                1,
+                2
               ],
               "description": "The CtrlZebra MCP Server configuration version."
+            },
+            "protocolMode": {
+              "type": "string",
+              "enum": [
+                "modern-only",
+                "dual"
+              ],
+              "description": "The explicit MCP protocol compatibility mode for version 2."
             },
             "serverId": {
               "type": "string",

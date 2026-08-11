@@ -1,6 +1,9 @@
 export const mcpServerSettingSection = "ctrlZebra.mcp";
 export const mcpServerSettingName = "server";
 export const mcpServerConfigurationVersion = 1 as const;
+export const mcpServerConfigurationV2Version = 2 as const;
+export const mcpProtocolModes = ["modern-only", "dual"] as const;
+export type McpProtocolMode = (typeof mcpProtocolModes)[number];
 
 const maxServerIdCharacters = 64;
 const maxDisplayNameCodePoints = 128;
@@ -10,13 +13,26 @@ const maxArguments = 64;
 const maxArgumentBytes = 4_096;
 const maxSerializedArgumentsBytes = 32_768;
 
-export interface McpServerConfiguration {
-  readonly version: typeof mcpServerConfigurationVersion;
+interface McpServerConfigurationFields {
   readonly serverId: string;
   readonly displayName: string;
   readonly command: string;
   readonly args: readonly string[];
 }
+
+/**
+ * A version-1 setting has no mode field on disk, but the parser exposes its
+ * effective mode so callers cannot accidentally infer a protocol era.
+ */
+export type McpServerConfiguration =
+  | (McpServerConfigurationFields & {
+      readonly version: typeof mcpServerConfigurationVersion;
+      readonly protocolMode?: "modern-only";
+    })
+  | (McpServerConfigurationFields & {
+      readonly version: typeof mcpServerConfigurationV2Version;
+      readonly protocolMode: McpProtocolMode;
+    });
 
 export interface InspectedConfiguration<T> {
   readonly globalValue?: T;
@@ -72,8 +88,21 @@ export function readMcpServerConfiguration(
 }
 
 export function parseMcpServerConfiguration(value: unknown): McpServerConfiguration {
-  const source = readStrictObject(value, ["version", "serverId", "displayName", "command", "args"]);
-  if (source === undefined || source.version !== mcpServerConfigurationVersion) {
+  const source = readStrictObject(value);
+  if (
+    source === undefined ||
+    (source.version !== mcpServerConfigurationVersion &&
+      source.version !== mcpServerConfigurationV2Version)
+  ) {
+    throw invalidConfiguration();
+  }
+
+  const version = source.version;
+  const expectedKeys =
+    version === mcpServerConfigurationVersion
+      ? ["version", "serverId", "displayName", "command", "args"]
+      : ["version", "protocolMode", "serverId", "displayName", "command", "args"];
+  if (!hasExactKeys(source, expectedKeys)) {
     throw invalidConfiguration();
   }
 
@@ -81,6 +110,8 @@ export function parseMcpServerConfiguration(value: unknown): McpServerConfigurat
   const displayName = source.displayName;
   const command = source.command;
   const args = source.args;
+  const protocolMode =
+    version === mcpServerConfigurationVersion ? "modern-only" : source.protocolMode;
   if (
     typeof serverId !== "string" ||
     serverId.length > maxServerIdCharacters ||
@@ -98,7 +129,8 @@ export function parseMcpServerConfiguration(value: unknown): McpServerConfigurat
     utf8Bytes(command) > maxCommandBytes ||
     containsCredentialMaterial(command) ||
     !Array.isArray(args) ||
-    args.length > maxArguments
+    args.length > maxArguments ||
+    !isProtocolMode(protocolMode)
   ) {
     throw invalidConfiguration();
   }
@@ -121,19 +153,29 @@ export function parseMcpServerConfiguration(value: unknown): McpServerConfigurat
     throw invalidConfiguration();
   }
 
-  return Object.freeze({
-    version: mcpServerConfigurationVersion,
+  const normalized = {
     serverId,
     displayName,
     command,
     args: Object.freeze(validatedArguments),
+  } as const;
+
+  if (version === mcpServerConfigurationVersion) {
+    return Object.freeze({
+      ...normalized,
+      version: mcpServerConfigurationVersion,
+      protocolMode: "modern-only" as const,
+    });
+  }
+
+  return Object.freeze({
+    ...normalized,
+    version: mcpServerConfigurationV2Version,
+    protocolMode,
   });
 }
 
-function readStrictObject(
-  value: unknown,
-  allowedKeys: readonly string[],
-): Readonly<Record<string, unknown>> | undefined {
+function readStrictObject(value: unknown): Readonly<Record<string, unknown>> | undefined {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     return undefined;
   }
@@ -141,11 +183,7 @@ function readStrictObject(
   try {
     const descriptors = Object.getOwnPropertyDescriptors(value);
     const keys = Object.keys(descriptors);
-    if (
-      keys.length !== allowedKeys.length ||
-      keys.some((key) => !allowedKeys.includes(key)) ||
-      Object.values(descriptors).some((descriptor) => !("value" in descriptor))
-    ) {
+    if (Object.values(descriptors).some((descriptor) => !("value" in descriptor))) {
       return undefined;
     }
 
@@ -155,6 +193,18 @@ function readStrictObject(
   } catch {
     return undefined;
   }
+}
+
+function hasExactKeys(
+  source: Readonly<Record<string, unknown>>,
+  expectedKeys: readonly string[],
+): boolean {
+  const keys = Object.keys(source);
+  return keys.length === expectedKeys.length && keys.every((key) => expectedKeys.includes(key));
+}
+
+function isProtocolMode(value: unknown): value is McpProtocolMode {
+  return value === "modern-only" || value === "dual";
 }
 
 function containsLineBreakOrNull(value: string): boolean {

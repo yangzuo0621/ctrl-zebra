@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { mcpNegotiatedProvenanceSchema } from "./mcp-negotiation.js";
+
 export const maxMcpServerDisplayNameCodePoints = 256;
 export const maxMcpResourceDescriptorTextCodePoints = 65_536;
 export const maxMcpResourceUriCodePoints = 2_048;
@@ -110,6 +112,7 @@ export const mcpResourceAttachmentSchema = z.strictObject({
     }
   }),
   truncated: z.boolean(),
+  provenance: mcpNegotiatedProvenanceSchema.optional(),
 });
 
 export const mcpResourceSelectionSchema = z.discriminatedUnion("kind", [
