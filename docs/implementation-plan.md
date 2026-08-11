@@ -65,13 +65,13 @@
 **进度摘要**：
 
 - 总任务：148
-- 已完成：118
+- 已完成：119
 - 进行中：0
 - 受阻：0
-- 待开始：29
-- 当前任务：T1802
-- 下一任务：T1803
-- 最后更新：2026-08-11
+- 待开始：28
+- 当前任务：T1803
+- 下一任务：T1804
+- 最后更新：2026-08-12
 
 | 阶段 | 任务 | 状态 | 完成 PR | 完成日期 |
 |---|---|---|---|---|
@@ -193,7 +193,7 @@
 | 17 | T1702 | 已完成 | [#184](https://github.com/yangzuo0621/ctrl-zebra/pull/184) | 2026-08-11 |
 | 17 | T1703 | 已完成 | [#185](https://github.com/yangzuo0621/ctrl-zebra/pull/185) | 2026-08-11 |
 | 18 | T1801 | 已完成 | [#188](https://github.com/yangzuo0621/ctrl-zebra/pull/188) | 2026-08-11 |
-| 18 | T1802 | 进行中 | — | — |
+| 18 | T1802 | 已完成 | [#191](https://github.com/yangzuo0621/ctrl-zebra/pull/191) | 2026-08-12 |
 | 18 | T1803 | 待开始 | — | — |
 | 18 | T1804 | 待开始 | — | — |
 | 18 | T1805 | 待开始 | — | — |
@@ -253,6 +253,13 @@
 - 完成证据：[PR #188](https://github.com/yangzuo0621/ctrl-zebra/pull/188)；实现 revision `4bc1efc` 的 GitHub Actions run `31507602189` 中 Ubuntu、macOS、Windows 均通过，并完成 `pnpm check`、`pnpm typecheck`、完整单元测试（1503 个）、集成测试、聚焦 T1801 测试及 `git diff --check`；后续 closure-only 计划文档提交以 required checks 作为合并门禁。
 - 完成日期：2026-08-11
 - 下一任务：T1802
+
+### T1802 完成记录
+
+- 完成摘要：按已归档的 Schema 关键字分类与引用规则规范化 MCP Tool Schema，保留受支持关键字、稳定拒绝不支持结构并输出可诊断路径信息。
+- 完成证据：[PR #191](https://github.com/yangzuo0621/ctrl-zebra/pull/191)，实现 revision `a19fb2e`；聚焦测试 109/109、完整单元测试 1516 个、`pnpm check`、`pnpm typecheck` 与 `git diff --check` 均通过；GitHub Actions run `31511668374` 的 Ubuntu、macOS、Windows 验证均通过。
+- 完成日期：2026-08-12
+- 下一任务：T1803
 
 ---
 
