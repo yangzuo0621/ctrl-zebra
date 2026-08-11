@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  IdeTextPrefixCollector,
   ideEditorContextResultSchema,
   ideTextContextSchema,
   maxIdeTextBytes,
@@ -27,6 +28,18 @@ describe("IDE context protocol", () => {
     });
     expect(takeIdeTextPrefix(atLineLimit)).toEqual({
       text: atLineLimit,
+      truncated: false,
+      truncationReasons: [],
+    });
+  });
+
+  it("keeps CRLF atomic when input arrives in bounded chunks", () => {
+    const collector = new IdeTextPrefixCollector();
+    collector.add("first\r");
+    collector.add("\nsecond");
+
+    expect(collector.finish()).toEqual({
+      text: "first\r\nsecond",
       truncated: false,
       truncationReasons: [],
     });
@@ -99,6 +112,14 @@ describe("IDE context protocol", () => {
       ideEditorContextResultSchema.safeParse({
         ...result,
         extra: true,
+      }).success,
+    ).toBe(false);
+    const tooManyLines = Array.from({ length: maxIdeTextLines + 1 }, () => "line").join("\n");
+    expect(
+      ideTextContextSchema.safeParse({
+        ...result.context,
+        source: { ...result.context.source, truncated: true, truncationReasons: ["lines"] },
+        text: tooManyLines,
       }).success,
     ).toBe(false);
   });

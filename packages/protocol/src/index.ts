@@ -74,6 +74,7 @@ export type {
   IdeUriDto,
 } from "./ide-context.js";
 export {
+  IdeTextPrefixCollector,
   ideEditorContextResultSchema,
   idePositionSchema,
   ideRangeSchema,

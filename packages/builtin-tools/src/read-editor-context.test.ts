@@ -1,4 +1,5 @@
 import { ToolExecutionError } from "@ctrl-zebra/core";
+import { maxIdeTextLines } from "@ctrl-zebra/protocol";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -88,6 +89,21 @@ describe(readEditorContextToolName, () => {
   it("rejects invalid host DTOs without leaking them to Core", async () => {
     const tool = createReadEditorContextTool(
       createPort({ ...context, source: { ...context.source, stale: undefined } }),
+    );
+
+    await expect(
+      tool.execute({ scope: "active-editor" }, { signal: new AbortController().signal }),
+    ).rejects.toEqual(
+      new ToolExecutionError("invalid-output", "Editor context returned invalid output."),
+    );
+  });
+
+  it("rejects a Port DTO whose text exceeds the logical-line bound", async () => {
+    const tool = createReadEditorContextTool(
+      createPort({
+        ...context,
+        text: Array.from({ length: maxIdeTextLines + 1 }, () => "line").join("\n"),
+      }),
     );
 
     await expect(

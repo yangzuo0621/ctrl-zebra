@@ -47,6 +47,7 @@ import {
 import { SpawnCommandRunner } from "./adapters/spawn-command-runner.js";
 import { createStructuredLogger } from "./adapters/structured-logger.js";
 import { createWorkspaceCheckpointStoreProvider } from "./adapters/vscode-checkpoint-storage.js";
+import { VsCodeEditorContext } from "./adapters/vscode-editor-context.js";
 import { VsCodeProposeFileEditWorkspace } from "./adapters/vscode-propose-file-edit-workspace.js";
 import { createWorkspaceSessionRepositoryProvider } from "./adapters/vscode-session-storage.js";
 import { findWorkspaceFiles } from "./adapters/vscode-workspace-find-files.js";
@@ -150,6 +151,7 @@ export function activate(context: ExtensionContext): void {
       "list_files",
       "propose_file_edit",
       "read_file",
+      "read_editor_context",
       "run_command",
       "search_files",
     ],
@@ -254,6 +256,16 @@ export function activate(context: ExtensionContext): void {
     commandApprovalWorkflow,
     mcpToolApprovalWorkflow,
   );
+  const editorContext = new VsCodeEditorContext({
+    getActiveEditor: () => window.activeTextEditor,
+    getSelectedRoot: () => getSelectedRoot(),
+    createScope: (root) => new WorkspaceScope(root, canonicalize),
+    // T1905 owns the user-facing setting and editor entry point. Until then,
+    // production composition is explicitly disabled rather than implicitly
+    // capturing editor content from focus or model activity.
+    isEnabled: () => false,
+    isTrusted: () => workspace.isTrusted,
+  });
   const workspaceTools = createWorkspaceToolRegistryProvider({
     getWorkspaceRoots: () => workspace.workspaceFolders?.map((folder) => folder.uri) ?? [],
     canonicalize,
@@ -266,6 +278,7 @@ export function activate(context: ExtensionContext): void {
       new VsCodeProposeFileEditWorkspace(root, scope, joinWorkspacePath),
     commandExecutor,
     workspaceTrust,
+    editorContext,
   });
   const selectSessionRepository = createWorkspaceSessionRepositoryProvider(
     context.storageUri,
@@ -456,6 +469,7 @@ export function activate(context: ExtensionContext): void {
       },
     },
     workspaceTools,
+    editorContext,
     diffPresenter,
     approvalWorkflow,
     {

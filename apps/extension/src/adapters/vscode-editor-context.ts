@@ -3,6 +3,8 @@ import { EditorContextUnavailableError } from "@ctrl-zebra/builtin-tools";
 import {
   type IdePositionDto,
   type IdeTextContextDto,
+  type IdeTextPrefix,
+  IdeTextPrefixCollector,
   type IdeTruncationReason,
   ideTextContextSchema,
   maxIdeLanguageIdBytes,
@@ -11,13 +13,14 @@ import {
   maxIdeUriPathCodePoints,
   maxIdeUriSchemeBytes,
   maxIdeUriSchemeCodePoints,
-  takeIdeTextPrefix,
 } from "@ctrl-zebra/protocol";
-import type { Selection, TextDocument, TextEditor, Uri } from "vscode";
+import type { Range, TextDocument, TextEditor, Uri } from "vscode";
 
 import type { WorkspaceScope } from "./workspace-scope.js";
 
 export { EditorContextUnavailableError } from "@ctrl-zebra/builtin-tools";
+
+const maxTextChunkCodeUnits = 16_384;
 
 export interface VsCodeEditorContextDependencies {
   readonly getActiveEditor: () => TextEditor | undefined;
@@ -34,7 +37,6 @@ interface CaptureSnapshot {
   readonly uri: Uri;
   readonly version: number;
   readonly languageId: string;
-  readonly selectionRange: Selection;
   readonly selection: SelectionSnapshot;
   readonly trusted: boolean | undefined;
 }
@@ -89,13 +91,7 @@ export class VsCodeEditorContext implements IdeContextPort {
     this.#assertOpen(signal);
     this.#assertOwner(snapshot);
 
-    const text = this.#readText(snapshot, input);
-    let textProjection: ReturnType<typeof takeIdeTextPrefix>;
-    try {
-      textProjection = takeIdeTextPrefix(text);
-    } catch {
-      throw new EditorContextUnavailableError();
-    }
+    const textProjection = this.#readText(snapshot, input);
     const languageProjection = takeBoundedDisplayText(
       snapshot.languageId,
       maxIdeLanguageIdCodePoints,
@@ -168,7 +164,6 @@ export class VsCodeEditorContext implements IdeContextPort {
         throw new EditorContextUnavailableError();
       }
 
-      const selectionRange = editor.selection;
       const selection = readSelection(editor);
       if (input.scope === "selection") {
         validateDocumentRange(document, selection);
@@ -181,7 +176,6 @@ export class VsCodeEditorContext implements IdeContextPort {
         uri: document.uri,
         version,
         languageId: document.languageId,
-        selectionRange,
         selection,
         trusted: this.#dependencies.isTrusted?.(),
       };
@@ -190,20 +184,61 @@ export class VsCodeEditorContext implements IdeContextPort {
     }
   }
 
-  #readText(snapshot: CaptureSnapshot, input: ReadEditorContextInput): string {
-    let text: unknown;
+  #readText(snapshot: CaptureSnapshot, input: ReadEditorContextInput): IdeTextPrefix {
     try {
-      text =
+      const range =
         input.scope === "selection"
-          ? snapshot.document.getText(snapshot.selectionRange)
-          : snapshot.document.getText();
-    } catch {
+          ? {
+              start: snapshot.selection.start,
+              end: snapshot.selection.end,
+            }
+          : {
+              start: { line: 0, character: 0 },
+              end: {
+                line: snapshot.document.lineCount - 1,
+                character: snapshot.document.lineAt(snapshot.document.lineCount - 1).text.length,
+              },
+            };
+      const collector = new IdeTextPrefixCollector();
+      for (let lineNumber = range.start.line; lineNumber <= range.end.line; lineNumber += 1) {
+        const line = snapshot.document.lineAt(lineNumber);
+        if (typeof line.text !== "string") throw new EditorContextUnavailableError();
+        const startCharacter = lineNumber === range.start.line ? range.start.character : 0;
+        const endCharacter = lineNumber === range.end.line ? range.end.character : line.text.length;
+        if (startCharacter > endCharacter || endCharacter > line.text.length) {
+          throw new EditorContextUnavailableError();
+        }
+
+        for (let character = startCharacter; character < endCharacter; ) {
+          let chunkEnd = Math.min(character + maxTextChunkCodeUnits, endCharacter);
+          if (chunkEnd < endCharacter && isHighSurrogate(line.text.charCodeAt(chunkEnd - 1))) {
+            chunkEnd -= 1;
+          }
+          if (chunkEnd <= character) throw new EditorContextUnavailableError();
+          const chunk = readDocumentRange(
+            snapshot.document,
+            toRange(lineNumber, character, lineNumber, chunkEnd),
+            chunkEnd - character,
+          );
+          collector.add(chunk);
+          character = chunkEnd;
+        }
+
+        if (lineNumber < range.end.line) {
+          collector.add(
+            readDocumentRange(
+              snapshot.document,
+              toRange(lineNumber, line.text.length, lineNumber + 1, 0),
+              2,
+            ),
+          );
+        }
+      }
+      return collector.finish();
+    } catch (error) {
+      if (error instanceof EditorContextUnavailableError) throw error;
       throw new EditorContextUnavailableError();
     }
-    if (typeof text !== "string" || text.includes("\u0000")) {
-      throw new EditorContextUnavailableError();
-    }
-    return text;
   }
 
   #isStale(snapshot: CaptureSnapshot): boolean {
@@ -296,6 +331,35 @@ function validateDocumentRange(document: TextDocument, selection: SelectionSnaps
   if (comparePositions(selection.start, selection.end) > 0) {
     throw new EditorContextUnavailableError();
   }
+}
+
+function readDocumentRange(document: TextDocument, range: Range, maxCodeUnits: number): string {
+  let value: unknown;
+  try {
+    value = document.getText(range);
+  } catch {
+    throw new EditorContextUnavailableError();
+  }
+  if (typeof value !== "string" || value.length > maxCodeUnits || value.includes("\u0000")) {
+    throw new EditorContextUnavailableError();
+  }
+  return value;
+}
+
+function toRange(
+  startLine: number,
+  startCharacter: number,
+  endLine: number,
+  endCharacter: number,
+): Range {
+  return {
+    start: { line: startLine, character: startCharacter },
+    end: { line: endLine, character: endCharacter },
+  } as unknown as Range;
+}
+
+function isHighSurrogate(value: number): boolean {
+  return value >= 0xd800 && value <= 0xdbff;
 }
 
 function validateDocumentPosition(document: TextDocument, position: IdePositionDto): void {

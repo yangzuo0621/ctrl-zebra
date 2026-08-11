@@ -90,7 +90,10 @@ export const ideSourceSchema = z
 
 export const ideTextContextSchema = z.strictObject({
   source: ideSourceSchema,
-  text: boundedTextSchema(maxIdeTextCodePoints, maxIdeTextBytes),
+  text: boundedTextSchema(maxIdeTextCodePoints, maxIdeTextBytes).refine(
+    hasAtMostIdeTextLines,
+    `Text must not exceed ${maxIdeTextLines} logical lines.`,
+  ),
 });
 
 export const ideEditorContextResultSchema = z.strictObject({
@@ -112,60 +115,107 @@ export interface IdeTextPrefix {
 }
 
 /**
+ * Incrementally projects IDE text while retaining only the bounded prefix.
+ * Chunks may split a CRLF delimiter; the collector defers a trailing CR until
+ * the next chunk so delimiter accounting remains atomic.
+ */
+export class IdeTextPrefixCollector {
+  readonly #output: string[] = [];
+  readonly #reasons = new Set<IdeTruncationReason>();
+  #codePoints = 0;
+  #bytes = 0;
+  #lines = 1;
+  #retained = true;
+  #pendingCr = false;
+  #finished = false;
+
+  add(value: string): void {
+    if (this.#finished) {
+      throw new Error("IDE text prefix collector is already finished.");
+    }
+
+    for (let index = 0; index < value.length; ) {
+      const codePoint = readCodePoint(value, index);
+      const nextIndex = index + codePoint.width;
+      if (this.#pendingCr) {
+        this.#pendingCr = false;
+        if (codePoint.value === 0x0a) {
+          this.#accept("\r\n", 2, 2, true);
+          index = nextIndex;
+          continue;
+        }
+        this.#accept("\r", 1, 1, true);
+      }
+
+      if (codePoint.value === 0x0d) {
+        this.#pendingCr = true;
+      } else {
+        this.#accept(
+          value.slice(index, nextIndex),
+          1,
+          utf8BytesForCodePoint(codePoint.value),
+          codePoint.value === 0x0a,
+        );
+      }
+      index = nextIndex;
+    }
+  }
+
+  finish(): IdeTextPrefix {
+    if (!this.#finished) {
+      this.#finished = true;
+      if (this.#pendingCr) {
+        this.#pendingCr = false;
+        this.#accept("\r", 1, 1, true);
+      }
+    }
+    const truncationReasons = ideTruncationReasons.filter((reason) => this.#reasons.has(reason));
+    return {
+      text: this.#output.join(""),
+      truncated: truncationReasons.length > 0,
+      truncationReasons,
+    };
+  }
+
+  #accept(
+    value: string,
+    candidateCodePoints: number,
+    candidateBytes: number,
+    createsLine: boolean,
+  ): void {
+    if (!this.#retained) return;
+
+    const candidateReasons: IdeTruncationReason[] = [];
+    if (this.#codePoints + candidateCodePoints > maxIdeTextCodePoints) {
+      candidateReasons.push("code-points");
+    }
+    if (this.#bytes + candidateBytes > maxIdeTextBytes) {
+      candidateReasons.push("utf8-bytes");
+    }
+    if (createsLine && this.#lines >= maxIdeTextLines) {
+      candidateReasons.push("lines");
+    }
+    if (candidateReasons.length > 0) {
+      this.#retained = false;
+      for (const reason of candidateReasons) this.#reasons.add(reason);
+      return;
+    }
+
+    this.#output.push(value);
+    this.#codePoints += candidateCodePoints;
+    this.#bytes += candidateBytes;
+    if (createsLine) this.#lines += 1;
+  }
+}
+
+/**
  * Produces the bounded editor-text prefix without retaining a dangling CR from a CRLF delimiter.
  * The input is already owned by VS Code; this pass keeps the protocol projection bounded.
  */
 export function takeIdeTextPrefix(value: string): IdeTextPrefix {
-  const output: string[] = [];
-  const reasons = new Set<IdeTruncationReason>();
-  let codePoints = 0;
-  let bytes = 0;
-  let lines = 1;
-  let retained = true;
-
-  for (let index = 0; index < value.length; ) {
-    const codePoint = readCodePoint(value, index);
-    const codePointWidth = codePoint.width;
-    const nextIndex = index + codePointWidth;
-    const isCr = codePoint.value === 0x0d;
-    const hasLf = isCr && value.charCodeAt(nextIndex) === 0x0a;
-    const delimiterWidth = hasLf ? 2 : codePointWidth;
-    const candidateCodePoints = hasLf ? 2 : 1;
-    const candidateBytes = hasLf ? 2 : utf8BytesForCodePoint(codePoint.value);
-    const createsLine = isCr || codePoint.value === 0x0a;
-
-    if (retained) {
-      const candidateReasons: IdeTruncationReason[] = [];
-      if (codePoints + candidateCodePoints > maxIdeTextCodePoints) {
-        candidateReasons.push("code-points");
-      }
-      if (bytes + candidateBytes > maxIdeTextBytes) {
-        candidateReasons.push("utf8-bytes");
-      }
-      if (createsLine && lines >= maxIdeTextLines) {
-        candidateReasons.push("lines");
-      }
-
-      if (candidateReasons.length > 0) {
-        retained = false;
-        for (const reason of candidateReasons) reasons.add(reason);
-      } else {
-        output.push(value.slice(index, index + delimiterWidth));
-        codePoints += candidateCodePoints;
-        bytes += candidateBytes;
-        if (createsLine) lines += 1;
-      }
-    }
-
-    index += delimiterWidth;
-  }
-
-  const orderedReasons = ideTruncationReasons.filter((reason) => reasons.has(reason));
-  return {
-    text: output.join(""),
-    truncated: orderedReasons.length > 0,
-    truncationReasons: orderedReasons,
-  };
+  const collector = new IdeTextPrefixCollector();
+  collector.add(value);
+  return collector.finish();
 }
 
 function boundedTextSchema(maxCodePoints: number, maxBytes: number) {
@@ -209,6 +259,23 @@ function isWellFormedUnicode(value: string): boolean {
   } catch {
     return false;
   }
+}
+
+function hasAtMostIdeTextLines(value: string): boolean {
+  let lines = 1;
+  for (let index = 0; index < value.length; ) {
+    const codePoint = readCodePoint(value, index);
+    const nextIndex = index + codePoint.width;
+    if (codePoint.value === 0x0d && value.charCodeAt(nextIndex) === 0x0a) {
+      index = nextIndex + 1;
+      lines += 1;
+    } else {
+      index = nextIndex;
+      if (codePoint.value === 0x0d || codePoint.value === 0x0a) lines += 1;
+    }
+    if (lines > maxIdeTextLines) return false;
+  }
+  return true;
 }
 
 function utf8ByteLength(value: string): number {

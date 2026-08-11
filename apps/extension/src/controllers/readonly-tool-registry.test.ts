@@ -6,8 +6,9 @@ import type {
   SearchFilesInput,
 } from "@ctrl-zebra/builtin-tools";
 import { describe, expect, it, vi } from "vitest";
-import type { Uri } from "vscode";
+import type { TextDocument, TextEditor, Uri } from "vscode";
 
+import { VsCodeEditorContext } from "../adapters/vscode-editor-context.js";
 import type { WorkspaceFindFiles } from "../adapters/workspace-file-lister.js";
 import type {
   JoinWorkspacePath,
@@ -95,6 +96,46 @@ describe("createWorkspaceToolRegistryProvider", () => {
         .get("read_editor_context")
         ?.execute({ scope: "active-editor" }, { signal: new AbortController().signal }),
     ).resolves.toMatchObject({ output: { kind: "editor-context", context: { text: "text" } } });
+  });
+
+  it("composes the concrete VS Code editor adapter into the production-shaped registry", async () => {
+    const root = uri("/workspace");
+    const document = {
+      uri: uri("/workspace/src/index.ts"),
+      version: 1,
+      languageId: "typescript",
+      lineCount: 1,
+      lineAt: () => ({ text: "text" }),
+      getText: () => "text",
+    } as unknown as TextDocument;
+    const editor = {
+      document,
+      selection: {
+        start: { line: 0, character: 0 },
+        end: { line: 0, character: 0 },
+      },
+    } as unknown as TextEditor;
+    const editorContext = new VsCodeEditorContext({
+      getActiveEditor: () => editor,
+      getSelectedRoot: () => root,
+      createScope: () => ({ validate: async (target: Uri) => target }),
+      isEnabled: () => true,
+    });
+    const provider = createWorkspaceToolRegistryProvider(
+      createDependencies([root], { editorContext }).values,
+    );
+
+    const registry = await provider.get(new AbortController().signal);
+    await expect(
+      registry
+        .get("read_editor_context")
+        ?.execute({ scope: "active-editor" }, { signal: new AbortController().signal }),
+    ).resolves.toMatchObject({
+      output: {
+        kind: "editor-context",
+        context: { source: { uri: { path: "src/index.ts" } }, text: "text" },
+      },
+    });
   });
 
   it("invalidates the cached composition when workspace folders change", async () => {

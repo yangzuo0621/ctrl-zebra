@@ -96,6 +96,30 @@ describe("VsCodeEditorContext", () => {
     expect(lineResult.text.endsWith("\r")).toBe(false);
   });
 
+  it("collects large documents through bounded ranges before retaining the prefix", async () => {
+    const calls: Array<NonNullable<Parameters<TextDocument["getText"]>[0]> | undefined> = [];
+    const source = "a".repeat(maxIdeTextCodePoints + 100);
+    const document = createDocument(source, "/workspace/src/chunked.ts", { calls });
+    const result = await createAdapter(createEditor(document)).readEditorContext(
+      { scope: "active-editor" },
+      signal(),
+    );
+
+    expect(result.text).toHaveLength(maxIdeTextCodePoints);
+    expect(calls.length).toBeGreaterThan(1);
+    expect(calls.every((range) => range !== undefined)).toBe(true);
+  });
+
+  it("maps a failed bounded range read to the fixed unavailable outcome", async () => {
+    const document = createDocument("a".repeat(20_000), "/workspace/src/failure.ts", {
+      failAtCall: 2,
+    });
+
+    await expect(
+      createAdapter(createEditor(document)).readEditorContext({ scope: "active-editor" }, signal()),
+    ).rejects.toEqual(new EditorContextUnavailableError());
+  });
+
   it("marks a changed selection stale but suppresses a switched-editor result", async () => {
     const document = createDocument("text", "/workspace/src/index.ts");
     const editor = createEditor(document, position(0, 0), position(0, 1));
@@ -215,8 +239,25 @@ function createAdapter(
   });
 }
 
-function createDocument(text: string, path: string): TextDocument {
+function createDocument(
+  text: string,
+  path: string,
+  options: {
+    readonly calls?: Array<NonNullable<Parameters<TextDocument["getText"]>[0]> | undefined>;
+    readonly failAtCall?: number;
+  } = {},
+): TextDocument {
   const lines = text.split(/\r\n|\n/u);
+  const lineOffsets = [0];
+  for (let index = 0; index < text.length; index += 1) {
+    if (text[index] === "\r" && text[index + 1] === "\n") {
+      lineOffsets.push(index + 2);
+      index += 1;
+    } else if (text[index] === "\n" || text[index] === "\r") {
+      lineOffsets.push(index + 1);
+    }
+  }
+  let callCount = 0;
   const document = {
     uri: uri(path),
     version: 1,
@@ -227,26 +268,22 @@ function createDocument(text: string, path: string): TextDocument {
       if (lineText === undefined) throw new Error("line out of range");
       return { text: lineText } as TextLine;
     },
-    getText(range?: {
-      start: { line: number; character: number };
-      end: { line: number; character: number };
-    }) {
+    getText(range?: NonNullable<Parameters<TextDocument["getText"]>[0]>) {
+      callCount += 1;
+      options.calls?.push(range);
+      if (options.failAtCall === callCount) throw new Error("range read failed");
       if (range === undefined) return text;
-      return text.slice(offsetAt(lines, range.start), offsetAt(lines, range.end));
+      return text.slice(offsetAt(lineOffsets, range.start), offsetAt(lineOffsets, range.end));
     },
   };
   return document as unknown as TextDocument;
 }
 
 function offsetAt(
-  lines: readonly string[],
+  lineOffsets: readonly number[],
   position: { readonly line: number; readonly character: number },
 ): number {
-  let offset = 0;
-  for (let line = 0; line < position.line; line += 1) {
-    offset += (lines[line]?.length ?? 0) + 1;
-  }
-  return offset + position.character;
+  return (lineOffsets[position.line] ?? 0) + position.character;
 }
 
 function createEditor(
