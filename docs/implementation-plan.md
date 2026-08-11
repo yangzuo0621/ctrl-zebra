@@ -300,7 +300,7 @@
 
 ## 5. 阶段规格索引
 
-阶段 0–17 已完成，完整任务正文均已按阶段归档。阶段 18–22 已规划，等待依次开始。
+阶段 0–18 已完成，完整任务正文均已按阶段归档。阶段 19–22 已规划，等待依次开始。
 
 | 阶段 | 状态 | 详细规格 |
 |---|---|---|
@@ -322,7 +322,7 @@
 | 15 | 已完成 | [阶段 15 归档](roadmap/archive/phase-15.md) |
 | 16 | 已完成 | [阶段 16 归档](roadmap/archive/phase-16.md) |
 | 17 | 已完成 | [阶段 17 归档](roadmap/archive/phase-17.md) |
-| 18 | 已规划 | [阶段 18：MCP Schema 与双纪元兼容性](roadmap/phases/phase-18.md) |
+| 18 | 已完成 | [阶段 18 归档](roadmap/archive/phase-18.md) |
 | 19 | 已规划 | [阶段 19：IDE 上下文与诊断闭环](roadmap/phases/phase-19.md) |
 | 20 | 已规划 | [阶段 20：文件生命周期与工作区编辑](roadmap/phases/phase-20.md) |
 | 21 | 已规划 | [阶段 21：对话交互与会话数据控制](roadmap/phases/phase-21.md) |
