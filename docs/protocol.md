@@ -377,8 +377,8 @@ Schema refines this object by status: `connected` requires one exact `negotiated
 `error`; `failed` requires `error`, omits `negotiated`, and has all capabilities false; all other
 states omit both `negotiated` and `error` and expose no usable capability. `generation` is an opaque
 freshness fence for consumers, not authorization. The modern-only `protocolVersion` field from the
-T1803 contract is replaced by this T1804 negotiated DTO after the constraint PR; the implementation
-PR must not accept both shapes or silently infer an era.
+T1803 contract is replaced by this mode-aware negotiated DTO. The active Extension/Webview path
+accepts the negotiated projection only; it does not accept both shapes or silently infer an era.
 
 `McpErrorDto` contains only `{ code, message }`. `message` is a fixed user-safe string of at most
 1,024 code points. The stable closed code set is:

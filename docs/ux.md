@@ -320,10 +320,10 @@ MCP 作为当前聊天的渐进披露辅助能力，不成为默认视觉焦点�
 （`modern-only` 或 `dual`）→ 显式选择“连接” → 查看完整 Server 启动操作和外部进程警告 →
 批准或拒绝 → 查看协商后的 Server 身份、era/version、能力和状态。配置缺失或无效时，连接
 入口解释具体缺失项并提供打开用户设置的操作，不要求用户阅读日志或手工编辑未知 JSON。
-在 T1807 wiring 合入前，T1804 的 interim activation guard 对有效 `dual` 配置在 workspace
-binding、启动审批和进程启动之前 fail-closed；此时只显示稳定的 `configuration-invalid` 和
-“打开设置”下一步，不显示审批卡、connecting/connected、协商 era/version 或能力。下述完整
-连接、审批和协商旅程是 T1807 移除 guard 后的规范目标，不得把 interim 拒绝呈现为一次连接尝试。
+`dual` 是显式配置的活动连接模式。Host 在 workspace binding、启动审批和进程启动前完成
+配置、Trust、操作范围和 generation 校验，再按模式选择受控生命周期；只有完整握手结束后才
+显示 negotiated era/version 和能力。配置错误仍显示稳定的 `configuration-invalid` 与“打开设置”，
+不会创建进程、审批或连接世代。
 
 - MCP 区域默认折叠或紧凑显示在对话次级位置；待处理启动审批、连接失败或清理失败可提高视觉
   优先级，但不覆盖 Composer、活动 Run 或普通聊天错误。
@@ -428,13 +428,11 @@ Tool 的路径不显示诊断区域或恢复按钮，也不播报失败。
 和迟到事件不得抢焦点、重置选择或折叠用户正在阅读的目录。约 300px、200% 缩放以及四类
 VS Code 主题下，原因、操作和失败状态必须可读且不依赖颜色或图标。
 
-### 11.7 双纪元配置与迁移（T1804）
+### 11.7 双纪元配置与迁移（T1804–T1807）
 
-- 本节分为两个阶段：T1804 只定义 strict parser/schema、规范化 DTO、provenance/recovery
-  fixture 与迁移契约；在 T1807 wiring 前，Host 对版本 `2` 的 `dual` submit/start 在 workspace
-  binding、审批或进程副作用前稳定返回 `configuration-invalid`，不创建 generation，不显示审批或
-  negotiated UI，也不进行 probe/fallback。以下 mode/era 选择和迁移旅程仅是 T1807 移除 interim
-  guard、完成 mode-aware lifecycle 后的规范目标。
+- 本节的 strict parser/schema、规范化 DTO、provenance/recovery fixture 与迁移契约已接入活动
+  Extension 生命周期。版本 `2` 的 `dual` submit/start 仍须经过 workspace binding、Trust、启动
+  审批和 generation 边界，随后才进行受控 probe/fallback；配置无效时不创建进程或连接世代。
 - 版本 `1` 的既有设置继续显示并运行 `modern-only`；升级不会自动写入版本 `2`，也不会因
   Server 响应而静默进入 dual。用户必须先确认迁移，再选择 `modern-only` 或 `dual`。
 - `modern-only` 的固定支持版本是 `2026-07-28`；`dual` 的闭合集是 `2026-07-28` 和
@@ -446,9 +444,10 @@ VS Code 主题下，原因、操作和失败状态必须可读且不依赖颜色
   era/version；失败只显示稳定错误、configured mode、支持版本和固定恢复动作，不显示探测
   响应、超时、回退尝试、时序、Server 原始错误或“回退成功”文案。DiscoverResult 或可识别
   modern JSON-RPC error 都锁定 modern；其缺少受支持 `2026-07-28` 时显示
-  `protocol-incompatible`，绝不暗示 legacy 回退。语法/结构错误或响应/错误形状校验失败显示
-  `malformed-message`；结构有效但不属于闭合的 recognized-modern/defined-non-modern 分类（含
-  unknown future 或未分类值）显示 `protocol-incompatible`；两者均不触发回退。
+  `protocol-incompatible`，绝不触发 legacy 回退。只有 bounded timeout 或定义的 non-modern
+  probe error 才进入 legacy；语法/结构错误或响应/错误形状校验失败显示 `malformed-message`；
+  结构有效但不属于闭合的 recognized-modern/defined-non-modern 分类（含 unknown future 或
+  未分类值）显示 `protocol-incompatible`；两者均不触发回退。
 - 连接状态与恢复组合保持严格：未连接/失败时没有可用能力；connected 才显示对应 era 的
   Tools、Resources/Templates、Prompts。取消、断开、Trust 丢失、清理失败或世代变化立即清空
   旧目录、诊断、恢复控件和 negotiated 值，迟到事件不改变界面。

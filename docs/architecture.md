@@ -365,8 +365,8 @@ second Agent Runtime.
 
 [ADR 0002](adr/0002-mcp-dual-era-stdio-compatibility.md) approves the stage 18 extension for
 explicit modern-only/dual stdio compatibility. T1804 records the cross-boundary contract and
-configuration migration in this document; its runtime implementation remains gated on the reviewed
-constraint PR. The user-visible setting and versioned representation are owned by the
+configuration migration in this document. The current Extension runtime applies the reviewed
+mode-aware lifecycle. The user-visible setting and versioned representation are owned by the
 [configuration contract](configuration.md).
 
 ### Package and dependency ownership
@@ -501,7 +501,7 @@ port.
   advertises them. Notifications schedule one serialized, generation-bound full refresh; they do
   not patch the trusted snapshot from notification content.
 
-### T1804 dual-era contract and migration gate
+### T1804–T1807 dual-era contract and migration
 
 T1804 changes the protocol-era/version boundary only; it does not add a second runtime, process,
 approval scope, capability set, or persistence authority. Both eras use the same selected workspace,
@@ -557,7 +557,7 @@ non-modern classifications (including unknown future or otherwise unclassified v
 but share the same no-fallback lock. Only the two explicitly eligible rows (defined non-modern
 response and bounded timeout) can enter legacy in `dual`; unknown future versions, unclassified
 responses, malformed data, oversize data, cancellation, process exit, trust loss, and cleanup failure
-are never fallback oracles. The T1804 implementation gate must add deterministic, no-network/no-secret
+are never fallback oracles. The T1804–T1807 verification set includes deterministic, no-network/no-secret
 fixtures and tests for each closed classification, including malformed/validation-failing to
 `malformed-message`, structurally valid unknown/unclassified to `protocol-incompatible`, recognized
 modern error version selection, defined non-modern fallback, and bounded timeout fallback.
