@@ -4,6 +4,7 @@ import type {
   McpDisconnectOutcome,
   McpProcessTermination,
   McpStdioPortHandlers,
+  McpToolSnapshotView,
 } from "@ctrl-zebra/mcp-client";
 import { McpPromptError, McpResourceError, McpToolDiscoveryError } from "@ctrl-zebra/mcp-client";
 import { describe, expect, it, vi } from "vitest";
@@ -261,6 +262,31 @@ describe("MCP connection controller", () => {
     expect(harness.createPort).not.toHaveBeenCalled();
   });
 
+  it("clears the Tool snapshot on disconnect and fences the next generation", async () => {
+    const harness = createHarness();
+    harness.client.getToolSnapshot.mockReturnValue({
+      server: { serverId: "local_fixture", displayName: "Local fixture" },
+      generation: 1,
+      tools: [],
+      rejectedTools: [],
+      rejectedToolsTruncated: false,
+      registry: new ToolRegistry(),
+    });
+    const controller = new McpConnectionController(harness.values);
+    await controller.connect();
+    expect(controller.getToolSnapshot()).toBeDefined();
+    expect(controller.getState().generation).toBe(1);
+
+    await expect(controller.disconnect()).resolves.toMatchObject({ status: "disconnected" });
+    expect(controller.getToolSnapshot()).toBeUndefined();
+
+    await expect(controller.connect()).resolves.toMatchObject({
+      status: "connected",
+      generation: 2,
+    });
+    expect(controller.getToolSnapshot()).toBeDefined();
+  });
+
   it("keeps unconfirmed termination failed and blocks process reuse", async () => {
     const harness = createHarness();
     harness.client.disconnect.mockResolvedValue({
@@ -373,7 +399,7 @@ function createHarness() {
         registry: new ToolRegistry(),
       }),
     ),
-    getToolSnapshot: vi.fn(() => undefined),
+    getToolSnapshot: vi.fn((): McpToolSnapshotView | undefined => undefined),
     discoverResources: vi.fn(
       async (context: {
         server: { serverId: string; displayName: string };

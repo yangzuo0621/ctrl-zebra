@@ -199,6 +199,99 @@ describe("MCP Webview actions", () => {
     expect(nextMcpCatalogSequence(Number.MAX_SAFE_INTEGER + 1)).toBeUndefined();
   });
 
+  it("disconnects and resets the generation after overflow before an explicit reconnect", async () => {
+    const server = { serverId: "local_fixture", displayName: "Local fixture" } as const;
+    const connectionState = {
+      protocolVersion: "2026-07-28" as const,
+      capabilities: {
+        tools: true,
+        toolsListChanged: false,
+        resources: false,
+        resourceTemplates: false,
+        resourcesListChanged: false,
+        prompts: false,
+        promptsListChanged: false,
+      },
+    };
+    let snapshot: McpConnectionSnapshot = {
+      status: "connected",
+      generation: 3,
+      server,
+      configurationStale: false,
+      connection: { status: "connected", ...connectionState },
+    };
+    const createTools = (generation: number) => ({
+      server,
+      generation,
+      tools: [],
+      rejectedTools: [],
+      rejectedToolsTruncated: false,
+      registry: new ToolRegistry(),
+    });
+    let toolSnapshot: ReturnType<typeof createTools> | undefined = createTools(3);
+    const disconnect = vi.fn(async () => {
+      toolSnapshot = undefined;
+      snapshot = { ...snapshot, status: "disconnected", connection: undefined };
+      return snapshot;
+    });
+    const connect = vi.fn(async () => {
+      toolSnapshot = createTools(4);
+      snapshot = {
+        ...snapshot,
+        status: "connected",
+        generation: 4,
+        connection: { status: "connected", ...connectionState },
+      };
+      return snapshot;
+    });
+    const post = vi.fn();
+    const actions = new McpWebviewActions(
+      {
+        connection: {
+          getState: () => snapshot,
+          getToolSnapshot: () => toolSnapshot,
+          getResourceCatalog: () => undefined,
+          getPromptCatalog: () => undefined,
+          connect,
+          disconnect,
+        },
+        openSettings: vi.fn(),
+      },
+      {
+        initialCatalogScope: `${server.serverId}\u00003`,
+        initialCatalogSequence: Number.MAX_SAFE_INTEGER,
+      },
+    );
+    actions.bind(post);
+    actions.refresh("overflow");
+    await vi.waitFor(() => expect(disconnect).toHaveBeenCalledOnce());
+    expect(snapshot.status).toBe("disconnected");
+    expect(toolSnapshot).toBeUndefined();
+    expect(
+      post.mock.calls.some(
+        ([message]) =>
+          message.type === "extension/mcp-tool-catalog" || message.type === "extension/mcp-tools",
+      ),
+    ).toBe(false);
+
+    actions.refresh("blocked");
+    expect(
+      post.mock.calls.some(
+        ([message]) =>
+          message.type === "extension/mcp-tool-catalog" && message.requestId === "blocked",
+      ),
+    ).toBe(false);
+
+    await actions.connect("reconnect");
+    const combined = post.mock.calls
+      .map(([message]) => message)
+      .filter((message) => message.type === "extension/mcp-tool-catalog")
+      .at(-1);
+    expect(combined).toMatchObject({ requestId: "reconnect", catalogSequence: 1 });
+    expect(snapshot.generation).toBe(4);
+    actions.dispose();
+  });
+
   it("emits neither combined nor legacy catalog when the strict envelope exceeds 1 MiB", () => {
     const server = { serverId: "local_fixture", displayName: "Local fixture" } as const;
     const snapshot: McpConnectionSnapshot = {
