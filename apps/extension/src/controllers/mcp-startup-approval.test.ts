@@ -44,9 +44,34 @@ describe("MCP startup approval", () => {
     const detail = showWarningMessage.mock.calls[0]?.[1].detail ?? "";
     expect(detail).toContain('Arguments: ["server.mjs","--stdio"]');
     expect(detail).toContain("Working directory: file:///workspace");
+    expect(detail).toContain("Protocol mode: modern-only");
     expect(detail).toContain("Workspace trust: trusted");
     expect(detail).toContain("Expires: 2026-08-03T00:05:00.000Z");
     expect(detail).not.toContain("PATH");
+  });
+
+  it("renders the normalized explicit mode without exposing raw configuration details", async () => {
+    const showWarningMessage = vi.fn(
+      async (_message: string, _options: import("vscode").MessageOptions, _item: string) =>
+        undefined,
+    );
+    const approval = new McpStartupApproval({ now: fixedNow, showWarningMessage });
+    const dualOperation = {
+      ...operation,
+      configuration: {
+        ...operation.configuration,
+        version: 2,
+        protocolMode: "dual" as const,
+      },
+    } satisfies McpServerStartOperation;
+
+    await expect(approval.request(dualOperation, new AbortController().signal)).resolves.toBe(
+      "denied",
+    );
+    const detail = showWarningMessage.mock.calls[0]?.[1].detail ?? "";
+    expect(detail).toContain("Protocol mode: dual");
+    expect(detail).not.toContain('"version"');
+    expect(detail).not.toContain("protocolMode");
   });
 
   it("distinguishes denial, expiry, and cancellation", async () => {

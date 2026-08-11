@@ -63,6 +63,7 @@ function formatApprovalDetail(
 ): string {
   return [
     `Server ID: ${operation.configuration.serverId}`,
+    `Protocol mode: ${effectiveProtocolMode(operation.configuration)}`,
     `Executable: ${JSON.stringify(operation.configuration.command)}`,
     `Arguments: ${JSON.stringify(operation.configuration.args)}`,
     `Working directory: ${operation.cwdUri}`,
