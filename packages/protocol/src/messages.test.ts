@@ -208,7 +208,6 @@ describe("Webview protocol messages", () => {
         type: "extension/provider-action",
         requestId: "provider-action-1",
         action: "save-key",
-        status: "completed",
         ...override,
       }).success,
     ).toBe(false);
