@@ -43,7 +43,7 @@ describe("ControlledMcpClient Tool discovery", () => {
       toolServer(() =>
         toolPage([
           { name: "valid", inputSchema: emptySchema },
-          { name: "unsafe", inputSchema: { type: "object", format: "email" } },
+          { name: "unsafe", inputSchema: { type: "object", pattern: "(a+)+$" } },
         ]),
       ),
     );
@@ -62,7 +62,7 @@ describe("ControlledMcpClient Tool discovery", () => {
   it("keeps the rejection prefix stable when pagination order changes", async () => {
     const rejected = Array.from({ length: 300 }, (_, index) => ({
       name: `rejected-${String(index).padStart(3, "0")}`,
-      inputSchema: { type: "object", format: "email" },
+      inputSchema: { type: "object", pattern: "(a+)+$" },
     }));
     const ordered = [
       ...rejected.slice(0, 150),
@@ -107,7 +107,7 @@ describe("ControlledMcpClient Tool discovery", () => {
     const client = new ControlledMcpClient(
       toolServer(() =>
         allRejected
-          ? toolPage([{ name: "unsafe", inputSchema: { type: "object", format: "email" } }])
+          ? toolPage([{ name: "unsafe", inputSchema: { type: "object", pattern: "(a+)+$" } }])
           : toolPage([{ name: "stable", inputSchema: emptySchema }]),
       ),
     );
