@@ -233,17 +233,25 @@ IDE 上下文是用户可以看见、关闭和控制的普通上下文，不是�
   字符/Token 截断状态和文档是否 `Stale`。不显示主机绝对路径、原始 VS Code URI、Provider
   对象或隐藏字段。显示文本与提交给 Model 的来源标记一致，来源标签只是 provenance，不是
   指令或权限。
+- `selection` 始终显示用户选定的精确范围；折叠选区是带有 `text: ""` 和相同起止位置的有效
+  空快照，不自动回退到活动行/文件；无活动编辑器显示固定不可用状态。范围字符位置保持 VS
+  Code 的 UTF-16 code-unit 语义，不把 astral 字符误算为一个 code unit。
 - 活动编辑器、选区、工作区、Trust 或文档版本在捕获期间改变时，附件变为 `Stale`；界面必须
   提供 `Refresh` 或明确的 `Use stale context` 决定，不能把旧快照当作当前内容发送。用户未作
   决定前发送按钮保持禁用并说明原因。取消、关闭或迟到结果不产生隐藏 Toast、消息或重试。
 - 超限内容显示非颜色唯一的稳定 `Truncated` 说明和被触发的上限（字符、行、字节或 Token），
-  不用省略号伪装完整文本。用户可以缩小选择或刷新；不得从另一预算类别借用空间。
+  不用省略号伪装完整文本；IDE 文本的行上限明确为 2,000 个逻辑行，2000 行可完整保留，
+  第 2,001 行触发 `lines` 截断（LF、CRLF 和末尾换行按同一规则计数）。用户可以缩小选择或
+  刷新；不得从另一预算类别借用空间。验收 fixture 还覆盖全 astral 行的 UTF-16 exclusive end
+  `131,072`、落入 surrogate pair 的位置和超出实际行长的位置，分别验证 round-trip 与稳定拒绝。
 - 只读诊断与语言服务结果在所属消息/Tool 卡附近显示来源、范围、severity、符号/目标和稳定
   `Stale`/`Truncated` 状态。Provider 消息按纯文本渲染，不解析 Markdown、HTML、链接或命令；
   不显示 `Code Action`、编辑、执行或审批控件。工作区外/不可信/不可用结果显示固定可操作
   状态，而不是原始 Provider 错误。混合结果中被工作区范围过滤的条目显示固定的
   `Some results were omitted`/`Out of workspace` 状态，不显示被过滤路径；若全部结果被过滤或
   Provider 形状无效，显示稳定 `No safe result available`（`invalid-output`），不伪装为空结果。
+- 符号列表兼容 `DocumentSymbol` 与 `SymbolInformation`：缺失的 `containerName`、`detail` 或
+  `selectionRange` 不显示占位文本，显式空字符串仍按真实值展示；嵌套符号以稳定扁平顺序呈现。
 - `get_diagnostics`、`find_definition`、`find_references` 和 `list_symbols` 是只读 Tool 结果，
   不能自动运行模型、改变输入、启动 Code Action、写文件或授予权限。编辑器入口填充 Composer
   后，内容保持可见、可编辑和可移除，发送前不创建 Run。

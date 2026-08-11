@@ -336,7 +336,9 @@ same closed/discriminated-union model as the existing Tool contracts: a variant 
 
 All code-point counts below mean well-formed Unicode scalar values after Unicode validation; UTF-8
 counts are the exact encoded bytes without a byte-order mark. A producer measures both counters while
-collecting and never converts a code-point limit into a UTF-16 code-unit limit.
+collecting and never converts a code-point limit into a UTF-16 code-unit limit. `IdePositionDto.character`
+is the deliberate numeric exception: it preserves VS Code's 0-based UTF-16 code-unit offset and is
+never reinterpreted as a scalar count.
 
 ### Shared source and range values
 
@@ -349,10 +351,14 @@ collecting and never converts a code-point limit into a UTF-16 code-unit limit.
   and canonical-identity checks. `fsPath`, `untitled:` documents, external files, and raw URI
   instances never cross the boundary.
 - `IdePositionDto` uses zero-based `{ line, character }` values. `line` is an integer from `0` through
-  `1,999` and `character` is an integer from `0` through `65,535`; `IdeRangeDto` contains `start` and
-  an exclusive `end` in the same document. Reversed, non-finite, or out-of-document ranges are
-  rejected. `documentVersion` is a non-negative safe integer. Positions and ranges are bounded by
-  the text and line limits in [Security](security.md).
+  `1,999` (`line < 2,000`) and `character` is an integer from `0` through `131,072` inclusive in
+  VS Code UTF-16 code units. The Host preserves that offset, rejects an endpoint inside a surrogate
+  pair or beyond the actual UTF-16 length of its line, and permits the exclusive end at that exact
+  length; `IdeRangeDto` contains `start` and an exclusive `end` in the same document. A line made of
+  65,536 astral scalars therefore has an exclusive end of `131,072`, while a shorter line cannot use
+  that value. Reversed, non-finite, or out-of-document ranges are rejected. `documentVersion` is a
+  non-negative safe integer. Positions and ranges are bounded by the text and line limits in
+  [Security](security.md), but their numeric offsets are not Unicode scalar counts.
 - `IdeSourceDto` contains `{ uri, range?, languageId?, documentVersion?, stale, truncated,
   truncationReasons? }`. `languageId` is a bounded display hint of at most 128 Unicode code points/
   512 UTF-8 bytes, `documentVersion` is a non-negative Host-observed revision, and `stale` means the
@@ -360,15 +366,29 @@ collecting and never converts a code-point limit into a UTF-16 code-unit limit.
   current editor. `truncationReasons` is a closed set of `code-points`, `utf8-bytes`, `lines`,
   `entries`, `tokens`, and `out-of-workspace`, and is present whenever `truncated` is true.
 - `IdeTextContextDto` contains one `source` and plain-text `text` of at most 65,536 Unicode code
-  points/262,144 UTF-8 bytes. `IdeDiagnosticDto` contains a source/range, closed `severity` (`error |
+  points, 2,000 logical lines, and 262,144 UTF-8 bytes. Empty text is one logical line; LF ends a
+  line, CRLF is one delimiter, and a terminal delimiter creates the following empty line. The producer
+  scans Unicode scalars and delimiters incrementally and stops before the candidate that would create
+  line 2,001 (or exceed either scalar/byte limit), evaluating CRLF atomically so no dangling CR is
+  retained. `IdeDiagnosticDto` contains a source/range, closed `severity` (`error |
   warning | information | hint`), an untrusted `message` of at most 4,096 code points/16,384 bytes,
   and optional `code`/`origin` display text of at most 1,024 code points/4,096 bytes. A provider's
   numeric diagnostic code is converted to its bounded decimal display text; malformed code/origin
   values are invalid output. `IdeLanguageLocationDto`
   contains a validated source and target range plus a closed `kind` (`definition | reference`);
-  `IdeSymbolDto` is flat and contains `name`, `containerName`, and `detail` strings of at most 1,024
-  code points/4,096 bytes each, an `IdeSymbolKind`, ranges, and no recursive provider object. Closed
+  `IdeSymbolDto` is flat and contains required `name` plus optional properties `containerName`, `detail`,
+  and `selectionRange`; each present string is at most 1,024 code points/4,096 bytes. It contains an
+  `IdeSymbolKind`, ranges, and no recursive provider object. Closed
   severity/kind labels are fixed literals, never provider strings, and accept no other value.
+- The Host maps both supported VS Code provider shapes without leaking their SDK objects: each
+  `DocumentSymbol` node becomes one flat entry in deterministic depth-first order, with its optional
+  `detail`; a child receives its immediate parent `name` as `containerName` when present. Each
+  `SymbolInformation` maps its required
+  `name`, `kind`, and `location.range` plus optional `containerName`, while `detail` and unsupported
+  fields are omitted. Missing optional fields are omitted (never `null`); an explicit empty provider
+  string remains an empty bounded value. Children are never serialized recursively, and all mapped
+  entries still obey the 256-entry/aggregate limits. Unsupported provider fields are discarded before
+  DTO construction; once constructed, strict Schemas still reject every unknown DTO property.
 - `IdeSymbolKind` is a closed CtrlZebra mapping, not a VS Code enum: `file | module | namespace |
   package | class | method | property | field | constructor | enum | interface | function | variable |
   constant | string | number | boolean | array | object | key | null | enum-member | struct | event |
@@ -396,7 +416,10 @@ The reserved read-only Tool names and strict input shapes are:
 
 - `read_editor_context`: `{ scope: "active-editor" | "selection" }`; the model cannot supply a
   URI, absolute path, document version, or replacement text. The Host resolves the current editor
-  and selection only after the user setting and ownership checks pass.
+  and selection only after the user setting and ownership checks pass. `selection` always uses the
+  exact selected range: a collapsed selection is a valid empty snapshot with `text: ""` and an exact
+  collapsed source range, never an automatic active-line/file fallback. With no active editor, either
+  scope returns the fixed unavailable `failed` Tool outcome.
 - `get_diagnostics`: the only legal combinations are `{ scope: "active-file" }` (no `path`, resolving
   the current active text document) and `{ scope: "workspace" }` (selected-root collection) or
   `{ scope: "workspace", path }` (one validated workspace-relative text document). A path with
@@ -420,8 +443,11 @@ It never silently converts an all-filtered response into an empty success or inv
 
 Conformance fixtures for this contract cover the cancellation race (local cancel state before one
 intent, gate already closed suppressing the intent, and gate closure suppressing every later message),
-the code-point/UTF-8 boundary at limit and limit+1 for every free-form field, aggregate and entry
-limits, empty/mixed/all-filtered provider sets, malformed ranges, every closed symbol mapping, and all
+the code-point/UTF-8 boundary at limit and limit+1 for every free-form field, the 2,000/2,001 logical
+line boundary with LF/CRLF/terminal-newline cases, aggregate and entry limits, empty/collapsed/no-editor
+`read_editor_context` outcomes, astral UTF-16 range round-trips plus split-surrogate and out-of-line
+rejections, empty/mixed/all-filtered provider sets, malformed ranges, every closed symbol mapping,
+missing optional `containerName`/`detail`/`selectionRange` cases for both provider shapes, and all
 legal/illegal `get_diagnostics` scope/path combinations.
 
 Each input is a strict object with no additional properties. Every Tool has risk `read`; none can

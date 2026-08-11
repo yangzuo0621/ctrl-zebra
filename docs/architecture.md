@@ -73,6 +73,10 @@ Host lifecycle and freshness are explicit:
 - Activation may register lightweight editor/diagnostic events, but it never reads the active document,
   scans a workspace, starts a provider, or injects context in the background. An explicit user
   attachment or model Tool call starts one bounded capture.
+- `read_editor_context` resolves only the requested active editor or exact selection. A collapsed
+  selection produces a valid empty snapshot with `text: ""` and the exact collapsed range; it never
+  falls back to an active line/file. If no active editor exists, the Host returns the fixed unavailable
+  outcome and performs no fallback capture.
 - Each capture records the Host-owned source URI, selection/range, language identifier, and document
   version privately before collecting text. Before a projection is delivered, the Host rechecks the
   active editor/selection, selected root, Trust state, setting, and document version. A changed
@@ -92,6 +96,10 @@ Host lifecycle and freshness are explicit:
   `out-of-workspace` omission reason; an all-filtered or malformed set returns stable `invalid-output`
   with no path/detail, while an actually empty provider set remains a valid empty result. SDK symbol
   kinds are mapped to the closed CtrlZebra `IdeSymbolKind` set with unknown values mapped to `unknown`.
+  DocumentSymbol nodes are flattened depth-first with optional detail; each child may receive its
+  immediate parent name as optional containerName. SymbolInformation entries preserve optional
+  containerName and have no detail; absent optional fields are omitted and unsupported SDK fields never
+  cross the boundary.
 - The same ownership and gate apply in a limited untrusted workspace. Read-only capture may remain
   available when the Extension declares that capability, but it never grants Trust or enables a write,
   execute, MCP, or other side-effecting operation. If VS Code or a provider refuses an operation, the
@@ -373,10 +381,15 @@ Host lifecycle and freshness are explicit:
 IDE context uses the same budget authority rather than creating a second quota:
 
 - One editor/selection text value is bounded before allocation to at most 65,536 Unicode code points,
-  2,000 lines, and 262,144 UTF-8 bytes. A diagnostic or language-service collection is at most 256
-  entries; every message, label, path, symbol name, and range is independently bounded by the
-  Protocol/Security string limits. The complete normalized Tool Result remains at most the existing
-  1,048,576-byte UTF-8 ceiling.
+  2,000 logical lines, and 262,144 UTF-8 bytes. Empty text is one logical line; LF ends a line,
+  CRLF is one delimiter, and a terminal delimiter creates the following empty line. A producer scans
+  scalars and delimiters incrementally, stops before the candidate that would create line 2,001 (or
+  exceed either byte/scalar limit), and never leaves a dangling CR. A diagnostic or language-service
+  collection is at most 256 entries; every message, label, path, symbol name, and range is independently
+  bounded by the Protocol/Security string limits. Position line is `0..1,999`; `character` preserves
+  the VS Code 0-based UTF-16 code-unit offset `0..131,072` inclusive, cannot split a surrogate pair,
+  and cannot exceed that line's actual UTF-16 length. The complete normalized Tool Result remains at
+  most the existing 1,048,576-byte UTF-8 ceiling.
 - The Host estimates tokens before context construction. IDE content may consume only the currently
   allocated Files budget (at most 25% of the declared model window, never more than the existing
   2,000,000-token context window); an unknown, invalid, or over-budget estimate follows the stable

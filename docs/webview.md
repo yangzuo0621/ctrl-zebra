@@ -71,7 +71,17 @@ decide whether a source is current, in scope, trusted, or authorized.
   Host workspace validation renders the fixed `Some results were omitted`/`Out of workspace` status
   without the rejected path; an all-filtered or malformed provider response renders fixed
   `No safe result available` (`invalid-output`) rather than an indistinguishable empty state. Symbol
-  kinds are already mapped to the closed Protocol labels and never display SDK enum values.
+  kinds are already mapped to the closed Protocol labels and never display SDK enum values. Symbols
+  from `DocumentSymbol` and `SymbolInformation` render in the Host's flat deterministic order; missing
+  optional `containerName`, `detail`, or `selectionRange` fields render without placeholders, while
+  explicit empty strings remain valid values.
+- The IDE text-boundary fixture renders a complete 2,000-logical-line value (without a delimiter that
+  would start line 2,001), rejects the 2,001st line with visible `Truncated`/`lines`, and covers LF,
+  CRLF, and a terminal newline as the next empty line without retaining a dangling CR. Scalar and
+  UTF-8 boundaries are checked at limit and limit+1 before rendering. The
+  fixture also round-trips an all-astral line whose exclusive UTF-16 end is `131,072`, rejects a split
+  surrogate or an offset beyond the actual line length, and renders a collapsed selection as an empty
+  exact-range snapshot (no active-line/file fallback); no-active-editor renders fixed unavailable text.
 - IDE context is not placed in `getState`/`setState` as an authoritative snapshot. Restoration may retain
   only presentation choices such as an expanded source card; it must clear text, URI, document version,
   stale state, diagnostic content, and pending refresh. Explicitly submitted text is owned by the normal

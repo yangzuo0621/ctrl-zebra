@@ -202,10 +202,13 @@ authorization, a capability claim, or a write/execute request.
 - Only supported text documents are accepted. NUL bytes, invalid UTF-8, binary classifications,
   missing document identity, and unreadable content fail closed. IDE DTO field limits are concrete:
   `scheme` ≤32 Unicode scalar values/128 UTF-8 bytes; the redacted `authority` is empty or the fixed
-  `workspace` label (≤9/32); `path` ≤4,096/16,384; `languageId` ≤128/512; text ≤65,536/262,144;
+  `workspace` label (≤9/32); `path` ≤4,096/16,384; `languageId` ≤128/512; text ≤65,536 scalar
+  values/2,000 logical lines/262,144 UTF-8 bytes;
   diagnostic messages ≤4,096/16,384; and diagnostic code/origin, symbol name/container/detail each
-  ≤1,024/4,096. Positions use line `0..1,999`, character `0..65,535`, and non-negative safe
-  document versions. Diagnostic, location, and symbol collections are at most 256 entries and each
+  ≤1,024/4,096. Positions use line `0..1,999` and VS Code's 0-based UTF-16 `character` offset
+  `0..131,072` inclusive; the Host rejects offsets inside a surrogate pair or beyond the actual
+  UTF-16 length of that line, while non-negative safe document versions remain numeric metadata.
+  Diagnostic, location, and symbol collections are at most 256 entries and each
   successful result has at most 131,072 aggregate scalar values/524,288 aggregate bytes across those
   projected strings. The complete Tool Result remains at most 1,048,576 serialized UTF-8 bytes.
   Producers count well-formed Unicode scalar values and UTF-8 bytes incrementally before retaining a
@@ -214,10 +217,15 @@ authorization, a capability claim, or a write/execute request.
 - A supported text value or collection that reaches a limit is truncated deterministically and carries
   `truncated: true` plus one or more closed reasons (`code-points`, `utf8-bytes`, `lines`, `entries`,
   `tokens`, or `out-of-workspace`). The `code-points`/`utf8-bytes` reasons also cover aggregate
-  ceilings; omitted entries are never replaced with an empty placeholder. Invalid Unicode, malformed
+  ceilings; omitted entries are never replaced with an empty placeholder. The producer checks the
+  scalar, UTF-8, and logical-line counters before retaining each scalar/delimiter, treats CRLF as one
+  atomic delimiter, and stops before a delimiter that would create line 2,001; empty text counts as one
+  line and a terminal delimiter creates the following empty line. Invalid Unicode, malformed
   DTO shape, non-finite/reversed/out-of-document ranges, and provider values that cannot be mapped are
   `invalid-output`, not truncation; the one exception is an unmappable symbol kind, which maps to the
-  closed `unknown` label.
+  closed `unknown` label. `DocumentSymbol` nodes are flattened depth-first and `SymbolInformation`
+  entries use their optional `containerName`; optional `detail`/`selectionRange` fields are omitted
+  when the provider does not supply them, while explicit empty strings remain valid bounded values.
 - The Host estimates tokens before inserting an attachment. IDE content may use only the current
   Files budget (at most 25% of the declared model window and never beyond the existing 2,000,000
   token context ceiling). Missing, negative, fractional, unsafe, or over-budget estimates are not
@@ -240,6 +248,10 @@ authorization, a capability claim, or a write/execute request.
   are read-only operations. Their Tool-specific input is parsed from `unknown` with a closed Schema;
   no input can choose a URI outside the selected root or add a write/execute action. They do not need
   an Approval grant and cannot create one as a result of a read.
+- `read_editor_context` with `scope: "selection"` returns the exact selected range even when collapsed:
+  that is a valid empty snapshot with `text: ""` and no active-line/file fallback. With no active
+  editor, both `active-editor` and `selection` return the fixed unavailable `failed` outcome. The Host
+  validates UTF-16 range boundaries without converting them to scalar offsets.
 - `get_diagnostics` accepts exactly `{ scope: "active-file" }`, `{ scope: "workspace" }`, or
   `{ scope: "workspace", path }`; the first resolves the current active text document, the second
   the selected root, and the third one validated workspace-relative document. A path with
@@ -259,6 +271,11 @@ authorization, a capability claim, or a write/execute request.
   Text explicitly sent by the user may follow the ordinary user-message/Tool-Result persistence rules,
   but source metadata is not persisted as a separate record and no cross-session editor memory is
   created.
+- The T1901 security fixture set includes a 2,000-line value and a 2,001-line value under LF, CRLF,
+  and terminal-newline encodings; 65,536-scalar/262,144-byte boundary cases; astral UTF-16 position
+  round-trips; split-surrogate and out-of-line rejection; collapsed-selection empty snapshots; and
+  no-editor unavailable outcomes. Each fixture verifies producer limits before retention and the
+  corresponding closed truncation or `failed`/`invalid-output` result.
 
 ## Approval Boundary
 
