@@ -776,9 +776,10 @@ and Prompt data that exceed their applicable limit are rejected rather than sile
   requested it. Disconnect, cancellation, Trust loss, a newer generation, or a failed refresh closes
   the delivery gate; late pages, validators, and rejection details are discarded before Core,
   Protocol, Webview, persistence, or approval state can observe them. When the two additive wire
-  messages are staged for a Webview pair, the Host-owned staging slot expires 1,000 ms after the
-  first half arrives; it is not extended or retried, and an unmatched half is discarded with the
-  prior complete pair retained.
+  messages are staged for a Webview pair, the Webview-local adapter-owned staging slot expires
+  1,000 ms after the first half arrives; it is not extended or retried, and an unmatched half is
+  discarded with the prior complete pair retained. The Extension Host owns generation binding and
+  message emission, not the Webview timer or receipt lifecycle.
 
 Unsupported image, audio, Blob, embedded Resource, Resource Link, unknown content, task,
 `input_required`, progress, logging, completion, subscription, or experimental values produce

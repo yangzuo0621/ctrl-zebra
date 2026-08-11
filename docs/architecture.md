@@ -531,9 +531,10 @@ port.
   accepted Tools; it merely cannot show the optional rejection details.
 - New consumers stage the accepted catalog and rejection projection in one bounded
   operation-scoped slot. Either message may arrive first, but an unmatched half is discarded at the
-  Host-owned 1,000 ms correlation deadline measured from the first half, on a newer refresh,
-  cancellation, disconnect, or generation change; the timer is never extended or retried. The last
-  complete pair remains visible. A non-empty list with zero accepted Tools returns the
+  Webview-local adapter-owned 1,000 ms correlation deadline measured from the first half, on a
+  newer refresh, cancellation, disconnect, or generation change; the timer is never extended or
+  retried. The Extension Host generates and sends both halves but does not own Webview receipt
+  timing. The last complete pair remains visible. A non-empty list with zero accepted Tools returns the
   stable `invalid-schema` outcome and publishes neither an empty catalog nor a rejection event.
   Names/reasons for that all-rejected case are reserved for a separately reviewed T1803 failure
   diagnostic, not smuggled through the success-catalog projection.

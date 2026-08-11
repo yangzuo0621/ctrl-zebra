@@ -491,8 +491,10 @@ empty list sets the flag to `false` so a refresh can clear an earlier projection
 
 New clients stage the two matching messages by `requestId`, Server identity, and generation and
 commit them together. Arrival order is irrelevant: the first half is held in one bounded,
-operation-scoped staging slot until its counterpart arrives. The Host-owned slot expires exactly
-1,000 ms after the first half arrives; the timer is not extended by retries or later messages. A
+operation-scoped staging slot until its counterpart arrives. The Webview-local adapter-owned slot
+expires exactly 1,000 ms after the first half arrives; its timer is not extended by retries or later
+messages. The Extension Host remains responsible for generating and sending both messages with the
+matching request ID, Server identity, and generation, but cannot control Webview receipt timing. A
 missing counterpart never creates a new partial view. If this deadline expires, a newer refresh
 starts, the staged request is cancelled, or the connection disconnects/changes generation, the staged half is
 discarded and the last complete pair remains visible; no retry, persistence, or error echo is

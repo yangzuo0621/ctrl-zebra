@@ -222,10 +222,11 @@ schema, and snapshot limits and then evaluated one descriptor at a time.
   `rejectedToolsTruncated` marker, within the existing serialized snapshot ceiling. Entries are
   sorted by exact MCP Tool name in lexicographic Unicode scalar-value order before the first 256 are
   selected, independent of page order. New clients stage the matching tools and rejection messages
-  atomically in one Host-owned slot that expires 1,000 ms after the first half arrives; a missing
-  half, refresh, cancellation, disconnect, or generation change discards the slot without retry.
-  Older clients ignore the unknown additive message and continue to receive accepted Tools, losing
-  only the optional diagnostics.
+  atomically in one Webview-local adapter-owned slot that expires 1,000 ms after the first half
+  arrives; a missing half, refresh, cancellation, disconnect, or generation change discards the slot
+  without retry. The Extension Host owns generation binding and message emission, not Webview
+  receipt timing. Older clients ignore the unknown additive message and continue to receive accepted
+  Tools, losing only the optional diagnostics.
 
 This supplement records the single-Tool degradation and compatibility behavior required before
 T1801 implementation. It does not authorize T1802 Schema keyword reinterpretation, T1803
