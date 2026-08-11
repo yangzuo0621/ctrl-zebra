@@ -678,7 +678,8 @@ The diagnostic message is additive and ignored by older clients. It is sent afte
 connection/catalog state for the same request and generation, but it is never a second half of a
 catalog publication. T1803 tests must cover each rejection classification, all-rejected and mixed
 outcomes, deterministic Unicode ordering, duplicate suppression, count/byte truncation, explicit
-clear after a successful refresh, stale sequence and generation races, disconnect cleanup,
+clear after a successful refresh, stale sequence and generation races, disconnect cleanup and
+Server-identity transitions,
 protocol-incompatible messaging without probe/fallback claims, connection-driven clear on
 disconnect/generation/cancel/trust/disposal, secret/raw-error exclusion, the normal connected path
 with no diagnostics, and keyboard/screen-reader recovery behavior.

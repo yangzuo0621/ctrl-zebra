@@ -321,7 +321,7 @@ authorize T1803 diagnostics or T1804–T1807 dual-era behavior.
 T1803 adds a separate additive `extension/mcp-diagnostics` message rather than widening the
 successful connection or Tool-catalog DTOs. This preserves the invariant that accepted Tool state
 is authoritative only in the catalog and that a failure cannot masquerade as an empty success. The
-  message carries only a bounded, de-duplicated prefix of already-validated Tool names and the closed
+message carries only a bounded, de-duplicated prefix of already-validated Tool names and the closed
 Schema rejection reasons, a stable whole-operation error code, or the fixed modern-only/version
 compatibility facts. It never carries raw MCP/SDK errors, Schema values or paths, command, environment,
 stderr, credentials, or arbitrary Server metadata.

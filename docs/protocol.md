@@ -749,7 +749,8 @@ same-sequence conflicting payload without state mutation; sequence conflicts are
 shown as Server errors. Diagnostics are sent after the authoritative connection/catalog message for
 the same request and generation, but are not a second half of that publication. The implementation
 must test each reason/code, deterministic de-duplication and truncation, all-rejected retention,
-refresh-to-clear recovery, connection-driven clear on disconnect/generation/cancel/trust/disposal,
+refresh-to-clear recovery, connection-driven clear on disconnect/generation/cancel/trust/disposal
+and Server-identity transitions,
 stale races, protocol-incompatible no-success claims, no secrets/raw errors, and the ordinary
 connected path with no diagnostics.
 
