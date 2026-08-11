@@ -5,7 +5,7 @@
 > - 归档日期：2026-08-12
 > - 完成任务：T1801–T1807；任务实现已通过 PR #188、#191、#193、#195、#197、#198、#199 合并到 `main`。
 > - 阶段完成基线：`d261a754693420ff62bfa02c418183933ae9f416`（归档校验开始时 `main` 与 `origin/main` 一致且工作区 clean）。
-> - 归档 PR：[ #200](https://github.com/yangzuo0621/ctrl-zebra/pull/200)（待审阅与 squash 合并）。
+> - 阶段 18 归档门禁 PR：[ #200](https://github.com/yangzuo0621/ctrl-zebra/pull/200)；T1901 只在该 PR 合并后可开始。
 > - 阶段门禁：单工具 Schema 隔离、危险/未知 Schema 拒绝、递归引用一致性、稳定诊断、双纪元闭合集、modern-first 无误回退、统一审批/Trust/generation/资源/清理边界，以及 Server-to-Client 请求前置拒绝均已由实现、协议 Schema、领域文档和测试覆盖。
 > - 跨边界一致性：`docs/architecture.md`、`docs/security.md`、`docs/protocol.md`、`docs/persistence.md`、`docs/ux.md`、`docs/webview.md`、`docs/configuration.md`、README、ADR 0001 补充说明与 ADR 0002 的模式、版本、错误、持久化和排除项一致。
 > - 验证证据：`pnpm check`（345 files）、`pnpm typecheck`、`pnpm test:unit`（130 files/1585 tests）、`pnpm build`、`pnpm test:integration`、`pnpm package:vsix` 和针对该 commit 的 `pnpm smoke:vsix` 均通过。VSIX 为 12 个 allowlisted entries（807093 compressed bytes、3667482 uncompressed bytes）；README/license parity、fixture/credential/network 排除和无 fixture 入包由 packaging verifier 与 fixture 审计确认。
