@@ -34,7 +34,9 @@ CtrlZebra 应让用户在不理解内部 Agent 状态机的情况下完成以下
 - 当 `apiKeyConfigured` 为 false 时显示“保存 API key”按钮；当 `modelConfigured` 为 false
   时显示“选择模型”按钮。OpenAI-Compatible 的已验证本地 loopback 端点可以在没有 Secret
   时报告 API key requirement 已满足。三个 Provider 都显示“打开设置”入口，以便修复端点、
-  能力或其他不在展示投影中的配置错误；T1603 不提供凭据轮换或删除入口。
+  能力或其他不在展示投影中的配置错误。T1603 Onboarding 不提供凭据轮换或删除入口；
+  T1604 的删除和轮换只通过 Host-owned Command Palette 命令发现和执行，不扩展 Webview
+  状态、Protocol 消息或 Onboarding action。
 - 状态矩阵必须保持可操作：
 
   | Provider 状态 | API key | 模型 | 空状态必须说明和提供的操作 |

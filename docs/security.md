@@ -437,6 +437,38 @@ entry, not only the intermediate object.
   user-safe text and never include the submitted value, stored value, Secret name, or original
   backend error. The command does not initialize a Gemini client or make a network request.
 
+## Provider API Key Lifecycle (T1604)
+
+- Credential deletion and rotation are Extension Host-only Command Palette workflows. The stable
+  commands are `ctrlZebra.deleteOpenAIApiKey`, `ctrlZebra.deleteGeminiApiKey`,
+  `ctrlZebra.deleteOpenAICompatibleApiKey`, `ctrlZebra.rotateOpenAIApiKey`,
+  `ctrlZebra.rotateGeminiApiKey`, and `ctrlZebra.rotateOpenAICompatibleApiKey`. They are not
+  Webview actions, Protocol messages, Onboarding actions, model Tools, or settings values. T1603
+  onboarding remains limited to save-key, select-model, and open-settings.
+- A delete command shows a modal confirmation that names the Provider and explains that its saved
+  API key will be removed. It never reads or displays the Secret to construct the confirmation and
+  never reveals whether a value exists. Cancellation performs no SecretStorage operation. After
+  confirmation, the command invokes the Provider's idempotent `SecretStorage.delete`; an already
+  absent key is a successful completed deletion.
+- A rotation command always opens a new password-masked input with no prefilled value. It keeps the
+  input open across focus loss, rejects an empty submitted value before storage, and treats dismissal
+  as cancellation. It invokes exactly the Provider's `SecretStorage.store` with the new value; it
+  does not read, delete, or clear the old value first. A successful `store` is the replacement commit
+  boundary. A rejected write reports a fixed safe failure and leaves the old value untouched; no
+  success message is shown on cancellation or failure.
+- Delete, rotation, and existing save commands for one Provider share a Host-owned serial operation
+  queue covering the prompt, confirmation, SecretStorage mutation, and result notification. This
+  prevents overlapping commands from observing or reporting an interleaved lifecycle. Operations
+  for different Providers may proceed independently. Queue state contains only operation promises,
+  never Secret values.
+- Any credential presence/status projection uses a dedicated Host-owned presence reader and returns
+  only a boolean. It must not expose a Secret, length, prefix, suffix, hash, timing-derived detail,
+  or any other value from which the Secret could be inferred. Presence-read failures become a safe
+  unavailable/false status without exposing backend error text.
+- User-facing success and failure messages may name the Provider and operation, but never include a
+  Secret value, Secret name, authorization material, submitted input, or original SecretStorage
+  error. The commands do not initialize a model client or contact a Provider endpoint.
+
 ## Provider Model Selection Network Boundary
 
 - Model selection is an explicit Extension Host workflow. The `ctrlZebra.selectModel` command may

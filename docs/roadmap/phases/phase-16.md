@@ -39,7 +39,9 @@ Provider、已配置/部分配置/无配置、键盘和焦点、错误恢复、�
 
 提供用户可发现的删除和替换入口；删除前显示 Provider 身份但不显示 Secret；轮换使用新的遮蔽输入，
 只有 SecretStorage 写入成功后才替换旧值；取消或失败保持原值。状态查询只回答是否存在，不返回长度、
-前后缀或其他可推断内容。测试删除、轮换、取消、存储失败、并发命令、无现有密钥和日志不泄密。
+前后缀或其他可推断内容。删除和轮换为 Extension Host-only Command Palette workflows，不扩展
+T1603 Onboarding、Webview 或 Protocol；同一 Provider 的命令必须串行。测试删除、轮换、取消、
+存储失败、并发命令、无现有密钥和日志不泄密。
 
 ### T1605：验证 Provider/Model 连接与必需能力
 

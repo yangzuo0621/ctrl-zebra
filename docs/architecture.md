@@ -165,6 +165,15 @@ This document defines the initial runtime boundaries for the CtrlZebra desktop V
   SecretStorage adapter, and expose no credential through Core, Protocol, Webview state, settings,
   command arguments, logs, or diagnostics. Command handlers remain thin composition points and do
   not initialize a model client or contact a Provider endpoint.
+- T1604 extends that same Host-only boundary with per-Provider delete and rotate commands. Delete
+  confirmation projects only the closed Provider display label and a generic consequence; it does
+  not read or display a Secret. Rotation collects a fresh password-masked value and invokes the
+  existing adapter's `SecretStorage.store` without clearing the old value first. A successful store
+  is the replacement commit boundary, while a rejected store is a safe failure that preserves the
+  prior value. Save, delete, and rotate handlers for one Provider are serialized by a Host-owned
+  queue; queue state contains no credential material and different Providers do not block one
+  another. A separate presence projection returns only a boolean and never exposes length, prefix,
+  suffix, hash, or other Secret-derived data.
 - T1603 Webview onboarding intents remain host-owned. The Extension maps the strict save-key,
   select-model, and open-settings messages to existing Provider workflows or the VS Code settings
   command; command IDs, VS Code objects, endpoint values, and credential material never cross the
