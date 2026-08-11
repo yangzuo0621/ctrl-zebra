@@ -65,12 +65,12 @@
 **进度摘要**：
 
 - 总任务：148
-- 已完成：124
-- 进行中：1
+- 已完成：125
+- 进行中：0
 - 受阻：0
 - 待开始：23
-- 当前任务：T1901
-- 下一任务：T1902
+- 当前任务：T1902
+- 下一任务：T1903
 - 最后更新：2026-08-12
 
 | 阶段 | 任务 | 状态 | 完成 PR | 完成日期 |
@@ -199,7 +199,7 @@
 | 18 | T1805 | 已完成 | [#197](https://github.com/yangzuo0621/ctrl-zebra/pull/197) | 2026-08-12 |
 | 18 | T1806 | 已完成 | [#198](https://github.com/yangzuo0621/ctrl-zebra/pull/198) | 2026-08-12 |
 | 18 | T1807 | 已完成 | [#199](https://github.com/yangzuo0621/ctrl-zebra/pull/199) | 2026-08-12 |
-| 19 | T1901 | 进行中 | — | — |
+| 19 | T1901 | 已完成 | [#201](https://github.com/yangzuo0621/ctrl-zebra/pull/201) | 2026-08-12 |
 | 19 | T1902 | 待开始 | — | — |
 | 19 | T1903 | 待开始 | — | — |
 | 19 | T1904 | 待开始 | — | — |
@@ -223,6 +223,15 @@
 | 22 | T2206 | 待开始 | — | — |
 | 22 | T2207 | 待开始 | — | — |
 | 22 | T2208 | 待开始 | — | — |
+
+---
+
+### T1901 完成记录
+
+- 完成摘要：仅定义 IDE context 与 read-only Tool 契约；docs-only PR #201 即为完整任务产物，T1902 负责实现 Host adapter。
+- 完成证据：[PR #201](https://github.com/yangzuo0621/ctrl-zebra/pull/201)，squash merge revision `d15efff1fd6f09d07abad9fd7f427b2d052a2b19`；GitHub Actions run `31544541307` 的 Ubuntu、macOS、Windows 验证均通过；`pnpm check`、`git diff --check` 及 T1901 跨文档 anchor/file validation 均通过。
+- 完成日期：2026-08-12
+- 下一任务：T1902
 
 ---
 
