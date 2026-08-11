@@ -191,6 +191,40 @@ to `server/discover → connected → operation → disconnect`, and the unimple
 it does not change the accepted SDK version, protocol version, capability scope, transport, or
 security boundary.
 
+## T1801 supplement: per-Tool rejection and snapshot isolation
+
+T1801 refines the accepted MCP boundary without changing the pinned `2026-07-28` protocol, SDK
+version, package ownership, capability allowlist, process lifecycle, approval policy, or Core
+contract. A `tools/list` result is collected within the existing byte, page, entry, descriptor,
+schema, and snapshot limits and then evaluated one descriptor at a time.
+
+- An accepted descriptor produces an immutable Tool descriptor, schema identity, and compiled
+  validator. A rejected descriptor produces no Core Tool and only a bounded MCP Tool name plus one
+  closed CtrlZebra reason: `forbidden-keyword`, `unknown-keyword`, `invalid-reference`,
+  `non-object-root`, `schema-invalid`, or `limit-exceeded`. Reasons never echo Server keywords,
+  schema paths, SDK/JSON-RPC errors, or exception text. T1802 may refine keyword-to-reason mapping
+  within this closed boundary, but cannot admit unknown or dangerous schema behavior.
+- Schema failure is isolated to that Tool. Invalid descriptor envelopes, malformed pages, duplicate
+  MCP identities, duplicate or reserved Registry names, and aggregate limit breaches remain
+  whole-operation failures because they prevent a trustworthy identity or complete snapshot. A
+  non-empty list with no accepted Tool remains an `invalid-schema` discovery failure; an empty list
+  is a valid empty catalog.
+- The adapter constructs accepted Tools, validators, schema identities, and rejection details off
+  to the side and publishes one complete current-generation snapshot atomically. It retains the
+  previous complete snapshot on any whole-operation failure. Server identity, generation, and
+  discovery context fence every refresh; a late or cancelled result cannot replace a newer
+  snapshot or revive revoked approvals.
+- The protocol adds `extension/mcp-tool-rejections` rather than changing the strict legacy
+  `extension/mcp-tools` shape. The additive projection carries at most 256 rejected entries and a
+  `rejectedToolsTruncated` marker, within the existing serialized snapshot ceiling. New clients
+  stage the matching tools and rejection messages atomically. Older clients ignore the unknown
+  additive message and continue to receive accepted Tools, losing only the optional diagnostics.
+
+This supplement records the single-Tool degradation and compatibility behavior required before
+T1801 implementation. It does not authorize T1802 Schema keyword reinterpretation, T1803
+diagnostic UX, or T1804–T1807 dual-era protocol behavior; those remain separate tasks and change
+control surfaces.
+
 ## Reviewed primary references
 
 - [MCP specification `2026-07-28`](https://modelcontextprotocol.io/specification/2026-07-28)

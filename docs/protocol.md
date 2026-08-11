@@ -399,9 +399,11 @@ stderr, stack traces, and causes are forbidden.
   normal envelope. They cannot carry configuration, command, cwd, risk, approval state, Tool
   schema, Resource content, Prompt result, or capability declarations.
 - Extension state uses `extension/mcp-connection`, `extension/mcp-tools`,
-  `extension/mcp-resources`, `extension/mcp-prompts`, `extension/mcp-resource-preview`, and
-  `extension/mcp-prompt-preview`. A snapshot atomically replaces the matching Server/generation
-  view; it is never interpreted as an incremental patch.
+  `extension/mcp-tool-rejections`, `extension/mcp-resources`, `extension/mcp-prompts`,
+  `extension/mcp-resource-preview`, and `extension/mcp-prompt-preview`. The tools message retains
+  its strict accepted-catalog shape; the additive rejection message carries the matching bounded
+  rejection projection. A matching pair atomically replaces the Server/generation view; neither
+  message is interpreted as an incremental patch.
 - MCP Tool Calls continue to use the existing Core Tool Call/Result correlation. Their Webview
   projection adds a strict `source` object to the Tool-state contract only when the originating
   registered Tool is external: `{ kind: "mcp", server, generation, mcpToolName }`. Built-in Tools
@@ -438,6 +440,50 @@ reserves the `mcp_` prefix for this mapping. A duplicate external identity, a ha
 collision with any registered name rejects the complete incoming snapshot; no order-dependent
 suffix or partial registration is allowed. A rename is removal plus addition. Tool calls and
 approvals bind both names, Server ID, generation, and immutable schema identity.
+
+### Tool acceptance and rejection projection
+
+Tool discovery is a per-descriptor decision, but the wire projection is still a complete atomic
+snapshot. The accepted `extension/mcp-tools` catalog contains only Tools whose descriptor and
+compiled schema passed the MCP boundary. A schema rejection never removes an accepted sibling;
+malformed pages, duplicate identities, duplicate/reserved Registry names, and other identity or
+envelope failures reject the complete snapshot. A non-empty list in which every Tool is rejected
+remains the stable `invalid-schema` discovery failure; an actually empty Server list is valid.
+
+`McpToolRejectionReason` is a strict closed enum:
+
+```text
+"forbidden-keyword" | "unknown-keyword" | "invalid-reference" |
+"non-object-root" | "schema-invalid" | "limit-exceeded"
+```
+
+The reason is selected by CtrlZebra and never contains an external keyword, JSON Pointer, SDK
+message, numeric JSON-RPC code, or exception text. `McpRejectedToolDto` is the strict object
+`{ mcpToolName, reason }`, where `mcpToolName` uses the same well-formed Unicode and length bound as
+the accepted Tool descriptor. `McpToolRejectionCatalogDto` is:
+
+```text
+{
+  server: McpServerIdentityDto,
+  generation: positive safe integer,
+  rejectedTools: McpRejectedToolDto[0..256],
+  rejectedToolsTruncated: boolean
+}
+```
+
+The Extension sends `extension/mcp-tool-rejections` as a strict additive version `1` message with
+that catalog and the same `requestId` as the corresponding `extension/mcp-tools` snapshot. The
+projection contains no schema, command, environment, raw error, or arbitrary metadata. When more
+than 256 Tools are rejected in a mixed snapshot, the list is a deterministic prefix and
+`rejectedToolsTruncated` is `true`; accepted Tools are never truncated. An empty list sets the flag
+to `false` so a refresh can clear an earlier projection.
+
+New clients stage the two matching messages by `requestId`, Server identity, and generation and
+commit them together. A stale, mismatched, cancelled, or post-disconnect message is ignored. A
+version `1` client that does not recognize `extension/mcp-tool-rejections` ignores that additive
+message under the existing unknown-message rule and still receives the unchanged tools-only
+`extension/mcp-tools` message; it renders accepted Tools without rejection details. The Host never
+adds an unknown field to the strict legacy catalog to force an older client to parse it.
 
 ### Resource and Resource Template projections
 

@@ -489,3 +489,37 @@ port.
   and again before execution. An advertised output schema, when present, validates normalized
   structured output. Validation proves shape only; it never proves safety, read-only behavior,
   idempotence, or authorization.
+
+### Tool discovery acceptance and snapshot isolation (T1801)
+
+- A bounded `tools/list` collection is evaluated one descriptor at a time. Each descriptor produces
+  exactly one internal result: `accepted` carries the immutable descriptor and compiled input/output
+  validators; `rejected` carries only the bounded MCP Tool name and one value from the closed
+  `McpToolRejectionReason` set (`forbidden-keyword`, `unknown-keyword`, `invalid-reference`,
+  `non-object-root`, `schema-invalid`, or `limit-exceeded`). A reason is a CtrlZebra classification,
+  never a Server keyword, JSON Pointer, SDK error, or exception message.
+- A schema rejection is local to that Tool. It must not abort, remove, or invalidate any sibling
+  Tool whose descriptor and schema were accepted. Descriptor-envelope failures that make identity or
+  trust impossible (`malformed-message`, an invalid or duplicate MCP name, a duplicate or reserved
+  Registry name, or an unknown descriptor property) remain whole-operation failures rather than
+  becoming a rejection entry. The existing list, descriptor, schema, and serialized snapshot limits
+  remain hard limits.
+- The adapter builds the complete replacement off to the side, including accepted Tools, immutable
+  schema identities, validators, and the bounded rejection projection. It publishes one atomic
+  current-generation snapshot only after every input descriptor has produced a result. A non-empty
+  list with no accepted Tool is an `invalid-schema` discovery failure and publishes no empty snapshot;
+  an empty Server list is a valid empty snapshot. Any malformed page, duplicate identity, aggregate
+  limit breach, or other whole-operation failure likewise leaves the last complete snapshot intact.
+- Snapshot publication is fenced by Server identity, connection generation, and the discovery
+  context object. A refresh or list-changed notification may be coalesced, but a late response from
+  an older context, a closed generation, a disconnected Client, or a cancelled refresh can never
+  revoke or replace a newer snapshot. On a successful replacement the previous snapshot is revoked
+  only after the new snapshot is fully constructed; approvals and Tool Calls remain bound to the
+  immutable snapshot and schema identity that created them.
+- The Webview receives accepted Tools and rejection details as an additive projection. Rejection
+  details are bounded independently to at most 256 entries and carry an explicit truncation marker;
+  truncating diagnostics never truncates the accepted Tool catalog. The projection contains no
+  schema, keyword path, raw error, command, environment, or Server-provided metadata. A client that
+  does not understand the additive rejection message still receives the unchanged tools-only
+  `extension/mcp-tools` message and therefore keeps rendering accepted Tools; it merely cannot show
+  the optional rejection details.
