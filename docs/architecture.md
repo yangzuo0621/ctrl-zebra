@@ -535,21 +535,28 @@ port.
   connection.generation)` scope. It starts at `1` for a new generation and is allocated exactly
   once immediately before each complete valid catalog projection is emitted, including a valid
   empty catalog; failed, cancelled, or all-rejected discovery allocates no sequence and emits no
-  projection. Both the request correlation and sequence are Host-owned values; the MCP Server and
-  Webview never choose or increment them. The value is a positive safe integer and never wraps. If
-  the next value would overflow, the Host closes the delivery gate and requires a later explicit
-  reconnect, which creates a new generation and resets the sequence to `1`.
+  projection. The complete strict wrapper plus catalog is measured as UTF-8 serialized JSON bytes
+  during bounded construction and before sequence allocation or sending; it must be at most
+  1,048,576 bytes. An over-limit candidate follows the stable `limit-exceeded` whole-operation
+  failure path, retains the previous complete snapshot, emits neither combined nor legacy catalog,
+  and consumes no sequence. Both the request correlation and sequence are Host-owned values; the
+  MCP Server and Webview never choose or increment them. The value is a positive safe integer and
+  never wraps. If the next value would overflow, the Host closes the delivery gate and requires a
+  later explicit reconnect, which creates a new generation and resets the sequence to `1`.
 - A sequence-aware Webview validates the strict combined envelope before any state mutation and
-  keeps a committed watermark for the current Server/generation. While one message is being
-  validated, its sequence is a transient pending watermark; it is never rendered or exposed as
-  partial state. A message whose Server, generation, or `catalogSequence` is at or below the
-  committed or pending watermark is ignored before commit. A higher sequence replaces the complete
-  catalog atomically and advances the committed watermark only after validation and commit; an
-  invalid candidate clears only the transient pending value. Duplicate or conflicting payloads at
-  an already committed sequence are discarded without changing state. A generation
-  change/disconnect clears pending and committed watermarks; late messages from the prior scope
-  cannot cross that fence. There is no two-half slot, timer, retry, or receipt-order dependency for
-  the combined message.
+  keeps the committed publication record and a transient pending candidate for the current
+  Server/generation. The committed record includes its request ID and validated catalog payload;
+  the pending candidate exists only during synchronous validation and is never rendered or exposed
+  as partial state. A lower sequence than either watermark is a stale no-op. At an equal committed
+  or pending sequence, an exact duplicate (same Server, generation, sequence, request ID, and
+  equivalent validated catalog payload) is an idempotent no-op: it is ignored and never re-staged or
+  committed. A same-sequence candidate with any differing tuple value or payload is discarded with
+  the stable local `conflicting-catalog-sequence` classification, leaving both watermarks and the
+  current snapshot unchanged. A higher sequence sets the pending candidate, and only after strict
+  validation succeeds does it atomically replace the complete catalog and advance the committed
+  watermark; invalid validation clears only the pending candidate. A generation change/disconnect
+  clears pending and committed records; late messages from the prior scope cannot cross that fence.
+  There is no two-half slot, timer, retry, or receipt-order dependency for the combined message.
 - The Host emits the sequence-bearing combined projection before the unchanged legacy
   `extension/mcp-tools` projection for the same request, correlation ID, Server identity, and
   generation; this compatibility projection is not a second half and is never jointly staged.
@@ -562,7 +569,8 @@ port.
 - The T1801 implementation gate tests a fully accepted catalog, a mixed catalog with one or more
   rejected siblings, an all-rejected refresh retaining the prior snapshot with no catalog emission,
   duplicate-name and malformed-page whole-operation failures, deterministic rejection-prefix
-  selection across pagination order, refresh and disconnect/generation races, sequence overflow and
-  reconnect reset, exact duplicate versus conflicting duplicate sequence handling, atomic combined
-  publication without partial state, and an older client that ignores the additive message while
-  still rendering the unchanged legacy catalog.
+  selection across pagination order, combined-envelope UTF-8 serialization at and above the
+  one-mebibyte ceiling, refresh and disconnect/generation races, sequence overflow and reconnect
+  reset, exact duplicate no-op at both pending and committed watermarks, same-sequence conflicting
+  discard at either watermark, atomic combined publication without partial state, and an older
+  client that ignores the additive message while still rendering the unchanged legacy catalog.

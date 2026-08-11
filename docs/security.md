@@ -732,7 +732,7 @@ Result ceiling.
 | One list operation | 100 pages and 1,000 entries |
 | One descriptor | 65,536 serialized UTF-8 bytes |
 | One complete list snapshot | 1,048,576 serialized UTF-8 bytes |
-| Rejected Tool projection | 256 entries, within the complete snapshot ceiling |
+| Rejected Tool projection | 256 entries; the complete strict catalog envelope (wrapper plus catalog) is at most 1,048,576 UTF-8 bytes |
 | One Tool input or output schema | 65,536 bytes, depth 32, 4,096 nodes, 1,024 properties |
 | All schemas in one Tool snapshot | 524,288 serialized UTF-8 bytes |
 | Tool arguments before approval | 262,144 serialized UTF-8 bytes |
@@ -757,13 +757,17 @@ and Prompt data that exceed their applicable limit are rejected rather than sile
   CtrlZebra reason (`forbidden-keyword`, `unknown-keyword`, `invalid-reference`, `non-object-root`,
   `schema-invalid`, or `limit-exceeded`). It never contains a Server keyword, schema path, raw
   schema, SDK/JSON-RPC error, stack, command, environment, or other untrusted diagnostic.
-- `rejectedTools` is independently bounded to 256 entries and to the one-mebibyte serialized
-  snapshot ceiling. Before taking the prefix, entries are sorted by exact MCP Tool name using
-  lexicographic Unicode scalar-value order (not UTF-16 code units or Server page order), so paging
-  and refresh order cannot change the reported prefix. When more entries are rejected in a mixed
-  snapshot, the adapter retains that deterministic prefix and sets `rejectedToolsTruncated: true`;
-  accepted Tools are never dropped to satisfy this diagnostic bound. An empty rejection list has
-  `rejectedToolsTruncated: false`.
+- `rejectedTools` is independently bounded to 256 entries. Before taking the prefix, entries are
+  sorted by exact MCP Tool name using lexicographic Unicode scalar-value order (not UTF-16 code units
+  or Server page order), so paging and refresh order cannot change the reported prefix. When more
+  entries are rejected in a mixed snapshot, the adapter retains that deterministic prefix and sets
+  `rejectedToolsTruncated: true`; accepted Tools are never dropped to satisfy this diagnostic bound.
+  An empty rejection list has `rejectedToolsTruncated: false`. The complete strict
+  `extension/mcp-tool-catalog` wrapper and catalog are then counted together as UTF-8 serialized
+  JSON bytes and must fit the 1,048,576-byte ceiling. The Host applies this check during bounded
+  construction and before sequence allocation or sending; an over-limit candidate follows the
+  stable `limit-exceeded` whole-operation path, retains the prior complete snapshot, emits neither
+  combined nor legacy catalog, and consumes no sequence.
   If a non-empty input list has no accepted Tool, discovery fails with the existing stable
   `invalid-schema` outcome instead of publishing a misleading empty catalog. A genuinely empty
   Server list remains a valid empty catalog.
@@ -777,16 +781,19 @@ and Prompt data that exceed their applicable limit are rejected rather than sile
   failed refresh closes the delivery gate; late pages, validators, and catalog projections are
   discarded before Core, Protocol, Webview, persistence, or approval state can observe them. The
   sequence is scoped to `(server.serverId, generation)`, starts at `1`, is allocated once immediately
-  before emitting a fully validated projection, and never wraps a positive safe integer. Failed,
-  cancelled, and all-rejected discoveries allocate no sequence. On overflow the Host closes the
-  current generation and requires an explicit reconnect; the new generation resets the sequence
-  and Webview committed watermark. A sequence-aware Webview may hold only a transient pending
-  watermark during synchronous validation; it rejects a catalog whose sequence is at or below the
-  pending or committed watermark before mutation, commits a higher sequence only as one complete
-  atomic value, and advances the committed watermark after commit. An invalid candidate clears the
-  transient pending value without changing the committed view. Conflicting duplicates at an already
-  committed sequence are discarded. There is no unmatched-half timer, retry, or receipt-order
-  dependency.
+  before emitting a fully validated, within-ceiling projection, and never wraps a positive safe
+  integer. Failed, cancelled, all-rejected, and over-limit discoveries allocate no sequence. On
+  overflow the Host closes the current generation and requires an explicit reconnect; the new
+  generation resets the sequence and Webview committed watermark. A sequence-aware Webview keeps a
+  committed publication record plus only a transient pending candidate during synchronous
+  validation. A lower sequence than either watermark is a stale no-op. At an equal committed or
+  pending sequence, an exact duplicate (same Server, generation, sequence, request ID, and
+  equivalent validated catalog payload) is an idempotent no-op: it is ignored and never re-staged or
+  committed. A same-sequence candidate with any differing tuple value or payload is discarded with
+  the stable local `conflicting-catalog-sequence` classification, leaving pending, committed, and
+  rendered state unchanged. A higher sequence commits only as one complete atomic value after
+  validation; invalid validation clears only pending. There is no unmatched-half timer, retry, or
+  receipt-order dependency.
 
 Unsupported image, audio, Blob, embedded Resource, Resource Link, unknown content, task,
 `input_required`, progress, logging, completion, subscription, or experimental values produce

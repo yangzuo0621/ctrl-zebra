@@ -221,16 +221,25 @@ schema, and snapshot limits and then evaluated one descriptor at a time.
   legacy `extension/mcp-tools` tools-only catalog unchanged. The combined catalog carries at most
   256 rejected entries and a `rejectedToolsTruncated` marker, within the existing serialized
   snapshot ceiling. Entries are sorted by exact MCP Tool name in lexicographic Unicode scalar-value
-  order before the deterministic prefix is selected, independent of page order. A Host-owned
-  positive-safe-integer `catalogSequence` is monotonic within each `(server.serverId, generation)`
-  scope, starts at `1` on a new generation, is allocated once immediately before each complete
-  valid emission, and never wraps. Failed, cancelled, and all-rejected discovery emits neither the
-  combined nor the unchanged legacy catalog and consumes no sequence; overflow closes the generation
-  and requires explicit reconnect.
-  The sequence-aware Webview uses a transient pending watermark during synchronous validation and
-  commits only a higher sequence than its current scope's pending or committed watermark; invalid
-  candidates clear only the transient value, while stale or conflicting duplicates are dropped
-  before mutation. Both watermarks reset on disconnect or generation change. There is no two-half
+  order before the deterministic prefix is selected, independent of page order. The complete strict
+  wrapper plus catalog is counted as UTF-8 serialized JSON bytes during bounded construction and
+  before sequence allocation or sending; it must fit the existing 1,048,576-byte ceiling. An
+  over-limit candidate follows the stable `limit-exceeded` whole-operation path, retains the prior
+  complete snapshot, emits neither the combined nor unchanged legacy catalog, and consumes no
+  sequence. A Host-owned positive-safe-integer `catalogSequence` is monotonic within each
+  `(server.serverId, generation)` scope, starts at `1` on a new generation, is allocated once
+  immediately before each complete valid emission, and never wraps. Failed, cancelled, and
+  all-rejected discovery emits neither the combined nor the unchanged legacy catalog and consumes
+  no sequence; overflow closes the generation and requires explicit reconnect. The sequence-aware
+  Webview keeps a committed publication record and only a transient pending candidate during
+  synchronous validation. A lower sequence than either watermark is a stale no-op. At an equal
+  committed or pending sequence, an exact duplicate (same Server, generation, sequence, request ID,
+  and equivalent validated catalog payload) is an idempotent no-op and is never re-staged or
+  committed. A same-sequence candidate with any differing tuple value or payload is discarded with
+  the stable local `conflicting-catalog-sequence` classification, leaving both records and the
+  current snapshot unchanged. A higher sequence commits only after validation as one atomic
+  replacement; invalid validation clears only pending. Both records reset on disconnect or
+  generation change. There is no two-half
   staging slot or timer. The superseded
   `extension/mcp-tool-rejections` projection is non-authoritative and is not emitted by the amended
   Host. Older clients ignore the unknown combined message and continue to receive accepted Tools
@@ -238,12 +247,13 @@ schema, and snapshot limits and then evaluated one descriptor at a time.
   ignore legacy catalogs for state so delayed compatibility messages cannot overwrite a newer view.
 
 This supplement records the single-Tool degradation and compatibility behavior required before
-T1801 implementation. The implementation gate must cover mixed acceptance, all-rejected retention,
-whole-operation identity failures, deterministic bounded rejection ordering, refresh/disconnect
-fences, sequence overflow/reconnect reset, duplicate sequence handling, atomic publication, and
-legacy-client compatibility. It does not authorize T1802 Schema keyword reinterpretation, T1803
-diagnostic UX, or T1804–T1807 dual-era protocol behavior; those remain separate tasks and change
-control surfaces.
+T1801 implementation. The implementation gate must cover mixed acceptance, schema-policy versus
+descriptor-envelope isolation, all-rejected retention, deterministic bounded rejection ordering,
+combined-envelope UTF-8 size boundaries, refresh/disconnect fences, sequence overflow/reconnect
+reset, exact duplicate no-op at both pending and committed watermarks, same-sequence conflicting
+discard at either watermark, atomic publication, and legacy-client compatibility. It does not
+authorize T1802 Schema keyword reinterpretation, T1803 diagnostic UX, or T1804–T1807 dual-era
+protocol behavior; those remain separate tasks and change control surfaces.
 
 ## Reviewed primary references
 

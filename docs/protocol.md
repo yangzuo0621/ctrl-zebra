@@ -490,6 +490,13 @@ message for the same publication carries the same `requestId`, Server identity, 
 accepted `tools` projection, but it is a compatibility projection rather than a second half of the
 combined envelope; neither message is staged or required to arrive for the other.
 
+The complete strict wrapper and its `catalog` payload are counted together as UTF-8 serialized JSON
+bytes against the existing 1,048,576-byte ceiling. The Host enforces that bound during bounded
+construction and before sequence allocation or sending. A candidate over the ceiling follows the
+stable `limit-exceeded` whole-operation path: it retains the prior complete catalog, emits neither
+the combined nor legacy catalog, and consumes no sequence. No partial envelope or mismatched old/new
+catalog may be published.
+
 `catalogSequence` is allocated and owned by the Extension Host, not the MCP Server or Webview. It
 is monotonic within the `(catalog.server.serverId, catalog.generation)` scope, starts at `1` for
 each new connection generation, and is allocated exactly once immediately before a fully validated
@@ -505,16 +512,20 @@ When more than 256 Tools are rejected in a mixed snapshot, entries are first sor
 order), then the deterministic bounded prefix is retained and `rejectedToolsTruncated` is `true`;
 accepted Tools are never truncated. An empty rejection list sets the flag to `false`.
 
-The sequence-aware Webview validates the strict envelope and catalog before state mutation and
-keeps committed and transient pending watermarks for the current Server/generation. The pending
-value exists only during synchronous validation and is never rendered or exposed as partial state.
-A message with a different Server, generation, or `catalogSequence` less than or equal to either
-watermark is ignored before commit. A higher sequence replaces the complete catalog atomically and
-advances the committed watermark only after the commit; an invalid candidate clears only the
-transient pending value. A duplicate sequence is accepted only as an exact idempotent replay; a
-conflicting payload at an already committed sequence is discarded. Generation change or disconnect
-clears both watermarks and closes the delivery gate, so late messages from the previous scope cannot
-commit. There is no two-half staging slot, timer, retry, or arrival-order dependency.
+The sequence-aware Webview validates the strict envelope and catalog before state mutation and keeps
+the committed publication record plus a transient pending candidate for the current Server/generation.
+The committed record includes the request ID and validated catalog payload; the pending candidate
+exists only during synchronous validation and is never rendered or exposed as partial state. A lower
+sequence than either watermark is a stale no-op. At an equal committed or pending sequence, an exact
+duplicate (same Server, generation, sequence, request ID, and equivalent validated catalog payload)
+is an idempotent no-op: it is ignored and never re-staged or committed. A same-sequence candidate
+with any differing tuple value or payload is discarded with the stable local
+`conflicting-catalog-sequence` classification, leaving pending, committed, and rendered state
+unchanged. A higher sequence sets the pending candidate; only after strict validation succeeds does
+it atomically replace the complete catalog and advance the committed watermark. Invalid validation
+clears only the pending candidate. Generation change or disconnect clears both records and closes the
+delivery gate, so late messages from the previous scope cannot commit. There is no two-half staging
+slot, timer, retry, or arrival-order dependency.
 
 The Host emits the sequence-bearing combined message before the unchanged legacy
 `extension/mcp-tools` message for the same publication. A version `1` client that does not know
@@ -532,11 +543,14 @@ it must not reuse this success-catalog message or expose raw schema data. Until 
 `invalid-schema` message is the only wire-visible all-failed detail.
 
 The T1801 implementation tests must cover a fully accepted catalog, mixed accepted/rejected
-descriptors, all-rejected retention with no catalog emission, duplicate-name and malformed-page
-whole-operation failure, deterministic rejection-prefix selection independent of pagination order,
-refresh and disconnect/generation stale races, overflow/reconnect reset, exact versus conflicting
-duplicate sequence handling, atomic combined publication without partial state, and an older client
-that ignores the additive message while continuing to render the unchanged legacy catalog.
+descriptors, schema-policy failure isolated to one Tool, invalid descriptor envelope/identity as a
+whole-operation failure, all-rejected retention with no catalog emission, duplicate-name and
+malformed-page failure, deterministic rejection-prefix selection independent of pagination order,
+combined-envelope UTF-8 serialization at and above the one-mebibyte ceiling, refresh and
+disconnect/generation stale races, overflow/reconnect reset, exact duplicate no-op at both pending
+and committed watermarks, same-sequence conflicting discard at either watermark, atomic combined
+publication without partial state, and an older client that ignores the additive message while
+continuing to render the unchanged legacy catalog.
 
 ### Resource and Resource Template projections
 
@@ -584,6 +598,9 @@ enforce the limits in [Security](security.md) while collecting. List snapshots c
 1,000 descriptors and must fit the one-mebibyte serialized ceiling. Strings must be well-formed
 Unicode and are measured both by Unicode code points and UTF-8 bytes where Security defines both.
 
-An invalid descriptor, duplicate identity, malformed cursor chain, unsupported content item, or
-limit breach rejects the complete operation. The Extension never asks the Webview to validate an
-SDK object, infer a capability, choose risk, join partial pages, or repair malformed content.
+An invalid descriptor envelope or identity, duplicate identity, malformed cursor chain, unsupported
+content item, or aggregate limit breach rejects the complete operation. A schema-policy failure
+after a descriptor's envelope and identity pass is isolated to that Tool as a bounded rejected
+result; it does not reject the complete operation or its valid siblings. The Extension never asks
+the Webview to validate an SDK object, infer a capability, choose risk, join partial pages, or repair
+malformed content.
