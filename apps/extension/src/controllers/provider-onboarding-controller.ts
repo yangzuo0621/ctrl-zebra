@@ -43,7 +43,7 @@ export class ProviderOnboardingController {
     if (this.#disposed || this.#pendingActionRequestId !== undefined) return;
 
     const status = await this.#actions.readStatus();
-    if (this.#disposed) return;
+    if (this.#disposed || this.#pendingActionRequestId !== undefined) return;
     post({ protocolVersion, type: "extension/provider-status", requestId, ...status });
   }
 
