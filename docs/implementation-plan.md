@@ -65,12 +65,12 @@
 **进度摘要**：
 
 - 总任务：148
-- 已完成：119
-- 进行中：1
+- 已完成：120
+- 进行中：0
 - 受阻：0
 - 待开始：28
-- 当前任务：T1803
-- 下一任务：T1804
+- 当前任务：T1804
+- 下一任务：T1805
 - 最后更新：2026-08-12
 
 | 阶段 | 任务 | 状态 | 完成 PR | 完成日期 |
@@ -194,7 +194,7 @@
 | 17 | T1703 | 已完成 | [#185](https://github.com/yangzuo0621/ctrl-zebra/pull/185) | 2026-08-11 |
 | 18 | T1801 | 已完成 | [#188](https://github.com/yangzuo0621/ctrl-zebra/pull/188) | 2026-08-11 |
 | 18 | T1802 | 已完成 | [#191](https://github.com/yangzuo0621/ctrl-zebra/pull/191) | 2026-08-12 |
-| 18 | T1803 | 进行中 | — | — |
+| 18 | T1803 | 已完成 | [#193](https://github.com/yangzuo0621/ctrl-zebra/pull/193) | 2026-08-12 |
 | 18 | T1804 | 待开始 | — | — |
 | 18 | T1805 | 待开始 | — | — |
 | 18 | T1806 | 待开始 | — | — |
@@ -260,6 +260,13 @@
 - 完成证据：[PR #191](https://github.com/yangzuo0621/ctrl-zebra/pull/191)，最终实现 revision `0a23753fb9d0f7a4de92f20980f51b7d74bc3af5`；最新本地聚焦测试 45/45、MCP 测试 110/110、完整单元测试 1517 个、集成测试 exit 0、`pnpm check`、`pnpm typecheck` 与 `git diff --check` 均通过；GitHub Actions run `31512898994` 的 Ubuntu、macOS、Windows 验证均通过。
 - 完成日期：2026-08-12
 - 下一任务：T1803
+
+### T1803 完成记录
+
+- 完成摘要：实现 MCP 诊断恢复投影与连接生命周期竞态防护，清理断开与重连诊断，隔离过期刷新/清理意图及失败，并补充 UTF-8 诊断截断覆盖。
+- 完成证据：[PR #193](https://github.com/yangzuo0621/ctrl-zebra/pull/193)，最终实现 revision `e98e7b3631a9593977732fdc63b2437bbe10a787`；本地单元测试 1535 个、`pnpm check`、`pnpm typecheck`、构建、集成测试及 `git diff --check` 均通过；GitHub Actions run `31521263866` 的 Ubuntu、macOS、Windows 验证均通过。
+- 完成日期：2026-08-12
+- 下一任务：T1804
 
 ---
 
