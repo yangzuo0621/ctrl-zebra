@@ -9,6 +9,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./app.js";
+import { strings } from "./strings.js";
 import type { WebviewHost } from "./vscode-api.js";
 
 class FakeWebviewHost implements WebviewHost {
@@ -623,7 +624,9 @@ describe("App streaming chat", () => {
       });
     });
 
-    expect(screen.getAllByRole("article", { name: "read_file" })).toHaveLength(1);
+    expect(
+      screen.getAllByRole("article", { name: `${strings.tool.cardLabel}: read_file` }),
+    ).toHaveLength(1);
     expect(screen.getByLabelText("Tool status")).toHaveTextContent("Pending");
 
     act(() => {
@@ -637,7 +640,9 @@ describe("App streaming chat", () => {
       });
     });
 
-    expect(screen.getAllByRole("article", { name: "read_file" })).toHaveLength(1);
+    expect(
+      screen.getAllByRole("article", { name: `${strings.tool.cardLabel}: read_file` }),
+    ).toHaveLength(1);
     expect(screen.getByLabelText("Tool status")).toHaveTextContent("Running");
 
     act(() => {
@@ -658,7 +663,9 @@ describe("App streaming chat", () => {
       });
     });
 
-    expect(screen.getAllByRole("article", { name: "read_file" })).toHaveLength(1);
+    expect(
+      screen.getAllByRole("article", { name: `${strings.tool.cardLabel}: read_file` }),
+    ).toHaveLength(1);
     expect(screen.getByLabelText("Tool status")).toHaveTextContent("Success");
     await user.click(screen.getByRole("button", { name: "Details" }));
     expect(screen.getByRole("group", { name: "Result" })).toHaveTextContent("Hello");
@@ -814,15 +821,17 @@ describe("App streaming chat", () => {
       animationFrames[0]?.(0);
     });
 
-    expect(screen.getByRole("region", { name: "推理摘要" })).toBeVisible();
+    expect(screen.getByRole("region", { name: strings.reasoning.regionLabel })).toBeVisible();
     expect(screen.getByText("Inspect contracts.")).toBeVisible();
     expect(screen.getByText("Final answer.")).toBeVisible();
-    expect(screen.getByRole("article", { name: "read_file" })).toBeVisible();
-    expect(screen.getByRole("status", { name: "推理摘要状态" })).toHaveTextContent(
-      "推理摘要已开始生成。",
-    );
+    expect(
+      screen.getByRole("article", { name: `${strings.tool.cardLabel}: read_file` }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("status", { name: strings.app.reasoningStatusLabel }),
+    ).toHaveTextContent(strings.reasoning.started);
 
-    const disclosure = screen.getByRole("button", { name: "折叠推理摘要" });
+    const disclosure = screen.getByRole("button", { name: strings.reasoning.toggle(true) });
     await user.click(disclosure);
     act(() => {
       host.emit({
@@ -835,7 +844,7 @@ describe("App streaming chat", () => {
       animationFrames[1]?.(0);
     });
 
-    expect(screen.getByRole("button", { name: "展开推理摘要" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: strings.reasoning.toggle(false) })).toHaveFocus();
     expect(screen.queryByText("Inspect contracts. Continue.")).not.toBeInTheDocument();
   });
 
@@ -857,7 +866,9 @@ describe("App streaming chat", () => {
     });
 
     expect(screen.getByText("Normal answer.")).toBeVisible();
-    expect(screen.queryByRole("region", { name: "推理摘要" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: strings.reasoning.regionLabel }),
+    ).not.toBeInTheDocument();
   });
 
   it("restores a completed reasoning summary collapsed without a live announcement", async () => {
@@ -921,12 +932,14 @@ describe("App streaming chat", () => {
       });
     });
 
-    expect(screen.getByRole("button", { name: "展开推理摘要" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: strings.reasoning.toggle(false) })).toHaveAttribute(
       "aria-expanded",
       "false",
     );
     expect(screen.queryByText("Recovered summary")).not.toBeInTheDocument();
-    expect(screen.getByRole("status", { name: "推理摘要状态" })).toBeEmptyDOMElement();
+    expect(
+      screen.getByRole("status", { name: strings.app.reasoningStatusLabel }),
+    ).toBeEmptyDOMElement();
   });
 
   it("populates composer draft when selecting an onboarding sample prompt (T1104)", async () => {

@@ -9,6 +9,7 @@ import { ApprovalCard } from "./approval-card.js";
 import type { DisplayApproval } from "./approval-store.js";
 import type { DisplayToolCall } from "./chat-store.js";
 import styles from "./command-tool-card.module.css";
+import { formatCommandStatus, strings } from "./strings.js";
 import { Badge } from "./ui/badge.js";
 import { Button } from "./ui/button.js";
 
@@ -51,15 +52,15 @@ export function CommandToolCard({
     (runStatus === "preparing" || runStatus === "streaming") &&
     !terminationRequested;
   const visibleStatus = isAwaitingApproval
-    ? "Awaiting Decision"
+    ? strings.command.awaitingDecision
     : commandCancelled
-      ? "Terminated"
+      ? strings.command.terminated
       : commandInterrupted
-        ? "Interrupted"
+        ? strings.command.interrupted
         : commandTruncated
-          ? "Not completed"
+          ? strings.command.notCompleted
           : terminationRequested && toolCall.status === "running"
-            ? "Terminating…"
+            ? strings.command.terminating
             : commandStatus(toolCall);
   const visualStatus =
     commandCancelled || commandInterrupted || commandTruncated ? "error" : toolCall.status;
@@ -94,17 +95,21 @@ export function CommandToolCard({
   };
 
   return (
-    <article aria-labelledby={headingId} className={styles.card} data-status={visualStatus}>
+    <article
+      aria-label={`${strings.command.eyebrow}: ${strings.command.name}`}
+      className={styles.card}
+      data-status={visualStatus}
+    >
       <header className={styles.header}>
         <div>
-          <p className={styles.eyebrow}>Command Tool</p>
+          <p className={styles.eyebrow}>{strings.command.eyebrow}</p>
           <h3 className={styles.title} id={headingId}>
-            run_command
+            {strings.command.name}
           </h3>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           <Badge variant={badgeVariant}>
-            <span className={styles.state} role="status" aria-label="Command status">
+            <span className={styles.state} role="status" aria-label={strings.command.statusLabel}>
               {visibleStatus}
             </span>
           </Badge>
@@ -114,7 +119,7 @@ export function CommandToolCard({
             onClick={() => setUserExpanded(!isExpanded)}
             aria-expanded={isExpanded}
           >
-            {isExpanded ? "Collapse" : "Details"}
+            {isExpanded ? strings.command.collapse : strings.command.details}
           </Button>
         </div>
       </header>
@@ -132,52 +137,58 @@ export function CommandToolCard({
             />
           ) : (
             <fieldset className={styles.field}>
-              <legend className={styles.label}>Command request</legend>
+              <legend className={styles.label}>{strings.command.request}</legend>
               <pre className={styles.code}>{JSON.stringify(toolCall.call.input, null, 2)}</pre>
             </fieldset>
           )}
 
           {commandCancelled ? (
             <p className={styles.error} role="alert">
-              Command execution was cancelled before it completed.
+              {strings.command.cancelled}
             </p>
           ) : null}
 
           {commandTruncated ? (
             <p className={styles.error} role="alert">
-              The response ended before this Tool could complete.
+              {strings.command.truncated}
             </p>
           ) : null}
 
           {toolCall.status === "success" && output?.success ? (
             <div className={styles.result}>
               <fieldset className={styles.field}>
-                <legend className={styles.label}>Standard output</legend>
-                <pre className={styles.output}>{output.data.stdout || "No stdout."}</pre>
+                <legend className={styles.label}>{strings.command.standardOutput}</legend>
+                <pre className={styles.output}>
+                  {output.data.stdout || strings.command.noStdout}
+                </pre>
               </fieldset>
               <fieldset className={styles.field}>
-                <legend className={styles.label}>Standard error</legend>
-                <pre className={styles.output}>{output.data.stderr || "No stderr."}</pre>
+                <legend className={styles.label}>{strings.command.standardError}</legend>
+                <pre className={styles.output}>
+                  {output.data.stderr || strings.command.noStderr}
+                </pre>
               </fieldset>
-              <dl className={styles.exit} aria-label="Command exit">
+              <dl className={styles.exit} aria-label={strings.command.exit}>
                 <div>
-                  <dt>Exit code</dt>
-                  <dd>{output.data.exitCode === null ? "None" : output.data.exitCode}</dd>
+                  <dt>{strings.command.exitCode}</dt>
+                  <dd>
+                    {output.data.exitCode === null ? strings.command.none : output.data.exitCode}
+                  </dd>
                 </div>
                 <div>
-                  <dt>Signal</dt>
-                  <dd>{output.data.signal ?? "None"}</dd>
+                  <dt>{strings.command.signal}</dt>
+                  <dd>{output.data.signal ?? strings.command.none}</dd>
                 </div>
               </dl>
               {toolCall.result.truncated ? (
-                <p className={styles.note}>Command output truncated.</p>
+                <p className={styles.note}>{strings.command.outputTruncated}</p>
               ) : null}
             </div>
           ) : null}
 
           {toolCall.status === "success" && output !== null && !output.success ? (
             <p className={styles.error} role="alert">
-              Command output could not be displayed safely.
+              {strings.command.unsafeOutput}
             </p>
           ) : null}
 
@@ -195,7 +206,7 @@ export function CommandToolCard({
                 onClick={terminate}
                 disabled={!canTerminate}
               >
-                Terminate command
+                {strings.command.terminate}
               </Button>
             </div>
           ) : null}
@@ -206,28 +217,13 @@ export function CommandToolCard({
 }
 
 function commandStatus(toolCall: DisplayToolCall): string {
-  if (toolCall.status === "pending") {
-    return "Pending";
-  }
-  if (toolCall.status === "running") {
-    return "Running";
-  }
-  if (toolCall.status === "error") {
-    return "Failed";
-  }
   if (toolCall.status !== "success") {
-    return "Pending";
+    return formatCommandStatus(toolCall.status, undefined);
   }
 
   const output = runCommandOutputSchema.safeParse(toolCall.result.output);
   if (!output.success) {
-    return "Invalid result";
+    return strings.command.status.invalidResult;
   }
-  if (output.data.exitCode !== null) {
-    return `Exited (${output.data.exitCode})`;
-  }
-  if (output.data.signal !== null) {
-    return `Exited (${output.data.signal})`;
-  }
-  return "Exited";
+  return formatCommandStatus(toolCall.status, output.data);
 }

@@ -2,6 +2,7 @@ import type { ApprovalDecisionIntent } from "@ctrl-zebra/protocol";
 
 import styles from "./approval-card.module.css";
 import type { DisplayApproval } from "./approval-store.js";
+import { strings } from "./strings.js";
 import { Badge } from "./ui/badge.js";
 import { Button } from "./ui/button.js";
 
@@ -13,16 +14,6 @@ export interface ApprovalCardProps {
   readonly onApprove: () => void;
   readonly onReject: () => void;
 }
-
-const statusText = {
-  pending: "Awaiting your decision.",
-  approved: "Approved.",
-  denied: "Rejected.",
-  cancelled: "Approval cancelled.",
-  expired: "Approval expired.",
-  invalidated: "Approval invalidated because the operation changed.",
-  consumed: "Approved change applied.",
-} as const;
 
 export function ApprovalCard({
   item,
@@ -38,36 +29,44 @@ export function ApprovalCard({
   const titleId = `approval-${item.approval.id}-title`;
   const visibleStatus =
     pendingDecision === "approved"
-      ? "Submitting approval…"
+      ? strings.approval.submittingApproval
       : pendingDecision === "denied"
-        ? "Submitting rejection…"
+        ? strings.approval.submittingRejection
         : item.status === "consumed" && commandApproval
-          ? "Approved command started."
-          : statusText[item.status];
+          ? strings.approval.approvedCommandStarted
+          : strings.approval.status[item.status];
 
   const cardClassName = embedded ? styles.embeddedCard : styles.card;
+  const accessibleLabel = commandApproval
+    ? strings.approval.commandApproval
+    : strings.approval.fileChangeApproval;
 
   return (
-    <article className={cardClassName} aria-labelledby={titleId}>
+    <article
+      className={cardClassName}
+      aria-label={`${accessibleLabel}: ${item.approval.presentation.title}`}
+    >
       {embedded ? (
         <div className={styles.embeddedHeader}>
-          <span className={styles.detailLabel}>Risk level</span>
+          <span className={styles.detailLabel}>{strings.approval.riskLevel}</span>
           <Badge variant={item.approval.scope.risk === "execute" ? "error" : "warning"}>
-            {item.approval.scope.risk}
+            {strings.approval.risk[item.approval.scope.risk]}
           </Badge>
         </div>
       ) : (
         <header className={styles.header}>
           <div>
             <p className={styles.eyebrow}>
-              {commandApproval ? "Command approval" : "File change approval"}
+              {commandApproval
+                ? strings.approval.commandApproval
+                : strings.approval.fileChangeApproval}
             </p>
             <h2 className={styles.title} id={titleId}>
               {item.approval.presentation.title}
             </h2>
           </div>
           <Badge variant={item.approval.scope.risk === "execute" ? "error" : "warning"}>
-            {item.approval.scope.risk}
+            {strings.approval.risk[item.approval.scope.risk]}
           </Badge>
         </header>
       )}
@@ -82,7 +81,7 @@ export function ApprovalCard({
 
       <div className={styles.details}>
         <span className={styles.detailLabel}>
-          {commandApproval ? "Working directory" : "Target files"}
+          {commandApproval ? strings.approval.workingDirectory : strings.approval.targetFiles}
         </span>
         <ul className={styles.resources}>
           {item.approval.scope.resources.map((resource) => (
@@ -91,7 +90,7 @@ export function ApprovalCard({
             </li>
           ))}
         </ul>
-        <span className={styles.detailLabel}>Expires</span>
+        <span className={styles.detailLabel}>{strings.approval.expires}</span>
         <time dateTime={item.approval.expiresAt}>{formatExpiryTime(item.approval.expiresAt)}</time>
       </div>
 
@@ -102,14 +101,14 @@ export function ApprovalCard({
       <div className={styles.actions}>
         {commandApproval ? null : (
           <Button variant="secondary" onClick={onViewDiff} disabled={!interactive}>
-            View Diff
+            {strings.approval.viewDiff}
           </Button>
         )}
         <Button variant="secondary" onClick={onReject} disabled={!interactive}>
-          Reject
+          {strings.approval.reject}
         </Button>
         <Button variant="primary" onClick={onApprove} disabled={!interactive}>
-          Approve
+          {strings.approval.approve}
         </Button>
       </div>
     </article>

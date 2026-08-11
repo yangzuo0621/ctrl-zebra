@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import type { DisplayApproval } from "./approval-store.js";
 import type { DisplayToolCall } from "./chat-store.js";
+import { strings } from "./strings.js";
 import { ToolCallCard } from "./tool-call-card.js";
 
 const call = {
@@ -15,7 +16,9 @@ describe("ToolCallCard", () => {
   it("renders the pending state with the tool name and arguments", () => {
     render(<ToolCallCard toolCall={{ call, status: "pending" }} />);
 
-    expect(screen.getByRole("article", { name: "read_file" })).toBeVisible();
+    expect(
+      screen.getByRole("article", { name: `${strings.tool.cardLabel}: read_file` }),
+    ).toBeVisible();
     expect(screen.getByRole("heading", { name: "read_file" })).toBeVisible();
     expect(screen.getByLabelText("Tool status")).toHaveTextContent("Pending");
     expect(screen.getByRole("group", { name: "Arguments" })).toHaveTextContent(

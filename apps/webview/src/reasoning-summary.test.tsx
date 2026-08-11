@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { DisplayReasoningBlock } from "./chat-store.js";
 import { ReasoningSummary } from "./reasoning-summary.js";
+import { strings } from "./strings.js";
 
 const streamingBlock: DisplayReasoningBlock = {
   blockId: "block-1",
@@ -38,17 +39,17 @@ describe("ReasoningSummary", () => {
 
     render(<Harness />);
 
-    expect(screen.getByRole("region", { name: "推理摘要" })).toBeVisible();
-    expect(screen.getByText("模型提供")).toBeVisible();
-    expect(screen.getByText("正在生成摘要")).toBeVisible();
-    const disclosure = screen.getByRole("button", { name: "折叠推理摘要" });
+    expect(screen.getByRole("region", { name: strings.reasoning.regionLabel })).toBeVisible();
+    expect(screen.getByText(strings.reasoning.providedBy)).toBeVisible();
+    expect(screen.getByText(strings.reasoning.streaming)).toBeVisible();
+    const disclosure = screen.getByRole("button", { name: strings.reasoning.toggle(true) });
     expect(disclosure).toHaveAttribute("aria-expanded", "true");
 
     await user.tab();
     expect(disclosure).toHaveFocus();
     await user.keyboard("{Enter}");
 
-    expect(screen.getByRole("button", { name: "展开推理摘要" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: strings.reasoning.toggle(false) })).toHaveAttribute(
       "aria-expanded",
       "false",
     );
@@ -86,12 +87,12 @@ describe("ReasoningSummary", () => {
       />,
     );
     const writeText = vi.spyOn(navigator.clipboard, "writeText");
-    const copy = screen.getByRole("button", { name: "复制摘要" });
+    const copy = screen.getByRole("button", { name: strings.reasoning.copy });
 
     await user.click(copy);
 
     expect(writeText).toHaveBeenCalledWith(streamingBlock.content);
-    expect(announce).toHaveBeenCalledWith("推理摘要已复制。");
+    expect(announce).toHaveBeenCalledWith(strings.reasoning.copied);
     expect(copy).toHaveFocus();
   });
 
@@ -115,15 +116,23 @@ describe("ReasoningSummary", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "展开推理摘要 1" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "展开推理摘要 2" })).toBeVisible();
-    expect(screen.getByText("部分摘要 · 内容已截断")).toBeVisible();
-    expect(screen.getByText("部分推理摘要已因运行限制省略。")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: strings.reasoning.toggle(false, " 1") }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: strings.reasoning.toggle(false, " 2") }),
+    ).toBeVisible();
+    expect(
+      screen.getByText(`${strings.reasoning.partial}${strings.reasoning.truncatedSuffix}`),
+    ).toBeVisible();
+    expect(screen.getByText(strings.reasoning.truncated)).toBeVisible();
   });
 
   it("renders nothing when no retained reasoning exists", () => {
     render(<ReasoningSummary blocks={[]} runTruncated onToggle={() => {}} onAnnounce={() => {}} />);
 
-    expect(screen.queryByRole("region", { name: "推理摘要" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: strings.reasoning.regionLabel }),
+    ).not.toBeInTheDocument();
   });
 });

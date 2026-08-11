@@ -13,6 +13,7 @@ import type {
 } from "@ctrl-zebra/protocol";
 import { createStore, type StoreApi } from "zustand/vanilla";
 
+import { strings } from "./strings.js";
 import type { WebviewHost } from "./vscode-api.js";
 
 export interface McpState {
@@ -73,17 +74,17 @@ export function createMcpStore(
     attachments: [],
     promptArguments: {},
     confirmations: [],
-    announcement: "MCP Server disconnected.",
+    announcement: strings.mcpAnnouncements.disconnected,
     connect() {
       connectionRequest = createRequestId();
-      set({ busy: "connecting", announcement: "Connecting to MCP Server." });
+      set({ busy: "connecting", announcement: strings.mcpAnnouncements.connecting });
       host.connectMcp?.(connectionRequest);
     },
     disconnect() {
       connectionRequest = createRequestId();
       resourceRequest = undefined;
       promptRequest = undefined;
-      set({ busy: "disconnecting", announcement: "Disconnecting MCP Server." });
+      set({ busy: "disconnecting", announcement: strings.mcpAnnouncements.disconnecting });
       host.disconnectMcp?.(connectionRequest);
     },
     openSettings() {
@@ -122,7 +123,11 @@ export function createMcpStore(
         };
       }
       resourceRequest = createRequestId();
-      set({ busy: "resource", resourcePreview: undefined, announcement: "Reading MCP Resource." });
+      set({
+        busy: "resource",
+        resourcePreview: undefined,
+        announcement: strings.mcpAnnouncements.readingResource,
+      });
       host.readMcpResource?.(
         resourceRequest,
         state.connection.server.serverId,
@@ -180,7 +185,7 @@ export function createMcpStore(
       set({
         busy: "prompt",
         promptPreview: undefined,
-        announcement: "Loading MCP Prompt preview.",
+        announcement: strings.mcpAnnouncements.loadingPrompt,
       });
       host.previewMcpPrompt?.(
         promptRequest,
@@ -230,7 +235,7 @@ export function createMcpStore(
         resourcePreview: undefined,
         promptPreview: undefined,
         busy: undefined,
-        announcement: "MCP draft context cleared.",
+        announcement: strings.mcpAnnouncements.draftCleared,
       });
     },
     receive(message) {
@@ -286,7 +291,7 @@ export function createMcpStore(
           set({
             busy: undefined,
             resourcePreview: { snapshotId: message.snapshotId, snapshot: message.snapshot },
-            announcement: "MCP Resource preview ready.",
+            announcement: strings.mcpAnnouncements.resourceReady,
           });
         else if (message.status === "attached")
           set({
@@ -297,14 +302,14 @@ export function createMcpStore(
               (item) => item.snapshotId,
             ),
             resourcePreview: undefined,
-            announcement: "MCP Resource attached to the draft.",
+            announcement: strings.mcpAnnouncements.resourceAttached,
           });
         else if (message.status === "detached")
           set({
             attachments: get().attachments.filter(
               ({ snapshotId }) => snapshotId !== message.snapshotId,
             ),
-            announcement: "MCP Resource removed from the draft.",
+            announcement: strings.mcpAnnouncements.resourceRemoved,
           });
         else if (message.status === "error")
           set({ busy: undefined, announcement: message.message });
@@ -316,7 +321,7 @@ export function createMcpStore(
           set({
             busy: undefined,
             promptPreview: message.preview,
-            announcement: "MCP Prompt preview ready.",
+            announcement: strings.mcpAnnouncements.promptReady,
           });
         else if (message.status === "confirmed")
           set({
@@ -327,20 +332,20 @@ export function createMcpStore(
               (item) => item.previewId,
             ),
             promptPreview: undefined,
-            announcement: "MCP Prompt confirmed for the draft.",
+            announcement: strings.mcpAnnouncements.promptConfirmed,
           });
         else if (message.status === "cancelled")
           set({
             busy: undefined,
             promptPreview: undefined,
-            announcement: "MCP Prompt preview cancelled.",
+            announcement: strings.mcpAnnouncements.promptCancelled,
           });
         else if (message.status === "detached")
           set({
             confirmations: get().confirmations.filter(
               ({ previewId }) => previewId !== message.previewId,
             ),
-            announcement: "MCP Prompt removed from the draft.",
+            announcement: strings.mcpAnnouncements.promptRemoved,
           });
         else if (message.status === "error")
           set({ busy: undefined, promptPreview: undefined, announcement: message.message });
@@ -365,9 +370,9 @@ function clearLiveState() {
 
 function connectionAnnouncement(connection: McpConnectionDto): string {
   if (connection.status === "connected")
-    return `Connected to MCP Server ${connection.server.displayName}.`;
+    return strings.mcpAnnouncements.connected(connection.server.displayName);
   if (connection.status === "failed") return connection.error.message;
-  return `MCP Server ${connection.status}.`;
+  return strings.mcpAnnouncements.status(strings.mcp.connectionStatus[connection.status]);
 }
 
 function sameGeneration(

@@ -6,6 +6,7 @@ import type {
 } from "@ctrl-zebra/protocol";
 import { createStore, type StoreApi } from "zustand/vanilla";
 
+import { strings } from "./strings.js";
 import type { WebviewHost } from "./vscode-api.js";
 
 export interface PendingProviderAction {
@@ -24,12 +25,6 @@ export interface ProviderOnboardingState {
   dispose(): void;
 }
 
-const actionLabels = {
-  "save-key": "Save API key",
-  "select-model": "Select model",
-  "open-settings": "Open Provider settings",
-} as const satisfies Record<ProviderAction, string>;
-
 export function createOnboardingStore(
   host: WebviewHost,
   createRequestId: () => string = () => crypto.randomUUID(),
@@ -39,7 +34,7 @@ export function createOnboardingStore(
   let disposed = false;
 
   return createStore<ProviderOnboardingState>()((set, get) => ({
-    announcement: "Checking Provider configuration.",
+    announcement: strings.provider.checking,
     refresh() {
       if (
         disposed ||
@@ -50,7 +45,7 @@ export function createOnboardingStore(
       }
       const requestId = createRequestId();
       statusRequestId = requestId;
-      set({ announcement: "Checking Provider configuration." });
+      set({ announcement: strings.provider.checking });
       host.requestProviderStatus(requestId);
       return true;
     },
@@ -67,7 +62,7 @@ export function createOnboardingStore(
       set({
         pendingAction: { requestId, action },
         actionOutcome: undefined,
-        announcement: `${actionLabels[action]} in progress.`,
+        announcement: strings.onboarding.actionInProgress(strings.onboarding.actionLabels[action]),
       });
       dispatch(requestId);
       return true;
@@ -115,10 +110,10 @@ export function createOnboardingStore(
 
 function actionAnnouncement(message: ProviderActionMessage): string {
   if (message.status === "completed") {
-    return `${actionLabels[message.action]} completed.`;
+    return strings.onboarding.actionCompleted(strings.onboarding.actionLabels[message.action]);
   }
   if (message.status === "cancelled") {
-    return `${actionLabels[message.action]} cancelled.`;
+    return strings.onboarding.actionCancelled(strings.onboarding.actionLabels[message.action]);
   }
-  return `${actionLabels[message.action]} failed. Try again.`;
+  return strings.onboarding.actionFailed(strings.onboarding.actionLabels[message.action]);
 }

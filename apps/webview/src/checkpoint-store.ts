@@ -1,6 +1,7 @@
 import type { CheckpointSummary, ExtensionToWebviewMessage } from "@ctrl-zebra/protocol";
 import { createStore, type StoreApi } from "zustand/vanilla";
 
+import { strings } from "./strings.js";
 import type { WebviewHost } from "./vscode-api.js";
 
 export interface CheckpointState {
@@ -37,7 +38,7 @@ export function createCheckpointStore(
         return false;
       }
       restoreRequestId = createRequestId();
-      set({ status: "restoring", message: "Restoring Checkpoint…" });
+      set({ status: "restoring", message: strings.checkpoint.restoringAction });
       host.restoreCheckpoint(restoreRequestId, selectedCheckpointId);
       return true;
     },
@@ -57,7 +58,7 @@ export function createCheckpointStore(
         message.requestId === restoreRequestId
       ) {
         restoreRequestId = undefined;
-        set({ status: "restored", message: "Checkpoint restored." });
+        set({ status: "restored", message: strings.checkpoint.restored });
         return;
       }
       if (
