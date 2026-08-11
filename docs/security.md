@@ -177,6 +177,106 @@ This document defines the Webview security constraints established before T0104.
   1,048,576-byte UTF-8 ceiling, and successful truncation keeps its marker through later context
   budgeting. Cancellation stops traversal, reads, canonicalization, and output production.
 
+## IDE context and read-only Tool boundary (T1901)
+
+Editor, selection, diagnostic, and language-service values are untrusted host observations. They
+remain ordinary user context or read-only Tool output and never become System instructions,
+authorization, a capability claim, or a write/execute request.
+
+- Only the Extension Host reads `window.activeTextEditor`, `TextDocument`, selections, diagnostics,
+  and VS Code language providers. It retains the complete `vscode.Uri` privately and exposes only
+  the strict Protocol `IdeUriDto`/`Ide*Dto` projections. Webview, Core, Providers, MCP Client, model
+  output, and Tool input cannot supply or replace an editor URI, document version, selected root, or
+  Trust decision.
+- Every source URI is checked against exactly one Extension-selected workspace folder. The adapter
+  preserves scheme and authority, rejects `untitled:`/external documents, query and fragment data,
+  `..`/backslash/ambiguous paths, and performs lexical then symlink/junction-aware canonical
+  containment before reading. A URI returned by a diagnostic or language provider is treated as
+  untrusted and is discarded unless it passes the same canonical identity and containment checks.
+  String-prefix checks and `fsPath` comparisons are forbidden.
+- Read-only IDE operations may run under the Extension's declared limited untrusted-workspace
+  capability, but Trust is checked at capture start and immediately before the read/provider call.
+  Trust loss closes the operation gate and prevents all later output; it never enables a write,
+  execute, MCP, Code Action, or hidden trust grant. A provider that cannot operate in the current
+  Trust state returns a stable bounded unavailable outcome without fallback to an unsafe API.
+- Only supported text documents are accepted. NUL bytes, invalid UTF-8, binary classifications,
+  missing document identity, and unreadable content fail closed. IDE DTO field limits are concrete:
+  `scheme` ≤32 Unicode scalar values/128 UTF-8 bytes; the redacted `authority` is empty or the fixed
+  `workspace` label (≤9/32); `path` ≤4,096/16,384; `languageId` ≤128/512; text ≤65,536 scalar
+  values/2,000 logical lines/262,144 UTF-8 bytes;
+  diagnostic messages ≤4,096/16,384; and diagnostic code/origin, symbol name/container/detail each
+  ≤1,024/4,096. Positions use line `0..1,999` and VS Code's 0-based UTF-16 `character` offset
+  `0..131,072` inclusive; the Host rejects offsets inside a surrogate pair or beyond the actual
+  UTF-16 length of that line, while non-negative safe document versions remain numeric metadata.
+  Diagnostic, location, and symbol collections are at most 256 entries and each
+  successful result has at most 131,072 aggregate scalar values/524,288 aggregate bytes across those
+  projected strings. The complete Tool Result remains at most 1,048,576 serialized UTF-8 bytes.
+  Producers count well-formed Unicode scalar values and UTF-8 bytes incrementally before retaining a
+  field or entry; an over-limit field is cut at a scalar boundary, and an aggregate/entry limit stops
+  before the next field or entry. They never build an unbounded provider value merely to reject it.
+- A supported text value or collection that reaches a limit is truncated deterministically and carries
+  `truncated: true` plus one or more closed reasons (`code-points`, `utf8-bytes`, `lines`, `entries`,
+  `tokens`, or `out-of-workspace`). The `code-points`/`utf8-bytes` reasons also cover aggregate
+  ceilings; omitted entries are never replaced with an empty placeholder. The producer checks the
+  scalar, UTF-8, and logical-line counters before retaining each scalar/delimiter, treats CRLF as one
+  atomic delimiter, and stops before a delimiter that would create line 2,001; empty text counts as one
+  line and a terminal delimiter creates the following empty line. Invalid Unicode, malformed
+  DTO shape, non-finite/reversed/out-of-document ranges, and provider values that cannot be mapped are
+  `invalid-output`, not truncation; the one exception is an unmappable symbol kind, which maps to the
+  closed `unknown` label. `DocumentSymbol` nodes are flattened depth-first and `SymbolInformation`
+  entries use their optional `containerName`; optional `detail`/`selectionRange` fields are omitted
+  when the provider does not supply them, while explicit empty strings remain valid bounded values.
+- The Host estimates tokens before inserting an attachment. IDE content may use only the current
+  Files budget (at most 25% of the declared model window and never beyond the existing 2,000,000
+  token context ceiling). Missing, negative, fractional, unsafe, or over-budget estimates are not
+  treated as zero; the Host applies a deterministic bounded prefix or returns `limit-exceeded`
+  without borrowing System, History, or Tool budget.
+- A capture records the source URI, range, language ID, and document version before collecting. The
+  Host rechecks active editor/selection, workspace folder, Trust, setting, and version before
+  delivery. A changed source is marked `stale` and requires an explicit refresh or user decision;
+  stale text is never silently injected as current. A switched editor, Session, Run, workspace, or
+  setting invalidates a pending capture and cannot produce a late result.
+- Diagnostics and language results are rendered as bounded plain text. Severity, ranges, source
+  labels, symbol names, and provider messages are data, not Markdown, HTML, links, commands, Code
+  Actions, or instructions. A non-empty provider location set is filtered against canonical workspace
+  scope: a mixed valid/outside set returns valid items with `truncated: true` and the closed
+  `out-of-workspace` omission reason; an all-filtered or malformed set returns stable `invalid-output`
+  with no path or raw provider detail. An actually empty provider set is a valid empty result. Provider
+  failures are mapped to existing stable Tool errors; raw SDK, provider, response, stack, and arbitrary
+  metadata are excluded.
+- `read_editor_context`, `get_diagnostics`, `find_definition`, `find_references`, and `list_symbols`
+  are read-only operations. Their Tool-specific input is parsed from `unknown` with a closed Schema;
+  no input can choose a URI outside the selected root or add a write/execute action. They do not need
+  an Approval grant and cannot create one as a result of a read.
+- `read_editor_context` with `scope: "selection"` returns the exact selected range even when collapsed:
+  that is a valid empty snapshot with `text: ""` and no active-line/file fallback. With no active
+  editor, both `active-editor` and `selection` return the fixed unavailable `failed` outcome. The Host
+  validates UTF-16 range boundaries without converting them to scalar offsets.
+- `get_diagnostics` accepts exactly `{ scope: "active-file" }`, `{ scope: "workspace" }`, or
+  `{ scope: "workspace", path }`; the first resolves the current active text document, the second
+  the selected root, and the third one validated workspace-relative document. A path with
+  `active-file`, a missing/unknown scope, an empty or invalid path, or any extra property is
+  `invalid-input` before any provider call.
+- Each capture and Tool call owns an `AbortSignal`. Cancellation, Run terminal state, Session switch,
+  setting disable, Trust loss, workspace/editor change, and Extension disposal close the delivery
+  gate before cleanup. Cancellation is not a Tool Result: after the gate closes, no Host-to-Webview or
+  Webview-to-Host message, text, diagnostic, language result, retry, approval, persistence mutation,
+  log entry containing source data, or Webview update may be emitted. A Webview cancel handler updates
+  only its own local interaction state synchronously before it attempts one cancel intent in the same
+  event turn; if the gate is already closed, it posts no intent. It cannot wait for or synthesize a Host
+  cancellation message. Cleanup is idempotent and awaited by the owning Host controller.
+- Pending or unsubmitted context, live selection state, document versions, source URI identity,
+  diagnostics, language-provider objects, stale markers, and cancellation metadata are excluded from
+  Session persistence, Webview restoration, logs, diagnostics, telemetry, fixtures, and model history.
+  Text explicitly sent by the user may follow the ordinary user-message/Tool-Result persistence rules,
+  but source metadata is not persisted as a separate record and no cross-session editor memory is
+  created.
+- The T1901 security fixture set includes a 2,000-line value and a 2,001-line value under LF, CRLF,
+  and terminal-newline encodings; 65,536-scalar/262,144-byte boundary cases; astral UTF-16 position
+  round-trips; split-surrogate and out-of-line rejection; collapsed-selection empty snapshots; and
+  no-editor unavailable outcomes. Each fixture verifies producer limits before retention and the
+  corresponding closed truncation or `failed`/`invalid-output` result.
+
 ## Approval Boundary
 
 Approval is an authorization for one exact, user-visible operation. It is not a capability token,
@@ -349,6 +449,10 @@ name, nested value, interpolated message, error message, stack, URL query, or se
   third-party request or response bodies.
 - User prompts, model input or output, tool input or output, command stdout or stderr, file contents,
   diffs, checkpoint before-content, persisted messages, and workspace source text.
+- Active editor text, selections, diagnostic messages, language-service names/locations, document
+  versions, stale/truncation details, and source URI values are likewise excluded. A stable event
+  code may say that an IDE operation was cancelled, unavailable, stale, or limit-exceeded, but it may
+  not include the source or content that led to that outcome.
 - Absolute workspace paths, user-directory paths, URIs containing user-controlled query or fragment
   data, and filenames or identifiers derived from source content.
 

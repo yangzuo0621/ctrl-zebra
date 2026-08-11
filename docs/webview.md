@@ -41,6 +41,60 @@ This document defines the React Webview constraints established before T0103. It
 - Reusable presentation components receive data and callbacks through typed props and do not acquire host capabilities.
 - Components do not parse protocol envelopes, perform persistence, or contain Extension workflow decisions.
 
+## IDE context and read-only Tool projection (T1901)
+
+The Webview is a presentation surface for the T1901 IDE contract. It does not read VS Code state or
+decide whether a source is current, in scope, trusted, or authorized.
+
+- The Extension sends only Protocol-validated `Ide*Dto` projections. A feature store owns the current
+  pending attachment and read-only result projection; it never stores a `vscode.Uri`, document object,
+  provider instance, absolute `fsPath`, Trust capability, or a second host-authoritative copy.
+- The attachment card shows fixed source provenance (`Editor context`, source kind, workspace-relative
+  path, language, range, `Stale`, and `Truncated`/reason). Source text, diagnostic messages, symbol
+  names, and provider labels render as escaped plain text. They never enter the Markdown renderer,
+  `dangerouslySetInnerHTML`, URI/command handlers, dynamic styles, links, images, or fetch.
+- `Remove`, `Refresh`, `Use stale context`, and the setting toggle dispatch narrow intent-only messages.
+  The Webview cannot edit the URI, range, document version, selected root, Trust state, Tool name,
+  risk, or result. A missing/disabled setting clears the pending projection synchronously and does not
+  wait for a Host acknowledgement. An old or mismatched request, Session, Run, source, or generation
+  is ignored before state mutation.
+- A stale attachment is rendered as a blocking, non-color-only state until the user explicitly refreshes
+  or confirms `Use stale context`. A truncated attachment remains visibly truncated; the store never
+  assumes an ellipsis is complete. Cancellation, disposal, Session/Run replacement, and close invalidate
+  pending context and accept no late message. Cancellation does not render a failure Tool Result or
+  accept a Host message after the gate closes.
+- Read-only diagnostics and language-service results are display-only. The Webview does not add Code
+  Action, edit, command, approval, or automatic retry controls, and it never runs a model request when
+  a result arrives. An editor command may fill the Composer only through a Host message; the text stays
+  visible and editable until the user sends it.
+- An actually empty provider result renders as an empty result. A mixed result with locations omitted by
+  Host workspace validation renders the fixed `Some results were omitted`/`Out of workspace` status
+  without the rejected path; an all-filtered or malformed provider response renders fixed
+  `No safe result available` (`invalid-output`) rather than an indistinguishable empty state. Symbol
+  kinds are already mapped to the closed Protocol labels and never display SDK enum values. Symbols
+  from `DocumentSymbol` and `SymbolInformation` render in the Host's flat deterministic order; missing
+  optional `containerName`, `detail`, or `selectionRange` fields render without placeholders, while
+  explicit empty strings remain valid values.
+- The IDE text-boundary fixture renders a complete 2,000-logical-line value (without a delimiter that
+  would start line 2,001), rejects the 2,001st line with visible `Truncated`/`lines`, and covers LF,
+  CRLF, and a terminal newline as the next empty line without retaining a dangling CR. Scalar and
+  UTF-8 boundaries are checked at limit and limit+1 before rendering. The
+  fixture also round-trips an all-astral line whose exclusive UTF-16 end is `131,072`, rejects a split
+  surrogate or an offset beyond the actual line length, and renders a collapsed selection as an empty
+  exact-range snapshot (no active-line/file fallback); no-active-editor renders fixed unavailable text.
+- IDE context is not placed in `getState`/`setState` as an authoritative snapshot. Restoration may retain
+  only presentation choices such as an expanded source card; it must clear text, URI, document version,
+  stale state, diagnostic content, and pending refresh. Explicitly submitted text is owned by the normal
+  chat projection, not by an IDE feature store.
+- Source attachments, refresh/remove controls, stale decisions, diagnostic lists, and symbol lists use
+  semantic elements, accessible names, visible focus, stable keys, and explicit disabled reasons. One
+  polite live region announces a discrete replacement, clear, stale, truncation, or omission outcome;
+  cancellation updates only the initiating control synchronously before one cancel intent is attempted
+  in the same event turn; an already-closed Host gate suppresses that intent and no late Host message
+  can announce it. The region never reads source text or every diagnostic/symbol item. Updates preserve
+  Composer focus, selection, disclosure state, and scroll position and remain operable at approximately
+  300px width, 200% zoom, reduced motion, and all supported VS Code themes.
+
 ## Product Language and String Ownership (T1701)
 
 - The Marketplace target language is English (`en`). This is a minimum-localization policy: T1701 does not

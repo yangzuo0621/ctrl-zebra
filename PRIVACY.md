@@ -1,6 +1,6 @@
 # CtrlZebra Privacy Notice
 
-Effective date: 2026-08-03
+Effective date: 2026-08-12
 
 This notice describes the data behavior of the Phase 1 CtrlZebra desktop VS Code extension. It does
 not replace the privacy terms of Visual Studio Code, the operating system, a model provider, or a
@@ -34,6 +34,9 @@ The Extension Host stores data using VS Code-owned facilities on the user's mach
   event categories, outcomes, durations, process RSS samples, and correlation identifiers; they
   exclude prompts, responses, file contents, command output, paths, credentials, and raw third-party
   errors.
+- Active editor text, selections, document versions, VS Code diagnostic messages, language-service
+  results, and their URI identities are not collected automatically. They remain in the Extension Host
+  only while a user-controlled capture or read-only Tool call is active.
 - The optional MCP Server configuration remains in VS Code machine settings. Live MCP catalogs,
   executable details, environment values, raw protocol messages, stderr, Server errors, and process
   handles are not copied into Session storage, Webview state, model context, or logs.
@@ -50,7 +53,11 @@ Code settings. Depending on the conversation, this can include:
 - the user's prompt and relevant prior conversation messages;
 - tool definitions and bounded tool results;
 - model responses needed to continue a tool loop; and
-- workspace source text returned by an approved read operation or other tool result.
+- workspace source text returned by an approved read operation or other tool result;
+- bounded text from an explicitly attached active editor or selection, when the user has enabled
+  `Editor context` and sends the current submission; and
+- bounded diagnostic, definition, reference, or symbol results returned by a read-only IDE Tool that
+  the user permitted in that Run.
 - bounded text from an MCP Resource that the user explicitly previews and attaches, a Prompt that
   the user explicitly previews and confirms, and results from individually approved MCP Tool calls.
 
@@ -101,6 +108,33 @@ and cancellation stops the local flow without changing configuration. Response b
 authorization material, SDK errors, and endpoint details are not persisted, logged, sent to the
 Webview, or retained by CtrlZebra. The configured provider service may observe and retain the
 metadata request under its own terms and privacy policy.
+
+## IDE context and language-service data
+
+The `Editor context` control is off by default. Even when enabled, CtrlZebra captures only the active
+editor or selection that the user explicitly attaches to the current Composer or that a user-permitted
+read-only IDE Tool requests. Moving the cursor, opening a file, receiving a diagnostic, or changing
+focus does not send source text to a model. The user can remove an attachment, refresh a stale snapshot,
+or close the control before sending.
+
+Before any transmission the Extension Host validates the selected workspace, canonical URI, Trust
+state, supported text encoding, document revision, and character/byte/Token limits. Unsubmitted or
+cancelled captures never leave the Host. A read-only language-service call may return bounded results
+from the VS Code provider, but it cannot execute a Code Action, write a file, run a command, or grant
+permission. VS Code or a provider may independently process the document locally under its own terms.
+
+When the user sends an attachment or permits a read-only Tool during a Run, the configured model
+provider receives only the bounded text or structured result and a workspace-relative source label
+needed for context. CtrlZebra does not send absolute host paths, query/fragment URI data, credentials,
+provider objects, raw errors, or a background editor stream. The provider may process or retain this
+content under its own privacy terms; users must choose a provider authorized for the source.
+
+Active editor snapshots, selection state, document versions, stale/truncation metadata, diagnostics,
+language-service results, and source URI identities are not written to Session persistence, Webview
+restoration, logs, telemetry, fixtures, or a cross-session memory store. Text that the user explicitly
+sends as ordinary user content follows the existing Session storage and deletion rules, without carrying
+the live source metadata. A future durable IDE provenance feature requires a separately reviewed
+privacy, persistence, and user-control contract.
 
 ## Workspace access and commands
 

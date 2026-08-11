@@ -277,11 +277,15 @@ metadata bags are forbidden.
   `extension/run-error` represents only a terminal run failure and does not replace Tool Result
   details or turn a recoverable Tool failure into a failed run.
 - Cancellation emits only the correlated `cancelled` terminal status and never a run error. After
-  truncation, cancellation, failure, interruption, Session replacement, or disposal, the Extension closes the
-  event gate: no later text delta, reasoning event, Tool Result, retry, approval response, or side
-  effect is delivered. A failed or interrupted Run may display its retained partial answer, but that
-  partial answer is not model history; the next Run receives the user prompt and only complete,
-  validated Tool pairs from the ordered persisted projection.
+  truncation, cancellation, failure, interruption, Session replacement, or disposal, the Extension
+  closes the event gate: no later Host-to-Webview or Webview-to-Host message, text delta, reasoning
+  event, Tool Result, retry, approval response, or side effect is delivered. If a user presses a
+  cancel control, its handler first updates only local interaction state synchronously, then attempts
+  one cancel intent in that same event turn; if the gate is already closed, it posts no intent. It
+  must not wait for or synthesize a Host outcome. A failed or interrupted Run
+  may display its retained partial answer, but that partial answer is not model history; the next Run
+  receives the user prompt and only complete, validated Tool pairs from the ordered persisted
+  projection.
 
 ## Serializable Boundary
 
@@ -320,6 +324,167 @@ metadata bags are forbidden.
   type-specific character, line, and entry truncation before context insertion.
 - Cancellation is not a Tool Result status or error code. A cancelled run stops the tool through its
   `AbortSignal`, emits no later result, and is represented by the owning Agent lifecycle contract.
+
+## IDE context and read-only Tool DTOs (T1901)
+
+T1901 reserves a strict, additive DTO family for the IDE surface. It does not add runtime schemas or
+message handlers; T1902–T1904 may implement the DTOs only after this contract is merged. Every value
+enters the Protocol boundary as `unknown`, is validated with a strict Schema, and is rejected when an
+unknown property, invalid Unicode value, unsupported URI, or bound is encountered. The DTOs use the
+same closed/discriminated-union model as the existing Tool contracts: a variant is selected by its
+`kind`/`operation`, and no variant accepts extra properties.
+
+All code-point counts below mean well-formed Unicode scalar values after Unicode validation; UTF-8
+counts are the exact encoded bytes without a byte-order mark. A producer measures both counters while
+collecting and never converts a code-point limit into a UTF-16 code-unit limit. `IdePositionDto.character`
+is the deliberate numeric exception: it preserves VS Code's 0-based UTF-16 code-unit offset and is
+never reinterpreted as a scalar count.
+
+### Shared source and range values
+
+- `IdeUriDto` is the redacted workspace URI `{ scheme, authority, path }`. `scheme` is a canonical
+  string of at most 32 Unicode code points/128 UTF-8 bytes and `authority` is empty or the fixed
+  non-host label `workspace` (at most 9 code points/32 bytes); the actual VS Code authority remains
+  Host-private. `path` is a canonical forward-slash workspace-relative path of at most 4,096 Unicode
+  code points/16,384 UTF-8 bytes, with no leading slash, backslash, query, fragment, or dot segment.
+  The Host keeps the complete `vscode.Uri` private and maps it to this DTO only after selected-root
+  and canonical-identity checks. `fsPath`, `untitled:` documents, external files, and raw URI
+  instances never cross the boundary.
+- `IdePositionDto` uses zero-based `{ line, character }` values. `line` is an integer from `0` through
+  `1,999` (`line < 2,000`) and `character` is an integer from `0` through `131,072` inclusive in
+  VS Code UTF-16 code units. The Host preserves that offset, rejects an endpoint inside a surrogate
+  pair or beyond the actual UTF-16 length of its line, and permits the exclusive end at that exact
+  length; `IdeRangeDto` contains `start` and an exclusive `end` in the same document. A line made of
+  65,536 astral scalars therefore has an exclusive end of `131,072`, while a shorter line cannot use
+  that value. Reversed, non-finite, or out-of-document ranges are rejected. `documentVersion` is a
+  non-negative safe integer. Positions and ranges are bounded by the text and line limits in
+  [Security](security.md), but their numeric offsets are not Unicode scalar counts.
+- `IdeSourceDto` contains `{ uri, range?, languageId?, documentVersion?, stale, truncated,
+  truncationReasons? }`. `languageId` is a bounded display hint of at most 128 Unicode code points/
+  512 UTF-8 bytes, `documentVersion` is a non-negative Host-observed revision, and `stale` means the
+  source changed after capture. A stale value is data, not permission to refresh or overwrite the
+  current editor. `truncationReasons` is a closed set of `code-points`, `utf8-bytes`, `lines`,
+  `entries`, `tokens`, and `out-of-workspace`, and is present whenever `truncated` is true.
+- `IdeTextContextDto` contains one `source` and plain-text `text` of at most 65,536 Unicode code
+  points, 2,000 logical lines, and 262,144 UTF-8 bytes. Empty text is one logical line; LF ends a
+  line, CRLF is one delimiter, and a terminal delimiter creates the following empty line. The producer
+  scans Unicode scalars and delimiters incrementally and stops before the candidate that would create
+  line 2,001 (or exceed either scalar/byte limit), evaluating CRLF atomically so no dangling CR is
+  retained. `IdeDiagnosticDto` contains a source/range, closed `severity` (`error |
+  warning | information | hint`), an untrusted `message` of at most 4,096 code points/16,384 bytes,
+  and optional `code`/`origin` display text of at most 1,024 code points/4,096 bytes. A provider's
+  numeric diagnostic code is converted to its bounded decimal display text; malformed code/origin
+  values are invalid output. `IdeLanguageLocationDto`
+  contains a validated source and target range plus a closed `kind` (`definition | reference`);
+  `IdeSymbolDto` is flat and contains required `name` plus optional properties `containerName`, `detail`,
+  and `selectionRange`; each present string is at most 1,024 code points/4,096 bytes. It contains an
+  `IdeSymbolKind`, ranges, and no recursive provider object. Closed
+  severity/kind labels are fixed literals, never provider strings, and accept no other value.
+- The Host maps both supported VS Code provider shapes without leaking their SDK objects: each
+  `DocumentSymbol` node becomes one flat entry in deterministic depth-first order, with its optional
+  `detail`; a child receives its immediate parent `name` as `containerName` when present. Each
+  `SymbolInformation` maps its required
+  `name`, `kind`, and `location.range` plus optional `containerName`, while `detail` and unsupported
+  fields are omitted. Missing optional fields are omitted (never `null`); an explicit empty provider
+  string remains an empty bounded value. Children are never serialized recursively, and all mapped
+  entries still obey the 256-entry/aggregate limits. Unsupported provider fields are discarded before
+  DTO construction; once constructed, strict Schemas still reject every unknown DTO property.
+- `IdeSymbolKind` is a closed CtrlZebra mapping, not a VS Code enum: `file | module | namespace |
+  package | class | method | property | field | constructor | enum | interface | function | variable |
+  constant | string | number | boolean | array | object | key | null | enum-member | struct | event |
+  operator | type-parameter | unknown`. An SDK kind not in this set maps to `unknown`; the numeric or
+  string SDK value never crosses the boundary. The Host owns the explicit conceptual mapping
+  `File→file`, `Module→module`, `Namespace→namespace`, `Package→package`, `Class→class`,
+  `Method→method`, `Property→property`, `Field→field`, `Constructor→constructor`, `Enum→enum`,
+  `Interface→interface`, `Function→function`, `Variable→variable`, `Constant→constant`,
+  `String→string`, `Number→number`, `Boolean→boolean`, `Array→array`, `Object→object`, `Key→key`,
+  `Null→null`, `EnumMember→enum-member`, `Struct→struct`, `Event→event`, `Operator→operator`, and
+  `TypeParameter→type-parameter`; future or unmappable values map to `unknown`.
+- A successful diagnostics, language-location, or symbol result contains at most 256 entries and at
+  most 131,072 aggregate Unicode code points/524,288 aggregate UTF-8 bytes across its projected
+  strings, in addition to the complete 1,048,576-byte serialized Tool Result ceiling. The Host counts
+  Unicode scalar values and UTF-8 bytes incrementally before retaining each field or entry; an
+  over-limit field is cut at a scalar boundary and marks `truncated` with `code-points` or
+  `utf8-bytes`, while an aggregate/entry limit stops before the next field or entry and marks the
+  corresponding closed reason. The Host never constructs an unbounded provider string, range list, or
+  result merely to reject it; malformed or non-mappable values are `invalid-output` instead (except a
+  symbol kind, for which an unmappable value is the closed `unknown` label).
+
+### Tool names, inputs, and outputs
+
+The reserved read-only Tool names and strict input shapes are:
+
+- `read_editor_context`: `{ scope: "active-editor" | "selection" }`; the model cannot supply a
+  URI, absolute path, document version, or replacement text. The Host resolves the current editor
+  and selection only after the user setting and ownership checks pass. `selection` always uses the
+  exact selected range: a collapsed selection is a valid empty snapshot with `text: ""` and an exact
+  collapsed source range, never an automatic active-line/file fallback. With no active editor, either
+  scope returns the fixed unavailable `failed` Tool outcome.
+- `get_diagnostics`: the only legal combinations are `{ scope: "active-file" }` (no `path`, resolving
+  the current active text document) and `{ scope: "workspace" }` (selected-root collection) or
+  `{ scope: "workspace", path }` (one validated workspace-relative text document). A path with
+  `active-file`, an absent/unknown scope, an invalid or empty path, or any second/unknown field is
+  `invalid-input`; no URI or host path is accepted. The workspace scope is still the selected root
+  only and is bounded by the collection limit.
+- `find_definition` and `find_references`: `{ path, position }`, where `path` is a validated
+  workspace-relative path and `position` is an `IdePositionDto`. They call only the corresponding
+  VS Code provider command and return validated locations.
+- `list_symbols`: `{ path }` for one validated workspace-relative text document. Results are a flat,
+  bounded list and do not create an index or cache.
+
+Providers may return an empty list, which is a valid successful empty result. For a non-empty provider
+response, the Host filters locations whose canonical URI is outside the selected root. If at least one
+valid in-scope item remains, the successful result carries `truncated: true` and the closed omission
+reason `out-of-workspace` (combined with any other limit reasons); it never claims that the returned
+subset is complete. A malformed item or invalid range makes the whole operation `invalid-output`, even
+when siblings are valid. If every provider item is outside the selected root, the operation likewise
+returns the stable `invalid-output` Tool error with no path, provider text, or partial success payload.
+It never silently converts an all-filtered response into an empty success or invokes a hidden fallback.
+
+Conformance fixtures for this contract cover the cancellation race (local cancel state before one
+intent, gate already closed suppressing the intent, and gate closure suppressing every later message),
+the code-point/UTF-8 boundary at limit and limit+1 for every free-form field, the 2,000/2,001 logical
+line boundary with LF/CRLF/terminal-newline cases, aggregate and entry limits, empty/collapsed/no-editor
+`read_editor_context` outcomes, astral UTF-16 range round-trips plus split-surrogate and out-of-line
+rejections, empty/mixed/all-filtered provider sets, malformed ranges, every closed symbol mapping,
+missing optional `containerName`/`detail`/`selectionRange` cases for both provider shapes, and all
+legal/illegal `get_diagnostics` scope/path combinations.
+
+Each input is a strict object with no additional properties. Every Tool has risk `read`; none can
+write, execute a command, invoke a Code Action, change a document, grant approval, broaden the
+workspace root, or select a different Session. The successful output is the strict union
+`IdeReadOnlyToolResultDto`:
+
+- `{ kind: "editor-context", context: IdeTextContextDto }`;
+- `{ kind: "diagnostics", source, diagnostics, stale, truncated, truncationReasons? }`;
+- `{ kind: "language-locations", operation: "definition" | "references", source, locations,
+  stale, truncated, truncationReasons? }`; or
+- `{ kind: "symbols", source, symbols, stale, truncated, truncationReasons? }`.
+
+The normal Tool Result envelope still owns call ID, name, success/error, and the one-mebibyte UTF-8
+ceiling. A cancelled operation emits no ordinary Tool Result. A malformed provider shape, invalid
+string/range, or all-filtered response maps to `invalid-output`; an unavailable provider maps to the
+existing `failed` Tool error with a fixed unavailable user outcome. Provider objects, raw
+messages, stacks, commands, responses, and unvalidated locations are never included. `stale: true`
+is deterministic display information and never authorizes use of an old snapshot as a current editor
+state.
+
+### Context authority, source display, and delivery
+
+- An explicitly attached `IdeTextContextDto` is serialized as one ordinary user-context attachment
+  inside the current submission. It is not a System message, hidden policy, Tool definition, approval
+  scope, or capability declaration. Fixed source labels are provenance only; model and user text in
+  the attachment remain untrusted data.
+- The Host and Webview show the same source kind, workspace-relative path, range, language hint, and
+  stale/truncated marker before send. The Webview may remove or request a fresh capture but cannot edit
+  the URI, revision, or trust decision. Any future message carrying these DTOs must be additive and
+  correlated with the active request; an older client ignores the unknown message under the existing
+  rule rather than guessing a shape.
+- Pending context is ephemeral until the user explicitly sends it. Session persistence may retain text
+  that the user deliberately included in an ordinary user message or a non-IDE completed Tool Result
+  according to the existing persistence contract, but it never stores the live editor selection, Host
+  URI, document version, stale state, provider object, or an unsubmitted attachment as a separate
+  record. T1901 IDE Tool Results remain transient as defined by Persistence.
 
 ## Ownership
 

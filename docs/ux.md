@@ -221,6 +221,49 @@ CtrlZebra 应让用户在不理解内部 Agent 状态机的情况下完成以下
   待恢复投影和未发送的 Resource/Prompt 附件，但不删除已保存会话；下一次发送从新会话开始。
   活动 Run、恢复或会话切换期间禁用该动作，并保留草稿。
 
+## IDE context and read-only Tool experience (T1901)
+
+IDE 上下文是用户可以看见、关闭和控制的普通上下文，不是隐藏的 System 指令。T1901 只建立
+体验约束；T1902–T1905 再实现具体读取、诊断、语言服务和编辑器入口。
+
+- `Editor context` 是显式用户控制。设置默认为关闭；开启后也只在用户明确附加活动编辑器或
+  选区时捕获，不能因为焦点、光标移动、打开文件或模型提示而静默注入。用户可以在发送前
+  `Remove`，也可以关闭设置；关闭、切换 Session 或 `New chat` 会清除未发送附件而保留草稿。
+- 附件卡在发送前显示固定的 `Editor context` 来源标签、工作区相对路径、语言提示、精确范围、
+  字符/Token 截断状态和文档是否 `Stale`。不显示主机绝对路径、原始 VS Code URI、Provider
+  对象或隐藏字段。显示文本与提交给 Model 的来源标记一致，来源标签只是 provenance，不是
+  指令或权限。
+- `selection` 始终显示用户选定的精确范围；折叠选区是带有 `text: ""` 和相同起止位置的有效
+  空快照，不自动回退到活动行/文件；无活动编辑器显示固定不可用状态。范围字符位置保持 VS
+  Code 的 UTF-16 code-unit 语义，不把 astral 字符误算为一个 code unit。
+- 活动编辑器、选区、工作区、Trust 或文档版本在捕获期间改变时，附件变为 `Stale`；界面必须
+  提供 `Refresh` 或明确的 `Use stale context` 决定，不能把旧快照当作当前内容发送。用户未作
+  决定前发送按钮保持禁用并说明原因。取消、关闭或迟到结果不产生隐藏 Toast、消息或重试。
+- 超限内容显示非颜色唯一的稳定 `Truncated` 说明和被触发的上限（字符、行、字节或 Token），
+  不用省略号伪装完整文本；IDE 文本的行上限明确为 2,000 个逻辑行，2000 行可完整保留，
+  第 2,001 行触发 `lines` 截断（LF、CRLF 和末尾换行按同一规则计数）。用户可以缩小选择或
+  刷新；不得从另一预算类别借用空间。验收 fixture 还覆盖全 astral 行的 UTF-16 exclusive end
+  `131,072`、落入 surrogate pair 的位置和超出实际行长的位置，分别验证 round-trip 与稳定拒绝。
+- 只读诊断与语言服务结果在所属消息/Tool 卡附近显示来源、范围、severity、符号/目标和稳定
+  `Stale`/`Truncated` 状态。Provider 消息按纯文本渲染，不解析 Markdown、HTML、链接或命令；
+  不显示 `Code Action`、编辑、执行或审批控件。工作区外/不可信/不可用结果显示固定可操作
+  状态，而不是原始 Provider 错误。混合结果中被工作区范围过滤的条目显示固定的
+  `Some results were omitted`/`Out of workspace` 状态，不显示被过滤路径；若全部结果被过滤或
+  Provider 形状无效，显示稳定 `No safe result available`（`invalid-output`），不伪装为空结果。
+- 符号列表兼容 `DocumentSymbol` 与 `SymbolInformation`：缺失的 `containerName`、`detail` 或
+  `selectionRange` 不显示占位文本，显式空字符串仍按真实值展示；嵌套符号以稳定扁平顺序呈现。
+- `get_diagnostics`、`find_definition`、`find_references` 和 `list_symbols` 是只读 Tool 结果，
+  不能自动运行模型、改变输入、启动 Code Action、写文件或授予权限。编辑器入口填充 Composer
+  后，内容保持可见、可编辑和可移除，发送前不创建 Run。
+- 关闭、取消、Session/Run 替换或 Extension disposal 后，迟到的上下文、诊断和语言结果均无 UI
+  效果。取消只允许 Webview 在取消控件事件中先同步更新自己的控件状态，再在同一事件回合尝试
+  一次取消请求；若 Host gate 已关闭则不发送请求，不等待或合成 Host 消息，也不产生 live-region 播报；替换或一次性 stale/limit/omission 结果才用一个简短
+  polite live region 播报，不逐项或逐字符朗读源码、诊断消息或符号列表。
+- 附件、刷新、移除、stale 决定和只读结果都必须有语义化可访问名称、键盘路径、可见焦点和禁用
+  原因。刷新/移除不得抢焦点、重置 Composer 光标、选择或滚动；结果列表使用标题、`aria` 关系
+  和稳定顺序，状态不能只靠颜色表达。在约 300px、200% 缩放、四类 VS Code 主题和长本地化文本
+  下仍可完成关闭、刷新、移除和发送。
+
 ## 5. Tool、审批与进度反馈
 
 - Tool 默认摘要使用面向用户的动作和对象描述，不以内部 Tool 名称作为唯一标题。
