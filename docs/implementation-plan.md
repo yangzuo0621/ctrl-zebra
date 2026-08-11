@@ -291,7 +291,7 @@
 
 ### T1807 完成记录
 
-- 完成摘要：完成阶段 18 MCP legacy 请求边界的最终实现与验证，满足任务验收要求。
+- 完成摘要：完成 Extension mode-aware wiring、Webview configured/negotiated UI、bounded persistence provenance/recovery no reconnect，以及 real stdio fixtures/e2e/VSIX evidence，满足任务验收要求。
 - 完成证据：[PR #199](https://github.com/yangzuo0621/ctrl-zebra/pull/199)，实现 revision `570531bfc69c6b76ab8386d37483154d5d7266dc`；GitHub Actions run `31539176012` 的 Ubuntu、macOS、Windows 验证均通过；本地 unit 1585、`pnpm check`、`pnpm typecheck`、VSIX 构建、smoke、build、integration 及 `git diff --check` 均通过。
 - 完成日期：2026-08-12
 - 下一任务：T1901（阶段 18 归档校验门禁通过后方可启动）
