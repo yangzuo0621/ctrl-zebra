@@ -60,10 +60,16 @@ Repository maintainers can create a verified local artifact with `pnpm package:v
    and never display the key. These lifecycle commands are Host-only Command Palette actions; the
    onboarding view continues to offer save, model selection, and settings actions only.
 4. For an explicit loopback OpenAI-compatible endpoint, a key is optional.
-5. Open the CtrlZebra Agent view, enter a request, and select **Send**.
-6. Review every file-change or command approval. The displayed operation is the operation that will
+5. Run **CtrlZebra: Check Provider Connection** when you want to verify the active Provider and model.
+   The check is user-triggered, sends only bounded model metadata, and reports authentication, model
+   existence, streaming, Tool Calling, and required capabilities as supported, unsupported, or unknown.
+   It never sends prompts, workspace/session content, or Tool data, and does not change settings or
+   credentials. Custom Provider endpoints are only checked under the bounded OpenAI-compatible
+   metadata contract; otherwise capabilities remain unknown.
+6. Open the CtrlZebra Agent view, enter a request, and select **Send**.
+7. Review every file-change or command approval. The displayed operation is the operation that will
    execute; denying it causes no write or command side effect.
-7. Use **Saved sessions** to inspect interrupted history and **Agent changes** to restore a
+8. Use **Saved sessions** to inspect interrupted history and **Agent changes** to restore a
    conflict-free Checkpoint.
 
 Do not paste API keys into chat, workspace files, settings, logs, or command arguments.
