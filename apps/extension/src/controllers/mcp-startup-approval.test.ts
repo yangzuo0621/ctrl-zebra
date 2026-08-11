@@ -89,6 +89,30 @@ describe("MCP startup approval", () => {
     ).toBe(false);
     expect(sameMcpStartOperation(operation, { ...operation, cwdPath: "/other" })).toBe(false);
   });
+
+  it("compares the normalized effective protocol mode, not the raw configuration version", () => {
+    const explicitModernOnly = {
+      ...operation,
+      configuration: {
+        ...operation.configuration,
+        version: 2,
+        protocolMode: "modern-only" as const,
+      },
+    } satisfies McpServerStartOperation;
+    const dual = {
+      ...operation,
+      configuration: {
+        ...operation.configuration,
+        version: 2,
+        protocolMode: "dual" as const,
+      },
+    } satisfies McpServerStartOperation;
+
+    expect(sameMcpStartOperation(operation, explicitModernOnly)).toBe(true);
+    expect(sameMcpStartOperation(explicitModernOnly, operation)).toBe(true);
+    expect(sameMcpStartOperation(operation, dual)).toBe(false);
+    expect(sameMcpStartOperation(dual, operation)).toBe(false);
+  });
 });
 
 function fixedNow(): Date {

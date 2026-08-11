@@ -250,6 +250,37 @@ describe("MCP connection controller", () => {
     expect(harness.createPort).not.toHaveBeenCalled();
   });
 
+  it("invalidates approval when the second read changes modern-only to dual", async () => {
+    const harness = createHarness();
+    harness.readConfiguration
+      .mockReturnValueOnce(configuration)
+      .mockReturnValueOnce({ ...configuration, version: 2, protocolMode: "dual" });
+    const controller = new McpConnectionController(harness.values);
+
+    await expect(controller.connect()).resolves.toMatchObject({
+      status: "failed",
+      error: { code: "approval-invalidated" },
+    });
+    expect(harness.createPort).not.toHaveBeenCalled();
+  });
+
+  it("fails closed for dual before workspace binding, approval, or process creation", async () => {
+    const harness = createHarness({ ...configuration, version: 2, protocolMode: "dual" });
+    const controller = new McpConnectionController(harness.values);
+
+    await expect(controller.connect()).resolves.toMatchObject({
+      generation: 0,
+      status: "failed",
+      error: { code: "configuration-invalid" },
+    });
+    expect(harness.bindWorkspace).not.toHaveBeenCalled();
+    expect(harness.requestStartupApproval).not.toHaveBeenCalled();
+    expect(harness.createPort).not.toHaveBeenCalled();
+    expect(harness.notifyError).toHaveBeenCalledWith(
+      "Configure one valid MCP Server in your user settings.",
+    );
+  });
+
   it("invalidates an approval when workspace trust is lost before consumption", async () => {
     const harness = createHarness();
     harness.requestStartupApproval.mockImplementation(async () => {
@@ -420,10 +451,10 @@ describe("MCP connection controller", () => {
   });
 });
 
-function createHarness() {
+function createHarness(initialConfiguration: McpServerConfiguration = configuration) {
   let trusted = true;
   let hostFailureHandler: ((failure: McpHostProcessFailure) => void) | undefined;
-  const readConfiguration = vi.fn((): McpServerConfiguration => configuration);
+  const readConfiguration = vi.fn((): McpServerConfiguration => initialConfiguration);
   const bindWorkspace = vi.fn(async () => ({
     cwdUri: "file:///workspace",
     cwdPath: "/workspace",
