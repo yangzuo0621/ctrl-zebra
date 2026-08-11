@@ -205,4 +205,28 @@ describe("MCP Tool JSON Schema boundary", () => {
       McpToolSchemaError,
     );
   });
+
+  it("counts stripped schema-map depth at the boundary", () => {
+    const createNestedSchema = (items: number): unknown => {
+      let nested: unknown = true;
+      for (let index = 0; index < items; index += 1) {
+        nested = { type: "array", items: nested };
+      }
+      return nested;
+    };
+
+    expect(
+      validateMcpToolSchema({
+        type: "object",
+        dependentSchemas: { value: createNestedSchema(29) },
+      }),
+    ).toEqual({ type: "object" });
+
+    expect(() =>
+      validateMcpToolSchema({
+        type: "object",
+        dependentSchemas: { value: createNestedSchema(30) },
+      }),
+    ).toThrow(expect.objectContaining({ reason: "limit-exceeded" }));
+  });
 });
