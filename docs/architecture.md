@@ -476,17 +476,45 @@ port.
   descriptor. Provider adapters unwrap the already-validated plain JSON value without narrowing it
   to the built-in schema subset; SDK JSON Schema types never enter Core.
 - T1404 must wrap the pinned SDK's documented `AjvJsonSchemaValidator` export behind an injected
-  `ExternalJsonSchemaValidator` contract. A structural walker first accepts only JSON Schema Draft
-  2020-12 and the closed keyword set `$schema`, `$defs`, local `$ref`, `type`, `properties`,
-  `required`, `additionalProperties`, `items`, `prefixItems`, `minItems`, `maxItems`,
-  `uniqueItems`, `minProperties`, `maxProperties`, `minimum`, `maximum`, `exclusiveMinimum`,
-  `exclusiveMaximum`, `multipleOf`, `minLength`, `maxLength`, `enum`, `const`, `allOf`, `anyOf`,
-  `oneOf`, `not`, `title`, `description`, `default`, and `examples`. It rejects remote or cyclic
-  references, unknown dialects/keywords, `pattern`, `patternProperties`, `format`, content and
-  unevaluated keywords, custom formats/keywords, excessive bytes, nodes, depth, and properties.
+  `ExternalJsonSchemaValidator` contract. Before compilation, a bounded structural normalizer
+  accepts only the Draft 2020-12 baseline (an omitted `$schema` is treated as that baseline) and
+  applies four closed keyword outcomes (allowed, safely stripped, known-dangerous rejection, and
+  unknown-keyword rejection). The legacy `definitions` spelling is normalized in a deterministic
+  conversion pass before reference analysis:
+  - **Allowed and retained**: `$schema`, `$defs`, local `$ref`, `type`, `properties`, `required`,
+    `additionalProperties`, `items`, `prefixItems`, `minItems`, `maxItems`, `uniqueItems`,
+    `minProperties`, `maxProperties`, `minimum`, `maximum`, `exclusiveMinimum`,
+    `exclusiveMaximum`, `multipleOf`, `minLength`, `maxLength`, `enum`, `const`, `allOf`, `anyOf`,
+    `oneOf`, `not`, `title`, `description`, `default`, and `examples`. Their values are narrowed,
+    recursively walked, and retained in the normalized schema.
+  - **Known and safely stripped**: `format`, `$id`, `$comment`, `readOnly`, `writeOnly`,
+    `deprecated`, `nullable`, `if`, `then`, `else`, `dependentSchemas`, `dependentRequired`,
+    `propertyNames`, `contains`, `minContains`, `maxContains`, `unevaluatedProperties`,
+    `unevaluatedItems`, `contentEncoding`, `contentMediaType`, and `contentSchema`. Their values
+    are still recursively walked and bounded (so a dangerous or unknown nested keyword cannot be
+    hidden), then omitted from the normalized schema. Stripping is a deliberate loss of annotation
+    or unsupported assertion semantics, not an admission of those keywords to Ajv.
+  - **Definitions conversion**: a `definitions` object is normalized into `$defs`. If both names
+    are present, entries are merged only when their decoded definition names do not collide; a
+    collision is `schema-invalid`. Every `#/definitions/...` local JSON Pointer is rewritten to
+    `#/$defs/...` while preserving RFC 6901 escaping. Missing targets, malformed pointers, remote
+    references, and non-local reference forms are rejected as `invalid-reference`.
+  - **Must reject**: regex-bearing `pattern` and `patternProperties`, `$dynamicRef`,
+    `$dynamicAnchor`, other unreviewed reference behavior, remote `$ref` targets, and any byte, node, depth, or property
+    limit breach. A key in none of these classes is an **unknown keyword** and is rejected; no
+    vendor extension is silently ignored. Known dangerous keywords map to `forbidden-keyword`,
+    unknown keys to `unknown-keyword`, reference failures to `invalid-reference`, and structural
+    or compilation failures to `schema-invalid` (limits remain `limit-exceeded`).
+  Local references are resolved after normalization. A direct recursive reference from a schema
+  under one `$defs` anchor back to that same anchor is supported by the pinned Ajv validator. A
+  cycle that traverses two or more distinct `$defs` anchors (for example `A -> B -> A`) is
+  rejected; a missing target is also rejected. This is the real recursion contract and replaces
+  the earlier blanket prohibition on cyclic references.
   Validation does not coerce types, insert defaults, remove properties, or return all errors.
-  Compiled validators are cached only for the immutable current-generation Tool snapshot and
-  disposed with it.
+  The normalized schema must compile through the injected Ajv validator, and that same compiled
+  validator must validate arguments immediately before approval construction and again before
+  execution. Compiled validators are cached only for the immutable current-generation Tool
+  snapshot and disposed with it.
 - The same compiled input schema validates Tool arguments immediately before approval construction
   and again before execution. An advertised output schema, when present, validates normalized
   structured output. Validation proves shape only; it never proves safety, read-only behavior,

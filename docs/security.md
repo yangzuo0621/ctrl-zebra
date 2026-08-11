@@ -800,6 +800,48 @@ Unsupported image, audio, Blob, embedded Resource, Resource Link, unknown conten
 stable unsupported errors. They
 are not fetched, stringified, rendered, persisted, remotely loaded, or passed to the model.
 
+### Tool Schema normalization and reference policy (T1802)
+
+- MCP Tool schemas remain untrusted JSON. The Host applies the byte, node, depth, and property
+  limits while walking the original value, before any keyword is stripped or renamed. A known
+  keyword is never dropped without inspecting its value: nested schemas under a stripped keyword
+  are walked with the same policy, so `pattern`, a remote reference, an unknown keyword, or a
+  limit breach cannot be hidden inside an annotation or conditional branch. The normalized schema
+  is the only value sent to Ajv; the original value and raw policy details never enter Core,
+  Protocol, Webview, persistence, approval display, or diagnostics.
+- The policy has four closed outcomes: allowed/retained, safe-to-strip, known-dangerous rejection,
+  and unknown-keyword rejection. Allowed keywords retain their bounded, recursively validated
+  value. Safe-to-strip keywords are the known annotation/unsupported-assertion set `format`,
+  `$id`, `$comment`, `readOnly`, `writeOnly`, `deprecated`, `nullable`, `if`, `then`, `else`,
+  `dependentSchemas`, `dependentRequired`, `propertyNames`, `contains`, `minContains`,
+  `maxContains`, `unevaluatedProperties`, `unevaluatedItems`, `contentEncoding`,
+  `contentMediaType`, and `contentSchema`; their values are validated and then omitted. The
+  legacy `definitions` map is not stripped: it is converted to `$defs`, and every local
+  `#/definitions/...` reference is rewritten to `#/$defs/...` before reference resolution. A
+  collision between converted and native `$defs` names is rejected rather than choosing an
+  order-dependent meaning. Any key outside the allowed, stripped, or conversion classes is an
+  unknown keyword and is rejected.
+- `pattern` and `patternProperties` remain forbidden because compiling Server-provided regular
+  expressions for model-generated arguments creates a ReDoS attack surface. Remote, malformed,
+  unresolved, or otherwise non-local references remain rejected; direct recursion from a `$defs`
+  anchor back to that same anchor is allowed, while a cycle traversing two or more distinct
+  anchors is rejected. These rules preserve useful tree/AST schemas without allowing remote
+  loading or unbounded reference traversal. Limits remain hard failures and are never relaxed by
+  stripping or conversion.
+- Stripping a known keyword can make CtrlZebra's local shape check less strict, but it does not
+  grant authority. Draft 2020-12 `format` is annotation-only under the pinned validator unless a
+  format-assertion vocabulary is explicitly enabled (which CtrlZebra does not enable), and the
+  MCP Server remains responsible for validating its own tool arguments. More importantly, every
+  invocation still validates the normalized arguments immediately before approval and execution,
+  and the one-time approval displays and binds the exact values that will be sent. Schema
+  normalization therefore cannot bypass the approval, Workspace Trust, risk, generation, or
+  cancellation boundaries; the worst permitted outcome is a bounded validation retry.
+- The normalized schema must compile through the pinned SDK Ajv adapter. Its compiled validator is
+  reused for argument validation immediately before approval construction and again before the
+  side-effecting Tool call, with coercion, default insertion, and property removal disabled. A
+  compile or runtime failure is a stable bounded classification and never exposes Ajv errors,
+  schema paths, Server keywords, or raw schema data.
+
 ### MCP diagnostics and secrets
 
 - MCP logging adds only bounded allowlisted facts: `event`, `component: "mcp"`, stable outcome or

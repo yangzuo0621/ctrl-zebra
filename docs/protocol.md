@@ -553,6 +553,38 @@ and committed watermarks, same-sequence conflicting discard at either watermark,
 publication without partial state, and an older client that ignores the additive message while
 continuing to render the unchanged legacy catalog.
 
+### Tool Schema keyword classes and reference normalization (T1802)
+
+The schema policy is evaluated in the Extension/MCP boundary before any Core Tool or catalog
+projection is constructed. It is a closed, versioned policy and is not a Webview responsibility:
+
+- Allowed keywords are the retained Draft 2020-12 subset already listed by Architecture. Known
+  annotation or unsupported-assertion keywords (`format`, `$id`, `$comment`, `readOnly`,
+  `writeOnly`, `deprecated`, `nullable`, `if`, `then`, `else`, `dependentSchemas`,
+  `dependentRequired`, `propertyNames`, `contains`, `minContains`, `maxContains`,
+  `unevaluatedProperties`, `unevaluatedItems`, `contentEncoding`, `contentMediaType`, and
+  `contentSchema`) are safely stripped after their bounded values and nested schemas are walked.
+  Stripped keywords never appear in a rejected-tool reason or a wire schema because schemas are
+  not part of the Webview DTO.
+- A legacy `definitions` object is converted to `$defs`; a local `#/definitions/...` JSON Pointer
+  is rewritten to `#/$defs/...` with RFC 6901 escaping preserved. Native and converted definition
+  names must not collide. A missing, malformed, remote, or otherwise non-local reference is an
+  `invalid-reference` rejection. A direct recursive reference from a `$defs` anchor to itself is
+  valid; a cycle through two or more distinct anchors is invalid. This permits bounded tree/AST
+  arguments while keeping reference resolution local and finite.
+- `pattern` and `patternProperties` remain forbidden (`forbidden-keyword`) because Server-supplied
+  regular expressions are not compiled or executed by this boundary. Any byte, node, depth, or
+  property limit breach is `limit-exceeded`. A key outside the allowed, stripped, or conversion
+  classes is `unknown-keyword`; malformed values, conversion collisions, and Ajv compile failures
+  are `schema-invalid`. These classifications are selected by CtrlZebra and the wire reason stays
+  the closed enum above; no external keyword, path, raw Schema, SDK error, or exception text is
+  exposed.
+- The normalized schema must compile through the pinned Ajv adapter. The same compiled validator
+  validates Tool arguments immediately before approval construction and again before execution;
+  validation is shape-only and performs no coercion, default insertion, or property removal.
+  Compilation and runtime validation are mandatory even when a keyword was stripped or renamed;
+  compatibility handling must never bypass either stage.
+
 ### Resource and Resource Template projections
 
 `McpResourceDescriptorDto` is the strict bounded projection `{ server, generation, uri, name,
