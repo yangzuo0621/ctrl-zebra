@@ -24,6 +24,9 @@ The Extension Host stores data using VS Code-owned facilities on the user's mach
 
 - Provider API keys are stored in VS Code SecretStorage. They are excluded from settings, Webview
   state, Session persistence, Checkpoints, logs, tests, and model-visible content.
+- The selected Provider model ID is stored in the existing VS Code machine setting. A model list
+  fetched for an explicit selection command is transient; list responses are not persisted, cached,
+  or copied into Session data, Webview state, diagnostics, or logs.
 - Session manifests, messages, and lifecycle events are stored in the extension storage directory.
 - Checkpoints are stored in extension storage before approved file changes. They contain the exact
   pre-edit UTF-8 workspace text needed for conflict-safe restoration.
@@ -56,6 +59,20 @@ not proxy provider traffic or receive a copy. Users are responsible for selectin
 provider and must not send confidential data unless that provider and account are authorized for it.
 A loopback OpenAI-compatible endpoint keeps the network destination local, but the behavior of that
 local service remains outside CtrlZebra's control.
+
+## User-triggered model discovery
+
+When a user explicitly runs the model-selection command, the Extension Host may send a metadata-only
+HTTPS `GET` request to the fixed official OpenAI or Gemini model-list endpoint. The request uses the
+selected Provider's API key as an authorization header and contains no prompt, workspace path or
+source text, Session, message, Tool definition, Tool input, or Tool result. The provider can observe
+and retain this request under its own terms, just as it can observe other authenticated API traffic.
+CtrlZebra does not proxy or receive a copy of the response beyond the local selection flow.
+
+No model-list request is made during activation, Webview creation, Session recovery, or chat execution.
+OpenAI-Compatible and custom endpoints are not queried automatically because their list behavior and
+data handling are not covered by the official Provider guarantees; users enter those model IDs
+manually. Cancelling or failing discovery leaves the existing model setting unchanged.
 
 ## Workspace access and commands
 

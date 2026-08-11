@@ -23,6 +23,28 @@ This document defines the Webview/Extension message boundary established before 
 - T0105 established the envelope only. Session continuation, cancellation, persistence, and restoration
   are governed by the multi-turn rules below; they do not change the meaning of `requestId`.
 
+## Provider Model Selection Boundary
+
+T1602's `ctrlZebra.selectModel` flow is Extension-host only. It is intentionally not a Webview
+message, Session command, Run event, or persisted Session record: the Host reads the active Provider
+configuration, performs the narrowly approved model-list request when eligible, presents the VS Code
+Quick Pick or manual input, and writes only the existing `ctrlZebra.provider.model` setting after an
+explicit user choice.
+
+- No API key, authorization header, endpoint URL, workspace or Session identity, message, Tool data,
+  provider response body, or SDK value crosses this protocol boundary. The list result is consumed
+  and discarded in the Extension Host; it is not echoed to the Webview or stored in a message,
+  checkpoint, or Session.
+- Provider and model identifiers used by a future Webview presentation remain bounded, validated
+  configuration values rather than arbitrary response objects. A later task that invokes this flow
+  from the Webview must add a separate strict, additive request/response Schema with explicit
+  cancellation and stable error categories; it must not reuse `webview/submit`, `extension/run-error`,
+  or an open metadata bag.
+- Cancellation, missing credentials, an unavailable or empty list, and configuration-write failure
+  are host outcomes. They do not create a Run error or terminal Session event. If a future protocol
+  projection reports one of them, it must preserve cancellation as distinct from failure and expose
+  only bounded user-safe status, never raw provider text.
+
 ## Session and Run Commands
 
 The multi-turn contract is additive within protocol version `1`. The Extension and Webview are shipped
