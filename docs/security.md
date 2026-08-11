@@ -872,8 +872,9 @@ or the fixed protocol-compatibility facts defined by Protocol. It never carries 
 JSON Pointer, raw SDK/JSON-RPC/process error, response data, stderr, stack, command, arguments, cwd,
 environment, URI query/fragment, credentials, or arbitrary Server metadata.
 
-- Diagnostic entries are de-duplicated by exact `(mcpToolName, reason)` and sorted by the
-  validated Tool name using Unicode scalar-value order before the independent 256-entry prefix is
+- Diagnostic entries are de-duplicated by exact `(boundedToolName, reason)` (the bounded
+  `mcpToolName` value) and sorted by the validated Tool name using Unicode scalar-value order before
+  the independent 256-entry prefix is
   selected. The prefix and complete strict message are measured incrementally in UTF-8; omitted
   entries set `skippedToolsTruncated: true`. The empty projection is an explicit bounded clear value,
   not an absent/unknown state. A malformed or over-limit diagnostic is dropped as a stable local
@@ -883,7 +884,11 @@ environment, URI query/fragment, credentials, or arbitrary Server metadata.
   closed generation, or late refresh is ignored before Webview state mutation. Exact duplicates are
   idempotent no-ops; same-sequence conflicting payloads are discarded. Disconnect, Trust loss,
   disposal, and failed cleanup clear the delivery gate before cleanup and cannot leave a recovery
-  action that would reconnect or approve work.
+  action that would reconnect or approve work. Independently of the gate, the Webview clears
+  diagnostics, pending refresh, recovery controls, sequence watermarks, and diagnostic live-region
+  text as soon as it receives `extension/mcp-connection` with `disconnecting`, `disconnected`, or
+  `failed`, or a connected Server/generation change. A connected cancelled refresh emits an explicit
+  `clear`; cleanup does not depend on waiting for that value.
 - `refresh-tools`, `reconnect`, and `open-settings` are display/recovery intents only. They must
   repeat the ordinary explicit connection, Workspace Trust, startup approval, generation, and
   cancellation checks. No diagnostic action can auto-connect, silently retry, downgrade protocol,
@@ -897,4 +902,7 @@ environment, URI query/fragment, credentials, or arbitrary Server metadata.
   siblings. An all-rejected or failed refresh may show only its bounded validated rejection prefix
   and stable recovery code while retaining the prior complete catalog. Whole-operation identity or
   envelope failures show no untrusted Tool name. A successful refresh replaces diagnostics with
-  `clear`, and a disconnect/generation change clears them synchronously.
+  `clear`, and a disconnect/generation change clears them synchronously. The strict variants permit
+  only connected+`refresh-tools` for degraded or refresh failures, failed+`reconnect` for initial
+  all-rejected/whole-operation failure, failed+`open-settings` for protocol incompatibility, and no
+  recovery action for `clear`.

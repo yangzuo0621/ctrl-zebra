@@ -321,7 +321,7 @@ authorize T1803 diagnostics or T1804–T1807 dual-era behavior.
 T1803 adds a separate additive `extension/mcp-diagnostics` message rather than widening the
 successful connection or Tool-catalog DTOs. This preserves the invariant that accepted Tool state
 is authoritative only in the catalog and that a failure cannot masquerade as an empty success. The
-message carries only a bounded, de-duplicated prefix of already-validated Tool names and the closed
+  message carries only a bounded, de-duplicated prefix of already-validated Tool names and the closed
 Schema rejection reasons, a stable whole-operation error code, or the fixed modern-only/version
 compatibility facts. It never carries raw MCP/SDK errors, Schema values or paths, command, environment,
 stderr, credentials, or arbitrary Server metadata.
@@ -330,11 +330,20 @@ The Extension owns a generation-scoped, Host-sequenced replacement projection. M
 accepted siblings; all-rejected discovery remains `invalid-schema` and keeps the prior snapshot (or
 fails the initial connection) while exposing its safe rejection prefix only through this diagnostic.
 A successful refresh emits an explicit clear replacement, and disconnect or generation closure clears
-the delivery gate before late diagnostics. Recovery is limited to explicit `refresh-tools`, `reconnect`,
+the delivery gate before late diagnostics. The Webview independently clears diagnostic state, pending
+refresh and recovery controls on every authoritative `extension/mcp-connection` disconnect, failure,
+Server/generation change, cancellation, Trust-loss or disposal projection; it never waits for clear.
+Recovery is limited to explicit `refresh-tools`, `reconnect`,
 and `open-settings` intents, each reusing existing trust, approval, cancellation and generation
 checks. Protocol incompatibility reports only the configured `modern-only` mode, supported
 `2026-07-28` version, and a fixed next action; it has no probe, fallback, or success claim. Future
 dual-era fields remain owned by ADR 0002/T1804.
+
+The projection uses a strict discriminated union: connected `degraded` and refresh-all-rejected
+variants allow only `refresh-tools`; failed initial all-rejected and whole-operation variants allow
+only `reconnect`; failed protocol incompatibility allows only `open-settings`; `clear` has no action.
+Entries are de-duplicated by exact `(boundedToolName, reason)` before the bounded Unicode-scalar
+prefix is selected.
 
 ### T1803 alternatives considered
 

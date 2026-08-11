@@ -634,8 +634,9 @@ approval, capability, connection, or retry grant.
   Host-owned positive-safe-integer `diagnosticSequence` scoped to `(server.serverId, generation)`;
   it starts at `1`, is allocated once for every emitted replacement (including an explicit clear),
   never wraps, and closes the generation on overflow. A request ID is correlation only and never a
-  freshness signal. Diagnostics are de-duplicated by exact `(mcpToolName, reason)` before
-  sorting by MCP Tool name in Unicode scalar-value order and applying the independent 256-entry
+  freshness signal. Diagnostics are de-duplicated by exact `(boundedToolName, reason)` (the
+  bounded `mcpToolName` value) before sorting by MCP Tool name in Unicode scalar-value order and
+  applying the independent 256-entry
   prefix. The projection sets `skippedToolsTruncated: true` whenever entries are omitted by the
   count or the serialized-message ceiling; accepted Tool descriptors are never truncated to fit
   diagnostics.
@@ -644,6 +645,12 @@ approval, capability, connection, or retry grant.
   but replaces diagnostics with its bounded failure/recovery outcome. Disconnect, generation
   change, cancellation, trust loss, and disposal synchronously close the diagnostic delivery gate
   and clear Webview diagnostics; late pages, errors, and timer settlements cannot recreate them.
+  The Webview independently clears diagnostics, pending refresh, recovery controls, sequence
+  watermarks, and diagnostic live-region text whenever it receives an authoritative
+  `extension/mcp-connection` state of `disconnecting`, `disconnected`, or `failed`, or a connected
+  state for a different Server/generation. It never waits for `kind: "clear"`; that variant is only
+  the connected-success replacement. A cancelled refresh that leaves the connection connected
+  emits `kind: "clear"` and invalidates the pending refresh request.
   Exact duplicate publications at a committed or pending sequence are no-ops. A same-sequence
   candidate with a different request ID or payload is discarded as a local diagnostic sequence
   conflict, without changing the rendered state.
@@ -660,10 +667,18 @@ approval, capability, connection, or retry grant.
   cancellation or disposal. The Webview displays fixed localized text selected from the stable
   reason/code and action, never third-party prose.
 
+The strict union constrains recovery combinations: `degraded` is connected plus
+`refresh-tools`; initial `all-rejected` is failed plus `reconnect`; refresh `all-rejected` is
+connected plus `refresh-tools`; initial whole-operation failure is failed plus `reconnect`; refresh
+whole-operation failure is connected plus `refresh-tools`; protocol incompatibility is failed with
+`modern-only`, `2026-07-28`, `connectionEstablished: false`, and `open-settings`; and `clear` has no
+recovery action. The Webview does not infer a legal combination from independent fields.
+
 The diagnostic message is additive and ignored by older clients. It is sent after the authoritative
 connection/catalog state for the same request and generation, but it is never a second half of a
 catalog publication. T1803 tests must cover each rejection classification, all-rejected and mixed
 outcomes, deterministic Unicode ordering, duplicate suppression, count/byte truncation, explicit
 clear after a successful refresh, stale sequence and generation races, disconnect cleanup,
-protocol-incompatible messaging without probe/fallback claims, secret/raw-error exclusion, normal
-connected operation, and keyboard/screen-reader recovery behavior.
+protocol-incompatible messaging without probe/fallback claims, connection-driven clear on
+disconnect/generation/cancel/trust/disposal, secret/raw-error exclusion, the normal connected path
+with no diagnostics, and keyboard/screen-reader recovery behavior.

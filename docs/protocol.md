@@ -621,48 +621,64 @@ Neither action carries a command, environment, URI, credential, schema, approval
 projection. The name has the existing bounded, well-formed Unicode constraint and `reason` is the
 closed `McpToolRejectionReason` union; no keyword, schema path, or raw cause is included.
 
-`McpDiagnosticsProjectionDto` is a strict discriminated union:
+`McpDiagnosticsProjectionDto` is a strict discriminated union. The `outcome`,
+`connectionStatus`, and `recoveryAction` combinations are closed rather than inferred by the
+Webview:
 
 ```text
 {
   kind: "tool-rejections",
+  outcome: "degraded",
   server: McpServerIdentityDto,
   generation: positive safe integer,
-  connectionStatus: "connected" | "failed",
+  connectionStatus: "connected",
   skippedTools: McpDiagnosticToolEntry[0..256],
   skippedToolsTruncated: boolean,
-  recoveryAction: "refresh-tools" | "reconnect"
+  recoveryAction: "refresh-tools"
 }
-```
-
-The `tool-rejections` form is used for a mixed/degraded catalog and for an all-rejected
-`invalid-schema` outcome. `connectionStatus` is a display correlation with the authoritative
-`extension/mcp-connection` message: `failed` means no usable connection was established, while
-`connected` means the prior complete catalog remains usable (including after a failed refresh).
-An all-rejected outcome has no accepted Tool entry and never emits an empty success catalog. A
-mixed outcome retains accepted siblings and may be recovered with `refresh-tools`; a failed initial
-connection uses `reconnect`.
-
-Whole-operation failures that have no safe Tool identity use this strict form:
-
-```text
+|
 {
-  kind: "tool-discovery-failure",
+  kind: "tool-rejections",
+  outcome: "all-rejected",
   server: McpServerIdentityDto,
   generation: positive safe integer,
-  connectionStatus: "connected" | "failed",
-  code: "invalid-schema" | "limit-exceeded" | "malformed-message",
-  recoveryAction: "refresh-tools" | "reconnect"
+  connectionStatus: "failed",
+  skippedTools: McpDiagnosticToolEntry[0..256],
+  skippedToolsTruncated: boolean,
+  recoveryAction: "reconnect"
 }
-```
-
-It contains no `skippedTools` field. `invalid-schema` with a validated all-rejected prefix uses the
-`tool-rejections` form instead; malformed envelopes, duplicate identities, aggregate limits, and
-other whole-operation failures use `tool-discovery-failure` and reveal no untrusted name.
-
-Protocol incompatibility uses a separate strict form:
-
-```text
+|
+{
+  kind: "tool-rejections",
+  outcome: "refresh-all-rejected",
+  server: McpServerIdentityDto,
+  generation: positive safe integer,
+  connectionStatus: "connected",
+  skippedTools: McpDiagnosticToolEntry[0..256],
+  skippedToolsTruncated: boolean,
+  recoveryAction: "refresh-tools"
+}
+|
+{
+  kind: "tool-discovery-failure",
+  outcome: "initial",
+  server: McpServerIdentityDto,
+  generation: positive safe integer,
+  connectionStatus: "failed",
+  code: "invalid-schema" | "limit-exceeded" | "malformed-message",
+  recoveryAction: "reconnect"
+}
+|
+{
+  kind: "tool-discovery-failure",
+  outcome: "refresh",
+  server: McpServerIdentityDto,
+  generation: positive safe integer,
+  connectionStatus: "connected",
+  code: "invalid-schema" | "limit-exceeded" | "malformed-message",
+  recoveryAction: "refresh-tools"
+}
+|
 {
   kind: "protocol-incompatible",
   server: McpServerIdentityDto,
@@ -673,22 +689,27 @@ Protocol incompatibility uses a separate strict form:
   connectionEstablished: false,
   nextStep: "open-settings"
 }
-```
-
-This form is emitted only with a failed `extension/mcp-connection`. It intentionally has no probe,
-fallback, selected-era, capability, or success field: before the handshake completes, the UI must
-not describe detection or fallback as successful. T1804 may extend the mode/version closed unions
-only through its reviewed dual-era contract.
-
-An explicit replacement is represented by:
-
-```text
+|
 {
   kind: "clear",
   server: McpServerIdentityDto,
   generation: positive safe integer
 }
 ```
+
+`degraded` retains accepted siblings in a connected catalog. `all-rejected` is the initial
+`invalid-schema` outcome: no usable connection was established and the only recovery is explicit
+`reconnect`. `refresh-all-rejected` retains the prior complete connected catalog and offers only a
+new explicit `refresh-tools`. `tool-discovery-failure` contains no `skippedTools` field; its
+`initial` variant uses `reconnect`, and its `refresh` variant retains the connected catalog and uses
+`refresh-tools`. Malformed envelopes, duplicate identities, aggregate limits, and other
+whole-operation failures therefore reveal no untrusted name. The `clear` variant is the explicit
+replacement for a successful refresh with no diagnostic.
+
+The `protocol-incompatible` variant is emitted only with a failed `extension/mcp-connection`. It
+intentionally has no probe, fallback, selected-era, capability, or success field: before the
+handshake completes, the UI must not describe detection or fallback as successful. T1804 may extend
+the mode/version closed unions only through its reviewed dual-era contract.
 
 The Extension-to-Webview envelope is strict and accepts no additional properties:
 
@@ -706,19 +727,31 @@ The Extension-to-Webview envelope is strict and accepts no additional properties
 `1`, is allocated exactly once for every emitted replacement including `clear`, and never wraps.
 The complete strict wrapper is measured incrementally as UTF-8 and must fit the existing
 1,048,576-byte message ceiling. Before the count/byte prefix is selected, `skippedTools` entries are
-de-duplicated by exact `(mcpToolName, reason)` and sorted by `mcpToolName` in lexicographic Unicode
+de-duplicated by exact `(boundedToolName, reason)` (where `boundedToolName` is the bounded
+`mcpToolName` value) and sorted by `mcpToolName` in lexicographic Unicode
 scalar-value order; the deterministic prefix is at most 256 entries. Any omitted entry sets
 `skippedToolsTruncated: true`. A successful refresh always emits a replacement (often `clear`), so
 stale rejection details cannot survive a refresh. A disconnect, generation change, cancellation,
 Trust loss, or disposal clears the delivery gate before late diagnostic messages are considered.
+
+The Webview also clears diagnostics synchronously from the authoritative
+`extension/mcp-connection` projection; it does not wait for a `kind: "clear"` message. A
+`disconnecting`, `disconnected`, or `failed` state, or any connected projection whose Server or
+generation differs from the current scope, clears the diagnostic payload, pending diagnostic
+sequence, pending refresh request, recovery controls, and diagnostic live-region text before
+rendering the new connection state. Host cancellation, Workspace Trust loss, and disposal are
+represented by that same non-connected/failed projection; a cancelled refresh that leaves the
+connection connected emits `kind: "clear"` and also invalidates the pending refresh request. Late
+responses cannot restore either diagnostics or recovery controls.
 
 The Webview ignores a wrong Server/generation, a lower sequence, an exact duplicate, or a
 same-sequence conflicting payload without state mutation; sequence conflicts are local and never
 shown as Server errors. Diagnostics are sent after the authoritative connection/catalog message for
 the same request and generation, but are not a second half of that publication. The implementation
 must test each reason/code, deterministic de-duplication and truncation, all-rejected retention,
-refresh-to-clear recovery, stale races, protocol-incompatible no-success claims, no secrets/raw
-errors, and the ordinary connected path.
+refresh-to-clear recovery, connection-driven clear on disconnect/generation/cancel/trust/disposal,
+stale races, protocol-incompatible no-success claims, no secrets/raw errors, and the ordinary
+connected path with no diagnostics.
 
 ### Resource and Resource Template projections
 

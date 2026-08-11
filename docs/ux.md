@@ -400,7 +400,8 @@ MCP 诊断是连接卡片中的次级、可操作状态，不改变连接、能�
   原子状态清除旧诊断并保留焦点；刷新失败保留上一次完整目录，但显示稳定失败类别和再次
   刷新的操作。全量被跳过的初始连接显示连接失败、跳过列表和“修复 Server 后重新连接”，
   不渲染空的成功目录。
-- 列表在 Host 侧先按 MCP 名称的 Unicode scalar 顺序去重并截断；Webview 再次防御性去重。
+- 列表在 Host 侧先按 MCP 名称的 Unicode scalar 顺序，对 exact `(boundedToolName, reason)` 去重并
+  截断；Webview 再次防御性按同一键去重。
   截断时显示固定“部分被跳过的 Tool 未显示”说明，不猜测总数或遗漏名称。重复诊断、旧
   generation、过期 sequence 和同 sequence 冲突不会改变当前内容或产生新的提示。
 - `protocol-incompatible` 只显示“配置模式：modern-only”“支持版本：2026-07-28”和固定的
@@ -408,6 +409,13 @@ MCP 诊断是连接卡片中的次级、可操作状态，不改变连接、能�
   探测成功、回退成功、已协商版本或可用能力；不得暗示双纪元（由 T1804 定义）。
 - 恢复动作是明确的用户操作：`refresh-tools`、`reconnect` 或 `open-settings`。它们不能自动
   连接、静默重试、复用启动或 Tool 审批，也不能在取消、断开或清理失败后恢复旧能力。
+
+收到 `extension/mcp-connection` 的 `disconnecting`、`disconnected` 或 `failed` 状态，或收到
+Server/generation 变化的 connected 投影时，面板立即同步清除诊断列表、截断提示、待处理刷新、
+恢复按钮和诊断 live-region 文本，然后再呈现新的连接状态；不得等待 `kind: "clear"`。Workspace
+Trust 丢失、取消和 disposal 通过同一非 connected/failed 投影清理；若取消只结束一次仍保持
+connected 的刷新，则 Host 发送 `kind: "clear"` 并使待处理请求失效。普通 connected 且无跳过
+Tool 的路径不显示诊断区域或恢复按钮，也不播报失败。
 
 诊断使用独立的语义 region 与现有 MCP 状态文本关联；每次诊断替换、清除或终态失败只播报
 一次简短的礼貌 live-region 摘要，不朗读每个 Tool 名称、参数、Schema 或 Server 文本。列表、
