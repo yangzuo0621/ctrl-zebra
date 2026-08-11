@@ -250,7 +250,7 @@
 ### T1801 完成记录
 
 - 完成摘要：实现 MCP Tool Schema 的单工具失败隔离、稳定拒绝原因与有界 `rejectedTools` 投影；以带序列号的单一 combined extension/mcp-tool-catalog 扩展投影原子发布接受与拒绝结果，同时保持 legacy extension/mcp-tools 兼容，并覆盖分页、刷新、断开竞态、上限与旧客户端兼容。
-- 完成证据：[PR #188](https://github.com/yangzuo0621/ctrl-zebra/pull/188)；实现 revision `4bc1efc` 已完成 `pnpm check`、`pnpm typecheck`、完整单元测试（1503 个）、集成测试、聚焦 T1801 测试及 `git diff --check`；计划修订后的最新 head 仍待 GitHub CI 的 Ubuntu、macOS、Windows 验证完成。
+- 完成证据：[PR #188](https://github.com/yangzuo0621/ctrl-zebra/pull/188)；实现 revision `4bc1efc` 的 GitHub Actions run `31507602189` 中 Ubuntu、macOS、Windows 均通过，并完成 `pnpm check`、`pnpm typecheck`、完整单元测试（1503 个）、集成测试、聚焦 T1801 测试及 `git diff --check`；后续 closure-only 计划文档提交以 required checks 作为合并门禁。
 - 完成日期：2026-08-11
 - 下一任务：T1802
 
