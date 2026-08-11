@@ -18,7 +18,7 @@
 | 任务顺序、状态、完成 PR、完成日期、当前执行点 | 本文档 |
 | 活动或计划中任务的目标、产物、测试、排除项、前置条件和阶段门禁 | 对应的 `docs/roadmap/phases/phase-xx.md` |
 | 已完成任务的历史规格和阶段门禁 | 对应的 `docs/roadmap/archive/phase-xx.md` |
-| 第一阶段产品范围、技术基线、模块边界、接口草案、测试分层和完成定义 | [产品与技术基础规格](roadmap/product-foundation.md) |
+| 当前授权产品范围、技术基线、模块边界、跨模块契约地图、产品级验证要求和完成定义 | [产品与技术基础规格](roadmap/product-foundation.md) |
 | 长期架构、安全、协议和测试规则 | 对应的 `docs/` 领域文档与根 `AGENTS.md` |
 | 用户路径、信息架构、交互反馈、视觉层级和体验验收 | [用户体验规范](ux.md) |
 | 任务执行报告格式 | [任务执行模板](roadmap/task-template.md) |
@@ -27,7 +27,8 @@
 
 ## 3. 范围与技术基础
 
-第一阶段的完整范围和技术基础见 [产品与技术基础规格](roadmap/product-foundation.md)。第一阶段仍仅限桌面 VS Code Extension；扩大产品范围、改变模块边界或技术基线时，必须先更新该规格和本文档。
+当前获准范围和技术基础见 [产品与技术基础规格](roadmap/product-foundation.md)。产品仍仅限该规格明确
+授权的桌面 VS Code Extension；扩大产品范围、改变模块边界或技术基线时，必须先更新该规格和本文档。
 
 ## 4. 任务执行与状态台账
 
