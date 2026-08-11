@@ -6,6 +6,8 @@ export type ProviderCapability = (typeof providerCapabilities)[number];
 
 export const providerConfigurationVersion = 1 as const;
 
+const maxProviderModelIdCodePoints = 256;
+
 export const providerSettingNames = {
   capabilities: "capabilities",
   endpoint: "endpoint",
@@ -15,6 +17,12 @@ export const providerSettingNames = {
 
 export interface ConfigurationReader {
   get(setting: string): unknown;
+}
+
+export interface ProviderSelectionConfiguration {
+  readonly provider: ProviderId;
+  readonly modelId?: string;
+  readonly endpoint?: string;
 }
 
 interface BaseProviderConfiguration {
@@ -98,6 +106,35 @@ export function readProviderConfiguration(reader: ConfigurationReader): Provider
   };
 }
 
+/**
+ * Reads only the Provider values needed before a model has been selected. Unlike the runtime
+ * configuration reader, this intentionally tolerates a missing or malformed model so the selection
+ * command can repair it without touching the other settings.
+ */
+export function readProviderSelectionConfiguration(
+  reader: ConfigurationReader,
+): ProviderSelectionConfiguration {
+  const provider = readProviderId(reader.get(providerSettingNames.id));
+  const endpoint = readOptionalEndpoint(reader.get(providerSettingNames.endpoint));
+
+  if (provider === "openai-compatible" && endpoint === undefined) {
+    throw new ProviderConfigurationError(
+      "missing-endpoint",
+      providerSettingNames.endpoint,
+      "OpenAI-Compatible requires an endpoint URL.",
+    );
+  }
+
+  const model = reader.get(providerSettingNames.model);
+  const modelId = typeof model === "string" && isValidSelectionModelId(model) ? model : undefined;
+
+  return {
+    provider,
+    modelId,
+    endpoint: endpoint?.value,
+  };
+}
+
 function readProviderId(value: unknown): ProviderId {
   const provider = value ?? "openai";
 
@@ -130,6 +167,17 @@ function readModelId(value: unknown): string {
   }
 
   return value;
+}
+
+function isValidSelectionModelId(value: string): boolean {
+  return (
+    value.length > 0 &&
+    value.trim() === value &&
+    [...value].length <= maxProviderModelIdCodePoints &&
+    !value.includes(String.fromCharCode(0)) &&
+    !value.includes("\r") &&
+    !value.includes("\n")
+  );
 }
 
 interface ValidatedEndpoint {

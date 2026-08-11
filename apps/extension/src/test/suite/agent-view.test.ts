@@ -7,6 +7,7 @@ import {
   createAgentViewOptions,
   registerAgentView,
 } from "../../agent-view.js";
+import { selectModelCommandId } from "../../controllers/model-selection-command.js";
 import {
   saveGeminiApiKeyCommandId,
   saveOpenAIApiKeyCommandId,
@@ -41,6 +42,7 @@ export async function verifyAgentViewRegistration(): Promise<void> {
     saveOpenAIApiKeyCommandId,
     saveGeminiApiKeyCommandId,
     saveOpenAICompatibleApiKeyCommandId,
+    selectModelCommandId,
   ]) {
     assert.ok(
       commands.includes(commandId),

@@ -14,4 +14,5 @@ export async function verifyExtensionActivation(): Promise<void> {
   const commands = await vscode.commands.getCommands(true);
   assert.ok(commands.includes("ctrlZebra.connectMcpServer"));
   assert.ok(commands.includes("ctrlZebra.disconnectMcpServer"));
+  assert.ok(commands.includes("ctrlZebra.selectModel"));
 }

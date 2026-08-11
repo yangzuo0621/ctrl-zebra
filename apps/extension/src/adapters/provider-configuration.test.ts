@@ -4,6 +4,7 @@ import {
   type ConfigurationReader,
   ProviderConfigurationError,
   readProviderConfiguration,
+  readProviderSelectionConfiguration,
 } from "./provider-configuration.js";
 
 function configuration(values: Readonly<Record<string, unknown>>): ConfigurationReader {
@@ -34,6 +35,36 @@ describe("Provider configuration", () => {
     expect(() => readProviderConfiguration(configuration({}))).toThrowError(
       expect.objectContaining({ code: "missing-model", setting: "model" }),
     );
+  });
+
+  it("reads the Provider selection target without requiring an existing model", () => {
+    expect(readProviderSelectionConfiguration(configuration({ id: "gemini" }))).toEqual({
+      provider: "gemini",
+      modelId: undefined,
+      endpoint: undefined,
+    });
+  });
+
+  it("retains a valid existing model while reading a custom selection target", () => {
+    expect(
+      readProviderSelectionConfiguration(
+        configuration({
+          id: "openai",
+          model: "gpt-test",
+          endpoint: "https://models.example.test/v1",
+        }),
+      ),
+    ).toEqual({
+      provider: "openai",
+      modelId: "gpt-test",
+      endpoint: "https://models.example.test/v1",
+    });
+  });
+
+  it("allows model selection to repair an invalid model value", () => {
+    expect(
+      readProviderSelectionConfiguration(configuration({ id: "openai", model: " invalid " })),
+    ).toMatchObject({ provider: "openai", modelId: undefined });
   });
 
   it.each([

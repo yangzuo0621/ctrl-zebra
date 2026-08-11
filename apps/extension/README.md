@@ -42,8 +42,8 @@ Repository maintainers can create a verified local artifact with `pnpm package:v
 
 1. Open VS Code Settings and set **CtrlZebra › Provider: Id** to `openai`, `gemini`, or
    `openai-compatible`.
-2. Set **CtrlZebra › Provider: Model** to the exact model ID available to your account or local
-   service.
+2. For OpenAI or Gemini, run **CtrlZebra: Select Model** to choose from the official model list. For
+   OpenAI-Compatible or custom endpoints, enter the exact model ID in **CtrlZebra › Provider: Model**.
 3. For a remote Provider, run the matching command from the Command Palette and enter the key in
    the password-masked prompt. The key is stored in VS Code SecretStorage:
    - **CtrlZebra: Save OpenAI API Key**
@@ -170,7 +170,8 @@ Read the full [Privacy Notice](PRIVACY.md) and [security contract](docs/security
 - Desktop VS Code only; Web Extensions are not supported.
 - Exactly one workspace folder is supported. Empty windows and multi-root workspaces cannot start an
   Agent run.
-- Provider and model configuration is manual; there is no model discovery or account sign-in.
+- Model discovery is user-triggered for the official OpenAI and Gemini endpoints only. OpenAI-Compatible
+  and custom endpoints use manual model IDs; there is no account sign-in.
 - MCP supports exactly one user-configured local stdio Server and exact protocol version
   `2026-07-28`. There is no HTTP transport, OAuth, credential injection, multi-server operation,
   automatic install, automatic connection, retry, or restart recovery.

@@ -73,6 +73,11 @@
         "category": "CtrlZebra"
       },
       {
+        "command": "ctrlZebra.selectModel",
+        "title": "Select Model",
+        "category": "CtrlZebra"
+      },
+      {
         "command": "ctrlZebra.connectMcpServer",
         "title": "Connect MCP Server",
         "category": "CtrlZebra"
