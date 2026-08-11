@@ -387,20 +387,32 @@ async function readBoundedResponseBody(response: Response, signal: AbortSignal):
         await reader.cancel();
         throw new BoundedResponseError();
       }
-      chunks.push(decoder.decode(value, { stream: true }));
+      chunks.push(decodeResponseChunk(decoder, value, true));
     }
-    chunks.push(decoder.decode());
+    chunks.push(decodeResponseChunk(decoder, undefined, false));
     return chunks.join("");
   } catch (error) {
     if (error instanceof BoundedResponseError) {
       throw error;
     }
+    throw error;
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+function decodeResponseChunk(
+  decoder: InstanceType<typeof TextDecoder>,
+  value: Uint8Array | undefined,
+  stream: boolean,
+): string {
+  try {
+    return decoder.decode(value, { stream });
+  } catch (error) {
     if (error instanceof TypeError) {
       throw new BoundedResponseError();
     }
     throw error;
-  } finally {
-    reader.releaseLock();
   }
 }
 

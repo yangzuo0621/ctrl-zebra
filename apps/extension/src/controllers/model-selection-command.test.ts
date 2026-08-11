@@ -85,6 +85,40 @@ describe("Model selection command", () => {
     );
   });
 
+  it.each([
+    401, 403,
+  ])("distinguishes authentication status %s from ordinary failures", async (status) => {
+    const harness = createHarness({
+      configuration: { provider: "openai" },
+      responseStatus: status,
+      manualModelId: "gpt-manual",
+    });
+
+    registerModelSelectionCommand(harness.options);
+    await harness.run();
+
+    expect(harness.showErrorMessage).toHaveBeenCalledWith(
+      "OpenAI rejected the saved API key. Enter a model ID manually.",
+    );
+    expect(harness.updateModel).toHaveBeenCalledWith("gpt-manual");
+  });
+
+  it.each([500, 503])("treats server status %s as an unavailable list", async (status) => {
+    const harness = createHarness({
+      configuration: { provider: "openai" },
+      responseStatus: status,
+      manualModelId: "gpt-manual",
+    });
+
+    registerModelSelectionCommand(harness.options);
+    await harness.run();
+
+    expect(harness.showErrorMessage).toHaveBeenCalledWith(
+      "Unable to load OpenAI models. Enter a model ID manually.",
+    );
+    expect(harness.updateModel).toHaveBeenCalledWith("gpt-manual");
+  });
+
   it("does not request a list when no API key is saved", async () => {
     const harness = createHarness({
       configuration: { provider: "openai" },
@@ -132,6 +166,20 @@ describe("Model selection command", () => {
     expect(harness.showInformationMessage).not.toHaveBeenCalled();
   });
 
+  it("does not write when manual input is cancelled", async () => {
+    const harness = createHarness({
+      configuration: { provider: "openai", modelId: "old-model" },
+      apiKey: "",
+      manualModelId: undefined,
+    });
+
+    registerModelSelectionCommand(harness.options);
+    await harness.run();
+
+    expect(harness.updateModel).not.toHaveBeenCalled();
+    expect(harness.showInformationMessage).not.toHaveBeenCalled();
+  });
+
   it("keeps the previous model when configuration writing fails", async () => {
     const harness = createHarness({
       configuration: { provider: "openai", modelId: "old-model" },
@@ -165,13 +213,72 @@ describe("Model selection command", () => {
       "The OpenAI model list was not usable. Enter a model ID manually.",
     );
   });
+
+  it("falls back for malformed JSON without writing a partial list", async () => {
+    const harness = createHarness({
+      configuration: { provider: "openai" },
+      responseBody: "not-json",
+      manualModelId: "gpt-manual",
+    });
+
+    registerModelSelectionCommand(harness.options);
+    await harness.run();
+
+    expect(harness.updateModel).toHaveBeenCalledWith("gpt-manual");
+    expect(harness.showErrorMessage).toHaveBeenCalledWith(
+      "The OpenAI model list was not usable. Enter a model ID manually.",
+    );
+  });
+
+  it("rejects a response over the 256 KiB body limit", async () => {
+    const harness = createHarness({
+      configuration: { provider: "openai" },
+      responseBody: JSON.stringify({ data: [{ id: "valid" }], padding: "x".repeat(256 * 1024) }),
+      manualModelId: "gpt-manual",
+    });
+
+    registerModelSelectionCommand(harness.options);
+    await harness.run();
+
+    expect(harness.updateModel).toHaveBeenCalledWith("gpt-manual");
+    expect(harness.showErrorMessage).toHaveBeenCalledWith(
+      "The model list response was too large or malformed. Enter a model ID manually.",
+    );
+  });
+
+  it("aborts a request after the timeout and falls back without writing until manual input", async () => {
+    vi.useFakeTimers();
+    try {
+      const harness = createHarness({
+        configuration: { provider: "openai" },
+        fetchWaitsForAbort: true,
+        manualModelId: "gpt-manual",
+      });
+
+      registerModelSelectionCommand(harness.options);
+      const run = harness.run();
+      await vi.advanceTimersByTimeAsync(10_001);
+      await run;
+
+      expect(harness.fetch).toHaveBeenCalled();
+      expect(harness.updateModel).toHaveBeenCalledWith("gpt-manual");
+      expect(harness.showErrorMessage).toHaveBeenCalledWith(
+        "Unable to load OpenAI models. Enter a model ID manually.",
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 interface HarnessOptions {
   readonly configuration: ProviderSelectionConfiguration;
   readonly apiKey?: string;
   readonly modelList?: unknown;
+  readonly responseBody?: string;
+  readonly responseStatus?: number;
   readonly fetchFailure?: Error;
+  readonly fetchWaitsForAbort?: boolean;
   readonly manualModelId?: string;
   readonly selectedItem?: number | null;
   readonly updateFailure?: Error;
@@ -193,7 +300,10 @@ function createHarness({
   configuration,
   apiKey,
   modelList,
+  responseBody,
+  responseStatus = 200,
   fetchFailure,
+  fetchWaitsForAbort,
   manualModelId,
   selectedItem,
   updateFailure,
@@ -201,12 +311,21 @@ function createHarness({
   const handlers = new Map<string, () => Promise<void>>();
   const quickPickItems: QuickPickItem[] = [];
   let inputBoxOptions: InputBoxOptions | undefined;
-  const fetch = vi.fn<typeof globalThis.fetch>(async () => {
+  const fetch = vi.fn<typeof globalThis.fetch>(async (_input, init) => {
     if (fetchFailure !== undefined) {
       throw fetchFailure;
     }
-    return new Response(JSON.stringify(modelList), {
-      status: 200,
+    if (fetchWaitsForAbort) {
+      await new Promise<never>((_resolve, reject) => {
+        init?.signal?.addEventListener(
+          "abort",
+          () => reject(new DOMException("The request was aborted.", "AbortError")),
+          { once: true },
+        );
+      });
+    }
+    return new Response(responseBody ?? JSON.stringify(modelList), {
+      status: responseStatus,
       headers: { "content-type": "application/json" },
     });
   });

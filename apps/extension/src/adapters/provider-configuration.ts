@@ -6,6 +6,8 @@ export type ProviderCapability = (typeof providerCapabilities)[number];
 
 export const providerConfigurationVersion = 1 as const;
 
+const maxProviderModelIdCodePoints = 256;
+
 export const providerSettingNames = {
   capabilities: "capabilities",
   endpoint: "endpoint",
@@ -124,8 +126,7 @@ export function readProviderSelectionConfiguration(
   }
 
   const model = reader.get(providerSettingNames.model);
-  const modelId =
-    typeof model === "string" && model.length > 0 && model.trim() === model ? model : undefined;
+  const modelId = typeof model === "string" && isValidSelectionModelId(model) ? model : undefined;
 
   return {
     provider,
@@ -166,6 +167,17 @@ function readModelId(value: unknown): string {
   }
 
   return value;
+}
+
+function isValidSelectionModelId(value: string): boolean {
+  return (
+    value.length > 0 &&
+    value.trim() === value &&
+    [...value].length <= maxProviderModelIdCodePoints &&
+    !value.includes(String.fromCharCode(0)) &&
+    !value.includes("\r") &&
+    !value.includes("\n")
+  );
 }
 
 interface ValidatedEndpoint {
