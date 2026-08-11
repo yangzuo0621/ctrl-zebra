@@ -19,20 +19,26 @@ verifiable, and consistent with CtrlZebra's architecture.
 
 ### 1.1 Progressive Document Loading
 
-Read the roadmap index first for roadmap work, then only the rows below that match the task. Do not
-load every domain document or completed phase archive by default.
+Read the roadmap index first for roadmap work, then only the rows below that match the task. For a
+scoped change, read the linked section through the next heading of the same level plus any section it
+directly references. Read a whole domain document only when the work is genuinely cross-cutting. Do
+not load every domain document or completed phase archive by default.
 
 | Work area | Required documents |
 |---|---|
 | Roadmap task | `docs/implementation-plan.md` and the linked active phase specification |
 | Product scope or technical baseline | `docs/roadmap/product-foundation.md` |
 | Any code, config, or dependency change | `docs/development.md`; add `docs/testing.md` when tests or logic change |
-| Core, Provider, Extension lifecycle, context budgeting | `docs/architecture.md` |
-| Webview/Extension messages or Tool DTOs | `docs/protocol.md`; add `docs/architecture.md` for runtime ownership |
-| Workspace access, approval, commands, checkpoints, secrets, logging | `docs/security.md` |
-| Webview state, components, styling, accessibility, streaming | `docs/webview.md` |
-| User journeys, information architecture, interaction feedback, visual hierarchy, UX acceptance | `docs/ux.md`; add `docs/webview.md` for implementation constraints |
-| Persistence or recovery | `docs/persistence.md`; add `docs/security.md` for checkpoint restore |
+| Extension lifecycle, disposal, adapters, or lazy initialization | Relevant section from [`Extension Lifecycle`](docs/architecture.md#extension-lifecycle) through [`Lazy Initialization`](docs/architecture.md#lazy-initialization) |
+| Provider boundary or configuration | [`Model Provider Boundary`](docs/architecture.md#model-provider-boundary) and/or [`Provider Configuration Boundary`](docs/architecture.md#provider-configuration-boundary) |
+| Core Tool lifecycle, context budgeting, history, or Session state | Relevant section from [`Tool Contract Boundary`](docs/architecture.md#tool-contract-boundary) through [`Session State Machine`](docs/architecture.md#session-state-machine) |
+| Webview/Extension messages, Session/Run commands, or Tool DTOs | Relevant section in [`docs/protocol.md`](docs/protocol.md); add the owning Architecture section for runtime behavior |
+| Workspace access, Tool input/output, approval, commands, or checkpoints | Relevant section from [`Tool Input and Output`](docs/security.md#tool-input-and-output) through [`Checkpoint and restore boundary`](docs/security.md#checkpoint-and-restore-boundary) |
+| Diagnostics, API keys, Provider endpoints, or credentials | Relevant section from [`Structured Diagnostic Logging`](docs/security.md#structured-diagnostic-logging) through [`Gemini API Key Entry`](docs/security.md#gemini-api-key-entry) |
+| Webview state, components, styling, accessibility, or streaming | Relevant section in [`docs/webview.md`](docs/webview.md) |
+| User journeys, information architecture, interaction feedback, visual hierarchy, or UX acceptance | Relevant section in [`docs/ux.md`](docs/ux.md); add the corresponding Webview section for implementation constraints |
+| Persistence, recovery, or checkpoints | Relevant section in [`docs/persistence.md`](docs/persistence.md); add [`Checkpoint and restore boundary`](docs/security.md#checkpoint-and-restore-boundary) for restore |
+| MCP lifecycle, transport, or SDK isolation | [`Controlled MCP Client Boundary`](docs/architecture.md#controlled-mcp-client-boundary) and the applicable MCP section in Security, Protocol, Persistence, Webview, or UX |
 | CI, VSIX packaging, or release | `docs/ci.md`, `docs/packaging.md`, or `docs/release-checklist.md` as applicable |
 
 When documents conflict, use the ownership above and the roadmap's fact-ownership table. Correct
