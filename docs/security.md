@@ -786,14 +786,14 @@ and Prompt data that exceed their applicable limit are rejected rather than sile
   overflow the Host closes the current generation and requires an explicit reconnect; the new
   generation resets the sequence and Webview committed watermark. A sequence-aware Webview keeps a
   committed publication record plus only a transient pending candidate during synchronous
-validation. A message for a different Server or generation is ignored before watermark handling. A
-lower sequence than either watermark is a stale no-op. At an equal committed or pending sequence,
-an exact duplicate (same Server, generation, sequence, request ID, and equivalent validated catalog
-payload) is an idempotent no-op: it is ignored and never re-staged or committed. A same-scope,
-same-sequence candidate with a differing request ID or payload is discarded with the stable local
-`conflicting-catalog-sequence` classification, leaving pending, committed, and rendered state
-unchanged. A higher sequence commits only as one complete atomic value after validation; invalid
-validation clears only pending. There is no unmatched-half timer, retry, or receipt-order dependency.
+  validation. A message for a different Server or generation is ignored before watermark handling. A
+  lower sequence than either watermark is a stale no-op. At an equal committed or pending sequence,
+  an exact duplicate (same Server, generation, sequence, request ID, and equivalent validated catalog
+  payload) is an idempotent no-op: it is ignored and never re-staged or committed. A same-scope,
+  same-sequence candidate with a differing request ID or payload is discarded with the stable local
+  `conflicting-catalog-sequence` classification, leaving pending, committed, and rendered state
+  unchanged. A higher sequence commits only as one complete atomic value after validation; invalid
+  validation clears only pending. There is no unmatched-half timer, retry, or receipt-order dependency.
 
 Unsupported image, audio, Blob, embedded Resource, Resource Link, unknown content, task,
 `input_required`, progress, logging, completion, subscription, or experimental values produce
