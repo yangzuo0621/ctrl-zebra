@@ -83,6 +83,31 @@ CtrlZebra 应让用户在不理解内部 Agent 状态机的情况下完成以下
   约 300px 侧栏中应保持主要对话操作可见。模型 ID 列表不是会话内容，不进入聊天消息或 Tool
   卡片。
 
+#### Provider 连接检查（T1605）
+
+- 用户从 Command Palette 明确执行 `CtrlZebra: Check Provider Connection` 后，Host 才读取当前
+  Provider、模型和对应凭据并开始一次检查。打开侧栏、激活扩展、恢复 Session、发送消息或
+  Tool 运行都不会自动触发检查；检查也不扩展 Webview 或 Protocol。
+- 检查只验证无上下文的 Provider 模型元数据，不发送 prompt、工作区或会话内容，不携带 Tool
+  定义或调用 Tool，也不请求模型生成。结果按认证、模型存在性、流式输出、Tool Calling 和
+  所需能力分别显示“支持”“不支持”或“未知”；只有官方元数据或明确的无副作用探测能证明
+  支持/不支持，无法可靠判断时必须显示“未知”，不能把配置声明、模型名称、`generateContent`
+  或一次 HTTP 200 猜成能力事实。OpenAI 元数据没有 Tool Calling/流式字段，因此两项未知；
+  Gemini 只有严格有效且完整的 `supportedGenerationMethods` 含 `streamGenerateContent` 时才
+  显示流式支持，完整列表缺失时显示不支持，无法确认完整性时显示未知；Tool Calling 没有
+  官方字段时始终未知。OpenAI-Compatible 只对已验证配置端点按 `models/{encodedModelId}` 的
+  有界 GET 契约检查；远端仅使用现有配置要求的 Bearer 认证，loopback 无 key 时不发送认证，
+  不把 Provider 名称当作 OpenAI 行为。其最小响应必须是含匹配 `id` 的有界 JSON，能力全部
+  未知；专用 Provider 的自定义端点不探测并显示未知。所需能力任一不支持则不支持，全部支持
+  才支持，否则未知。
+- 结果消息只说明 Provider、模型和固定安全错误类别：配置错误、认证失败、模型不存在、限流、超时、
+  网络不可用、响应格式错误、已取消或未知。不得显示原始第三方错误、响应正文、请求头、
+  授权材料、Secret、端点 URL 或内部堆栈。自定义端点明确显示能力未知并提示用户按其服务文档
+  验证，不因“OpenAI-Compatible”名称假定 OpenAI 行为。
+- 检查有固定超时、无自动重试；取消后不显示成功，不发起后续请求，不写入配置。检查失败、
+  取消或未知均保留原 Provider、模型、能力和凭据状态，并提供“重试检查”或“打开设置”等
+  固定下一步。
+
 ### 2.2 日常对话与代码任务
 
 路径：输入任务 → 观察生成和工具进度 → 必要时取消 → 阅读最终结果。

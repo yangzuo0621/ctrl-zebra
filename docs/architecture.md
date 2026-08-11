@@ -200,6 +200,42 @@ This document defines the initial runtime boundaries for the CtrlZebra desktop V
   command; command IDs, VS Code objects, endpoint values, and credential material never cross the
   Webview boundary. Completion, cancellation, and failure are returned as bounded user-safe action
   outcomes, while the Host remains the only source of configuration truth.
+- T1605 adds a Host-only, user-triggered connection-check command. The command is discoverable from
+  the Command Palette and is never started by activation, Webview creation, Session recovery, chat,
+  or a Tool. It reads the already validated active Provider and model configuration, obtains the
+  matching credential only for the check, and sends at most one metadata-only request to an endpoint
+  whose request shape is covered by the current official Provider contract. The request contains no
+  prompt, instructions, workspace URI or text, Session/message history, Tool declaration, Tool input
+  or result, and it cannot execute a model generation or Tool side effect. The dedicated routes are
+  OpenAI `GET /v1/models/{model}` with `Authorization: Bearer <key>` and Gemini
+  `GET /v1beta/models/{model}` with `x-goog-api-key: <key>`; both use one strictly validated model
+  path segment encoded exactly once, an empty body, `Accept` plus the required authorization header,
+  and no credential in a query string. For OpenAI-Compatible, the validated normalized endpoint is
+  the base URL owned by the existing configuration contract; the check appends exactly one
+  `models/{encodedModelId}` path segment (preserving the base path and adding one separator). The
+  request is `GET` with an empty body, `Accept: application/json`, redirects disabled, and no query
+  or cookie credential. A remote endpoint (`requiresApiKey`) receives exactly one
+  `Authorization: Bearer <key>` header; an explicit loopback endpoint may omit the header when no
+  key is configured and uses it when a key is present. No other auth form is accepted. The Provider
+  name never supplies an undocumented OpenAI assumption; a dedicated Provider custom endpoint has
+  no official route and reports unknown without a request.
+- The check returns an internal bounded report with tri-state facts for authentication, model
+  existence, text streaming, Tool Calling, and the required capabilities. OpenAI's documented model
+  retrieve metadata has no Tool Calling or streaming fields, so a successful response proves neither
+  and both remain unknown. Gemini may report streaming as supported only when a strictly validated
+  complete `supportedGenerationMethods` list contains `streamGenerateContent`; a documented complete
+  list that omits it proves unsupported, while an absent, malformed, or non-complete field remains
+  unknown. Neither `generateContent` nor a successful status proves Tool Calling; absent Tool Calling
+  metadata remains unknown. The OpenAI-Compatible response contract is deliberately minimal: a
+  bounded JSON object must contain an `id` string exactly equal to the configured model ID; unknown
+  fields are discarded and no capability field is recognized, so all compatible capabilities remain
+  unknown. Missing/mismatched `id` is malformed rather than evidence of model absence. The aggregate
+  required-capability fact is unsupported when any required capability is unsupported, supported only
+  when all are supported, and unknown otherwise. These
+  rules apply only to official metadata or a documented, side-effect-free probe; the check never
+  infers a capability from a model name or HTTP 200. It does not mutate Provider, endpoint, model,
+  capabilities, or SecretStorage configuration. Cancellation and timeout close the operation and
+  prevent late notifications or follow-up requests; the check has no automatic retry.
 - Version `1` is the first Provider configuration format, so there is no legacy data to migrate.
   Future changes to identifiers, setting names, normalized shapes, defaults, or Secret names must
   define an explicit version transition. Migration reads exact prior keys through VS Code

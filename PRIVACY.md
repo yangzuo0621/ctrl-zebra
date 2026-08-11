@@ -74,6 +74,34 @@ OpenAI-Compatible and custom endpoints are not queried automatically because the
 data handling are not covered by the official Provider guarantees; users enter those model IDs
 manually. Cancelling or failing discovery leaves the existing model setting unchanged.
 
+## User-triggered Provider connection checks
+
+When a user explicitly runs the Provider connection-check command, the Extension Host may send one
+bounded, metadata-only request to the documented model-metadata endpoint for the active OpenAI or
+Gemini configuration. OpenAI uses `GET /v1/models/{model}` with `Authorization: Bearer <key>`;
+Gemini uses `GET /v1beta/models/{model}` with `x-goog-api-key: <key>`. The selected model is one
+strictly validated path segment encoded exactly once; the request has an empty body, only `Accept`
+and the required authorization header, and never places a key in a query string. It contains no
+prompt or instructions, workspace path or source text, Session/messages, Tool definition, Tool
+input/result, or other model context, and it does not ask the model to generate output or execute a
+Tool. The response is used transiently to classify authentication and model existence and only
+explicitly documented capability fields; unsupported or ambiguous capability facts are shown as
+unknown rather than inferred. OpenAI retrieve metadata has no Tool Calling or streaming fields;
+Gemini streaming is supported only from a strict complete `supportedGenerationMethods` list containing
+`streamGenerateContent`, with no Tool Calling inference from `generateContent` or HTTP 200.
+
+OpenAI-Compatible endpoints use the validated normalized configured base URL and an explicitly bounded
+`GET` path formed by preserving its base path and appending exactly one `models/{encodedModelId}`
+segment. Remote endpoints receive one `Authorization: Bearer <key>` header; explicit loopback
+endpoints may omit that header when no key is configured and use it when a key is present. No query
+or cookie credential is sent, and the minimal response must contain a matching bounded `id` fact;
+capabilities remain unknown. Dedicated Provider custom endpoints are not assumed to implement an
+official metadata route and are not probed. The request has a fixed timeout, no retry,
+and cancellation stops the local flow without changing configuration. Response bodies, headers,
+authorization material, SDK errors, and endpoint details are not persisted, logged, sent to the
+Webview, or retained by CtrlZebra. The configured provider service may observe and retain the
+metadata request under its own terms and privacy policy.
+
 ## Workspace access and commands
 
 Read tools access only canonical UTF-8 text inside the single selected workspace. File changes and

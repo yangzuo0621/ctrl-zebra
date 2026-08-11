@@ -539,6 +539,65 @@ entry, not only the intermediate object.
   clears or rewrites Provider, endpoint, capability, or SecretStorage values. A configuration write
   failure reports fixed user-safe text and preserves the prior model value.
 
+## Provider Connection Check Boundary (T1605)
+
+- Connection checks are Extension Host-only Command Palette workflows. The stable command is
+  `ctrlZebra.checkProviderConnection`; it runs only after an explicit user invocation and is not a
+  Webview action, Protocol message, Session/Run operation, model Tool, activation hook, or background
+  health poll. A check reads the active, validated Provider configuration and model identifier, then
+  reads the matching SecretStorage value only for the one request. It never writes Provider,
+  endpoint, model, capability, or SecretStorage configuration.
+- The request is metadata-only and contains only the active Provider/model identifier plus the
+  required authorization material in the Provider-defined header. It has no body containing a prompt
+  or instructions, no workspace URI or text, Session/message history, Tool declaration, Tool input or
+  result, and it cannot trigger model generation or a Tool side effect. Dedicated OpenAI and Gemini
+  checks use only their documented [OpenAI model retrieve](https://developers.openai.com/api/reference/resources/models/methods/retrieve)
+  route (`GET /v1/models/{model}`, `Authorization: Bearer <key>`) and
+  [Gemini `models.get`](https://ai.google.dev/api/models#method:-models.get) route
+  (`GET /v1beta/models/{model}`, `x-goog-api-key: <key>`). The model is one strictly validated path
+  segment encoded exactly once; both requests have an empty body, only `Accept` plus the required
+  authorization header, no query credential, and redirects disabled. For OpenAI-Compatible, the
+  validated normalized endpoint is the base URL from the existing configuration contract; the Host
+  appends exactly one `models/{encodedModelId}` segment after preserving the base path and adding one
+  separator. The request is `GET` with an empty body, `Accept: application/json`, redirects disabled,
+  and no query or cookie credential. A remote endpoint (`requiresApiKey`) receives exactly one
+  `Authorization: Bearer <key>` header. An explicit loopback endpoint may omit that header when no
+  key is configured and uses it when a key is present. No other auth form is accepted. A dedicated
+  Provider custom endpoint has no official route and reports unknown without a request; the Provider
+  name never grants an undocumented OpenAI assumption.
+- The Host bounds the response before parsing (64 KiB maximum body, with a declared length rejected
+  above that limit), accepts only the documented model identity and explicitly documented capability
+  fields, and discards all other metadata. It uses one operation-wide `AbortSignal`, a fixed 10-second
+  timeout, and no retry. Cancellation is distinct from timeout and provider failure; after any
+  terminal result no late message, notification, retry, or other side effect is allowed.
+- Authentication, model existence, text streaming, Tool Calling, and the required capabilities are
+  represented as `supported`, `unsupported`, or `unknown`. `supported` or `unsupported` is allowed
+  only when official metadata or an explicitly documented, side-effect-free probe proves the fact;
+  missing metadata, custom endpoints, and ambiguous responses remain `unknown`. OpenAI retrieve
+  metadata has no Tool Calling or streaming fields, so a successful response leaves both unknown.
+  Gemini streaming is supported only for a strict, bounded, complete `supportedGenerationMethods`
+  list containing `streamGenerateContent`; omission proves unsupported only when the official
+  complete-list semantics are valid, otherwise it remains unknown. No `generateContent` field or
+  HTTP 200 may be used to infer Tool Calling. The aggregate required-capability fact is unsupported
+  when any required capability is unsupported, supported only when all are supported, and unknown
+  otherwise. The OpenAI-Compatible response contract is a bounded JSON object with a required `id`
+  string exactly equal to the configured model ID. Unknown fields are discarded, no capability field
+  is recognized, and all compatible capability facts remain unknown; missing or mismatched `id` is a
+  malformed response, not evidence of model absence. A successful metadata response proves
+  authentication and model existence only when the Provider contract says so; it does not imply
+  streaming or Tool Calling support.
+- HTTP status classification is structural and allowlisted: `401`/`403` are authentication failure,
+  `404` is model not found, `429` is rate limited, `408`/`504` are timeout, other `5xx` and transport
+  failures are network/unavailable, and other statuses are unknown or invalid response according to
+  the documented route. The classifier never branches on response text, headers, URL, or SDK error
+  messages.
+- User-facing outcomes and diagnostics use fixed safe categories: authentication failure, model not
+  found, rate limited, timeout, cancelled, network/unavailable, malformed response, configuration,
+  and unknown. Raw response bodies, headers, authorization values, endpoint URLs (including query or
+  fragment), SDK errors, stack traces, and SecretStorage values never enter Webview state, messages,
+  persistence, fixtures, logs, diagnostics, or notifications. Logs may retain only the stable
+  Provider identifier, outcome category, and bounded duration.
+
 ## Controlled MCP Security Boundary
 
 This boundary applies to the exact stage 14 MCP `2026-07-28` contract. MCP Servers, descriptors,
