@@ -232,13 +232,14 @@ schema, and snapshot limits and then evaluated one descriptor at a time.
   all-rejected discovery emits neither the combined nor the unchanged legacy catalog and consumes
   no sequence; overflow closes the generation and requires explicit reconnect. The sequence-aware
   Webview keeps a committed publication record and only a transient pending candidate during
-  synchronous validation. A lower sequence than either watermark is a stale no-op. At an equal
-  committed or pending sequence, an exact duplicate (same Server, generation, sequence, request ID,
-  and equivalent validated catalog payload) is an idempotent no-op and is never re-staged or
-  committed. A same-sequence candidate with any differing tuple value or payload is discarded with
-  the stable local `conflicting-catalog-sequence` classification, leaving both records and the
-  current snapshot unchanged. A higher sequence commits only after validation as one atomic
-  replacement; invalid validation clears only pending. Both records reset on disconnect or
+  synchronous validation. A message for a different Server or generation is ignored before
+  watermark handling. Within the active scope, a lower sequence than either watermark is a stale
+  no-op. At an equal committed or pending sequence, an exact duplicate (same Server, generation,
+  sequence, request ID, and equivalent validated catalog payload) is an idempotent no-op and is
+  never re-staged or committed. A same-scope, same-sequence candidate with a differing request ID or
+  payload is discarded with the stable local `conflicting-catalog-sequence` classification, leaving
+  both records and the current snapshot unchanged. A higher sequence commits only after validation
+  as one atomic replacement; invalid validation clears only pending. Both records reset on disconnect or
   generation change. There is no two-half
   staging slot or timer. The superseded
   `extension/mcp-tool-rejections` projection is non-authoritative and is not emitted by the amended

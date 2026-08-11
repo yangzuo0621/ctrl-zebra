@@ -547,12 +547,14 @@ port.
   keeps the committed publication record and a transient pending candidate for the current
   Server/generation. The committed record includes its request ID and validated catalog payload;
   the pending candidate exists only during synchronous validation and is never rendered or exposed
-  as partial state. A lower sequence than either watermark is a stale no-op. At an equal committed
-  or pending sequence, an exact duplicate (same Server, generation, sequence, request ID, and
-  equivalent validated catalog payload) is an idempotent no-op: it is ignored and never re-staged or
-  committed. A same-sequence candidate with any differing tuple value or payload is discarded with
-  the stable local `conflicting-catalog-sequence` classification, leaving both watermarks and the
-  current snapshot unchanged. A higher sequence sets the pending candidate, and only after strict
+  as partial state. A message for a different Server or generation is ignored before watermark
+  handling. Within the active scope, a lower sequence than either watermark is a stale no-op. At an
+  equal committed or pending sequence, an exact duplicate (same Server, generation, sequence,
+  request ID, and equivalent validated catalog payload) is an idempotent no-op: it is ignored and
+  never re-staged or committed. A same-scope, same-sequence candidate with a differing request ID
+  or payload is discarded with the stable local `conflicting-catalog-sequence` classification,
+  leaving both watermarks and the current snapshot unchanged. A higher sequence sets the pending
+  candidate, and only after strict
   validation succeeds does it atomically replace the complete catalog and advance the committed
   watermark; invalid validation clears only the pending candidate. A generation change/disconnect
   clears pending and committed records; late messages from the prior scope cannot cross that fence.
