@@ -1,5 +1,9 @@
-import { protocolVersion } from "@ctrl-zebra/protocol";
-import { describe, expect, it, vi } from "vitest";
+import {
+  type McpToolCatalogDto,
+  type McpToolRejectionCatalogDto,
+  protocolVersion,
+} from "@ctrl-zebra/protocol";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createMcpStore } from "./mcp-store.js";
 import type { WebviewHost } from "./vscode-api.js";
@@ -40,6 +44,8 @@ function host(): WebviewHost {
 }
 
 describe("unified MCP feature store", () => {
+  afterEach(() => vi.useRealTimers());
+
   it("gates Server generations and preserves only immutable draft context on disconnect", () => {
     const api = host();
     const ids = ["connect", "read", "attach", "preview", "confirm", "disconnect"];
@@ -214,5 +220,181 @@ describe("unified MCP feature store", () => {
       .getState()
       .receive({ protocolVersion, type: "extension/mcp-resources", requestId: "refresh", catalog });
     expect(store.getState().selectedResourceKey).toBe("template:memory://{name}");
+  });
+
+  it("atomically commits an out-of-order Tool pair and retains the last pair across refresh races", () => {
+    const store = createMcpStore(host(), () => "request");
+    store.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-connection",
+      requestId: "initial",
+      connection: {
+        status: "connected",
+        server,
+        generation: 1,
+        configurationStale: false,
+        protocolVersion: "2026-07-28",
+        capabilities,
+      },
+    });
+    const tools: McpToolCatalogDto = {
+      server,
+      generation: 1,
+      tools: [
+        {
+          server,
+          generation: 1,
+          registryName: "mcp_local_fixture_lookup",
+          mcpToolName: "lookup",
+        },
+      ],
+    };
+    const rejections: McpToolRejectionCatalogDto = {
+      server,
+      generation: 1,
+      rejectedTools: [{ mcpToolName: "unsafe", reason: "forbidden-keyword" as const }],
+      rejectedToolsTruncated: false,
+    };
+
+    store.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-tool-rejections",
+      requestId: "catalog-1",
+      catalog: rejections,
+    });
+    expect(store.getState().tools).toBeUndefined();
+    store.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-tools",
+      requestId: "catalog-1",
+      catalog: tools,
+    });
+    expect(store.getState().tools).toEqual(tools);
+    expect(store.getState().toolRejections).toEqual(rejections);
+
+    const refreshedTools: McpToolCatalogDto = { ...tools, tools: [] };
+    store.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-tools",
+      requestId: "catalog-2",
+      catalog: refreshedTools,
+    });
+    expect(store.getState().tools).toEqual(tools);
+    store.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-tool-rejections",
+      requestId: "catalog-1",
+      catalog: rejections,
+    });
+    expect(store.getState().tools).toEqual(tools);
+    store.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-tool-rejections",
+      requestId: "catalog-2",
+      catalog: { ...rejections, rejectedTools: [] },
+    });
+    store.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-tools",
+      requestId: "catalog-2",
+      catalog: refreshedTools,
+    });
+    expect(store.getState().tools).toEqual(refreshedTools);
+    expect(store.getState().toolRejections?.rejectedTools).toEqual([]);
+  });
+
+  it("discards an unmatched half at the fixed deadline and on generation change", () => {
+    vi.useFakeTimers();
+    const store = createMcpStore(host(), () => "request");
+    store.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-connection",
+      requestId: "initial",
+      connection: {
+        status: "connected",
+        server,
+        generation: 1,
+        configurationStale: false,
+        protocolVersion: "2026-07-28",
+        capabilities,
+      },
+    });
+    const tools: McpToolCatalogDto = {
+      server,
+      generation: 1,
+      tools: [],
+    };
+    store.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-tools",
+      requestId: "expired",
+      catalog: tools,
+    });
+    vi.advanceTimersByTime(1_000);
+    store.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-tool-rejections",
+      requestId: "expired",
+      catalog: { server, generation: 1, rejectedTools: [], rejectedToolsTruncated: false },
+    });
+    expect(store.getState().tools).toBeUndefined();
+
+    store.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-connection",
+      requestId: "refresh",
+      connection: {
+        status: "connected",
+        server,
+        generation: 2,
+        configurationStale: false,
+        protocolVersion: "2026-07-28",
+        capabilities,
+      },
+    });
+    store.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-tool-rejections",
+      requestId: "expired",
+      catalog: { server, generation: 1, rejectedTools: [], rejectedToolsTruncated: false },
+    });
+    expect(store.getState().tools).toBeUndefined();
+  });
+
+  it("clears staged Tool halves on disconnect and ignores late messages", () => {
+    const store = createMcpStore(host(), () => "request");
+    store.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-connection",
+      requestId: "initial",
+      connection: {
+        status: "connected",
+        server,
+        generation: 1,
+        configurationStale: false,
+        protocolVersion: "2026-07-28",
+        capabilities,
+      },
+    });
+    store.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-tools",
+      requestId: "late",
+      catalog: { server, generation: 1, tools: [] },
+    });
+    store.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-connection",
+      requestId: "disconnect",
+      connection: { status: "disconnected", server, generation: 1, configurationStale: false },
+    });
+    store.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-tool-rejections",
+      requestId: "late",
+      catalog: { server, generation: 1, rejectedTools: [], rejectedToolsTruncated: false },
+    });
+    expect(store.getState().tools).toBeUndefined();
+    expect(store.getState().toolRejections).toBeUndefined();
   });
 });

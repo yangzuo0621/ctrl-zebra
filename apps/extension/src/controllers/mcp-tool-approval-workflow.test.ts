@@ -153,6 +153,8 @@ function createFixture() {
           schemaId: preparation.schemaId,
         },
       ],
+      rejectedTools: [],
+      rejectedToolsTruncated: false,
       registry,
     }),
   });

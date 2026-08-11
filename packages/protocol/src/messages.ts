@@ -9,6 +9,7 @@ import { checkpointIdSchema, checkpointSummarySchema } from "./checkpoint.js";
 import {
   mcpConnectionSchema,
   mcpToolCatalogSchema,
+  mcpToolRejectionCatalogSchema,
   toolStateSourceSchema,
 } from "./mcp-connection.js";
 import {
@@ -198,6 +199,11 @@ export const mcpToolsMessageSchema = z.strictObject({
   ...protocolEnvelopeSchema.shape,
   type: z.literal("extension/mcp-tools"),
   catalog: mcpToolCatalogSchema,
+});
+export const mcpToolRejectionsMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("extension/mcp-tool-rejections"),
+  catalog: mcpToolRejectionCatalogSchema,
 });
 
 export const mcpResourceReadMessageSchema = z.strictObject({
@@ -600,6 +606,7 @@ export const extensionToWebviewMessageSchema = z.union([
   checkpointErrorMessageSchema,
   mcpConnectionMessageSchema,
   mcpToolsMessageSchema,
+  mcpToolRejectionsMessageSchema,
   mcpResourcesMessageSchema,
   mcpResourcePreviewMessageSchema,
   mcpPromptsMessageSchema,
@@ -627,6 +634,7 @@ export type McpDisconnectMessage = z.infer<typeof mcpDisconnectMessageSchema>;
 export type McpOpenSettingsMessage = z.infer<typeof mcpOpenSettingsMessageSchema>;
 export type McpConnectionMessage = z.infer<typeof mcpConnectionMessageSchema>;
 export type McpToolsMessage = z.infer<typeof mcpToolsMessageSchema>;
+export type McpToolRejectionsMessage = z.infer<typeof mcpToolRejectionsMessageSchema>;
 export type McpResourceReadMessage = z.infer<typeof mcpResourceReadMessageSchema>;
 export type McpResourceAttachMessage = z.infer<typeof mcpResourceAttachMessageSchema>;
 export type McpResourceDetachMessage = z.infer<typeof mcpResourceDetachMessageSchema>;

@@ -368,6 +368,8 @@ function createHarness() {
         server: context.server,
         generation: context.generation,
         tools: [],
+        rejectedTools: [],
+        rejectedToolsTruncated: false,
         registry: new ToolRegistry(),
       }),
     ),

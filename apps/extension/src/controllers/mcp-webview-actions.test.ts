@@ -1,3 +1,4 @@
+import { ToolRegistry } from "@ctrl-zebra/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { McpConnectionSnapshot } from "./mcp-connection-controller.js";
@@ -60,6 +61,73 @@ describe("MCP Webview actions", () => {
     actions.refresh("ping-1");
     actions.refresh("ping-2");
     expect(post.mock.calls.map(([message]) => message.requestId)).toEqual(["ping-1", "ping-2"]);
+    actions.dispose();
+  });
+
+  it("publishes accepted Tools and bounded rejections as a matching pair", () => {
+    const server = { serverId: "local_fixture", displayName: "Local fixture" } as const;
+    const snapshot: McpConnectionSnapshot = {
+      status: "connected",
+      generation: 3,
+      server,
+      configurationStale: false,
+      connection: {
+        status: "connected",
+        protocolVersion: "2026-07-28",
+        capabilities: {
+          tools: true,
+          toolsListChanged: false,
+          resources: false,
+          resourceTemplates: false,
+          resourcesListChanged: false,
+          prompts: false,
+          promptsListChanged: false,
+        },
+      },
+    };
+    const tools = {
+      server,
+      generation: 3,
+      tools: [
+        {
+          registryName: "mcp_local_fixture_lookup",
+          mcpToolName: "lookup",
+          schemaId: "schema-1",
+        },
+      ],
+      rejectedTools: [{ mcpToolName: "unsafe", reason: "schema-invalid" as const }],
+      rejectedToolsTruncated: false,
+      registry: new ToolRegistry(),
+    };
+    const post = vi.fn();
+    const actions = new McpWebviewActions({
+      connection: {
+        getState: () => snapshot,
+        getToolSnapshot: () => tools,
+        getResourceCatalog: () => undefined,
+        getPromptCatalog: () => undefined,
+        connect: async () => snapshot,
+        disconnect: async () => snapshot,
+      },
+      openSettings: vi.fn(),
+    });
+    actions.bind(post);
+    actions.refresh("catalog");
+
+    const toolMessages = post.mock.calls
+      .map(([message]) => message)
+      .filter(
+        (message) =>
+          message.type === "extension/mcp-tools" ||
+          message.type === "extension/mcp-tool-rejections",
+      );
+    expect(toolMessages).toHaveLength(2);
+    expect(toolMessages.map((message) => message.requestId)).toEqual(["catalog", "catalog"]);
+    expect(toolMessages[0]).toMatchObject({ type: "extension/mcp-tools" });
+    expect(toolMessages[1]).toMatchObject({
+      type: "extension/mcp-tool-rejections",
+      catalog: { rejectedTools: [{ mcpToolName: "unsafe", reason: "schema-invalid" }] },
+    });
     actions.dispose();
   });
 });

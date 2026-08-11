@@ -5,6 +5,8 @@ export const maxMcpListPages = 100;
 export const maxMcpListEntries = 1_000;
 export const maxMcpDescriptorBytes = 65_536;
 export const maxMcpListSnapshotBytes = 1_048_576;
+export const maxMcpRejectedTools = 256;
+export const maxMcpRejectedToolProjectionBytes = maxMcpListSnapshotBytes;
 export const maxMcpToolSchemaBytes = 65_536;
 export const maxMcpToolSnapshotSchemaBytes = 524_288;
 export const maxMcpToolSchemaDepth = 32;
@@ -44,6 +46,15 @@ export type McpClientErrorCode =
   | "prompt-unsupported"
   | "termination-unconfirmed"
   | "internal";
+
+/** Stable, non-sensitive classifications for a Tool omitted from a mixed snapshot. */
+export type McpToolRejectionReason =
+  | "forbidden-keyword"
+  | "unknown-keyword"
+  | "invalid-reference"
+  | "non-object-root"
+  | "schema-invalid"
+  | "limit-exceeded";
 
 export interface McpClientError {
   readonly code: McpClientErrorCode;

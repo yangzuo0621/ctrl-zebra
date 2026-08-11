@@ -6,6 +6,7 @@ import {
   mcpPromptCatalogSchema,
   mcpResourceCatalogSchema,
   mcpToolCatalogSchema,
+  mcpToolRejectionCatalogSchema,
   protocolVersion,
 } from "@ctrl-zebra/protocol";
 
@@ -103,10 +104,22 @@ export class McpWebviewActions {
           description,
         })),
       });
-      const signature = JSON.stringify(catalog);
+      const rejectionCatalog = mcpToolRejectionCatalogSchema.parse({
+        server: tools.server,
+        generation: tools.generation,
+        rejectedTools: tools.rejectedTools,
+        rejectedToolsTruncated: tools.rejectedToolsTruncated,
+      });
+      const signature = JSON.stringify({ catalog, rejectionCatalog });
       if (force || signature !== this.#toolSignature) {
         this.#toolSignature = signature;
         post({ protocolVersion, type: "extension/mcp-tools", requestId, catalog });
+        post({
+          protocolVersion,
+          type: "extension/mcp-tool-rejections",
+          requestId,
+          catalog: rejectionCatalog,
+        });
       }
     }
     const resources = this.#connection.getResourceCatalog();

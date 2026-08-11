@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   mcpConnectionSchema,
   mcpToolCatalogSchema,
+  mcpToolRejectionCatalogSchema,
   toolStateSourceSchema,
 } from "./mcp-connection.js";
 import {
@@ -49,6 +50,14 @@ describe("MCP connection Protocol", () => {
       }).tools,
     ).toHaveLength(1);
     expect(
+      mcpToolRejectionCatalogSchema.parse({
+        server,
+        generation: 2,
+        rejectedTools: [{ mcpToolName: "unsafe", reason: "forbidden-keyword" }],
+        rejectedToolsTruncated: false,
+      }),
+    ).toMatchObject({ rejectedTools: [{ mcpToolName: "unsafe" }] });
+    expect(
       toolStateSourceSchema.parse({ kind: "mcp", server, generation: 2, mcpToolName: "lookup" }),
     ).toMatchObject({ kind: "mcp" });
     for (const type of [
@@ -90,6 +99,60 @@ describe("MCP connection Protocol", () => {
         type: "webview/mcp-resource-detach",
         requestId: "detach",
         snapshotId: "",
+      }).success,
+    ).toBe(false);
+    expect(
+      extensionToWebviewMessageSchema.safeParse({
+        protocolVersion,
+        type: "extension/mcp-tool-rejections",
+        requestId: "reject",
+        catalog: {
+          server,
+          generation: 2,
+          rejectedTools: [{ mcpToolName: "unsafe", reason: "not-a-reason" }],
+          rejectedToolsTruncated: false,
+        },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("accepts the additive rejection message with the matching strict envelope", () => {
+    const message = {
+      protocolVersion,
+      type: "extension/mcp-tool-rejections",
+      requestId: "catalog",
+      catalog: {
+        server,
+        generation: 2,
+        rejectedTools: [{ mcpToolName: "unsafe", reason: "schema-invalid" }],
+        rejectedToolsTruncated: false,
+      },
+    } as const;
+    expect(extensionToWebviewMessageSchema.parse(message)).toEqual(message);
+    expect(
+      extensionToWebviewMessageSchema.safeParse({ ...message, requestId: "catalog", extra: true })
+        .success,
+    ).toBe(false);
+  });
+
+  it("bounds rejection names by well-formed Unicode and serialized projection bytes", () => {
+    expect(
+      mcpToolRejectionCatalogSchema.safeParse({
+        server,
+        generation: 2,
+        rejectedTools: [{ mcpToolName: "\ud800", reason: "schema-invalid" }],
+        rejectedToolsTruncated: false,
+      }).success,
+    ).toBe(false);
+    expect(
+      mcpToolRejectionCatalogSchema.safeParse({
+        server,
+        generation: 2,
+        rejectedTools: Array.from({ length: 256 }, (_, index) => ({
+          mcpToolName: `${String(index)}${"x".repeat(65_000)}`,
+          reason: "schema-invalid" as const,
+        })),
+        rejectedToolsTruncated: true,
       }).success,
     ).toBe(false);
   });

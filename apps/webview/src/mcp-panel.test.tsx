@@ -67,6 +67,17 @@ describe("MCP panel", () => {
         ],
       },
     });
+    store.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-tool-rejections",
+      requestId: "catalog",
+      catalog: {
+        server,
+        generation: 1,
+        rejectedTools: [],
+        rejectedToolsTruncated: false,
+      },
+    });
     render(<McpPanel store={store} />);
     const disclosure = screen.getByText("MCP Server and context").closest("details");
     expect(disclosure).not.toHaveAttribute("open");

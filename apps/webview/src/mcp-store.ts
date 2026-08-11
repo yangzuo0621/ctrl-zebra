@@ -10,6 +10,7 @@ import type {
   McpResourceSelectionDto,
   McpResourceSnapshotDto,
   McpToolCatalogDto,
+  McpToolRejectionCatalogDto,
 } from "@ctrl-zebra/protocol";
 import { createStore, type StoreApi } from "zustand/vanilla";
 
@@ -19,6 +20,7 @@ import type { WebviewHost } from "./vscode-api.js";
 export interface McpState {
   readonly connection: McpConnectionDto;
   readonly tools?: McpToolCatalogDto;
+  readonly toolRejections?: McpToolRejectionCatalogDto;
   readonly resources?: McpResourceCatalogDto;
   readonly prompts?: McpPromptCatalogDto;
   readonly selectedResourceKey?: string;
@@ -68,6 +70,52 @@ export function createMcpStore(
   let connectionRequest: string | undefined;
   let resourceRequest: string | undefined;
   let promptRequest: string | undefined;
+  let pendingToolPair:
+    | {
+        readonly requestId: string;
+        readonly serverId: string;
+        readonly generation: number;
+        tools?: McpToolCatalogDto;
+        rejections?: McpToolRejectionCatalogDto;
+        timer: ReturnType<typeof setTimeout>;
+      }
+    | undefined;
+
+  const clearPendingToolPair = (): void => {
+    if (pendingToolPair !== undefined) clearTimeout(pendingToolPair.timer);
+    pendingToolPair = undefined;
+  };
+
+  const stageToolPart = (
+    setState: StoreApi<McpState>["setState"],
+    requestId: string,
+    value: McpToolCatalogDto | McpToolRejectionCatalogDto,
+  ): void => {
+    const serverId = value.server.serverId;
+    const generation = value.generation;
+    if (
+      pendingToolPair !== undefined &&
+      (pendingToolPair.requestId !== requestId ||
+        pendingToolPair.serverId !== serverId ||
+        pendingToolPair.generation !== generation)
+    ) {
+      clearPendingToolPair();
+    }
+    if (pendingToolPair === undefined) {
+      const timer = setTimeout(() => {
+        pendingToolPair = undefined;
+      }, 1_000);
+      pendingToolPair = { requestId, serverId, generation, timer };
+    }
+    if ("tools" in value) pendingToolPair.tools = value;
+    else pendingToolPair.rejections = value;
+    if (pendingToolPair.tools !== undefined && pendingToolPair.rejections !== undefined) {
+      const pair = pendingToolPair;
+      clearPendingToolPair();
+      setState({ tools: pair.tools, toolRejections: pair.rejections });
+    }
+  };
+
   return createStore<McpState>()((set, get) => ({
     connection: disconnected,
     resourceArguments: {},
@@ -84,6 +132,7 @@ export function createMcpStore(
       connectionRequest = createRequestId();
       resourceRequest = undefined;
       promptRequest = undefined;
+      clearPendingToolPair();
       set({ busy: "disconnecting", announcement: strings.mcpAnnouncements.disconnecting });
       host.disconnectMcp?.(connectionRequest);
     },
@@ -229,6 +278,7 @@ export function createMcpStore(
     clearDraft() {
       resourceRequest = undefined;
       promptRequest = undefined;
+      clearPendingToolPair();
       set({
         attachments: [],
         confirmations: [],
@@ -242,6 +292,7 @@ export function createMcpStore(
       if (message.type === "extension/mcp-connection") {
         if (connectionRequest !== undefined && message.requestId !== connectionRequest) return;
         if (message.requestId === connectionRequest) connectionRequest = undefined;
+        clearPendingToolPair();
         const active = message.connection.status === "connected";
         set({
           connection: message.connection,
@@ -252,7 +303,15 @@ export function createMcpStore(
         return;
       }
       if (message.type === "extension/mcp-tools") {
-        if (sameGeneration(get().connection, message.catalog)) set({ tools: message.catalog });
+        if (sameGeneration(get().connection, message.catalog)) {
+          stageToolPart(set, message.requestId, message.catalog);
+        }
+        return;
+      }
+      if (message.type === "extension/mcp-tool-rejections") {
+        if (sameGeneration(get().connection, message.catalog)) {
+          stageToolPart(set, message.requestId, message.catalog);
+        }
         return;
       }
       if (message.type === "extension/mcp-resources") {
@@ -357,6 +416,7 @@ export function createMcpStore(
 function clearLiveState() {
   return {
     tools: undefined,
+    toolRejections: undefined,
     resources: undefined,
     prompts: undefined,
     selectedResourceKey: undefined,
