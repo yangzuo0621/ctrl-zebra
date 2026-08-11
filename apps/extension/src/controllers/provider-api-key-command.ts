@@ -1,8 +1,9 @@
 import type { Disposable, InputBoxOptions, MessageOptions } from "vscode";
 
-import {
-  type ApiKeySecretStorage,
-  ApiKeySecretStorageError,
+import type {
+  ApiKeySecretStorage,
+  ProviderApiKeyPresence,
+  ProviderApiKeyPresenceReader,
 } from "../adapters/api-key-secret-storage.js";
 import type { ProviderId } from "../adapters/provider-configuration.js";
 import type { ProviderOnboardingActionResult } from "./provider-onboarding-controller.js";
@@ -10,14 +11,24 @@ import type { ProviderOnboardingActionResult } from "./provider-onboarding-contr
 export const saveOpenAIApiKeyCommandId = "ctrlZebra.saveOpenAIApiKey";
 export const saveGeminiApiKeyCommandId = "ctrlZebra.saveGeminiApiKey";
 export const saveOpenAICompatibleApiKeyCommandId = "ctrlZebra.saveOpenAICompatibleApiKey";
+export const rotateOpenAIApiKeyCommandId = "ctrlZebra.rotateOpenAIApiKey";
+export const rotateGeminiApiKeyCommandId = "ctrlZebra.rotateGeminiApiKey";
+export const rotateOpenAICompatibleApiKeyCommandId = "ctrlZebra.rotateOpenAICompatibleApiKey";
+export const deleteOpenAIApiKeyCommandId = "ctrlZebra.deleteOpenAIApiKey";
+export const deleteGeminiApiKeyCommandId = "ctrlZebra.deleteGeminiApiKey";
+export const deleteOpenAICompatibleApiKeyCommandId = "ctrlZebra.deleteOpenAICompatibleApiKey";
 
 const confirmSaveAction = "Replace";
+const confirmDeleteAction = "Delete";
+
+type ProviderApiKeyCommandOperation = "save" | "rotate" | "delete";
 
 interface ProviderApiKeyCommandDefinition {
   readonly provider: ProviderId;
   readonly commandId: string;
   readonly providerLabel: string;
   readonly inputProviderLabel: string;
+  readonly operation: ProviderApiKeyCommandOperation;
 }
 
 export const providerApiKeyCommandDefinitions = [
@@ -26,33 +37,141 @@ export const providerApiKeyCommandDefinitions = [
     commandId: saveOpenAIApiKeyCommandId,
     providerLabel: "OpenAI",
     inputProviderLabel: "OpenAI",
+    operation: "save",
   },
   {
     provider: "gemini",
     commandId: saveGeminiApiKeyCommandId,
     providerLabel: "Gemini",
     inputProviderLabel: "Google Gemini",
+    operation: "save",
   },
   {
     provider: "openai-compatible",
     commandId: saveOpenAICompatibleApiKeyCommandId,
     providerLabel: "OpenAI-Compatible",
     inputProviderLabel: "OpenAI-Compatible",
+    operation: "save",
   },
 ] as const satisfies readonly ProviderApiKeyCommandDefinition[];
 
+export const providerApiKeyLifecycleCommandDefinitions = [
+  ...providerApiKeyCommandDefinitions,
+  {
+    provider: "openai",
+    commandId: rotateOpenAIApiKeyCommandId,
+    providerLabel: "OpenAI",
+    inputProviderLabel: "OpenAI",
+    operation: "rotate",
+  },
+  {
+    provider: "gemini",
+    commandId: rotateGeminiApiKeyCommandId,
+    providerLabel: "Gemini",
+    inputProviderLabel: "Google Gemini",
+    operation: "rotate",
+  },
+  {
+    provider: "openai-compatible",
+    commandId: rotateOpenAICompatibleApiKeyCommandId,
+    providerLabel: "OpenAI-Compatible",
+    inputProviderLabel: "OpenAI-Compatible",
+    operation: "rotate",
+  },
+  {
+    provider: "openai",
+    commandId: deleteOpenAIApiKeyCommandId,
+    providerLabel: "OpenAI",
+    inputProviderLabel: "OpenAI",
+    operation: "delete",
+  },
+  {
+    provider: "gemini",
+    commandId: deleteGeminiApiKeyCommandId,
+    providerLabel: "Gemini",
+    inputProviderLabel: "Google Gemini",
+    operation: "delete",
+  },
+  {
+    provider: "openai-compatible",
+    commandId: deleteOpenAICompatibleApiKeyCommandId,
+    providerLabel: "OpenAI-Compatible",
+    inputProviderLabel: "OpenAI-Compatible",
+    operation: "delete",
+  },
+] as const satisfies readonly ProviderApiKeyCommandDefinition[];
+
+export interface ProviderApiKeyOperationContext {
+  readonly isCurrent: () => boolean;
+}
+
+/** Serializes credential operations per Provider without retaining credential material. */
+export class ProviderApiKeyOperationCoordinator {
+  readonly #tails = new Map<ProviderId, Promise<void>>();
+  #generation = 0;
+  #disposed = false;
+
+  run<T>(
+    provider: ProviderId,
+    operation: (context: ProviderApiKeyOperationContext) => Promise<T>,
+  ): Promise<T | undefined> {
+    const generation = this.#generation;
+    const previous = this.#tails.get(provider) ?? Promise.resolve();
+    const current = previous
+      .catch(() => undefined)
+      .then(async () => {
+        if (!this.isCurrent(generation)) return undefined;
+        try {
+          const result = await operation({ isCurrent: () => this.isCurrent(generation) });
+          return this.isCurrent(generation) ? result : undefined;
+        } catch (error) {
+          // A late UI Thenable rejection is also suppressed. While current, preserve the
+          // rejection so the Host wrapper can map it to its fixed internal failure outcome.
+          if (!this.isCurrent(generation)) return undefined;
+          throw error;
+        }
+      });
+    const settled = current.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.#tails.set(provider, settled);
+    void settled.finally(() => {
+      if (this.#tails.get(provider) === settled) {
+        this.#tails.delete(provider);
+      }
+    });
+    return current;
+  }
+
+  invalidate(): void {
+    this.#generation += 1;
+  }
+
+  dispose(): void {
+    this.#disposed = true;
+    this.invalidate();
+  }
+
+  private isCurrent(generation: number): boolean {
+    return !this.#disposed && generation === this.#generation;
+  }
+}
+
 export interface RegisterProviderApiKeyCommandsOptions {
   readonly storages: Readonly<Record<ProviderId, ApiKeySecretStorage>>;
+  readonly presence: ProviderApiKeyPresenceReader;
+  readonly coordinator?: ProviderApiKeyOperationCoordinator;
   readonly registerCommand: (
     commandId: string,
-    handler: () => Promise<ProviderOnboardingActionResult>,
+    handler: () => Promise<ProviderOnboardingActionResult | undefined>,
   ) => Disposable;
   readonly showInputBox: (options: InputBoxOptions) => Thenable<string | undefined>;
   readonly showWarningMessage: (
     message: string,
     options: MessageOptions,
-    ...items: [typeof confirmSaveAction]
-  ) => Thenable<typeof confirmSaveAction | undefined>;
+    item: string,
+  ) => Thenable<string | undefined>;
   readonly showInformationMessage: (message: string) => Thenable<unknown>;
   readonly showErrorMessage: (message: string) => Thenable<unknown>;
 }
@@ -66,51 +185,34 @@ export type RegisterProviderApiKeyCommandOptions = Omit<
 
 export function registerProviderApiKeyCommand(
   provider: ProviderId,
-  {
-    storage,
-    registerCommand,
-    showInputBox,
-    showWarningMessage,
-    showInformationMessage,
-    showErrorMessage,
-  }: RegisterProviderApiKeyCommandOptions,
+  options: RegisterProviderApiKeyCommandOptions,
+  operation: ProviderApiKeyCommandOperation = "save",
 ): Disposable {
-  const definition = providerApiKeyCommandDefinitions.find(
-    (candidate) => candidate.provider === provider,
+  const definition = providerApiKeyLifecycleCommandDefinitions.find(
+    (candidate) => candidate.provider === provider && candidate.operation === operation,
   );
   if (definition === undefined) {
-    throw new Error(`Unsupported provider API key command: ${provider}`);
+    throw new Error(`Unsupported provider API key command: ${provider}/${operation}`);
   }
 
-  return registerCommand(definition.commandId, () => {
-    return saveProviderApiKey({
-      definition,
-      storage,
-      showInputBox,
-      showWarningMessage,
-      showInformationMessage,
-      showErrorMessage,
-    });
+  const coordinator = options.coordinator ?? new ProviderApiKeyOperationCoordinator();
+  return options.registerCommand(definition.commandId, async () => {
+    return coordinator.run(provider, (context) =>
+      runProviderApiKeyCommand({ ...options, definition, context }),
+    );
   });
 }
 
 export function registerProviderApiKeyCommands({
-  storages,
-  registerCommand,
-  showInputBox,
-  showWarningMessage,
-  showInformationMessage,
-  showErrorMessage,
+  coordinator = new ProviderApiKeyOperationCoordinator(),
+  ...options
 }: RegisterProviderApiKeyCommandsOptions): Disposable {
-  const registrations = providerApiKeyCommandDefinitions.map(({ provider }) =>
-    registerProviderApiKeyCommand(provider, {
-      storage: storages[provider],
-      registerCommand,
-      showInputBox,
-      showWarningMessage,
-      showInformationMessage,
-      showErrorMessage,
-    }),
+  const registrations = providerApiKeyLifecycleCommandDefinitions.map(({ provider, operation }) =>
+    registerProviderApiKeyCommand(
+      provider,
+      { ...options, coordinator, storage: options.storages[provider] },
+      operation,
+    ),
   );
 
   return {
@@ -122,66 +224,253 @@ export function registerProviderApiKeyCommands({
   };
 }
 
-interface SaveProviderApiKeyOptions {
+interface RunProviderApiKeyCommandOptions extends RegisterProviderApiKeyCommandOptions {
+  readonly definition: ProviderApiKeyCommandDefinition;
+  readonly context: ProviderApiKeyOperationContext;
+}
+
+async function runProviderApiKeyCommand({
+  definition,
+  storage,
+  presence,
+  context,
+  showInputBox,
+  showWarningMessage,
+  showInformationMessage,
+  showErrorMessage,
+}: RunProviderApiKeyCommandOptions): Promise<ProviderOnboardingActionResult | undefined> {
+  if (definition.operation === "delete") {
+    return deleteProviderApiKey({
+      definition,
+      storage,
+      presence,
+      context,
+      showWarningMessage,
+      showInformationMessage,
+      showErrorMessage,
+    });
+  }
+
+  return saveOrRotateProviderApiKey({
+    definition,
+    storage,
+    presence,
+    context,
+    showInputBox,
+    showWarningMessage,
+    showInformationMessage,
+    showErrorMessage,
+  });
+}
+
+interface SaveOrRotateProviderApiKeyOptions {
   readonly definition: ProviderApiKeyCommandDefinition;
   readonly storage: ApiKeySecretStorage;
+  readonly presence: ProviderApiKeyPresenceReader;
+  readonly context: ProviderApiKeyOperationContext;
   readonly showInputBox: (options: InputBoxOptions) => Thenable<string | undefined>;
   readonly showWarningMessage: RegisterProviderApiKeyCommandsOptions["showWarningMessage"];
   readonly showInformationMessage: (message: string) => Thenable<unknown>;
   readonly showErrorMessage: (message: string) => Thenable<unknown>;
 }
 
-async function saveProviderApiKey({
+async function saveOrRotateProviderApiKey({
   definition,
   storage,
+  presence,
+  context,
   showInputBox,
   showWarningMessage,
   showInformationMessage,
   showErrorMessage,
-}: SaveProviderApiKeyOptions): Promise<ProviderOnboardingActionResult> {
+}: SaveOrRotateProviderApiKeyOptions): Promise<ProviderOnboardingActionResult | undefined> {
   const apiKey = await showInputBox({
     ignoreFocusOut: true,
     password: true,
     prompt: `Enter the ${definition.inputProviderLabel} API key to store securely on this machine.`,
-    title: `CtrlZebra: Save ${definition.providerLabel} API Key`,
+    title: `CtrlZebra: ${definition.operation === "rotate" ? "Rotate" : "Save"} ${definition.providerLabel} API Key`,
     validateInput: (value) => validateApiKey(value, definition.providerLabel),
   });
 
+  if (!context.isCurrent()) {
+    return undefined;
+  }
   if (apiKey === undefined) {
     return { status: "cancelled" };
   }
 
   const validationMessage = validateApiKey(apiKey, definition.providerLabel);
   if (validationMessage !== undefined) {
-    await showErrorMessage(validationMessage);
+    await notifyError(context, showErrorMessage, validationMessage);
     return { status: "failed", code: "configuration" };
   }
 
   const confirmation = await showWarningMessage(
-    "Saving this key will replace any saved key for this provider. Continue?",
+    definition.operation === "rotate"
+      ? "Rotating this key will replace any saved key for this provider. Continue?"
+      : "Saving this key will replace any saved key for this provider. Continue?",
     { modal: true },
     confirmSaveAction,
   );
+  if (!context.isCurrent()) {
+    return undefined;
+  }
   if (confirmation !== confirmSaveAction) {
     return { status: "cancelled" };
   }
 
+  let mutationFailed = false;
   try {
     await storage.save(apiKey);
-  } catch (error) {
-    if (error instanceof ApiKeySecretStorageError) {
-      await showErrorMessage(error.message);
+  } catch {
+    mutationFailed = true;
+  }
+
+  const reconciled = await readPresence(presence, definition.provider);
+  if (definition.operation === "save") {
+    if (mutationFailed) {
+      await notifyError(context, showErrorMessage, "Unable to save the API key.");
       return { status: "failed", code: "storage" };
     }
+    if (reconciled !== "present") {
+      await notifyError(
+        context,
+        showErrorMessage,
+        `Unable to confirm the ${definition.providerLabel} API key after saving. Try again or open Settings.`,
+      );
+      return { status: "failed", code: "storage" };
+    }
+    await notifyInformation(
+      context,
+      showInformationMessage,
+      `${definition.providerLabel} API key saved securely.`,
+    );
+    return { status: "completed" };
+  }
 
-    // Storage backends are untrusted host boundaries; never surface their error text because it
-    // could contain the submitted credential or backend details.
-    await showErrorMessage("Unable to save the API key.");
+  if (mutationFailed || reconciled !== "present") {
+    await notifyError(
+      context,
+      showErrorMessage,
+      `Unable to confirm the ${definition.providerLabel} API key after rotation. Try again or open Settings.`,
+    );
     return { status: "failed", code: "storage" };
   }
 
-  await showInformationMessage(`${definition.providerLabel} API key saved securely.`);
+  await notifyInformation(
+    context,
+    showInformationMessage,
+    `${definition.providerLabel} API key rotated securely.`,
+  );
   return { status: "completed" };
+}
+
+interface DeleteProviderApiKeyOptions {
+  readonly definition: ProviderApiKeyCommandDefinition;
+  readonly storage: ApiKeySecretStorage;
+  readonly presence: ProviderApiKeyPresenceReader;
+  readonly context: ProviderApiKeyOperationContext;
+  readonly showWarningMessage: RegisterProviderApiKeyCommandsOptions["showWarningMessage"];
+  readonly showInformationMessage: (message: string) => Thenable<unknown>;
+  readonly showErrorMessage: (message: string) => Thenable<unknown>;
+}
+
+async function deleteProviderApiKey({
+  definition,
+  storage,
+  presence,
+  context,
+  showWarningMessage,
+  showInformationMessage,
+  showErrorMessage,
+}: DeleteProviderApiKeyOptions): Promise<ProviderOnboardingActionResult | undefined> {
+  const confirmation = await showWarningMessage(
+    `Delete the saved ${definition.providerLabel} API key from this machine?`,
+    { modal: true },
+    confirmDeleteAction,
+  );
+  if (!context.isCurrent()) {
+    return undefined;
+  }
+  if (confirmation !== confirmDeleteAction) {
+    return { status: "cancelled" };
+  }
+
+  const currentPresence = await readPresence(presence, definition.provider);
+  if (!context.isCurrent()) {
+    return undefined;
+  }
+  if (currentPresence === "unavailable") {
+    await notifyError(
+      context,
+      showErrorMessage,
+      `Unable to confirm the ${definition.providerLabel} API key state. Try again or open Settings.`,
+    );
+    return { status: "failed", code: "storage" };
+  }
+  if (currentPresence === "absent") {
+    await notifyInformation(
+      context,
+      showInformationMessage,
+      `No saved ${definition.providerLabel} API key was found; nothing was deleted.`,
+    );
+    return { status: "completed" };
+  }
+
+  let mutationFailed = false;
+  try {
+    await storage.delete();
+  } catch {
+    mutationFailed = true;
+  }
+
+  const reconciled = await readPresence(presence, definition.provider);
+  if (mutationFailed || reconciled !== "absent") {
+    await notifyError(
+      context,
+      showErrorMessage,
+      `Unable to confirm deletion of the ${definition.providerLabel} API key. Try again or open Settings.`,
+    );
+    return { status: "failed", code: "storage" };
+  }
+
+  await notifyInformation(
+    context,
+    showInformationMessage,
+    `${definition.providerLabel} API key deleted.`,
+  );
+  return { status: "completed" };
+}
+
+async function readPresence(
+  presence: ProviderApiKeyPresenceReader,
+  provider: ProviderId,
+): Promise<ProviderApiKeyPresence> {
+  try {
+    return await presence.read(provider);
+  } catch {
+    return "unavailable";
+  }
+}
+
+async function notifyInformation(
+  context: ProviderApiKeyOperationContext,
+  showInformationMessage: (message: string) => Thenable<unknown>,
+  message: string,
+): Promise<void> {
+  if (context.isCurrent()) {
+    await showInformationMessage(message);
+  }
+}
+
+async function notifyError(
+  context: ProviderApiKeyOperationContext,
+  showErrorMessage: (message: string) => Thenable<unknown>,
+  message: string,
+): Promise<void> {
+  if (context.isCurrent()) {
+    await showErrorMessage(message);
+  }
 }
 
 function validateApiKey(value: string, providerLabel: string): string | undefined {

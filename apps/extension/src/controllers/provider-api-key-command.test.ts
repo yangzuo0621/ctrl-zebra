@@ -1,31 +1,43 @@
+import type { ExtensionToWebviewMessage } from "@ctrl-zebra/protocol";
 import { describe, expect, it, vi } from "vitest";
 import type { Disposable, InputBoxOptions, MessageOptions } from "vscode";
 
-import {
-  type ApiKeySecretStorage,
-  ApiKeySecretStorageError,
+import type {
+  ApiKeySecretStorage,
+  ProviderApiKeyPresence,
+  ProviderApiKeyPresenceReader,
 } from "../adapters/api-key-secret-storage.js";
 import {
+  deleteGeminiApiKeyCommandId,
+  deleteOpenAIApiKeyCommandId,
+  deleteOpenAICompatibleApiKeyCommandId,
+  ProviderApiKeyOperationCoordinator,
   providerApiKeyCommandDefinitions,
+  providerApiKeyLifecycleCommandDefinitions,
   registerProviderApiKeyCommands,
+  rotateOpenAIApiKeyCommandId,
   saveGeminiApiKeyCommandId,
   saveOpenAIApiKeyCommandId,
   saveOpenAICompatibleApiKeyCommandId,
 } from "./provider-api-key-command.js";
+import type { ProviderOnboardingActionResult } from "./provider-onboarding-controller.js";
+import { ProviderOnboardingController } from "./provider-onboarding-controller.js";
+
+const providers = ["openai", "gemini", "openai-compatible"] as const;
 
 describe("Provider API key commands", () => {
-  it("registers discoverable commands for all supported providers and owns their registrations", async () => {
-    const harness = createHarness("test-openai-api-key");
+  it("registers discoverable save, rotate, and delete commands for every provider", async () => {
+    const harness = createHarness("test-openai-compatible-api-key", ["openai-compatible"]);
     const disposable = registerProviderApiKeyCommands(harness.options);
 
-    expect([...harness.handlers.keys()]).toEqual([
-      saveOpenAIApiKeyCommandId,
-      saveGeminiApiKeyCommandId,
-      saveOpenAICompatibleApiKeyCommandId,
-    ]);
+    expect([...harness.handlers.keys()]).toEqual(
+      providerApiKeyLifecycleCommandDefinitions.map(({ commandId }) => commandId),
+    );
 
     await harness.run(saveOpenAICompatibleApiKeyCommandId);
-    expect(harness.storages["openai-compatible"].save).toHaveBeenCalledWith("test-openai-api-key");
+    expect(harness.storages["openai-compatible"].save).toHaveBeenCalledWith(
+      "test-openai-compatible-api-key",
+    );
     expect(harness.showInputBox).toHaveBeenCalledWith(
       expect.objectContaining({
         ignoreFocusOut: true,
@@ -51,7 +63,10 @@ describe("Provider API key commands", () => {
 
   it.each(
     providerApiKeyCommandDefinitions,
-  )("$provider cancels without writing or reporting success", async ({ commandId, provider }) => {
+  )("$provider save cancels without writing or reporting success", async ({
+    commandId,
+    provider,
+  }) => {
     const harness = createHarness(undefined);
     const disposable = registerProviderApiKeyCommands(harness.options);
 
@@ -79,8 +94,8 @@ describe("Provider API key commands", () => {
   });
 
   it("does not replace a saved key when overwrite confirmation is cancelled", async () => {
-    const harness = createHarness("test-openai-api-key");
-    harness.confirmation = undefined;
+    const harness = createHarness("test-openai-api-key", ["openai"]);
+    harness.setConfirmation(undefined);
     registerProviderApiKeyCommands(harness.options);
 
     await harness.run(saveOpenAIApiKeyCommandId);
@@ -92,7 +107,7 @@ describe("Provider API key commands", () => {
 
   it("maps SecretStorage failures without exposing the submitted key", async () => {
     const harness = createHarness("test-gemini-api-key");
-    harness.storages.gemini.save.mockRejectedValue(new ApiKeySecretStorageError("save"));
+    harness.storages.gemini.save.mockRejectedValue(new Error("backend contains submitted key"));
     registerProviderApiKeyCommands(harness.options);
 
     await harness.run(saveGeminiApiKeyCommandId);
@@ -102,67 +117,461 @@ describe("Provider API key commands", () => {
     expect(harness.showInformationMessage).not.toHaveBeenCalled();
   });
 
-  it("maps unexpected storage failures to fixed safe text", async () => {
+  it("rotates with one direct save and only reconciles presence after settlement", async () => {
+    const harness = createHarness("test-openai-api-key", ["openai"]);
+    registerProviderApiKeyCommands(harness.options);
+
+    await harness.run(rotateOpenAIApiKeyCommandId);
+
+    expect(harness.storages.openai.save).toHaveBeenCalledTimes(1);
+    expect(harness.presence.read).toHaveBeenCalledTimes(1);
+    expect(harness.presence.read).toHaveBeenCalledWith("openai");
+    expect(harness.showInputBox).toHaveBeenCalledWith(
+      expect.objectContaining({
+        password: true,
+        ignoreFocusOut: true,
+        title: "CtrlZebra: Rotate OpenAI API Key",
+      }),
+    );
+    expect(harness.showWarningMessage).toHaveBeenCalledWith(
+      "Rotating this key will replace any saved key for this provider. Continue?",
+      { modal: true },
+      "Replace",
+    );
+    expect(harness.showInformationMessage).toHaveBeenCalledWith("OpenAI API key rotated securely.");
+  });
+
+  it("rotates an absent key as a first save without a presence preflight", async () => {
     const harness = createHarness("test-openai-api-key");
-    harness.storages.openai.save.mockRejectedValue(
-      new Error("backend failure contains test-openai-api-key"),
+    registerProviderApiKeyCommands(harness.options);
+
+    await harness.run(rotateOpenAIApiKeyCommandId);
+
+    expect(harness.storages.openai.save).toHaveBeenCalledTimes(1);
+    expect(harness.presence.read).toHaveBeenCalledTimes(1);
+    expect(harness.showInformationMessage).toHaveBeenCalledWith("OpenAI API key rotated securely.");
+  });
+
+  it("treats a rejected rotation as indeterminate and does not compensate", async () => {
+    const submittedKey = "test-openai-api-key";
+    const harness = createHarness(submittedKey, ["openai"]);
+    harness.storages.openai.save.mockRejectedValue(new Error("secret backend failure"));
+    registerProviderApiKeyCommands(harness.options);
+
+    await harness.run(rotateOpenAIApiKeyCommandId);
+
+    expect(harness.storages.openai.delete).not.toHaveBeenCalled();
+    expect(harness.presence.read).toHaveBeenCalledTimes(1);
+    expect(harness.showErrorMessage).toHaveBeenCalledWith(
+      "Unable to confirm the OpenAI API key after rotation. Try again or open Settings.",
+    );
+    expect(String(harness.showErrorMessage.mock.calls)).not.toContain(submittedKey);
+    expect(harness.showInformationMessage).not.toHaveBeenCalled();
+  });
+
+  it("reports rotation reconciliation failure with fixed safe text", async () => {
+    const harness = createHarness("test-openai-api-key", ["openai"]);
+    harness.presence.read.mockResolvedValue("unavailable");
+    registerProviderApiKeyCommands(harness.options);
+
+    await harness.run(rotateOpenAIApiKeyCommandId);
+
+    expect(harness.storages.openai.save).toHaveBeenCalledTimes(1);
+    expect(harness.showErrorMessage).toHaveBeenCalledWith(
+      "Unable to confirm the OpenAI API key after rotation. Try again or open Settings.",
+    );
+  });
+
+  it("deletes a present key only after Provider-only confirmation and reconciliation", async () => {
+    const harness = createHarness(undefined, ["openai"]);
+    harness.setConfirmation("Delete");
+    registerProviderApiKeyCommands(harness.options);
+
+    await harness.run(deleteOpenAIApiKeyCommandId);
+
+    expect(harness.showWarningMessage).toHaveBeenCalledWith(
+      "Delete the saved OpenAI API key from this machine?",
+      { modal: true },
+      "Delete",
+    );
+    expect(harness.storages.openai.delete).toHaveBeenCalledTimes(1);
+    expect(harness.presence.read).toHaveBeenCalledTimes(2);
+    expect(harness.showInformationMessage).toHaveBeenCalledWith("OpenAI API key deleted.");
+    expect(String(harness.showWarningMessage.mock.calls)).not.toContain("test-");
+  });
+
+  it("does not call delete when the presence preflight is absent", async () => {
+    const harness = createHarness(undefined);
+    harness.setConfirmation("Delete");
+    registerProviderApiKeyCommands(harness.options);
+
+    await harness.run(deleteGeminiApiKeyCommandId);
+
+    expect(harness.presence.read).toHaveBeenCalledTimes(1);
+    expect(harness.storages.gemini.delete).not.toHaveBeenCalled();
+    expect(harness.showInformationMessage).toHaveBeenCalledWith(
+      "No saved Gemini API key was found; nothing was deleted.",
+    );
+  });
+
+  it("does not call delete when presence is unavailable", async () => {
+    const harness = createHarness(undefined, ["gemini"]);
+    harness.setConfirmation("Delete");
+    harness.presence.read.mockResolvedValue("unavailable");
+    registerProviderApiKeyCommands(harness.options);
+
+    await harness.run(deleteGeminiApiKeyCommandId);
+
+    expect(harness.storages.gemini.delete).not.toHaveBeenCalled();
+    expect(harness.presence.read).toHaveBeenCalledTimes(1);
+    expect(harness.showErrorMessage).toHaveBeenCalledWith(
+      "Unable to confirm the Gemini API key state. Try again or open Settings.",
+    );
+  });
+
+  it("treats a rejected delete as indeterminate without claiming the old value remains", async () => {
+    const harness = createHarness(undefined, ["openai-compatible"]);
+    harness.setConfirmation("Delete");
+    harness.storages["openai-compatible"].delete.mockRejectedValue(
+      new Error("secret backend failure"),
     );
     registerProviderApiKeyCommands(harness.options);
 
-    await harness.run(saveOpenAIApiKeyCommandId);
+    await harness.run(deleteOpenAICompatibleApiKeyCommandId);
 
-    expect(harness.showErrorMessage).toHaveBeenCalledWith("Unable to save the API key.");
-    expect(String(harness.showErrorMessage.mock.calls)).not.toContain("test-openai-api-key");
+    expect(harness.storages["openai-compatible"].delete).toHaveBeenCalledTimes(1);
+    expect(harness.presence.read).toHaveBeenCalledTimes(2);
+    expect(harness.showErrorMessage).toHaveBeenCalledWith(
+      "Unable to confirm deletion of the OpenAI-Compatible API key. Try again or open Settings.",
+    );
+  });
+
+  it("does not call storage when delete confirmation is cancelled", async () => {
+    const harness = createHarness(undefined, ["openai"]);
+    harness.setConfirmation(undefined);
+    registerProviderApiKeyCommands(harness.options);
+
+    await harness.run(deleteOpenAIApiKeyCommandId);
+
+    expect(harness.presence.read).not.toHaveBeenCalled();
+    expect(harness.storages.openai.delete).not.toHaveBeenCalled();
+  });
+
+  it("serializes same-provider commands while allowing different providers to proceed", async () => {
+    const harness = createHarness("test-openai-api-key", ["openai", "gemini"]);
+    const firstSave = deferred<void>();
+    harness.storages.openai.save.mockImplementationOnce(() => firstSave.promise);
+    registerProviderApiKeyCommands(harness.options);
+
+    const first = harness.run(saveOpenAIApiKeyCommandId);
+    await flush();
+    const second = harness.run(rotateOpenAIApiKeyCommandId);
+    const crossProvider = harness.run(saveGeminiApiKeyCommandId);
+    await flush();
+
+    expect(harness.storages.openai.save).toHaveBeenCalledTimes(1);
+    expect(harness.storages.gemini.save).toHaveBeenCalledTimes(1);
+
+    firstSave.resolve();
+    await Promise.all([first, second, crossProvider]);
+
+    expect(harness.storages.openai.save).toHaveBeenCalledTimes(2);
+    expect(harness.presence.read).toHaveBeenCalledWith("openai");
+  });
+
+  it("suppresses late notifications after coordinator disposal while observing settlement", async () => {
+    const harness = createHarness("test-openai-api-key");
+    const save = deferred<void>();
+    harness.storages.openai.save.mockImplementationOnce(() => save.promise);
+    registerProviderApiKeyCommands(harness.options);
+
+    const pending = harness.run(saveOpenAIApiKeyCommandId);
+    await flush();
+    harness.coordinator.dispose();
+    save.resolve();
+    await pending;
+
     expect(harness.showInformationMessage).not.toHaveBeenCalled();
+    expect(harness.showErrorMessage).not.toHaveBeenCalled();
+  });
+
+  it("suppresses stale-generation notifications after an in-flight save settles", async () => {
+    const harness = createHarness("test-openai-api-key");
+    const save = deferred<void>();
+    harness.storages.openai.save.mockImplementationOnce(() => save.promise);
+    registerProviderApiKeyCommands(harness.options);
+
+    const pending = harness.run(saveOpenAIApiKeyCommandId);
+    await flush();
+    expect(harness.storages.openai.save).toHaveBeenCalledTimes(1);
+
+    harness.coordinator.invalidate();
+    save.resolve();
+    await pending;
+
+    expect(harness.presence.read).toHaveBeenCalledTimes(1);
+    expect(harness.showInformationMessage).not.toHaveBeenCalled();
+    expect(harness.showErrorMessage).not.toHaveBeenCalled();
+  });
+
+  it("suppresses the onboarding projection when generation changes during input", async () => {
+    const harness = createHarness("test-openai-api-key");
+    const input = deferred<string | undefined>();
+    harness.showInputBox.mockImplementationOnce(() => input.promise);
+    registerProviderApiKeyCommands(harness.options);
+    const onboarding = createOnboardingBridge(harness);
+
+    const pending = onboarding.controller.action("input-stale", "save-key", onboarding.post);
+    await flush();
+    harness.coordinator.invalidate();
+    input.resolve("test-openai-api-key");
+    await pending;
+
+    expect(onboarding.post).not.toHaveBeenCalled();
+    expect(harness.storages.openai.save).not.toHaveBeenCalled();
+    expect(harness.showInformationMessage).not.toHaveBeenCalled();
+    expect(harness.showErrorMessage).not.toHaveBeenCalled();
+  });
+
+  it("suppresses the onboarding projection when generation changes during confirmation", async () => {
+    const harness = createHarness("test-openai-api-key");
+    const confirmation = deferred<string | undefined>();
+    harness.showWarningMessage.mockImplementationOnce(() => confirmation.promise);
+    registerProviderApiKeyCommands(harness.options);
+    const onboarding = createOnboardingBridge(harness);
+
+    const pending = onboarding.controller.action("confirmation-stale", "save-key", onboarding.post);
+    await flush();
+    expect(harness.showWarningMessage).toHaveBeenCalledTimes(1);
+    harness.coordinator.invalidate();
+    confirmation.resolve("Replace");
+    await pending;
+
+    expect(onboarding.post).not.toHaveBeenCalled();
+    expect(harness.storages.openai.save).not.toHaveBeenCalled();
+    expect(harness.showInformationMessage).not.toHaveBeenCalled();
+    expect(harness.showErrorMessage).not.toHaveBeenCalled();
+  });
+
+  it("suppresses the onboarding projection when generation changes during storage", async () => {
+    const harness = createHarness("test-openai-api-key");
+    const save = deferred<void>();
+    harness.storages.openai.save.mockImplementationOnce(() => save.promise);
+    registerProviderApiKeyCommands(harness.options);
+    const onboarding = createOnboardingBridge(harness);
+
+    const pending = onboarding.controller.action("storage-stale", "save-key", onboarding.post);
+    await flush();
+    expect(harness.storages.openai.save).toHaveBeenCalledTimes(1);
+    harness.coordinator.invalidate();
+    save.resolve();
+    await pending;
+
+    expect(onboarding.post).not.toHaveBeenCalled();
+    expect(harness.presence.read).toHaveBeenCalledTimes(1);
+    expect(harness.showInformationMessage).not.toHaveBeenCalled();
+    expect(harness.showErrorMessage).not.toHaveBeenCalled();
+  });
+
+  it("suppresses the onboarding projection when generation changes during reconciliation", async () => {
+    const harness = createHarness("test-openai-api-key");
+    const reconciliation = deferred<ProviderApiKeyPresence>();
+    harness.presence.read.mockImplementationOnce(() => reconciliation.promise);
+    registerProviderApiKeyCommands(harness.options);
+    const onboarding = createOnboardingBridge(harness);
+
+    const pending = onboarding.controller.action(
+      "reconciliation-stale",
+      "save-key",
+      onboarding.post,
+    );
+    await waitFor(() => harness.presence.read.mock.calls.length === 1);
+    expect(harness.presence.read).toHaveBeenCalledTimes(1);
+    harness.coordinator.invalidate();
+    reconciliation.resolve("present");
+    await pending;
+
+    expect(onboarding.post).not.toHaveBeenCalled();
+    expect(harness.showInformationMessage).not.toHaveBeenCalled();
+    expect(harness.showErrorMessage).not.toHaveBeenCalled();
+  });
+
+  it("suppresses a late input rejection after generation invalidation", async () => {
+    const harness = createHarness("test-openai-api-key");
+    const input = deferred<string | undefined>();
+    harness.showInputBox.mockImplementationOnce(() => input.promise);
+    registerProviderApiKeyCommands(harness.options);
+    const onboarding = createOnboardingBridge(harness);
+
+    const pending = onboarding.controller.action(
+      "input-rejection-stale",
+      "save-key",
+      onboarding.post,
+    );
+    await waitFor(() => harness.showInputBox.mock.calls.length === 1);
+    harness.coordinator.invalidate();
+    input.reject(new Error("late input failure"));
+    await pending;
+
+    expect(onboarding.post).not.toHaveBeenCalled();
+    expect(harness.showInformationMessage).not.toHaveBeenCalled();
+    expect(harness.showErrorMessage).not.toHaveBeenCalled();
+  });
+
+  it("suppresses a late confirmation rejection after generation invalidation", async () => {
+    const harness = createHarness("test-openai-api-key");
+    const confirmation = deferred<string | undefined>();
+    harness.showWarningMessage.mockImplementationOnce(() => confirmation.promise);
+    registerProviderApiKeyCommands(harness.options);
+    const onboarding = createOnboardingBridge(harness);
+
+    const pending = onboarding.controller.action(
+      "confirmation-rejection-stale",
+      "save-key",
+      onboarding.post,
+    );
+    await waitFor(() => harness.showWarningMessage.mock.calls.length === 1);
+    harness.coordinator.invalidate();
+    confirmation.reject(new Error("late confirmation failure"));
+    await pending;
+
+    expect(onboarding.post).not.toHaveBeenCalled();
+    expect(harness.storages.openai.save).not.toHaveBeenCalled();
+    expect(harness.showInformationMessage).not.toHaveBeenCalled();
+    expect(harness.showErrorMessage).not.toHaveBeenCalled();
+  });
+
+  it("suppresses a late success-notification rejection after generation invalidation", async () => {
+    const harness = createHarness("test-openai-api-key");
+    const information = deferred<unknown>();
+    harness.showInformationMessage.mockImplementationOnce(() => information.promise);
+    registerProviderApiKeyCommands(harness.options);
+    const onboarding = createOnboardingBridge(harness);
+
+    const pending = onboarding.controller.action(
+      "information-rejection-stale",
+      "save-key",
+      onboarding.post,
+    );
+    await waitFor(() => harness.showInformationMessage.mock.calls.length === 1);
+    harness.coordinator.invalidate();
+    information.reject(new Error("late information failure"));
+    await pending;
+
+    expect(onboarding.post).not.toHaveBeenCalled();
+    expect(harness.showErrorMessage).not.toHaveBeenCalled();
+  });
+
+  it("suppresses a late failure-notification rejection after generation invalidation", async () => {
+    const harness = createHarness("test-openai-api-key");
+    const errorMessage = deferred<unknown>();
+    harness.storages.openai.save.mockRejectedValue(new Error("storage failure"));
+    harness.showErrorMessage.mockImplementationOnce(() => errorMessage.promise);
+    registerProviderApiKeyCommands(harness.options);
+    const onboarding = createOnboardingBridge(harness);
+
+    const pending = onboarding.controller.action(
+      "error-rejection-stale",
+      "save-key",
+      onboarding.post,
+    );
+    await waitFor(() => harness.showErrorMessage.mock.calls.length === 1);
+    harness.coordinator.invalidate();
+    errorMessage.reject(new Error("late error notification failure"));
+    await pending;
+
+    expect(onboarding.post).not.toHaveBeenCalled();
+    expect(harness.showInformationMessage).not.toHaveBeenCalled();
+  });
+
+  it("publishes a real user cancellation when generation is current", async () => {
+    const harness = createHarness(undefined);
+    registerProviderApiKeyCommands(harness.options);
+    const onboarding = createOnboardingBridge(harness);
+
+    await onboarding.controller.action("user-cancel", "save-key", onboarding.post);
+
+    expect(onboarding.post.mock.calls.map(([message]) => message.type)).toEqual([
+      "extension/provider-action",
+      "extension/provider-status",
+    ]);
+    expect(onboarding.post.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({
+        requestId: "user-cancel",
+        action: "save-key",
+        status: "cancelled",
+      }),
+    );
+    expect(harness.storages.openai.save).not.toHaveBeenCalled();
   });
 });
 
 interface Harness {
   readonly options: Parameters<typeof registerProviderApiKeyCommands>[0];
-  readonly handlers: Map<string, () => Promise<void>>;
+  readonly handlers: Map<string, () => Promise<unknown>>;
   readonly disposables: readonly Disposable[];
-  readonly storages: Record<"openai" | "gemini" | "openai-compatible", TestStorage>;
+  readonly coordinator: ProviderApiKeyOperationCoordinator;
+  readonly storages: Record<(typeof providers)[number], TestStorage>;
+  readonly presence: ProviderApiKeyPresenceReader & {
+    readonly read: ReturnType<
+      typeof vi.fn<(provider: (typeof providers)[number]) => Promise<ProviderApiKeyPresence>>
+    >;
+  };
   readonly showInputBox: ReturnType<
     typeof vi.fn<(options: InputBoxOptions) => Promise<string | undefined>>
   >;
   readonly showWarningMessage: ReturnType<
     typeof vi.fn<
-      (message: string, options: MessageOptions, item: "Replace") => Promise<"Replace" | undefined>
+      (message: string, options: MessageOptions, item: string) => Promise<string | undefined>
     >
   >;
   readonly showInformationMessage: ReturnType<typeof vi.fn<(message: string) => Promise<unknown>>>;
   readonly showErrorMessage: ReturnType<typeof vi.fn<(message: string) => Promise<unknown>>>;
-  confirmation: "Replace" | undefined;
-  run(commandId: string): Promise<void>;
+  setConfirmation(value: string | undefined): void;
+  run(commandId: string): Promise<unknown>;
 }
 
-interface TestStorage extends Omit<ApiKeySecretStorage, "save"> {
+interface TestStorage extends ApiKeySecretStorage {
+  value: string | undefined;
   readonly save: ReturnType<typeof vi.fn<(apiKey: string) => Promise<void>>>;
+  readonly delete: ReturnType<typeof vi.fn<() => Promise<void>>>;
 }
 
-function createHarness(input: string | undefined): Harness {
-  const handlers = new Map<string, () => Promise<void>>();
-  const disposables = providerApiKeyCommandDefinitions.map(() => ({ dispose: vi.fn() }));
+function createHarness(
+  input: string | undefined,
+  initiallyPresent: readonly (typeof providers)[number][] = [],
+): Harness {
+  const handlers = new Map<string, () => Promise<unknown>>();
+  const disposables = providerApiKeyLifecycleCommandDefinitions.map(() => ({ dispose: vi.fn() }));
   const storages = {
-    openai: createStorage(),
-    gemini: createStorage(),
-    "openai-compatible": createStorage(),
-  } satisfies Record<"openai" | "gemini" | "openai-compatible", TestStorage>;
+    openai: createStorage(initiallyPresent.includes("openai")),
+    gemini: createStorage(initiallyPresent.includes("gemini")),
+    "openai-compatible": createStorage(initiallyPresent.includes("openai-compatible")),
+  } satisfies Record<(typeof providers)[number], TestStorage>;
   const showInputBox = vi.fn(async (_options: InputBoxOptions) => input);
+  let confirmation: string | undefined = "Replace";
   const showWarningMessage = vi.fn(
     async (
       _message: string,
       _options: MessageOptions,
-      _item: "Replace",
-    ): Promise<"Replace" | undefined> => "Replace",
+      _item: string,
+    ): Promise<string | undefined> => confirmation,
   );
   const showInformationMessage = vi.fn(async (_message: string) => undefined);
   const showErrorMessage = vi.fn(async (_message: string) => undefined);
+  const presence = {
+    read: vi.fn(async (provider: (typeof providers)[number]) =>
+      storages[provider].value === undefined ? "absent" : "present",
+    ),
+  } satisfies ProviderApiKeyPresenceReader;
+  const coordinator = new ProviderApiKeyOperationCoordinator();
   let registrationIndex = 0;
 
   const harness: Harness = {
     options: {
+      coordinator,
       storages,
+      presence,
       registerCommand: vi.fn((commandId, handler) => {
         handlers.set(commandId, handler);
         return disposables[registrationIndex++] ?? { dispose: vi.fn() };
@@ -174,34 +583,84 @@ function createHarness(input: string | undefined): Harness {
     },
     handlers,
     disposables,
+    coordinator,
     storages,
+    presence,
     showInputBox,
     showWarningMessage,
     showInformationMessage,
     showErrorMessage,
-    confirmation: "Replace",
+    setConfirmation(value) {
+      confirmation = value;
+    },
     async run(commandId) {
-      showWarningMessage.mockImplementation(
-        async (
-          _message: string,
-          _options: MessageOptions,
-          _item: "Replace",
-        ): Promise<"Replace" | undefined> => harness.confirmation,
-      );
       const handler = handlers.get(commandId);
       if (handler === undefined) {
         throw new Error(`Expected ${commandId} to be registered.`);
       }
-      await handler();
+      return handler();
     },
   };
   return harness;
 }
 
-function createStorage(): TestStorage {
+function createStorage(initiallyPresent: boolean): TestStorage {
+  const storage: TestStorage = {
+    value: initiallyPresent ? "existing-test-api-key" : undefined,
+    read: vi.fn(async (): Promise<string | undefined> => storage.value),
+    save: vi.fn(async (apiKey: string) => {
+      storage.value = apiKey;
+    }),
+    delete: vi.fn(async () => {
+      storage.value = undefined;
+    }),
+  } satisfies TestStorage;
+  return storage;
+}
+
+function createOnboardingBridge(harness: Harness): {
+  readonly controller: ProviderOnboardingController;
+  readonly post: ReturnType<typeof vi.fn<(message: ExtensionToWebviewMessage) => void>>;
+} {
+  const post = vi.fn<(message: ExtensionToWebviewMessage) => void>();
+  const controller = new ProviderOnboardingController({
+    readStatus: async () => ({
+      provider: "openai" as const,
+      apiKeyConfigured: true,
+      modelConfigured: true,
+    }),
+    run: async () =>
+      (await harness.run(saveOpenAIApiKeyCommandId)) as ProviderOnboardingActionResult | undefined,
+  });
+  return { controller, post };
+}
+
+function deferred<T>(): {
+  readonly promise: Promise<T>;
+  resolve(value: T): void;
+  reject(error: unknown): void;
+} {
+  let resolvePromise!: (value: T) => void;
+  let rejectPromise!: (error: unknown) => void;
+  const promise = new Promise<T>((resolve, reject) => {
+    resolvePromise = resolve;
+    rejectPromise = reject;
+  });
   return {
-    read: vi.fn(async () => undefined),
-    save: vi.fn(async (_apiKey: string) => undefined),
-    delete: vi.fn(async () => undefined),
+    promise,
+    resolve: resolvePromise,
+    reject: rejectPromise,
   };
+}
+
+async function flush(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
+async function waitFor(condition: () => boolean): Promise<void> {
+  for (let attempt = 0; attempt < 20 && !condition(); attempt += 1) {
+    await flush();
+  }
 }

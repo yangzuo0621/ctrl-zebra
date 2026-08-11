@@ -17,8 +17,12 @@ export interface ProviderOnboardingStatus {
 }
 
 export interface ProviderOnboardingHostActions {
-  readonly readStatus: () => Promise<ProviderOnboardingStatus>;
-  readonly run: (action: ProviderAction) => Promise<ProviderOnboardingActionResult>;
+  /**
+   * Returns undefined when the Host cannot establish a trustworthy status projection.
+   * Callers retain the last valid Webview projection rather than publishing false.
+   */
+  readonly readStatus: () => Promise<ProviderOnboardingStatus | undefined>;
+  readonly run: (action: ProviderAction) => Promise<ProviderOnboardingActionResult | undefined>;
 }
 
 type PostMessage = (message: ExtensionToWebviewMessage) => void;
@@ -42,8 +46,14 @@ export class ProviderOnboardingController {
   async status(requestId: string, post: PostMessage): Promise<void> {
     if (this.#disposed || this.#pendingActionRequestId !== undefined) return;
 
-    const status = await this.#actions.readStatus();
-    if (this.#disposed || this.#pendingActionRequestId !== undefined) return;
+    let status: ProviderOnboardingStatus | undefined;
+    try {
+      status = await this.#actions.readStatus();
+    } catch {
+      return;
+    }
+    if (this.#disposed || this.#pendingActionRequestId !== undefined || status === undefined)
+      return;
     post({ protocolVersion, type: "extension/provider-status", requestId, ...status });
   }
 
@@ -51,19 +61,21 @@ export class ProviderOnboardingController {
     if (this.#disposed || this.#pendingActionRequestId !== undefined) return;
 
     this.#pendingActionRequestId = requestId;
-    let result: ProviderOnboardingActionResult;
     try {
-      result = await this.#actions.run(action);
-    } catch {
-      result = { status: "failed", code: "internal" };
-    }
+      let result: ProviderOnboardingActionResult | undefined;
+      try {
+        result = await this.#actions.run(action);
+      } catch {
+        result = { status: "failed", code: "internal" };
+      }
 
-    if (this.#disposed) return;
-    post(createActionMessage(requestId, action, result));
+      // Undefined is an internal suppression result (for example, a stale generation), not a
+      // user cancellation. Do not publish an action outcome or refresh a potentially stale status.
+      if (this.#disposed || result === undefined) return;
+      post(createActionMessage(requestId, action, result));
 
-    try {
       const status = await this.#actions.readStatus();
-      if (!this.#disposed) {
+      if (!this.#disposed && status !== undefined) {
         post({ protocolVersion, type: "extension/provider-status", requestId, ...status });
       }
     } catch {
