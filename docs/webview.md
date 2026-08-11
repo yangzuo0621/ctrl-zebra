@@ -221,8 +221,9 @@ This document defines the React Webview constraints established before T0103. It
 
 ## MCP Rendering and State Boundary
 
-This boundary renders only the stage 14 MCP `2026-07-28` projection and does not negotiate protocol
-or capabilities in the browser.
+This boundary renders the validated stage 14/T1804 MCP projection and does not negotiate protocol or
+capabilities in the browser. Modern/legacy selection, configuration migration, probing, fallback,
+and SDK lifecycle remain Host-owned.
 
 - One MCP feature store owns the current validated connection snapshot and generation-bound Tool,
   Resource, Resource Template, Prompt, Resource preview, and Prompt preview snapshots. Components
@@ -240,6 +241,14 @@ or capabilities in the browser.
   instruction. Webview restoration may retain only presentation choices such as an expanded catalog
   section; it does not retain a connected flag, capability, approval, generation, preview, or Server
   content as authoritative state.
+- The connection snapshot always carries the validated configured mode (`modern-only` or `dual`). It
+  carries `negotiated: { era, version }` only for a connected state, where the closed pairs are
+  `modern / 2026-07-28` and `legacy / 2025-11-25`. Connecting, disconnecting, disconnected, and
+  failed states expose neither a selected era nor usable capabilities. The store never infers a
+  negotiated value from the configured mode, diagnostics, catalog contents, or a prior connection.
+- A version-1 configuration is presented as modern-only until the user explicitly migrates it to
+  version 2. The browser cannot edit the setting object or request migration by carrying a command,
+  environment, credential, raw JSON, or mode override; `open-settings` remains a Host-owned intent.
 
 MCP descriptors, annotations, Tool results, Resources, and Prompts are rendered through React text
 interpolation. They never reach `dangerouslySetInnerHTML`, the answer Markdown renderer, command or
@@ -298,8 +307,10 @@ shows bounded skipped Tool names and reasons, a stable truncation marker, and on
 control (`Refresh tools`, `Reconnect`, or `Open settings`) appropriate to the projection. It never
 renders Schema values, keyword paths, JSON-RPC/SDK errors, commands, arguments, environment, stderr,
 stack traces, credentials, or arbitrary Server metadata. A protocol-incompatible diagnostic renders
-configured `modern-only`, supported `2026-07-28`, and the next step while the connection status remains
-failed; no probe/fallback/negotiated-success text is inferred in the Webview.
+the configured mode, its closed supported-version list, and the next step while the connection status
+remains failed; no probe/fallback/negotiated-success, timeout, timing, or Server-error text is inferred
+in the Webview. A successful connected snapshot renders the negotiated era/version separately and
+never rewrites it as modern because the configured mode is dual.
 
 The store validates the union combinations before rendering: degraded and refresh-all-rejected
 diagnostics are connected and expose only `Refresh tools`; initial all-rejected and initial
@@ -318,3 +329,19 @@ not itself a live region, so names and reasons are never read item-by-item. Keyb
 selection, disclosure state, and scroll position remain stable during polling, refresh and stale
 message rejection. Normal connected operation with no diagnostics follows the same path without a
 diagnostic announcement or recovery control.
+
+### Dual-era display and migration (T1804)
+
+The Webview renders configured mode as a setting fact and negotiated era/version as a successful
+connection fact. It uses fixed localized labels for `modern-only`, `dual`, `modern / 2026-07-28`, and
+`legacy / 2025-11-25`; it never renders SDK enums, raw discovery/initialize data, probe timing,
+fallback attempts, or a guessed era. A version-1 setting is described as modern-only and exposes an
+`Open settings` path for the explicit migration to version 2; no Webview message carries a mode
+override or a configuration object.
+
+The connection card keeps the configured mode visible while `connecting`, but shows no negotiated
+version or capabilities until `connected`. A failed connection exposes only the stable error,
+closed supported-version list, and fixed next action. Disconnect, cancellation, trust loss, cleanup
+failure, generation change, or configuration staleness clears the negotiated pair and all dependent
+catalog/recovery state synchronously. This is a presentation rule; the Extension remains the sole
+owner of negotiation, migration, process cleanup, and capability decisions.

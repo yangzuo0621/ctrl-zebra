@@ -626,24 +626,31 @@ entry, not only the intermediate object.
 
 ## Controlled MCP Security Boundary
 
-This boundary applies to the exact stage 14 MCP `2026-07-28` contract. MCP Servers, descriptors,
-schemas, annotations, content, results, notifications, stderr, logs, and
+This boundary applies to the stage 14 MCP surface and the T1804 dual-era contract. MCP Servers,
+descriptors, schemas, annotations, content, results, notifications, stderr, logs, and
 errors are untrusted external process input. A local stdio transport is not a sandbox: the Server
 runs with the Extension user's operating-system authority and can have unknown local or network
 side effects independent of what it advertises.
 
 ### User configuration and Server identity
 
-- The only version `1` source is the user-scoped VS Code setting `ctrlZebra.mcp.server`. The Host
-  reads its inspected global value as `unknown`; workspace, workspace-folder, language override,
-  Webview, model, Prompt, Resource, persistence, environment, and Server-provided values cannot
-  create, replace, or merge configuration.
-- The setting is either absent or one strict object:
-  `{ version: 1, serverId, displayName, command, args }`. Unknown fields are rejected. `serverId`
-  is lower `snake_case`, begins with a letter, and is at most 64 ASCII characters. `displayName`
-  is well-formed Unicode, non-empty, and at most 128 code points and 512 UTF-8 bytes. `command` is
-  non-empty, contains no NUL or newline, and is at most 4,096 UTF-8 bytes. `args` contains at most
-  64 strings; each is at most 4,096 bytes and the array is at most 32,768 serialized UTF-8 bytes.
+- The source is the user-scoped VS Code setting `ctrlZebra.mcp.server`. The Host reads its
+  inspected global value as `unknown`; workspace, workspace-folder, language override, Webview,
+  model, Prompt, Resource, persistence, environment, and Server-provided values cannot create,
+  replace, or merge configuration.
+- The setting is either absent or one strict versioned object. Version `1` is
+  `{ version: 1, serverId, displayName, command, args }` and means
+  `protocolMode: "modern-only"`. Version `2` adds required
+  `protocolMode: "modern-only" | "dual"`. Unknown fields, versions, and modes are rejected.
+  `serverId` is lower `snake_case`, begins with a letter, and is at most 64 ASCII characters.
+  `displayName` is well-formed Unicode, non-empty, and at most 128 code points and 512 UTF-8 bytes.
+  `command` is non-empty, contains no NUL or newline, and is at most 4,096 UTF-8 bytes. `args`
+  contains at most 64 strings; each is at most 4,096 bytes and the array is at most 32,768
+  serialized UTF-8 bytes.
+- Reading a version `1` object never writes a version `2` object or silently enables dual behavior.
+  Migration and selection of `protocolMode: "dual"` are explicit user actions. A change while
+  connected marks the configuration stale and requires disconnect, a new generation, and fresh
+  startup approval; it cannot mutate the live process or switch era in place.
 - Configuration has no cwd, environment, shell, transport, endpoint, headers, credential,
   SecretStorage name, auto-start, retry, or capability fields. The canonical cwd is the exact
   Extension-selected trusted workspace root at connect time. Version, identity, command, args, and
@@ -667,8 +674,8 @@ side effects independent of what it advertises.
   canonical cwd, and operation equality immediately before direct spawn. Shell interpretation,
   string command lines, profile loading, variable/glob expansion, aliases, pipes, redirects,
   command substitution, and model- or Server-selected executables are forbidden.
-- The process receives a new allowlisted environment rather than the Host environment. Version `1`
-  may copy only `PATH`; on Windows it may additionally copy `PATHEXT`, `SystemRoot`, `WINDIR`,
+- The process receives a new allowlisted environment rather than the Host environment. Both
+  configuration versions may copy only `PATH`; on Windows it may additionally copy `PATHEXT`, `SystemRoot`, `WINDIR`,
   `TEMP`, and `TMP`, and on POSIX `TMPDIR`. Missing optional values are omitted. Names and values
   are never shown, logged, persisted, sent to the Webview or model, or configurable by the Server.
 - Stdout is exclusively the MCP framed message channel. Non-protocol stdout is a malformed-message
@@ -894,10 +901,10 @@ environment, URI query/fragment, credentials, or arbitrary Server metadata.
   cancellation checks. No diagnostic action can auto-connect, silently retry, downgrade protocol,
   reuse an approval, invoke a Tool, read a Resource, or mutate persistence.
 - A protocol-incompatible diagnostic is emitted only alongside a failed connection projection and
-  says the configured mode is `modern-only`, the only supported version is `2026-07-28`, and the
-  fixed next action. It has no probe result, fallback flag, selected-era claim, or capability data;
-  those facts cannot be inferred before a successful handshake. A future dual-era expansion must
-  update this closed projection through T1804 change control.
+  says the configured mode (`modern-only` or `dual`), its corresponding closed supported-version
+  list, and the fixed next action. It has no probe result, fallback flag, selected-era claim, or
+  capability data; those facts cannot be inferred before a successful handshake. The negotiated
+  era/version is available only on a connected projection.
 - A mixed accepted/rejected catalog may show the validated rejected names while retaining accepted
   siblings. An all-rejected or failed refresh may show only its bounded validated rejection prefix
   and stable recovery code while retaining the prior complete catalog. Whole-operation identity or
@@ -906,3 +913,39 @@ environment, URI query/fragment, credentials, or arbitrary Server metadata.
   only connected+`refresh-tools` for degraded or refresh failures, failed+`reconnect` for initial
   all-rejected/whole-operation failure, failed+`open-settings` for protocol incompatibility, and no
   recovery action for `clear`.
+
+### T1804 dual-era negotiation and information boundary
+
+The configured mode is a user choice, not a Server capability. Version `1` settings remain
+`modern-only`; version `2` requires an explicit `protocolMode`. `modern-only` accepts only
+`2026-07-28`. `dual` accepts exactly `2026-07-28` and `2025-11-25`, always over the same local
+`stdio` process port and with the same approved executable operation.
+
+- A `dual` connection begins with one bounded `server/discover` probe. Only a specification-
+  classified non-modern response or bounded timeout can enter one legacy `initialize` /
+  `notifications/initialized` exchange. A DiscoverResult, recognized modern error, malformed
+  framing, message/stream overflow, cancellation, process exit, trust loss, or cleanup failure is
+  terminal and cannot become a downgrade oracle. The probe request and correlation state are closed
+  before fallback, and the generation gate drops all late probe data.
+- No capability, catalog, Tool, Resource, Prompt, approval, persistence, or Webview state is
+  available until the selected handshake has validated its exact closed version. Both eras expose
+  only the reviewed Tools, Resources, Resource Templates, Prompts, and list-change behavior. Roots,
+  Sampling, Elicitation, Tasks, logging, completion, subscriptions, experimental values, and unknown
+  Server requests are rejected before Core, Provider, Workspace, approval, or persistence.
+- The connected projection may expose the configured mode and one negotiated `{ era, version }`
+  pair. Before connection succeeds, failed/connecting projections expose no selected era, version,
+  capability, probe result, fallback result, timing, or SDK value. Protocol diagnostics use the
+  bounded configured mode, closed supported-version list, stable error code, and fixed next action;
+  raw protocol data and whether a fallback was attempted never cross the boundary.
+- Negotiated era is not authorization. The same Workspace Trust, startup approval, exact Tool
+  approval, generation, cancellation, limits, and process-tree cleanup apply in both eras. Legacy
+  annotations cannot lower `execute` risk or create remembered permission.
+- Completed operations may persist bounded provenance `{ configuredMode, negotiatedEra,
+  negotiatedVersion }`; failed attempts, probe timing, fallback state, command/args/cwd/environment,
+  credentials, SDK/JSON-RPC errors, and Server output remain volatile. Recovery treats provenance as
+  historical display data and never starts, reconnects, probes, renegotiates, retries, or authorizes
+  an operation.
+
+The T1804 constraint PR documents these rules only. Configuration parsing, Protocol schema changes,
+negotiation lifecycle, and compatibility fixtures are gated on its reviewed merge and belong to the
+subsequent phase tasks.
