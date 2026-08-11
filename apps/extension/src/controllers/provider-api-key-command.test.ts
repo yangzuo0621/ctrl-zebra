@@ -291,6 +291,25 @@ describe("Provider API key commands", () => {
     expect(harness.showInformationMessage).not.toHaveBeenCalled();
     expect(harness.showErrorMessage).not.toHaveBeenCalled();
   });
+
+  it("suppresses stale-generation notifications after an in-flight save settles", async () => {
+    const harness = createHarness("test-openai-api-key");
+    const save = deferred<void>();
+    harness.storages.openai.save.mockImplementationOnce(() => save.promise);
+    registerProviderApiKeyCommands(harness.options);
+
+    const pending = harness.run(saveOpenAIApiKeyCommandId);
+    await flush();
+    expect(harness.storages.openai.save).toHaveBeenCalledTimes(1);
+
+    harness.coordinator.invalidate();
+    save.resolve();
+    await pending;
+
+    expect(harness.presence.read).toHaveBeenCalledTimes(1);
+    expect(harness.showInformationMessage).not.toHaveBeenCalled();
+    expect(harness.showErrorMessage).not.toHaveBeenCalled();
+  });
 });
 
 interface Harness {

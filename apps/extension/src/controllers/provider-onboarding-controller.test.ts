@@ -59,6 +59,58 @@ describe("ProviderOnboardingController", () => {
     ]);
   });
 
+  it("keeps repair actions available for an invalid-endpoint fallback projection", async () => {
+    const post = vi.fn<(message: ExtensionToWebviewMessage) => void>();
+    const actions: string[] = [];
+    const controller = new ProviderOnboardingController({
+      // The Extension supplies this bounded fallback when endpoint validation fails so the
+      // settings action remains discoverable instead of leaving onboarding permanently disabled.
+      readStatus: async () => ({
+        provider: "openai-compatible" as const,
+        apiKeyConfigured: false,
+        modelConfigured: false,
+      }),
+      run: async (action) => {
+        actions.push(action);
+        return { status: "completed" };
+      },
+    });
+
+    await controller.status("invalid-endpoint-status", post);
+    await controller.action("invalid-endpoint-settings", "open-settings", post);
+
+    expect(actions).toEqual(["open-settings"]);
+    expect(post).toHaveBeenCalledWith({
+      protocolVersion,
+      type: "extension/provider-status",
+      requestId: "invalid-endpoint-status",
+      provider: "openai-compatible",
+      apiKeyConfigured: false,
+      modelConfigured: false,
+    });
+    expect(post).toHaveBeenCalledWith({
+      protocolVersion,
+      type: "extension/provider-action",
+      requestId: "invalid-endpoint-settings",
+      action: "open-settings",
+      status: "completed",
+    });
+  });
+
+  it("suppresses stale-generation actions without an action or status projection", async () => {
+    const post = vi.fn<(message: ExtensionToWebviewMessage) => void>();
+    const readStatus = vi.fn(async () => readyStatus);
+    const controller = new ProviderOnboardingController({
+      readStatus,
+      run: async () => undefined,
+    });
+
+    await controller.action("stale-action", "open-settings", post);
+
+    expect(post).not.toHaveBeenCalled();
+    expect(readStatus).not.toHaveBeenCalled();
+  });
+
   it("settles an action before publishing the correlated fresh status", async () => {
     const post = vi.fn<(message: ExtensionToWebviewMessage) => void>();
     const controller = new ProviderOnboardingController({

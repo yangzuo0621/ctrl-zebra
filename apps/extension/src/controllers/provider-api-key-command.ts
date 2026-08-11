@@ -156,7 +156,7 @@ export interface RegisterProviderApiKeyCommandsOptions {
   readonly coordinator?: ProviderApiKeyOperationCoordinator;
   readonly registerCommand: (
     commandId: string,
-    handler: () => Promise<ProviderOnboardingActionResult>,
+    handler: () => Promise<ProviderOnboardingActionResult | undefined>,
   ) => Disposable;
   readonly showInputBox: (options: InputBoxOptions) => Thenable<string | undefined>;
   readonly showWarningMessage: (
@@ -189,10 +189,9 @@ export function registerProviderApiKeyCommand(
 
   const coordinator = options.coordinator ?? new ProviderApiKeyOperationCoordinator();
   return options.registerCommand(definition.commandId, async () => {
-    const result = await coordinator.run(provider, (context) =>
+    return coordinator.run(provider, (context) =>
       runProviderApiKeyCommand({ ...options, definition, context }),
     );
-    return result ?? { status: "cancelled" };
   });
 }
 

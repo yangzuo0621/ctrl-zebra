@@ -342,7 +342,13 @@ export function activate(context: ExtensionContext): void {
           const configuration = readProviderOnboardingConfiguration({
             get: (setting) => settings.get(setting),
           });
-          if (!configuration.endpointValid) return undefined;
+          if (!configuration.endpointValid) {
+            return {
+              provider: configuration.provider,
+              apiKeyConfigured: false,
+              modelConfigured: false,
+            };
+          }
           const apiKeyConfigured = configuration.apiKeyRequired
             ? await readApiKeyConfigured(configuration.provider)
             : true;
@@ -353,10 +359,14 @@ export function activate(context: ExtensionContext): void {
             modelConfigured: configuration.modelConfigured,
           };
         } catch {
-          return undefined;
+          return {
+            provider: "openai" as const,
+            apiKeyConfigured: false,
+            modelConfigured: false,
+          };
         }
       },
-      async run(action): Promise<ProviderOnboardingActionResult> {
+      async run(action): Promise<ProviderOnboardingActionResult | undefined> {
         if (action === "open-settings") {
           try {
             await commands.executeCommand("workbench.action.openSettings", "ctrlZebra.provider");
@@ -368,10 +378,8 @@ export function activate(context: ExtensionContext): void {
 
         if (action === "select-model") {
           try {
-            return (
-              (await commands.executeCommand<ProviderOnboardingActionResult>(
-                selectModelCommandId,
-              )) ?? { status: "failed", code: "internal" }
+            return await commands.executeCommand<ProviderOnboardingActionResult>(
+              selectModelCommandId,
             );
           } catch {
             return { status: "failed", code: "internal" };
@@ -394,11 +402,8 @@ export function activate(context: ExtensionContext): void {
         }
 
         try {
-          return (
-            (await commands.executeCommand<ProviderOnboardingActionResult>(commandId)) ?? {
-              status: "failed",
-              code: "internal",
-            }
+          return await commands.executeCommand<ProviderOnboardingActionResult | undefined>(
+            commandId,
           );
         } catch {
           return { status: "failed", code: "internal" };
@@ -407,9 +412,14 @@ export function activate(context: ExtensionContext): void {
     });
 
   async function readApiKeyConfigured(provider: Parameters<typeof secrets.read>[0]) {
-    const presence = await providerApiKeyCoordinator.run(provider, () =>
-      providerApiKeyPresence.read(provider),
-    );
+    let presence: Awaited<ReturnType<typeof providerApiKeyPresence.read>> | undefined;
+    try {
+      presence = await providerApiKeyCoordinator.run(provider, () =>
+        providerApiKeyPresence.read(provider),
+      );
+    } catch {
+      return undefined;
+    }
     if (presence === undefined || presence === "unavailable") return undefined;
     return presence === "present";
   }
