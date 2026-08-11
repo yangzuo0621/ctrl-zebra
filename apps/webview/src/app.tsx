@@ -13,6 +13,7 @@ import { createMcpStore } from "./mcp-store.js";
 import { OnboardingCard } from "./onboarding-card.js";
 import { createOnboardingStore } from "./onboarding-store.js";
 import { ReasoningSummary } from "./reasoning-summary.js";
+import { strings } from "./strings.js";
 import { TokenUsageSummary } from "./token-usage-summary.js";
 import { ToolCallCard } from "./tool-call-card.js";
 import { Button } from "./ui/button.js";
@@ -23,35 +24,24 @@ interface AppProps {
   readonly createRequestId?: () => string;
 }
 
-const statusText = {
-  idle: "Ready.",
-  preparing: "Preparing response…",
-  streaming: "Generating response…",
-  completed: "Response complete.",
-  truncated: "Response truncated.",
-  cancelled: "Response cancelled.",
-  failed: "Response failed.",
-  interrupted: "Session was interrupted by a restart.",
-} as const;
-
 function messageContent(message: DisplayMessage, status: string): string {
   if (message.content.length > 0 || message.role === "user") {
     return message.content;
   }
 
   if (status === "cancelled") {
-    return "Cancelled before a response was received.";
+    return strings.app.messageFallback.cancelled;
   }
 
   if (status === "truncated") {
-    return "The response was truncated before a complete answer was received.";
+    return strings.app.messageFallback.truncated;
   }
 
   if (status === "failed") {
-    return "No response was received.";
+    return strings.app.messageFallback.failed;
   }
 
-  return "Waiting for response…";
+  return strings.app.messageFallback.waiting;
 }
 
 export function App({ host: providedHost, createRequestId }: AppProps) {
@@ -185,18 +175,18 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
           </div>
           <div>
             <h1 className={styles.title} id="agent-view-title">
-              CtrlZebra
+              {strings.app.title}
             </h1>
-            <p className={styles.description}>Ask a question and stream the response.</p>
+            <p className={styles.description}>{strings.app.description}</p>
           </div>
         </div>
         <div className={styles.headerActions}>
           <span
             className={styles.currentSession}
             aria-live="polite"
-            title={selectedSessionId ?? "New chat"}
+            title={selectedSessionId ?? strings.app.newChat}
           >
-            Current Session: {selectedSessionId ?? "New chat"}
+            {strings.app.currentSession(selectedSessionId)}
           </span>
           <Button
             variant="secondary"
@@ -205,7 +195,7 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
             disabled={activeRequestId !== undefined || restoring || sessionSwitchPending}
             aria-describedby="session-action-hint"
           >
-            New chat
+            {strings.app.newChat}
           </Button>
           <Button
             variant="ghost"
@@ -213,36 +203,39 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
             onClick={() => setShowSessionsDrawer((prev) => !prev)}
             aria-expanded={showSessionsDrawer}
           >
-            {showSessionsDrawer ? "Hide Sessions" : "Sessions"}
+            {showSessionsDrawer ? strings.app.hideSessions : strings.app.sessions}
           </Button>
         </div>
       </header>
 
       <p id="session-action-hint" className={styles.srOnly}>
         {activeRequestId !== undefined
-          ? "Session actions are unavailable while a response is running."
+          ? strings.app.sessionActionHint.running
           : restoring
-            ? "Session actions are unavailable while a Session is restoring."
+            ? strings.app.sessionActionHint.restoring
             : sessionSwitchPending
-              ? "Restore the selected Session before sending a message."
-              : "Start a separate conversation without deleting saved Sessions."}
+              ? strings.app.sessionActionHint.switching
+              : strings.app.sessionActionHint.ready}
       </p>
 
       {showSessionsDrawer ? (
-        <section className={styles.secondaryDrawer} aria-label="Session history and checkpoints">
+        <section className={styles.secondaryDrawer} aria-label={strings.app.sessionDrawerLabel}>
           <section className={styles.sessions} aria-labelledby="saved-sessions-title">
-            <h2 id="saved-sessions-title">Saved sessions</h2>
+            <h2 id="saved-sessions-title">{strings.app.savedSessionsHeading}</h2>
             <div className={styles.sessionControls}>
               <select
-                aria-label="Saved session"
+                aria-label={strings.app.savedSessionLabel}
                 value={sessionSelectionId ?? ""}
                 onChange={(event) => store.getState().selectSession(event.target.value)}
                 disabled={sessions.length === 0 || activeRequestId !== undefined || restoring}
               >
-                {sessions.length === 0 ? <option value="">No saved sessions</option> : null}
+                {sessions.length === 0 ? (
+                  <option value="">{strings.app.noSavedSessions}</option>
+                ) : null}
                 {sessions.map((session) => (
                   <option value={session.sessionId} key={session.sessionId}>
-                    {new Date(session.createdAt).toLocaleString()} — {session.status}
+                    {new Date(session.createdAt).toLocaleString()} —{" "}
+                    {strings.app.sessionStatus[session.status]}
                   </option>
                 ))}
               </select>
@@ -252,7 +245,7 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
                 onClick={() => store.getState().loadSessions()}
                 disabled={activeRequestId !== undefined || restoring}
               >
-                Refresh
+                {strings.app.refresh}
               </Button>
               <Button
                 variant="secondary"
@@ -262,13 +255,15 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
                   sessionSelectionId === undefined || activeRequestId !== undefined || restoring
                 }
               >
-                Restore
+                {strings.app.restore}
               </Button>
             </div>
             {sessionError === undefined ? null : (
               <p className={styles.sessionError}>{sessionError}</p>
             )}
-            {restoring ? <p className={styles.sessionStatus}>Restoring Session…</p> : null}
+            {restoring ? (
+              <p className={styles.sessionStatus}>{strings.app.restoringSession}</p>
+            ) : null}
           </section>
           <CheckpointPanel store={checkpointStore} />
         </section>
@@ -280,7 +275,7 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
         ref={mainRef}
         onScroll={handleScroll}
         className={styles.transcriptSection}
-        aria-label="Conversation"
+        aria-label={strings.app.conversationLabel}
       >
         <ol className={styles.transcript}>
           {messages.length === 0 ? (
@@ -293,7 +288,7 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
                 onAction={(action) => onboardingStore.getState().runAction(action)}
                 onSelectPrompt={(prompt) => setDraft(prompt)}
               />
-              <p className={styles.emptyText}>No messages yet.</p>
+              <p className={styles.emptyText}>{strings.app.noMessages}</p>
             </li>
           ) : (
             messages.map((message) => (
@@ -301,7 +296,11 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
                 className={styles.message}
                 data-role={message.role}
                 key={message.id}
-                aria-label={message.role === "user" ? "Your message" : "Agent message"}
+                aria-label={
+                  message.role === "user"
+                    ? strings.app.userMessageLabel
+                    : strings.app.assistantMessageLabel
+                }
               >
                 <ReasoningSummary
                   blocks={message.reasoningBlocks}
@@ -339,9 +338,9 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
             type="button"
             className={styles.jumpBottomButton}
             onClick={scrollToBottom}
-            aria-label="Scroll to newest messages"
+            aria-label={strings.app.scrollToNewest}
           >
-            ↓ Jump to bottom
+            {strings.app.jumpToBottom}
           </button>
         ) : null}
 
@@ -362,7 +361,7 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
           role="status"
           aria-live="polite"
           aria-atomic="true"
-          aria-label="推理摘要状态"
+          aria-label={strings.app.reasoningStatusLabel}
         >
           {reasoningAnnouncement}
         </p>
@@ -371,7 +370,7 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
           role="status"
           aria-live="polite"
           aria-atomic="true"
-          aria-label="Session status"
+          aria-label={strings.app.sessionStatusLabel}
         >
           {sessionAnnouncement}
         </p>
@@ -387,13 +386,13 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
         <form className={styles.composer} onSubmit={handleSubmit}>
           <div className={styles.composerBox}>
             <label className={styles.srOnly} htmlFor="chat-message">
-              Message
+              {strings.app.messageLabel}
             </label>
             <textarea
               ref={inputRef}
               className={styles.input}
               id="chat-message"
-              placeholder="Describe what to build or ask a question…"
+              placeholder={strings.app.messagePlaceholder}
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
               onKeyDown={handleKeyDown}
@@ -403,7 +402,7 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
               disabled={activeRequestId !== undefined || restoring}
             />
             <div className={styles.composerFooter}>
-              <span className={styles.composerHint}>Enter to send, Shift+Enter for line break</span>
+              <span className={styles.composerHint}>{strings.app.composerHint}</span>
               <div className={styles.actions}>
                 <Button
                   type="submit"
@@ -415,7 +414,7 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
                     draft.trim().length === 0
                   }
                 >
-                  Send
+                  {strings.app.send}
                 </Button>
                 <Button
                   variant="secondary"
@@ -423,15 +422,15 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
                   onClick={() => store.getState().cancel()}
                   disabled={activeRequestId === undefined}
                 >
-                  Cancel
+                  {strings.app.cancel}
                 </Button>
               </div>
             </div>
           </div>
         </form>
 
-        <p className={styles.status} role="status" aria-label="Run status">
-          {statusText[status]}
+        <p className={styles.status} role="status" aria-label={strings.app.runStatusLabel}>
+          {strings.app.status[status]}
         </p>
       </footer>
     </div>

@@ -7,6 +7,7 @@ import { useEffect, useRef } from "react";
 
 import styles from "./onboarding-card.module.css";
 import type { PendingProviderAction } from "./onboarding-store.js";
+import { strings } from "./strings.js";
 import { Button } from "./ui/button.js";
 import { EmptyState } from "./ui/empty-state.js";
 
@@ -18,31 +19,6 @@ interface OnboardingCardProps {
   readonly announcement: string;
   readonly onAction: (action: ProviderAction) => boolean;
 }
-
-const EXAMPLE_PROMPTS = [
-  "Explain workspace structure",
-  "Analyze codebase for lint issues",
-  "Summarize key modules and entry points",
-] as const;
-
-const providerLabels = {
-  openai: "OpenAI",
-  gemini: "Gemini",
-  "openai-compatible": "OpenAI-Compatible",
-} as const;
-
-const actionLabels = {
-  "save-key": "Save API key",
-  "select-model": "Select model",
-  "open-settings": "Open Provider settings",
-} as const satisfies Record<ProviderAction, string>;
-
-const failureMessages = {
-  configuration: "Check the Provider settings and try again.",
-  storage: "The Provider setting could not be saved. Try again.",
-  unavailable: "Model discovery is unavailable. Try again or enter a model ID manually.",
-  internal: "The Provider action failed unexpectedly. Try again.",
-} as const;
 
 export function OnboardingCard({
   onSelectPrompt,
@@ -56,10 +32,13 @@ export function OnboardingCard({
   const actionButtonRefs = useRef<Partial<Record<ProviderAction, HTMLButtonElement | null>>>({});
   const lastOutcomeRequestId = useRef<string | undefined>(undefined);
   const fallbackOutcomeRequestId = useRef<string | undefined>(undefined);
-  const providerLabel = status === undefined ? "Provider" : providerLabels[status.provider];
+  const providerLabel =
+    status === undefined
+      ? strings.onboarding.provider
+      : strings.onboarding.providerLabels[status.provider];
   const missingItems = [
-    ...(status?.apiKeyConfigured === false ? ["API key"] : []),
-    ...(status?.modelConfigured === false ? ["model"] : []),
+    ...(status?.apiKeyConfigured === false ? [strings.onboarding.missing.apiKey] : []),
+    ...(status?.modelConfigured === false ? [strings.onboarding.missing.model] : []),
   ];
 
   useEffect(() => {
@@ -97,10 +76,10 @@ export function OnboardingCard({
 
   const setupDescription =
     status === undefined
-      ? "Checking the saved Provider setup…"
+      ? strings.onboarding.checking
       : missingItems.length === 0
-        ? `${providerLabel} is ready for a chat.`
-        : `Finish ${missingItems.join(" and ")} setup to start a chat.`;
+        ? strings.onboarding.ready(providerLabel)
+        : strings.onboarding.finishSetup(missingItems.join(" and "));
 
   return (
     <div className={styles.container}>
@@ -108,24 +87,32 @@ export function OnboardingCard({
         className={styles.emptyState}
         title={
           <h2 ref={headingRef} className={styles.title} tabIndex={-1}>
-            Welcome to CtrlZebra
+            {strings.onboarding.welcome}
           </h2>
         }
-        description="Ask a question or select a sample task below to get started."
+        description={strings.onboarding.description}
         action={
           <>
             <section className={styles.providerStatus} aria-labelledby="provider-setup-title">
-              <h3 id="provider-setup-title">{providerLabel} setup</h3>
+              <h3 id="provider-setup-title">{strings.onboarding.setup(providerLabel)}</h3>
               <p>{setupDescription}</p>
               {status === undefined ? null : (
                 <ul>
-                  <li>{status.apiKeyConfigured ? "API key saved." : "API key not saved."}</li>
-                  <li>{status.modelConfigured ? "Model selected." : "Model not selected."}</li>
+                  <li>
+                    {status.apiKeyConfigured
+                      ? strings.onboarding.apiKeySaved
+                      : strings.onboarding.apiKeyNotSaved}
+                  </li>
+                  <li>
+                    {status.modelConfigured
+                      ? strings.onboarding.modelSelected
+                      : strings.onboarding.modelNotSelected}
+                  </li>
                 </ul>
               )}
               <fieldset className={styles.providerActions}>
-                <legend className={styles.srOnly}>Provider actions</legend>
-                {(Object.keys(actionLabels) as ProviderAction[])
+                <legend className={styles.srOnly}>{strings.onboarding.actionsLegend}</legend>
+                {(Object.keys(strings.onboarding.actionLabels) as ProviderAction[])
                   .filter((action) => action !== "save-key" || status?.apiKeyConfigured === false)
                   .map((action) => (
                     <Button
@@ -138,8 +125,8 @@ export function OnboardingCard({
                       onClick={(event) => handleAction(action, event)}
                     >
                       {pendingAction?.action === action
-                        ? `${actionLabels[action]}…`
-                        : actionLabels[action]}
+                        ? `${strings.onboarding.actionLabels[action]}…`
+                        : strings.onboarding.actionLabels[action]}
                     </Button>
                   ))}
               </fieldset>
@@ -148,12 +135,12 @@ export function OnboardingCard({
               </p>
               {actionOutcome?.status === "failed" ? (
                 <p className={styles.error} role="alert">
-                  {failureMessages[actionOutcome.code]}
+                  {strings.onboarding.failureMessages[actionOutcome.code]}
                 </p>
               ) : null}
             </section>
-            <fieldset className={styles.examples} aria-label="Sample tasks">
-              {EXAMPLE_PROMPTS.map((prompt) => (
+            <fieldset className={styles.examples} aria-label={strings.onboarding.sampleTasks}>
+              {strings.onboarding.examples.map((prompt) => (
                 <button
                   key={prompt}
                   type="button"

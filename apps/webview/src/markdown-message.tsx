@@ -1,5 +1,6 @@
 import { useState } from "react";
 import styles from "./markdown-message.module.css";
+import { strings } from "./strings.js";
 
 interface MarkdownMessageProps {
   readonly content: string;
@@ -27,13 +28,13 @@ export function MarkdownMessage({ content }: MarkdownMessageProps) {
           return (
             <div key={key} className={styles.codeBlock}>
               <div className={styles.codeHeader}>
-                <span>{block.lang || "code"}</span>
+                <span>{block.lang || strings.markdown.code}</span>
                 <button
                   type="button"
                   className={styles.copyButton}
                   onClick={() => handleCopy(block.text, i)}
                 >
-                  {copiedIndex === i ? "Copied!" : "Copy"}
+                  {copiedIndex === i ? strings.markdown.copied : strings.markdown.copy}
                 </button>
               </div>
               <pre className={styles.pre}>

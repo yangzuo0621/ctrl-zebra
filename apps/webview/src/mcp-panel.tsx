@@ -3,6 +3,7 @@ import { useStore } from "zustand";
 import type { StoreApi } from "zustand/vanilla";
 import styles from "./mcp-panel.module.css";
 import type { McpState } from "./mcp-store.js";
+import { strings } from "./strings.js";
 import { Button } from "./ui/button.js";
 
 export function McpPanel({ store }: { readonly store: StoreApi<McpState> }) {
@@ -21,43 +22,45 @@ export function McpPanel({ store }: { readonly store: StoreApi<McpState> }) {
 
   return (
     <details className={styles.panel}>
-      <summary>MCP Server and context</summary>
+      <summary>{strings.mcp.panelSummary}</summary>
       <div className={styles.body}>
         <h2 ref={heading} tabIndex={-1}>
-          MCP
+          {strings.mcp.heading}
         </h2>
+        <p>{strings.mcp.description}</p>
         <p>
-          Connect one configured local stdio Server. Chat remains available while MCP is
-          disconnected.
-        </p>
-        <p>
-          <strong>Status:</strong> {state.connection.status}
+          <strong>{strings.mcp.status}</strong>{" "}
+          {strings.mcp.connectionStatus[state.connection.status]}
         </p>
         {state.connection.server === undefined ? null : (
           <p>
-            <strong>Server:</strong> {state.connection.server.displayName}
+            <strong>{strings.mcp.server}</strong> {state.connection.server.displayName}
           </p>
         )}
         {state.connection.status === "connected" ? (
-          <ul className={styles.compactList} aria-label="MCP Server capabilities">
-            <li>Tools: {yesNo(state.connection.capabilities.tools)}</li>
-            <li>Resources: {yesNo(state.connection.capabilities.resources)}</li>
-            <li>Prompts: {yesNo(state.connection.capabilities.prompts)}</li>
+          <ul className={styles.compactList} aria-label={strings.mcp.capabilitiesLabel}>
+            <li>
+              {strings.mcp.tools}: {yesNo(state.connection.capabilities.tools)}
+            </li>
+            <li>
+              {strings.mcp.resources}: {yesNo(state.connection.capabilities.resources)}
+            </li>
+            <li>
+              {strings.mcp.prompts}: {yesNo(state.connection.capabilities.prompts)}
+            </li>
           </ul>
         ) : null}
         {state.connection.status === "failed" ? (
           <p role="alert">{state.connection.error.message}</p>
         ) : null}
-        {state.connection.configurationStale ? (
-          <p>Configuration changed. Disconnect, then reconnect to apply it.</p>
-        ) : null}
+        {state.connection.configurationStale ? <p>{strings.mcp.configurationChanged}</p> : null}
         <div className={styles.actions}>
           <Button
             size="sm"
             onClick={() => state.connect()}
             disabled={state.busy !== undefined || state.connection.status === "connected"}
           >
-            Connect
+            {strings.mcp.connect}
           </Button>
           <Button
             size="sm"
@@ -65,45 +68,44 @@ export function McpPanel({ store }: { readonly store: StoreApi<McpState> }) {
             onClick={() => state.disconnect()}
             disabled={state.busy !== undefined || state.connection.status === "disconnected"}
           >
-            Disconnect
+            {strings.mcp.disconnect}
           </Button>
           <Button size="sm" variant="ghost" onClick={() => state.openSettings()}>
-            Configure
+            {strings.mcp.configure}
           </Button>
         </div>
 
         <section aria-labelledby="mcp-tools-title">
-          <h3 id="mcp-tools-title">Tools</h3>
+          <h3 id="mcp-tools-title">{strings.mcp.tools}</h3>
           {state.tools?.tools.length ? (
             <ul className={styles.cards}>
               {state.tools.tools.map((tool) => (
                 <li key={tool.registryName}>
                   <strong>{tool.title ?? tool.mcpToolName}</strong>
-                  <span>Server: {tool.server.displayName}</span>
-                  <span>Action: {tool.mcpToolName}</span>
-                  {tool.description === undefined ? null : <span>{tool.description}</span>}
                   <span>
-                    Execution risk: external Server behavior and side effects may be unknown;
-                    approval is still required where applicable.
+                    {strings.mcp.server} {tool.server.displayName}
                   </span>
+                  <span>{strings.mcp.action(tool.mcpToolName)}</span>
+                  {tool.description === undefined ? null : <span>{tool.description}</span>}
+                  <span>{strings.mcp.executionRiskDetail}</span>
                 </li>
               ))}
             </ul>
           ) : (
-            <p>No MCP Tools available.</p>
+            <p>{strings.mcp.noTools}</p>
           )}
         </section>
 
         <section aria-labelledby="mcp-resources-title">
-          <h3 id="mcp-resources-title">Resources</h3>
-          <label htmlFor="mcp-resource">Resource or template</label>
+          <h3 id="mcp-resources-title">{strings.mcp.resources}</h3>
+          <label htmlFor="mcp-resource">{strings.mcp.resourceOrTemplate}</label>
           <select
             id="mcp-resource"
             value={state.selectedResourceKey ?? ""}
             onChange={(event) => state.selectResource(event.target.value)}
             disabled={state.resources === undefined}
           >
-            <option value="">No Resource selected</option>
+            <option value="">{strings.mcp.noResource}</option>
             {state.resources?.resources.map((item) => (
               <option key={item.uri} value={`resource:${item.uri}`}>
                 {item.title ?? item.name}
@@ -111,14 +113,16 @@ export function McpPanel({ store }: { readonly store: StoreApi<McpState> }) {
             ))}
             {state.resources?.templates.map((item) => (
               <option key={item.uriTemplate} value={`template:${item.uriTemplate}`}>
-                {item.title ?? item.name} (template)
+                {item.title ?? item.name}
+                {strings.mcp.templateSuffix}
               </option>
             ))}
           </select>
           {selectedResource?.kind === "template"
             ? selectedResource.value.arguments.map(({ name }) => (
                 <label key={name}>
-                  {name} (required)
+                  {name}
+                  {strings.mcp.requiredSuffix}
                   <input
                     required
                     value={state.resourceArguments[name] ?? ""}
@@ -128,7 +132,7 @@ export function McpPanel({ store }: { readonly store: StoreApi<McpState> }) {
               ))
             : null}
           {selectedResource === undefined ? null : (
-            <p>{selectedResource.value.description ?? "No description supplied."}</p>
+            <p>{selectedResource.value.description ?? strings.mcp.noDescription}</p>
           )}
           <Button
             size="sm"
@@ -136,25 +140,27 @@ export function McpPanel({ store }: { readonly store: StoreApi<McpState> }) {
             onClick={() => state.readResource()}
             disabled={selectedResource === undefined || state.busy !== undefined}
           >
-            Read preview
+            {strings.mcp.readPreview}
           </Button>
           {state.resourcePreview === undefined ? null : (
             <article className={styles.preview}>
-              <h4>Text preview</h4>
-              <p>Source: {state.resourcePreview.snapshot.server.displayName}</p>
+              <h4>{strings.mcp.textPreview}</h4>
+              <p>{strings.mcp.source(state.resourcePreview.snapshot.server.displayName)}</p>
               <p>
-                MIME: {state.resourcePreview.snapshot.mimeType}; truncated:{" "}
-                {yesNo(state.resourcePreview.snapshot.truncated)}
+                {strings.mcp.mime(
+                  state.resourcePreview.snapshot.mimeType,
+                  yesNo(state.resourcePreview.snapshot.truncated),
+                )}
               </p>
               <pre>{state.resourcePreview.snapshot.items.map(({ text }) => text).join("")}</pre>
               <Button size="sm" onClick={() => state.attachResource()}>
-                Attach to draft
+                {strings.mcp.attachToDraft}
               </Button>
             </article>
           )}
           <DraftItems
-            title="Attached Resources"
-            empty="No Resources attached."
+            title={strings.mcp.attachedResources}
+            empty={strings.mcp.noResourcesAttached}
             items={state.attachments.map((item) => ({
               id: item.snapshotId,
               label: `${item.serverId}: ${item.uri}`,
@@ -164,15 +170,15 @@ export function McpPanel({ store }: { readonly store: StoreApi<McpState> }) {
         </section>
 
         <section aria-labelledby="mcp-prompts-title">
-          <h3 id="mcp-prompts-title">Prompts</h3>
-          <label htmlFor="mcp-prompt">Prompt</label>
+          <h3 id="mcp-prompts-title">{strings.mcp.prompts}</h3>
+          <label htmlFor="mcp-prompt">{strings.mcp.prompt}</label>
           <select
             id="mcp-prompt"
             value={state.selectedPromptName ?? ""}
             onChange={(event) => state.selectPrompt(event.target.value)}
             disabled={state.prompts === undefined}
           >
-            <option value="">No Prompt selected</option>
+            <option value="">{strings.mcp.noPrompt}</option>
             {state.prompts?.prompts.map((prompt) => (
               <option key={prompt.name} value={prompt.name}>
                 {prompt.title ?? prompt.name}
@@ -182,7 +188,7 @@ export function McpPanel({ store }: { readonly store: StoreApi<McpState> }) {
           {selectedPrompt?.arguments.map((argument) => (
             <label key={argument.name}>
               {argument.name}
-              {argument.required ? " (required)" : " (optional)"}
+              {argument.required ? strings.mcp.requiredSuffix : strings.mcp.optionalSuffix}
               <input
                 required={argument.required}
                 aria-describedby={
@@ -204,34 +210,34 @@ export function McpPanel({ store }: { readonly store: StoreApi<McpState> }) {
             onClick={() => state.previewPrompt()}
             disabled={selectedPrompt === undefined || state.busy !== undefined}
           >
-            Preview Prompt
+            {strings.mcp.previewPrompt}
           </Button>
           {state.promptPreview === undefined ? null : (
             <article className={styles.preview}>
-              <h4>Full Prompt preview</h4>
+              <h4>{strings.mcp.fullPromptPreview}</h4>
               <p>
-                Source: {state.promptPreview.server.displayName}. Content is ordinary user context,
-                never System authority.
+                {strings.mcp.source(state.promptPreview.server.displayName)}{" "}
+                {strings.mcp.promptContextNotice}
               </p>
               {state.promptPreview.messages.map((message) => (
                 <div key={`${message.sourceRole}:${message.text}`}>
-                  <strong>Source role: {message.sourceRole}</strong>
+                  <strong>{strings.mcp.promptSource(message.sourceRole)}</strong>
                   <pre>{message.text}</pre>
                 </div>
               ))}
               <div className={styles.actions}>
                 <Button size="sm" onClick={() => state.confirmPrompt()}>
-                  Confirm for draft
+                  {strings.mcp.confirmForDraft}
                 </Button>
                 <Button size="sm" variant="secondary" onClick={() => state.cancelPrompt()}>
-                  Cancel preview
+                  {strings.mcp.cancelPreview}
                 </Button>
               </div>
             </article>
           )}
           <DraftItems
-            title="Confirmed Prompts"
-            empty="No Prompts confirmed."
+            title={strings.mcp.confirmedPrompts}
+            empty={strings.mcp.noPromptsConfirmed}
             items={state.confirmations.map((item) => ({
               id: item.previewId,
               label: `${item.value.serverId}: ${item.value.promptName}`,
@@ -239,7 +245,13 @@ export function McpPanel({ store }: { readonly store: StoreApi<McpState> }) {
             }))}
           />
         </section>
-        <p className={styles.srOnly} role="status" aria-live="polite" aria-atomic="true">
+        <p
+          className={styles.srOnly}
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          aria-label={strings.mcp.announcementLabel}
+        >
           {state.announcement}
         </p>
       </div>
@@ -271,7 +283,7 @@ function DraftItems({
             <li key={item.id}>
               <span>{item.label}</span>
               <Button size="sm" variant="ghost" onClick={item.remove}>
-                Remove
+                {strings.mcp.remove}
               </Button>
             </li>
           ))}
@@ -294,5 +306,5 @@ function findSelectedResource(state: McpState) {
 }
 
 function yesNo(value: boolean): string {
-  return value ? "yes" : "no";
+  return value ? strings.mcp.yes : strings.mcp.no;
 }

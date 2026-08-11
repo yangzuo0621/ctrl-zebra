@@ -5,6 +5,7 @@ import { ApprovalCard } from "./approval-card.js";
 import type { DisplayApproval } from "./approval-store.js";
 import type { DisplayToolCall } from "./chat-store.js";
 import { CommandToolCard, type DisplayRunStatus } from "./command-tool-card.js";
+import { strings } from "./strings.js";
 import styles from "./tool-call-card.module.css";
 import { Badge } from "./ui/badge.js";
 import { Button } from "./ui/button.js";
@@ -19,13 +20,6 @@ export interface ToolCallCardProps {
   readonly onApprove?: () => void;
   readonly onReject?: () => void;
 }
-
-const statusLabels = {
-  pending: "Pending",
-  running: "Running",
-  success: "Success",
-  error: "Error",
-} as const;
 
 export function ToolCallCard({
   toolCall,
@@ -73,7 +67,9 @@ export function ToolCallCard({
           ? "info"
           : "default";
 
-  const badgeText = isAwaitingApproval ? "Awaiting Decision" : statusLabels[toolCall.status];
+  const badgeText = isAwaitingApproval
+    ? strings.tool.awaitingDecision
+    : strings.tool.status[toolCall.status];
 
   return (
     <article aria-labelledby={headingId} className={styles.card} data-status={toolCall.status}>
@@ -83,7 +79,7 @@ export function ToolCallCard({
             {toolCall.call.name}
           </h3>
           <Badge variant={badgeVariant}>
-            <span className={styles.state} role="status" aria-label="Tool status">
+            <span className={styles.state} role="status" aria-label={strings.tool.statusLabel}>
               {badgeText}
             </span>
           </Badge>
@@ -94,7 +90,7 @@ export function ToolCallCard({
           onClick={() => setUserExpanded(!isExpanded)}
           aria-expanded={isExpanded}
         >
-          {isExpanded ? "Collapse" : "Details"}
+          {isExpanded ? strings.tool.collapse : strings.tool.details}
         </Button>
       </header>
 
@@ -102,12 +98,12 @@ export function ToolCallCard({
         <>
           {toolCall.source?.kind === "mcp" ? (
             <div className={styles.note}>
-              <p>External MCP Server: {toolCall.source.server.displayName}</p>
-              <p>Action: {toolCall.source.mcpToolName}</p>
-              <p>Risk: execution may have side effects unknown to CtrlZebra.</p>
+              <p>{strings.tool.externalServer(toolCall.source.server.displayName)}</p>
+              <p>{strings.tool.action(toolCall.source.mcpToolName)}</p>
+              <p>{strings.tool.executionRisk}</p>
             </div>
           ) : (
-            <p className={styles.note}>Source: built-in CtrlZebra Tool.</p>
+            <p className={styles.note}>{strings.tool.builtinSource}</p>
           )}
           {isAwaitingApproval ? (
             <ApprovalCard
@@ -120,7 +116,7 @@ export function ToolCallCard({
             />
           ) : (
             <fieldset className={styles.field}>
-              <legend className={styles.label}>Arguments</legend>
+              <legend className={styles.label}>{strings.tool.arguments}</legend>
               <pre className={styles.code}>{formatJson(toolCall.call.input)}</pre>
             </fieldset>
           )}
@@ -128,10 +124,12 @@ export function ToolCallCard({
           {toolCall.status === "success" ? (
             <div className={styles.result}>
               <fieldset className={styles.field}>
-                <legend className={styles.label}>Result</legend>
+                <legend className={styles.label}>{strings.tool.result}</legend>
                 <pre className={styles.code}>{summarizeJson(toolCall.result.output)}</pre>
               </fieldset>
-              {toolCall.result.truncated ? <p className={styles.note}>Result truncated.</p> : null}
+              {toolCall.result.truncated ? (
+                <p className={styles.note}>{strings.tool.resultTruncated}</p>
+              ) : null}
             </div>
           ) : null}
 

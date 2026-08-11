@@ -21,6 +21,7 @@ import {
 } from "@ctrl-zebra/protocol";
 import { createStore, type StoreApi } from "zustand/vanilla";
 
+import { strings } from "./strings.js";
 import type { WebviewHost } from "./vscode-api.js";
 
 export interface DisplayReasoningBlock {
@@ -263,7 +264,7 @@ export function createChatStore({
         reasoningRunUtf8Bytes += prefix.measurement.utf8Bytes;
         reasoningDirty = true;
         if (!wasVisible) {
-          pendingReasoningAnnouncement = "推理摘要已开始生成。";
+          pendingReasoningAnnouncement = strings.reasoning.started;
         }
         schedulePendingFlush();
       }
@@ -279,7 +280,7 @@ export function createChatStore({
           reasoningRunTruncated = true;
           reasoningTextLimited = true;
         }
-        pendingReasoningAnnouncement = "推理摘要已截断。";
+        pendingReasoningAnnouncement = strings.reasoning.truncatedAnnouncement;
         schedulePendingFlush();
       }
     };
@@ -317,7 +318,7 @@ export function createChatStore({
         usageOverflowed = true;
         set({
           usage: undefined,
-          runError: "Provider usage exceeded the supported Session limit.",
+          runError: strings.chat.usageLimit,
         });
         return;
       }
@@ -430,7 +431,7 @@ export function createChatStore({
           usage: state.usage,
           reasoningAnnouncement: "",
           sessionAnnouncement:
-            sessionId === undefined ? "Starting a new Session." : "Continuing the current Session.",
+            sessionId === undefined ? strings.chat.startNewSession : strings.chat.continueSession,
         }));
         host.submit(requestId, content, sessionId);
         return true;
@@ -474,7 +475,7 @@ export function createChatStore({
           runError: undefined,
           usage: undefined,
           reasoningAnnouncement: "",
-          sessionAnnouncement: "New chat ready.",
+          sessionAnnouncement: strings.chat.newChatReady,
         });
         host.newChat?.(requestId);
         return true;
@@ -517,7 +518,7 @@ export function createChatStore({
           sessionError: undefined,
           runError: undefined,
           reasoningAnnouncement: "",
-          sessionAnnouncement: "Restoring Session.",
+          sessionAnnouncement: strings.chat.restoringSession,
         });
         host.restoreSession(restoreRequestId, sessionSelectionId);
         return true;
@@ -582,7 +583,7 @@ export function createChatStore({
             sessionSelectionId: message.sessionId,
             sessionSwitchPending: false,
             sessionError: undefined,
-            sessionAnnouncement: "Current Session confirmed.",
+            sessionAnnouncement: strings.chat.currentSessionConfirmed,
           });
           return;
         }
@@ -614,8 +615,8 @@ export function createChatStore({
           if (targetSessionId === undefined || message.session.sessionId !== targetSessionId) {
             set({
               restoring: false,
-              sessionError: "The restored Session did not match the selected Session.",
-              sessionAnnouncement: "Session restore failed.",
+              sessionError: strings.chat.restoredMismatch,
+              sessionAnnouncement: strings.chat.restoreFailed,
             });
             return;
           }
@@ -641,20 +642,21 @@ export function createChatStore({
             usage: message.session.usage,
             reasoningAnnouncement: "",
             sessionError: message.session.eventLogTailDamaged
-              ? "Recovered through the last valid event."
+              ? strings.chat.recoveredEventLog
               : undefined,
             runError:
-              message.session.status === "truncated"
-                ? "The response was truncated before completion. Ask a follow-up to continue."
-                : undefined,
-            sessionAnnouncement: "Session restored.",
+              message.session.status === "truncated" ? strings.chat.truncatedFollowUp : undefined,
+            sessionAnnouncement: strings.chat.sessionRestored,
           });
           return;
         }
 
         if (message.type === "extension/session-error" && message.requestId === listRequestId) {
           listRequestId = undefined;
-          set({ sessionError: message.message, sessionAnnouncement: "Session list unavailable." });
+          set({
+            sessionError: message.message,
+            sessionAnnouncement: strings.chat.sessionListUnavailable,
+          });
           return;
         }
 
@@ -665,7 +667,7 @@ export function createChatStore({
           set({
             restoring: false,
             sessionError: message.message,
-            sessionAnnouncement: "Session restore failed.",
+            sessionAnnouncement: strings.chat.restoreFailed,
           });
           return;
         }
@@ -686,8 +688,8 @@ export function createChatStore({
             mismatchedSessionRequests.delete(message.requestId);
             applyPendingStreams(message.status);
             set({
-              sessionError: "The response belonged to a different Session.",
-              sessionAnnouncement: "Session ownership rejected.",
+              sessionError: strings.chat.responseDifferentSession,
+              sessionAnnouncement: strings.chat.sessionOwnershipRejected,
             });
           }
           return;
@@ -720,7 +722,7 @@ export function createChatStore({
             reasoningBlockCountLimited = true;
             reasoningRunTruncated = true;
             reasoningDirty = true;
-            pendingReasoningAnnouncement = "部分推理摘要因块数限制已省略。";
+            pendingReasoningAnnouncement = strings.reasoning.omittedByBlockLimit;
             schedulePendingFlush();
             return;
           }
@@ -759,13 +761,13 @@ export function createChatStore({
             block.truncated = true;
             block.discardText = true;
             reasoningDirty = true;
-            pendingReasoningAnnouncement = "推理摘要已截断。";
+            pendingReasoningAnnouncement = strings.reasoning.truncatedAnnouncement;
           } else {
             reasoningRunTruncated = true;
             reasoningBlockCountLimited = true;
             reasoningTextLimited = message.reason !== "block-count";
             reasoningDirty = true;
-            pendingReasoningAnnouncement = "部分推理摘要因运行限制已省略。";
+            pendingReasoningAnnouncement = strings.reasoning.omittedByRunLimit;
           }
           schedulePendingFlush();
           return;
@@ -785,8 +787,8 @@ export function createChatStore({
           openReasoningBlockId = undefined;
           if (block.content.length > 0 || block.pendingParts.length > 0) {
             pendingReasoningAnnouncement = block.truncated
-              ? "推理摘要已截断并完成。"
-              : "推理摘要生成完成。";
+              ? strings.reasoning.endedTruncated
+              : strings.reasoning.ended;
           }
           applyPendingStreams();
           return;
@@ -821,14 +823,13 @@ export function createChatStore({
             ) {
               openBlock.state = "partial";
               reasoningDirty = true;
-              pendingReasoningAnnouncement = "推理摘要已部分结束。";
+              pendingReasoningAnnouncement = strings.reasoning.partialAnnouncement;
             }
             openReasoningBlockId = undefined;
             applyPendingStreams(message.status);
             if (message.status === "truncated") {
               set({
-                runError:
-                  "The response was truncated before completion. Ask a follow-up to continue.",
+                runError: strings.chat.truncatedFollowUp,
               });
             }
           } else {

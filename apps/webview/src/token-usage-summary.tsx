@@ -1,6 +1,7 @@
 import type { TokenUsage } from "@ctrl-zebra/protocol";
 
 import styles from "./app.module.css";
+import { strings } from "./strings.js";
 
 interface TokenUsageSummaryProps {
   readonly usage: TokenUsage | undefined;
@@ -16,9 +17,9 @@ export function TokenUsageSummary({ usage, status }: TokenUsageSummaryProps) {
 
   if (usage === undefined) {
     return (
-      <aside className={styles.tokenUsage} aria-label="Provider token usage">
-        <span className={styles.tokenUsageTitle}>Provider usage</span>
-        <span className={styles.tokenUsageUnavailable}>Unavailable for this response.</span>
+      <aside className={styles.tokenUsage} aria-label={strings.tokenUsage.label}>
+        <span className={styles.tokenUsageTitle}>{strings.tokenUsage.title}</span>
+        <span className={styles.tokenUsageUnavailable}>{strings.tokenUsage.unavailable}</span>
       </aside>
     );
   }
@@ -29,15 +30,24 @@ export function TokenUsageSummary({ usage, status }: TokenUsageSummaryProps) {
     usage.totalTokens !== undefined;
 
   return (
-    <aside className={styles.tokenUsage} aria-label="Provider token usage">
-      <span className={styles.tokenUsageTitle}>Provider usage{complete ? "" : " (partial)"}</span>
-      <span>Input: {formatTokenCount(usage.inputTokens)}</span>
-      <span>Output: {formatTokenCount(usage.outputTokens)}</span>
-      <span>Total: {formatTokenCount(usage.totalTokens)}</span>
+    <aside className={styles.tokenUsage} aria-label={strings.tokenUsage.label}>
+      <span className={styles.tokenUsageTitle}>
+        {strings.tokenUsage.title}
+        {complete ? "" : strings.tokenUsage.partial}
+      </span>
+      <span>
+        {strings.tokenUsage.input}: {formatTokenCount(usage.inputTokens)}
+      </span>
+      <span>
+        {strings.tokenUsage.output}: {formatTokenCount(usage.outputTokens)}
+      </span>
+      <span>
+        {strings.tokenUsage.total}: {formatTokenCount(usage.totalTokens)}
+      </span>
     </aside>
   );
 }
 
 function formatTokenCount(value: number | undefined): string {
-  return value === undefined ? "—" : value.toLocaleString();
+  return value === undefined ? strings.tokenUsage.unknown : value.toLocaleString();
 }

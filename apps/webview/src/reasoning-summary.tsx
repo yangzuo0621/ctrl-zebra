@@ -2,6 +2,7 @@ import { useId, useState } from "react";
 
 import type { DisplayReasoningBlock } from "./chat-store.js";
 import styles from "./reasoning-summary.module.css";
+import { formatReasoningBlockState, strings } from "./strings.js";
 
 interface ReasoningSummaryProps {
   readonly blocks: readonly DisplayReasoningBlock[];
@@ -30,26 +31,25 @@ export function ReasoningSummary({
     setCopyingBlockId(block.blockId);
     try {
       await navigator.clipboard.writeText(block.content);
-      onAnnounce("推理摘要已复制。");
+      onAnnounce(strings.reasoning.copied);
     } catch {
-      onAnnounce("无法复制推理摘要。");
+      onAnnounce(strings.reasoning.copyFailed);
     } finally {
       setCopyingBlockId(undefined);
     }
   };
 
   return (
-    <section className={styles.summary} aria-label="推理摘要">
+    <section className={styles.summary} aria-label={strings.reasoning.regionLabel}>
       <div className={styles.heading}>
-        <h3 className={styles.title}>推理摘要</h3>
-        <span className={styles.source}>模型提供</span>
+        <h3 className={styles.title}>{strings.reasoning.title}</h3>
+        <span className={styles.source}>{strings.reasoning.providedBy}</span>
       </div>
 
       <ol className={styles.blocks}>
         {blocks.map((block, index) => {
           const contentId = `${summaryId}-reasoning-${index + 1}`;
           const position = blocks.length > 1 ? ` ${index + 1}` : "";
-          const action = block.expanded ? "折叠" : "展开";
           return (
             <li
               className={styles.block}
@@ -65,7 +65,7 @@ export function ReasoningSummary({
                   onClick={() => onToggle(block.blockId)}
                 >
                   <span aria-hidden="true">{block.expanded ? "▾" : "▸"}</span>
-                  {`${action}推理摘要${position}`}
+                  {strings.reasoning.toggle(block.expanded, position)}
                 </button>
                 <span className={styles.state}>{blockStateText(block)}</span>
               </div>
@@ -79,7 +79,9 @@ export function ReasoningSummary({
                     disabled={copyingBlockId !== undefined}
                     onClick={() => copyBlock(block)}
                   >
-                    {copyingBlockId === block.blockId ? "正在复制…" : "复制摘要"}
+                    {copyingBlockId === block.blockId
+                      ? strings.reasoning.copying
+                      : strings.reasoning.copy}
                   </button>
                 </div>
               ) : null}
@@ -88,17 +90,11 @@ export function ReasoningSummary({
         })}
       </ol>
 
-      {runTruncated ? <p className={styles.notice}>部分推理摘要已因运行限制省略。</p> : null}
+      {runTruncated ? <p className={styles.notice}>{strings.reasoning.truncated}</p> : null}
     </section>
   );
 }
 
 function blockStateText(block: DisplayReasoningBlock): string {
-  const state =
-    block.state === "streaming"
-      ? "正在生成摘要"
-      : block.state === "partial"
-        ? "部分摘要"
-        : "摘要已完成";
-  return block.truncated ? `${state} · 内容已截断` : state;
+  return formatReasoningBlockState(block.state, block.truncated);
 }
