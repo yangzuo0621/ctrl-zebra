@@ -129,8 +129,12 @@ This document defines the initial runtime boundaries for the CtrlZebra desktop V
 - `apps/extension` owns Provider configuration. It accepts VS Code configuration values as
   `unknown`, validates them at the host boundary, resolves credentials through Extension-owned
   SecretStorage adapters, and selects a `ModelGateway` through an injected Provider factory.
-  `packages/core` and `apps/webview` never receive Provider identifiers, endpoint URLs, Secret
-  references, SDK options, or other vendor-specific configuration.
+  `packages/core` and `apps/webview` never receive authoritative Provider configuration, endpoint
+  URLs, Secret references, SDK options, model IDs, or other vendor-specific values. T1603 adds one
+  deliberately bounded display projection: the Extension may send the closed Provider identifier
+  and two configuration booleans (`apiKeyConfigured` and `modelConfigured`) to the Webview. This
+  projection is presentation-only, is validated at the Protocol boundary, and never becomes a
+  Provider selection, credential, model, or runtime configuration owned by the Webview.
 - The supported Provider identifiers are the closed set `openai`, `gemini`, and
   `openai-compatible`. Unknown identifiers fail before Secret access or model client creation.
   Provider identifiers are public configuration values; renaming one requires an implementation
@@ -161,6 +165,11 @@ This document defines the initial runtime boundaries for the CtrlZebra desktop V
   SecretStorage adapter, and expose no credential through Core, Protocol, Webview state, settings,
   command arguments, logs, or diagnostics. Command handlers remain thin composition points and do
   not initialize a model client or contact a Provider endpoint.
+- T1603 Webview onboarding intents remain host-owned. The Extension maps the strict save-key,
+  select-model, and open-settings messages to existing Provider workflows or the VS Code settings
+  command; command IDs, VS Code objects, endpoint values, and credential material never cross the
+  Webview boundary. Completion, cancellation, and failure are returned as bounded user-safe action
+  outcomes, while the Host remains the only source of configuration truth.
 - Version `1` is the first Provider configuration format, so there is no legacy data to migrate.
   Future changes to identifiers, setting names, normalized shapes, defaults, or Secret names must
   define an explicit version transition. Migration reads exact prior keys through VS Code

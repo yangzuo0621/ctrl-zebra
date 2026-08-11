@@ -41,6 +41,37 @@ This document defines the React Webview constraints established before T0103. It
 - Reusable presentation components receive data and callbacks through typed props and do not acquire host capabilities.
 - Components do not parse protocol envelopes, perform persistence, or contain Extension workflow decisions.
 
+## Provider Onboarding Projection
+
+- The Extension Host remains the source of truth for Provider settings, model selection, and
+  SecretStorage. The onboarding region consumes only the validated T1603 `extension/provider-status`
+  projection: the closed active Provider enum plus `apiKeyConfigured` and `modelConfigured`
+  booleans. It never receives an endpoint URL, model ID, Secret reference, credential value, key
+  length/prefix/suffix, authorization material, or raw Provider response.
+- On mount, the feature requests the projection through the strict `webview/provider-status`
+  message. Save-key, select-model, and open-settings controls send separate intent-only messages;
+  they do not invoke VS Code APIs or carry Provider/Secret arguments. The Host maps those intents to
+  its existing command workflows and sends a correlated bounded action outcome, then a fresh status
+  projection reusing that action's `requestId`. The Webview accepts the post-action projection only
+  after the matching terminal action outcome for its pending action; a normal status request uses
+  only its own `requestId`. Malformed, stale, or mismatched responses are ignored after Protocol
+  Schema validation.
+- `apiKeyConfigured: false` is rendered as a missing credential requirement, not as a prompt to
+  inspect or replace a value. The Host may report it as configured for a validated local
+  OpenAI-Compatible endpoint that does not require a key. The Webview never infers credential state
+  from model text, labels, endpoint strings, or error wording.
+- Onboarding actions are semantic, keyboard-operable buttons with accessible names and visible
+  focus indicators. A status refresh, command completion, cancellation, or error preserves the
+  active control and does not auto-focus another region. After an action settles, focus returns to
+  its trigger; if that control is no longer rendered, focus moves once to the onboarding heading.
+  A polite status region announces only the discrete outcome, while actionable failures expose a
+  stable user-safe message and keep the retry controls available. Cancellation leaves the previous
+  projection unchanged and does not announce failure.
+- The empty-state layout keeps the composer and its primary action reachable at approximately
+  300px width, 200% zoom, and long localized labels. It uses the existing VS Code CSS variables and
+  semantic tokens for light, dark, high-contrast, and high-contrast-light themes; state is never
+  communicated by color alone and no page-level horizontal scrolling is introduced.
+
 ## Styling and Theme Integration
 
 - Component styles use CSS Modules. Global rules are limited to the application root and document defaults required by the Webview shell.
