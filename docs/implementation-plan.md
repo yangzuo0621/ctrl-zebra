@@ -68,7 +68,7 @@
 - 已完成：119
 - 进行中：0
 - 受阻：0
-- 待开始：28
+- 待开始：29
 - 当前任务：T1803
 - 下一任务：T1804
 - 最后更新：2026-08-12
@@ -256,8 +256,8 @@
 
 ### T1802 完成记录
 
-- 完成摘要：按已归档的 Schema 关键字分类与引用规则规范化 MCP Tool Schema，保留受支持关键字、稳定拒绝不支持结构并输出可诊断路径信息。
-- 完成证据：[PR #191](https://github.com/yangzuo0621/ctrl-zebra/pull/191)，实现 revision `a19fb2e`；聚焦测试 109/109、完整单元测试 1516 个、`pnpm check`、`pnpm typecheck` 与 `git diff --check` 均通过；GitHub Actions run `31511668374` 的 Ubuntu、macOS、Windows 验证均通过。
+- 完成摘要：按已归档的 Schema 关键字分类与引用规则规范化 MCP Tool Schema，保留受支持关键字并以稳定 reason 拒绝不支持结构，不泄漏 schema 路径信息。
+- 完成证据：[PR #191](https://github.com/yangzuo0621/ctrl-zebra/pull/191)，最终实现 revision `6e3c028`；最新本地完整单元测试 1516 个、`pnpm check`、`pnpm typecheck`、集成测试与 `git diff --check` 均通过；GitHub Actions run `31512291441` 的 Ubuntu、macOS、Windows 验证均通过。
 - 完成日期：2026-08-12
 - 下一任务：T1803
 
