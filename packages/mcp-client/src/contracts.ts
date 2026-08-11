@@ -1,4 +1,5 @@
 export const mcpProtocolVersion = "2026-07-28" as const;
+export const mcpLegacyProtocolVersion = "2025-11-25" as const;
 export const maxMcpMessageBytes = 1_048_576;
 export const maxMcpStderrBytes = 65_536;
 export const maxMcpListPages = 100;
@@ -47,6 +48,13 @@ export type McpClientErrorCode =
   | "termination-unconfirmed"
   | "internal";
 
+export type McpProtocolMode = "modern-only" | "dual";
+export type McpProtocolEra = "modern" | "legacy";
+
+export type McpNegotiatedProtocol =
+  | { readonly era: "modern"; readonly version: typeof mcpProtocolVersion }
+  | { readonly era: "legacy"; readonly version: typeof mcpLegacyProtocolVersion };
+
 /** Stable, non-sensitive classifications for a Tool omitted from a mixed snapshot. */
 export type McpToolRejectionReason =
   | "forbidden-keyword"
@@ -73,8 +81,11 @@ export interface McpServerCapabilities {
 
 export interface McpConnectedState {
   readonly status: "connected";
-  readonly protocolVersion: typeof mcpProtocolVersion;
+  readonly protocolVersion: typeof mcpProtocolVersion | typeof mcpLegacyProtocolVersion;
   readonly capabilities: McpServerCapabilities;
+  /** Additive dual-era projection; omitted for the pre-T1805 default path. */
+  readonly configuredMode?: McpProtocolMode;
+  readonly negotiated?: McpNegotiatedProtocol;
 }
 
 export interface McpFailedState {
@@ -127,6 +138,10 @@ export interface McpStdioPort {
 export interface ControlledMcpClientOptions {
   readonly clientName?: string;
   readonly clientVersion?: string;
+  /** The closed protocol mode. Omitted keeps the existing modern-only shape. */
+  readonly protocolMode?: McpProtocolMode;
+  /** Bounded probe and legacy-handshake timeout used by the package-private lifecycle. */
+  readonly probeTimeoutMs?: number;
 }
 
 export interface McpServerIdentity {

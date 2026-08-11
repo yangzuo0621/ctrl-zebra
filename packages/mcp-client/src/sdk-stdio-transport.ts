@@ -31,6 +31,7 @@ export class SdkStdioTransport implements Transport {
   private cleanupPromise: Promise<void> | undefined;
   private failureCode: McpClientErrorCode | undefined;
   private selectedProtocolVersion: string | undefined;
+  private readonly ignoredResponseIds = new Set<string | number>();
 
   constructor(
     private readonly port: McpStdioPort,
@@ -55,9 +56,21 @@ export class SdkStdioTransport implements Transport {
 
   setSupportedProtocolVersions = (_versions: string[]): void => {};
 
+  /**
+   * A probe may time out immediately before SDK handoff. Keep its correlation
+   * id fenced so a late response cannot be interpreted by the new SDK request
+   * registry or mutate a later generation.
+   */
+  ignoreResponseId(id: string | number): void {
+    this.ignoredResponseIds.add(id);
+  }
+
   async start(): Promise<void> {
     if (this.started) {
-      throw new McpTransportFailure("internal");
+      if (this.acceptingMessages && this.failureCode === undefined) {
+        return;
+      }
+      throw new McpTransportFailure(this.failureCode ?? "disconnected");
     }
 
     this.started = true;
@@ -159,6 +172,9 @@ export class SdkStdioTransport implements Transport {
     try {
       const line = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
       const message = deserializeMessage(line);
+      if (isIgnoredResponse(message, this.ignoredResponseIds)) {
+        return;
+      }
       this.onmessage?.(message);
     } catch {
       this.fail("malformed-message");
@@ -224,4 +240,18 @@ export class SdkStdioTransport implements Transport {
       this.recordFailure("termination-unconfirmed");
     }
   }
+}
+
+function isIgnoredResponse(message: JSONRPCMessage, ignoredIds: Set<string | number>): boolean {
+  if (typeof message !== "object" || message === null || !("id" in message)) {
+    return false;
+  }
+  if ("method" in message) {
+    return false;
+  }
+  const id = message.id;
+  if (typeof id !== "string" && typeof id !== "number") {
+    return false;
+  }
+  return ignoredIds.delete(id);
 }

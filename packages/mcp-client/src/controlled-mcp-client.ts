@@ -15,6 +15,7 @@ import {
   type McpConnectionState,
   type McpConnectOutcome,
   type McpDisconnectOutcome,
+  type McpNegotiatedProtocol,
   type McpPromptDiscoveryContext,
   type McpResourceDiscoveryContext,
   type McpServerCapabilities,
@@ -24,9 +25,11 @@ import {
   type McpToolDiscoveryContext,
   maxMcpListEntries,
   maxMcpListPages,
+  mcpLegacyProtocolVersion,
   mcpProtocolVersion,
 } from "./contracts.js";
 import { createMcpClientError } from "./errors.js";
+import { McpNegotiationFailure, negotiateMcpEra } from "./mcp-negotiation.js";
 import {
   createMcpPromptCatalog,
   type McpPromptCatalogView,
@@ -51,7 +54,7 @@ import {
   McpToolSnapshotError,
   type McpToolSnapshotView,
 } from "./mcp-tool-snapshot.js";
-import { controlledSdkClientOptions } from "./sdk-options.js";
+import { createControlledSdkClientOptions } from "./sdk-options.js";
 import { SdkStdioTransport } from "./sdk-stdio-transport.js";
 
 const emptyCapabilities: McpServerCapabilities = {
@@ -67,6 +70,11 @@ const emptyCapabilities: McpServerCapabilities = {
 export class ControlledMcpClient {
   private readonly sdkClient: Client;
   private readonly transport: SdkStdioTransport;
+  private readonly protocolMode: NonNullable<ControlledMcpClientOptions["protocolMode"]>;
+  private readonly probeTimeoutMs: number;
+  private readonly exposeNegotiatedProjection: boolean;
+  private readonly sdkClientName: string;
+  private readonly sdkClientVersion: string;
   private status: McpConnectionState["status"] = "disconnected";
   private connectedState: McpConnectedState | undefined;
   private failure: McpClientError | undefined;
@@ -89,14 +97,22 @@ export class ControlledMcpClient {
   private promptRefreshPromise: Promise<McpPromptCatalogView> | undefined;
   private promptRefreshRequested = false;
   private promptController: AbortController | undefined;
+  private generation = 0;
+  private activeGeneration = 0;
+  private negotiatedEra: "modern" | "legacy" | undefined;
 
   constructor(port: McpStdioPort, options: ControlledMcpClientOptions = {}) {
+    this.protocolMode = options.protocolMode ?? "modern-only";
+    this.probeTimeoutMs = normalizeProbeTimeout(options.probeTimeoutMs);
+    this.exposeNegotiatedProjection = options.protocolMode !== undefined;
+    this.sdkClientName = options.clientName ?? "ctrl-zebra";
+    this.sdkClientVersion = options.clientVersion ?? "0.0.0";
     this.sdkClient = new Client(
       {
-        name: options.clientName ?? "ctrl-zebra",
-        version: options.clientVersion ?? "0.0.0",
+        name: this.sdkClientName,
+        version: this.sdkClientVersion,
       },
-      controlledSdkClientOptions,
+      createControlledSdkClientOptions(this.protocolMode),
     );
     this.transport = new SdkStdioTransport(port, (code) => this.handleTransportFailure(code));
     this.sdkClient.setNotificationHandler("notifications/tools/list_changed", async () => {
@@ -360,7 +376,12 @@ export class ControlledMcpClient {
 
     this.consumed = true;
     this.status = "connecting";
+    const generation = ++this.generation;
+    this.activeGeneration = generation;
     this.connectPromise = this.connectOnce(signal).finally(() => {
+      if (this.activeGeneration === generation && this.status !== "connected") {
+        this.activeGeneration = 0;
+      }
       this.connectPromise = undefined;
     });
     return this.connectPromise;
@@ -380,6 +401,7 @@ export class ControlledMcpClient {
     }
 
     this.status = "disconnecting";
+    this.activeGeneration = ++this.generation;
     this.connectedState = undefined;
     this.transport.closeDeliveryGate();
 
@@ -396,6 +418,7 @@ export class ControlledMcpClient {
     }
 
     this.status = "disconnected";
+    this.activeGeneration = 0;
     this.failure = undefined;
     return { kind: "disconnected" };
   }
@@ -405,6 +428,7 @@ export class ControlledMcpClient {
   }
 
   private async connectOnce(signal?: AbortSignal): Promise<McpConnectOutcome> {
+    const generation = this.activeGeneration;
     if (signal?.aborted) {
       this.status = "disconnected";
       return { kind: "cancelled" };
@@ -414,14 +438,40 @@ export class ControlledMcpClient {
     signal?.addEventListener("abort", abortConnection, { once: true });
 
     try {
-      await this.sdkClient.connect(this.transport, { signal });
+      const probe = await negotiateMcpEra(this.transport, {
+        mode: this.protocolMode,
+        clientName: this.sdkClientName,
+        clientVersion: this.sdkClientVersion,
+        timeoutMs: this.probeTimeoutMs,
+        generation,
+        signal,
+        isCurrent: () => this.isCurrentGeneration(generation),
+      });
+      if (!this.isCurrentGeneration(generation)) {
+        throw new McpNegotiationFailure("protocol-incompatible");
+      }
+
+      this.negotiatedEra = probe.kind;
+      await this.sdkClient.connect(this.transport, {
+        signal,
+        timeout: this.probeTimeoutMs,
+        prior:
+          probe.kind === "modern"
+            ? { kind: "modern", discover: probe.discover }
+            : { kind: "legacy" },
+      });
 
       if (signal?.aborted || this.status === "disconnecting") {
         await this.transport.close();
         return { kind: "cancelled" };
       }
 
-      if (this.transport.protocolVersion !== mcpProtocolVersion) {
+      const negotiated: McpNegotiatedProtocol =
+        probe.kind === "modern"
+          ? { era: "modern", version: mcpProtocolVersion }
+          : { era: "legacy", version: mcpLegacyProtocolVersion };
+      const expectedVersion = negotiated.version;
+      if (this.transport.protocolVersion !== expectedVersion) {
         const failure = this.setFailure("protocol-incompatible");
         await this.transport.close();
         return { kind: "failed", error: failure };
@@ -429,8 +479,14 @@ export class ControlledMcpClient {
 
       const connection: McpConnectedState = {
         status: "connected",
-        protocolVersion: mcpProtocolVersion,
+        protocolVersion: expectedVersion,
         capabilities: projectCapabilities(this.sdkClient.getServerCapabilities()),
+        ...(this.exposeNegotiatedProjection
+          ? {
+              configuredMode: this.protocolMode,
+              negotiated,
+            }
+          : {}),
       };
       this.connectedState = connection;
       this.failure = undefined;
@@ -459,7 +515,9 @@ export class ControlledMcpClient {
 
       return {
         kind: "failed",
-        error: this.setFailure(classifySdkFailure(error, this.transport.failure)),
+        error: this.setFailure(
+          classifySdkFailure(error, this.transport.failure, this.negotiatedEra === "legacy"),
+        ),
       };
     } finally {
       signal?.removeEventListener("abort", abortConnection);
@@ -479,10 +537,15 @@ export class ControlledMcpClient {
 
   private setFailure(code: McpClientErrorCode): McpClientError {
     this.connectedState = undefined;
+    this.activeGeneration = 0;
     const failure = createMcpClientError(code);
     this.failure = failure;
     this.status = "failed";
     return failure;
+  }
+
+  private isCurrentGeneration(generation: number): boolean {
+    return this.status === "connecting" && this.activeGeneration === generation;
   }
 
   private requestToolRefresh(signal?: AbortSignal): Promise<McpToolSnapshotView> {
@@ -872,9 +935,14 @@ function projectCapabilities(capabilities: ServerCapabilities | undefined): McpS
 function classifySdkFailure(
   error: unknown,
   transportFailure: McpClientErrorCode | undefined,
+  legacyHandshake: boolean,
 ): McpClientErrorCode {
   if (transportFailure !== undefined) {
     return transportFailure;
+  }
+
+  if (error instanceof McpNegotiationFailure) {
+    return error.code;
   }
 
   if (error instanceof UnsupportedProtocolVersionError) {
@@ -900,10 +968,27 @@ function classifySdkFailure(
       return "malformed-message";
     }
 
+    if (legacyHandshake && error.code === SdkErrorCode.RequestTimeout) {
+      return "protocol-incompatible";
+    }
+
     if (error.code === SdkErrorCode.ConnectionClosed) {
       return "server-exited";
     }
   }
 
+  // The SDK reports a legacy initialize response with an unsupported version
+  // as a plain Error after validating its envelope. Do not branch on its
+  // untrusted text; the handshake arm itself owns this stable classification.
+  if (legacyHandshake && error instanceof Error) {
+    return "protocol-incompatible";
+  }
+
   return "connect-failed";
+}
+
+function normalizeProbeTimeout(value: number | undefined): number {
+  if (value === undefined) return 5_000;
+  if (!Number.isFinite(value) || value <= 0) return 5_000;
+  return Math.min(Math.floor(value), 60_000);
 }
