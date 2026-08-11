@@ -65,12 +65,12 @@
 **进度摘要**：
 
 - 总任务：148
-- 已完成：121
-- 进行中：1
+- 已完成：122
+- 进行中：0
 - 受阻：0
 - 待开始：26
-- 当前任务：T1805
-- 下一任务：T1806
+- 当前任务：T1806
+- 下一任务：T1807
 - 最后更新：2026-08-12
 
 | 阶段 | 任务 | 状态 | 完成 PR | 完成日期 |
@@ -196,7 +196,7 @@
 | 18 | T1802 | 已完成 | [#191](https://github.com/yangzuo0621/ctrl-zebra/pull/191) | 2026-08-12 |
 | 18 | T1803 | 已完成 | [#193](https://github.com/yangzuo0621/ctrl-zebra/pull/193) | 2026-08-12 |
 | 18 | T1804 | 已完成 | [#195](https://github.com/yangzuo0621/ctrl-zebra/pull/195) | 2026-08-12 |
-| 18 | T1805 | 进行中 | — | — |
+| 18 | T1805 | 已完成 | [#197](https://github.com/yangzuo0621/ctrl-zebra/pull/197) | 2026-08-12 |
 | 18 | T1806 | 待开始 | — | — |
 | 18 | T1807 | 待开始 | — | — |
 | 19 | T1901 | 待开始 | — | — |
@@ -274,6 +274,13 @@
 - 完成证据：[PR #195](https://github.com/yangzuo0621/ctrl-zebra/pull/195)，最终实现 revision `fc8e31a62f1528382ea498ed551eff97640cf7d3`；GitHub Actions run `31529057458` 的 Ubuntu、macOS、Windows 验证均通过；本地 `pnpm test`（1552）、`pnpm check`、`pnpm typecheck`、VSIX 构建、差异/Parity 校验及 `git diff --check` 均通过。
 - 完成日期：2026-08-12
 - 下一任务：T1805
+
+### T1805 完成记录
+
+- 完成摘要：在 `packages/mcp-client` 实现 modern-first stdio 双纪元探测与协商：有界 `server/discover`、modern 成功/可识别错误锁定、dual 模式下仅对规范允许的非 modern 结果或超时执行一次 legacy 回退；取消、malformed、超限、进程退出、Trust 失效、清理失败和迟到 probe 结果均不会触发错误回退，并覆盖版本闭集与重复协商边界。
+- 完成证据：[PR #197](https://github.com/yangzuo0621/ctrl-zebra/pull/197)，实现 revision `83a1f136e9904e8e9e3e616385516094513912f2`；GitHub Actions run `31532442329` 的 Ubuntu、macOS、Windows 验证均通过；本地 MCP 聚焦测试 132 个、完整测试 1574 个、`pnpm typecheck`、`pnpm check`、构建、集成测试及 `git diff --check` 均通过。
+- 完成日期：2026-08-12
+- 下一任务：T1806
 
 ---
 
