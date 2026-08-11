@@ -398,12 +398,12 @@ stderr, stack traces, and causes are forbidden.
   connection is required, bounded projected identities/arguments required by that action, and the
   normal envelope. They cannot carry configuration, command, cwd, risk, approval state, Tool
   schema, Resource content, Prompt result, or capability declarations.
-- Extension state uses `extension/mcp-connection`, `extension/mcp-tools`,
-  `extension/mcp-tool-rejections`, `extension/mcp-resources`, `extension/mcp-prompts`,
-  `extension/mcp-resource-preview`, and `extension/mcp-prompt-preview`. The tools message retains
-  its strict accepted-catalog shape; the additive rejection message carries the matching bounded
-  rejection projection. A matching pair atomically replaces the Server/generation view; neither
-  message is interpreted as an incremental patch.
+- Extension state uses `extension/mcp-connection`, the unchanged legacy `extension/mcp-tools`, the
+  additive atomic `extension/mcp-tool-catalog`, `extension/mcp-resources`, `extension/mcp-prompts`,
+  `extension/mcp-resource-preview`, and `extension/mcp-prompt-preview`. The combined catalog is
+  authoritative for sequence-aware clients; legacy tools-only state is retained only for older
+  clients. The superseded `extension/mcp-tool-rejections` message is non-authoritative and is not
+  emitted by the amended Host. No catalog message is interpreted as an incremental patch.
 - MCP Tool Calls continue to use the existing Core Tool Call/Result correlation. Their Webview
   projection adds a strict `source` object to the Tool-state contract only when the originating
   registered Tool is external: `{ kind: "mcp", server, generation, mcpToolName }`. Built-in Tools
@@ -443,7 +443,7 @@ approvals bind both names, Server ID, generation, and immutable schema identity.
 
 ### Tool acceptance and rejection projection
 
-Tool discovery is a per-descriptor decision, but the wire projection is still a complete atomic
+Tool discovery is a per-descriptor decision, but the wire projection is still one complete atomic
 snapshot. The accepted `extension/mcp-tools` catalog contains only Tools whose descriptor and
 compiled schema passed the MCP boundary. A schema rejection never removes an accepted sibling;
 malformed pages, duplicate identities, duplicate/reserved Registry names, and other identity or
@@ -460,12 +460,13 @@ remains the stable `invalid-schema` discovery failure; an actually empty Server 
 The reason is selected by CtrlZebra and never contains an external keyword, JSON Pointer, SDK
 message, numeric JSON-RPC code, or exception text. `McpRejectedToolDto` is the strict object
 `{ mcpToolName, reason }`, where `mcpToolName` uses the same well-formed Unicode and length bound as
-the accepted Tool descriptor. `McpToolRejectionCatalogDto` is:
+the accepted Tool descriptor. The sequence-bearing combined catalog is:
 
 ```text
 {
   server: McpServerIdentityDto,
   generation: positive safe integer,
+  tools: McpToolDescriptorDto[0..1000],
   rejectedTools: McpRejectedToolDto[0..256],
   rejectedToolsTruncated: boolean
 }
@@ -476,43 +477,81 @@ The Extension sends this strict additive version `1` message:
 ```text
 {
   protocolVersion: 1,
-  type: "extension/mcp-tool-rejections",
+  type: "extension/mcp-tool-catalog",
   requestId,
-  catalog: McpToolRejectionCatalogDto
+  catalogSequence: positive safe integer,
+  catalog: McpToolCatalogProjectionDto
 }
 ```
 
-Its `requestId` is the same as the corresponding `extension/mcp-tools` snapshot. The projection
-contains no schema, command, environment, raw error, or arbitrary metadata. When more than 256 Tools
-are rejected in a mixed snapshot, entries are first sorted by exact `mcpToolName` in lexicographic
-Unicode scalar-value order (not UTF-16 code units or Server page order), then the first 256 form the
-deterministic prefix and `rejectedToolsTruncated` is `true`; accepted Tools are never truncated. An
-empty list sets the flag to `false` so a refresh can clear an earlier projection.
+All five outer properties are required, their types are the bounded types stated above, and no
+additional outer or catalog properties are accepted. The unchanged legacy `extension/mcp-tools`
+message for the same publication carries the same `requestId`, Server identity, generation, and
+accepted `tools` projection, but it is a compatibility projection rather than a second half of the
+combined envelope; neither message is staged or required to arrive for the other.
 
-New clients stage the two matching messages by `requestId`, Server identity, and generation and
-commit them together. Arrival order is irrelevant: the first half is held in one bounded,
-operation-scoped staging slot until its counterpart arrives. The Webview-local adapter-owned slot
-expires exactly 1,000 ms after the first half arrives; its timer is not extended by retries or later
-messages. The Extension Host remains responsible for generating and sending both messages with the
-matching request ID, Server identity, and generation, but cannot control Webview receipt timing. A
-missing counterpart never creates a new partial view. If this deadline expires, a newer refresh
-starts, the staged request is cancelled, or the connection disconnects/changes generation, the staged half is
-discarded and the last complete pair remains visible; no retry, persistence, or error echo is
-created. A stale or mismatched message is ignored before staging. An empty rejection message is the
-only way to clear an earlier rejection projection.
+The complete strict wrapper and its `catalog` payload are counted together as UTF-8 serialized JSON
+bytes against the existing 1,048,576-byte ceiling. The Host enforces that bound during bounded
+construction and before sequence allocation or sending. A candidate over the ceiling follows the
+stable `limit-exceeded` whole-operation path: it retains the prior complete catalog, emits neither
+the combined nor legacy catalog, and consumes no sequence. No partial envelope or mismatched old/new
+catalog may be published.
+
+`catalogSequence` is allocated and owned by the Extension Host, not the MCP Server or Webview. It
+is monotonic within the `(catalog.server.serverId, catalog.generation)` scope, starts at `1` for
+each new connection generation, and is allocated exactly once immediately before a fully validated
+catalog is emitted. Valid empty catalogs consume a sequence; failed, cancelled, and all-rejected
+discoveries consume none. The value never wraps. If the next value would exceed the safe-integer
+bound, the Host closes the current delivery gate and requires an explicit reconnect; the new
+generation resets the sequence. `requestId` remains an opaque correlation identifier and is not a
+freshness or ordering signal.
+
+The combined catalog contains no schema, command, environment, raw error, or arbitrary metadata.
+When more than 256 Tools are rejected in a mixed snapshot, entries are first sorted by exact
+`mcpToolName` in lexicographic Unicode scalar-value order (not UTF-16 code units or Server page
+order), then the deterministic bounded prefix is retained and `rejectedToolsTruncated` is `true`;
+accepted Tools are never truncated. An empty rejection list sets the flag to `false`.
+
+The sequence-aware Webview validates the strict envelope and catalog before state mutation and keeps
+the committed publication record plus a transient pending candidate for the current Server/generation.
+The committed record includes the request ID and validated catalog payload; the pending candidate
+exists only during synchronous validation and is never rendered or exposed as partial state. A
+message for a different Server or generation is ignored before watermark handling. A lower sequence
+than either watermark is a stale no-op. At an equal committed or pending sequence, an exact duplicate
+(same Server, generation, sequence, request ID, and equivalent validated catalog payload) is an
+idempotent no-op: it is ignored and never re-staged or committed. A same-scope, same-sequence
+candidate with a differing request ID or payload is discarded with the stable local
+`conflicting-catalog-sequence` classification, leaving pending, committed, and rendered state
+unchanged. A higher sequence sets the pending candidate; only after strict validation succeeds does
+it atomically replace the complete catalog and advance the committed watermark. Invalid validation
+clears only the pending candidate. Generation change or disconnect clears both records and closes the
+delivery gate, so late messages from the previous scope cannot commit. There is no two-half staging
+slot, timer, retry, or arrival-order dependency.
+
+The Host emits the sequence-bearing combined message before the unchanged legacy
+`extension/mcp-tools` message for the same publication. A version `1` client that does not know
+`extension/mcp-tool-catalog` ignores that additive message and continues rendering accepted Tools
+from the legacy catalog; it loses only rejection details. The superseded
+`extension/mcp-tool-rejections` message is no longer authoritative and the amended Host does not
+emit it. Sequence-aware clients ignore legacy tools-only messages for catalog state so a delayed
+legacy message cannot overwrite a newer combined projection.
 
 When the complete non-empty Server list rejects every Tool, the Host returns the existing bounded
-`invalid-schema` discovery outcome, retains the prior complete pair, and emits neither an empty
-`extension/mcp-tools` catalog nor an `extension/mcp-tool-rejections` list. This preserves the
-all-failed failure test and prevents a misleading usable catalog. The future T1803 diagnostics task
-may add a separate reviewed, bounded failure projection for skipped names/reasons; it must not
-reuse this success-catalog message or expose raw schema data. Until then, the user-safe
+`invalid-schema` discovery outcome, retains the prior complete catalog, and emits neither an empty
+combined catalog nor a legacy tools-only catalog for that failed refresh. The future T1803
+diagnostics task may add a separate reviewed, bounded failure projection for skipped names/reasons;
+it must not reuse this success-catalog message or expose raw schema data. Until then, the user-safe
 `invalid-schema` message is the only wire-visible all-failed detail.
 
-A version `1` client that does not recognize `extension/mcp-tool-rejections` ignores that additive
-message under the existing unknown-message rule and still receives the unchanged tools-only
-`extension/mcp-tools` message; it renders accepted Tools without rejection details. The Host never
-adds an unknown field to the strict legacy catalog to force an older client to parse it.
+The T1801 implementation tests must cover a fully accepted catalog, mixed accepted/rejected
+descriptors, schema-policy failure isolated to one Tool, invalid descriptor envelope/identity as a
+whole-operation failure, all-rejected retention with no catalog emission, duplicate-name and
+malformed-page failure, deterministic rejection-prefix selection independent of pagination order,
+combined-envelope UTF-8 serialization at and above the one-mebibyte ceiling, refresh and
+disconnect/generation stale races, overflow/reconnect reset, exact duplicate no-op at both pending
+and committed watermarks, same-sequence conflicting discard at either watermark, atomic combined
+publication without partial state, and an older client that ignores the additive message while
+continuing to render the unchanged legacy catalog.
 
 ### Resource and Resource Template projections
 
@@ -560,6 +599,9 @@ enforce the limits in [Security](security.md) while collecting. List snapshots c
 1,000 descriptors and must fit the one-mebibyte serialized ceiling. Strings must be well-formed
 Unicode and are measured both by Unicode code points and UTF-8 bytes where Security defines both.
 
-An invalid descriptor, duplicate identity, malformed cursor chain, unsupported content item, or
-limit breach rejects the complete operation. The Extension never asks the Webview to validate an
-SDK object, infer a capability, choose risk, join partial pages, or repair malformed content.
+An invalid descriptor envelope or identity, duplicate identity, malformed cursor chain, unsupported
+content item, or aggregate limit breach rejects the complete operation. A schema-policy failure
+after a descriptor's envelope and identity pass is isolated to that Tool as a bounded rejected
+result; it does not reject the complete operation or its valid siblings. The Extension never asks
+the Webview to validate an SDK object, infer a capability, choose risk, join partial pages, or repair
+malformed content.
