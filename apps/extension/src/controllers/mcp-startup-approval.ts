@@ -63,6 +63,7 @@ function formatApprovalDetail(
 ): string {
   return [
     `Server ID: ${operation.configuration.serverId}`,
+    `Protocol mode: ${effectiveProtocolMode(operation.configuration)}`,
     `Executable: ${JSON.stringify(operation.configuration.command)}`,
     `Arguments: ${JSON.stringify(operation.configuration.args)}`,
     `Working directory: ${operation.cwdUri}`,
@@ -102,12 +103,16 @@ export function sameMcpStartOperation(
   return (
     left.cwdUri === right.cwdUri &&
     left.cwdPath === right.cwdPath &&
-    left.configuration.version === right.configuration.version &&
+    effectiveProtocolMode(left.configuration) === effectiveProtocolMode(right.configuration) &&
     left.configuration.serverId === right.configuration.serverId &&
     left.configuration.displayName === right.configuration.displayName &&
     left.configuration.command === right.configuration.command &&
     arraysEqual(left.configuration.args, right.configuration.args)
   );
+}
+
+function effectiveProtocolMode(configuration: McpServerConfiguration): "modern-only" | "dual" {
+  return configuration.protocolMode ?? "modern-only";
 }
 
 function arraysEqual(left: readonly string[], right: readonly string[]): boolean {

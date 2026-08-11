@@ -13,16 +13,37 @@ const validConfiguration = {
   command: "node",
   args: ["server.mjs", "--stdio"],
 } as const;
+const validDualConfiguration = {
+  version: 2,
+  protocolMode: "dual",
+  serverId: "local_fixture",
+  displayName: "Local fixture",
+  command: "node",
+  args: ["server.mjs", "--stdio"],
+} as const;
 
 describe("MCP Server configuration", () => {
-  it("reads and freezes the strict version 1 global configuration", () => {
+  it("reads and freezes version 1 as effective modern-only without rewriting the setting", () => {
     const configuration = readMcpServerConfiguration({
       inspect: () => ({ globalValue: validConfiguration }),
     });
 
-    expect(configuration).toEqual(validConfiguration);
+    expect(configuration).toEqual({ ...validConfiguration, protocolMode: "modern-only" });
     expect(Object.isFrozen(configuration)).toBe(true);
     expect(Object.isFrozen(configuration.args)).toBe(true);
+  });
+
+  it.each([
+    "modern-only",
+    "dual",
+  ] as const)("accepts explicit version 2 %s mode", (protocolMode) => {
+    const configuration = parseMcpServerConfiguration({
+      ...validDualConfiguration,
+      protocolMode,
+    });
+
+    expect(configuration).toEqual({ ...validDualConfiguration, protocolMode });
+    expect(configuration.version).toBe(2);
   });
 
   it("requires an explicitly configured global value", () => {
@@ -44,6 +65,10 @@ describe("MCP Server configuration", () => {
   it.each([
     ["unknown field", { ...validConfiguration, cwd: "." }],
     ["unknown version", { ...validConfiguration, version: 2 }],
+    ["version 1 mode field", { ...validConfiguration, protocolMode: "modern-only" }],
+    ["version 2 missing mode", { ...validDualConfiguration, protocolMode: undefined }],
+    ["unknown mode", { ...validDualConfiguration, protocolMode: "future" }],
+    ["version 2 unknown field", { ...validDualConfiguration, extra: true }],
     ["invalid identity", { ...validConfiguration, serverId: "Local-Server" }],
     ["empty display name", { ...validConfiguration, displayName: "" }],
     [

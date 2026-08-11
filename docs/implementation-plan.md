@@ -65,12 +65,12 @@
 **进度摘要**：
 
 - 总任务：148
-- 已完成：120
-- 进行中：1
+- 已完成：121
+- 进行中：0
 - 受阻：0
 - 待开始：27
-- 当前任务：T1804
-- 下一任务：T1805
+- 当前任务：T1805
+- 下一任务：T1806
 - 最后更新：2026-08-12
 
 | 阶段 | 任务 | 状态 | 完成 PR | 完成日期 |
@@ -195,7 +195,7 @@
 | 18 | T1801 | 已完成 | [#188](https://github.com/yangzuo0621/ctrl-zebra/pull/188) | 2026-08-11 |
 | 18 | T1802 | 已完成 | [#191](https://github.com/yangzuo0621/ctrl-zebra/pull/191) | 2026-08-12 |
 | 18 | T1803 | 已完成 | [#193](https://github.com/yangzuo0621/ctrl-zebra/pull/193) | 2026-08-12 |
-| 18 | T1804 | 进行中 | — | — |
+| 18 | T1804 | 已完成 | [#195](https://github.com/yangzuo0621/ctrl-zebra/pull/195) | 2026-08-12 |
 | 18 | T1805 | 待开始 | — | — |
 | 18 | T1806 | 待开始 | — | — |
 | 18 | T1807 | 待开始 | — | — |
@@ -267,6 +267,13 @@
 - 完成证据：[PR #193](https://github.com/yangzuo0621/ctrl-zebra/pull/193)，最终实现 revision `e98e7b3631a9593977732fdc63b2437bbe10a787`；本地单元测试 1535 个、`pnpm check`、`pnpm typecheck`、构建、集成测试及 `git diff --check` 均通过；GitHub Actions run `31521263866` 的 Ubuntu、macOS、Windows 验证均通过。
 - 完成日期：2026-08-12
 - 下一任务：T1804
+
+### T1804 完成记录
+
+- 完成摘要：固化双纪元 MCP 配置、启动身份与激活门禁，实现协商/降级错误分类、协议与持久化契约、兼容 fixtures 及扩展侧验证。
+- 完成证据：[PR #195](https://github.com/yangzuo0621/ctrl-zebra/pull/195)，最终实现 revision `fc8e31a62f1528382ea498ed551eff97640cf7d3`；GitHub Actions run `31529057458` 的 Ubuntu、macOS、Windows 验证均通过；本地 `pnpm test`（1552）、`pnpm check`、`pnpm typecheck`、VSIX 构建、差异/Parity 校验及 `git diff --check` 均通过。
+- 完成日期：2026-08-12
+- 下一任务：T1805
 
 ---
 

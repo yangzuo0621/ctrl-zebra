@@ -467,6 +467,9 @@ export class McpConnectionController {
     this.#dependencies.workspaceTrust.requireTrusted();
     signal.throwIfAborted();
     const configuration = this.#dependencies.readConfiguration();
+    if (configuration.protocolMode === "dual") {
+      throw new McpServerConfigurationError("configuration-invalid");
+    }
     const binding = await this.#dependencies.bindWorkspace(signal);
     signal.throwIfAborted();
     this.#dependencies.workspaceTrust.requireTrusted();

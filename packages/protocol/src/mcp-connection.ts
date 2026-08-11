@@ -1,9 +1,27 @@
 import { z } from "zod";
 
+import {
+  mcpLegacyProtocolVersionSchema,
+  mcpNegotiatedSchema,
+  mcpProtocolModeSchema,
+  mcpProtocolVersionSchema,
+} from "./mcp-negotiation.js";
 import { mcpGenerationSchema, mcpServerIdentitySchema, mcpServerIdSchema } from "./mcp-resource.js";
 import { toolNameSchema } from "./tool.js";
 
-export const mcpProtocolVersionSchema = z.literal("2026-07-28");
+export type {
+  McpNegotiatedDto,
+  McpNegotiatedProvenanceDto,
+  McpProtocolMode,
+} from "./mcp-negotiation.js";
+export {
+  mcpLegacyProtocolVersionSchema,
+  mcpNegotiatedProvenanceSchema,
+  mcpNegotiatedSchema,
+  mcpProtocolModeSchema,
+  mcpProtocolVersionSchema,
+} from "./mcp-negotiation.js";
+
 const maxMcpToolNameCodePoints = 65_536;
 const mcpToolNameSchema = z
   .string()
@@ -77,6 +95,71 @@ export const mcpConnectionSchema = z.discriminatedUnion("status", [
     error: mcpErrorSchema,
   }),
 ]);
+
+const unavailableMcpCapabilitiesSchema = z.strictObject({
+  tools: z.literal(false),
+  toolsListChanged: z.literal(false),
+  resources: z.literal(false),
+  resourceTemplates: z.literal(false),
+  resourcesListChanged: z.literal(false),
+  prompts: z.literal(false),
+  promptsListChanged: z.literal(false),
+});
+const negotiatedConnectionBase = {
+  server: mcpServerIdentitySchema,
+  generation: mcpGenerationSchema,
+  configuredMode: mcpProtocolModeSchema,
+  configurationStale: z.boolean(),
+};
+
+/**
+ * Additive T1804 projection contract. Live Extension/Webview consumers continue using
+ * `mcpConnectionSchema` until the T1807 wiring task switches them to this shape.
+ */
+export const mcpNegotiatedConnectionSchema = z
+  .discriminatedUnion("status", [
+    z.strictObject({
+      ...negotiatedConnectionBase,
+      status: z.literal("disconnected"),
+      capabilities: unavailableMcpCapabilitiesSchema,
+    }),
+    z.strictObject({
+      ...negotiatedConnectionBase,
+      status: z.literal("connecting"),
+      capabilities: unavailableMcpCapabilitiesSchema,
+    }),
+    z.strictObject({
+      ...negotiatedConnectionBase,
+      status: z.literal("disconnecting"),
+      capabilities: unavailableMcpCapabilitiesSchema,
+    }),
+    z.strictObject({
+      ...negotiatedConnectionBase,
+      status: z.literal("connected"),
+      negotiated: mcpNegotiatedSchema,
+      capabilities: mcpCapabilitiesSchema,
+    }),
+    z.strictObject({
+      ...negotiatedConnectionBase,
+      status: z.literal("failed"),
+      capabilities: unavailableMcpCapabilitiesSchema,
+      error: mcpErrorSchema,
+    }),
+  ])
+  .superRefine((connection, context) => {
+    if (
+      connection.status === "connected" &&
+      connection.configuredMode === "modern-only" &&
+      connection.negotiated.era !== "modern"
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["negotiated"],
+        message: "modern-only connections cannot carry legacy provenance.",
+      });
+    }
+  });
+export const mcpConnectionProjectionSchema = mcpNegotiatedConnectionSchema;
 
 export const mcpToolDescriptorSchema = z.strictObject({
   server: mcpServerIdentitySchema,
@@ -189,6 +272,15 @@ export const mcpDiagnosticsProjectionSchema = z.union([
     nextStep: z.literal("open-settings"),
   }),
   z.strictObject({
+    kind: z.literal("protocol-incompatible"),
+    ...mcpDiagnosticSourceShape,
+    connectionStatus: z.literal("failed"),
+    configuredMode: z.literal("dual"),
+    supportedVersions: z.tuple([mcpProtocolVersionSchema, mcpLegacyProtocolVersionSchema]),
+    connectionEstablished: z.literal(false),
+    nextStep: z.literal("open-settings"),
+  }),
+  z.strictObject({
     kind: z.literal("clear"),
     ...mcpDiagnosticSourceShape,
   }),
@@ -204,6 +296,8 @@ export const toolStateSourceSchema = z.discriminatedUnion("kind", [
 ]);
 
 export type McpConnectionDto = z.infer<typeof mcpConnectionSchema>;
+export type McpNegotiatedConnectionDto = z.infer<typeof mcpNegotiatedConnectionSchema>;
+export type McpConnectionProjectionDto = z.infer<typeof mcpConnectionProjectionSchema>;
 export type McpToolCatalogDto = z.infer<typeof mcpToolCatalogSchema>;
 export type McpToolCatalogProjectionDto = z.infer<typeof mcpToolCatalogProjectionSchema>;
 export type McpToolRejectionReasonDto = z.infer<typeof mcpToolRejectionReasonSchema>;
