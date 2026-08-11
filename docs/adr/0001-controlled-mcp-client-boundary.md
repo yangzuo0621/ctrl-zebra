@@ -316,6 +316,46 @@ direct self-recursion, mutual-reference rejection, Draft differences, Ajv compil
 validation, and preservation of the T1801 all-rejected and mixed-catalog behavior. It does not
 authorize T1803 diagnostics or T1804–T1807 dual-era behavior.
 
+## T1803 supplement: bounded diagnostics and recovery projection
+
+T1803 adds a separate additive `extension/mcp-diagnostics` message rather than widening the
+successful connection or Tool-catalog DTOs. This preserves the invariant that accepted Tool state
+is authoritative only in the catalog and that a failure cannot masquerade as an empty success. The
+message carries only a bounded, de-duplicated prefix of already-validated Tool names and the closed
+Schema rejection reasons, a stable whole-operation error code, or the fixed modern-only/version
+compatibility facts. It never carries raw MCP/SDK errors, Schema values or paths, command, environment,
+stderr, credentials, or arbitrary Server metadata.
+
+The Extension owns a generation-scoped, Host-sequenced replacement projection. Mixed catalogs retain
+accepted siblings; all-rejected discovery remains `invalid-schema` and keeps the prior snapshot (or
+fails the initial connection) while exposing its safe rejection prefix only through this diagnostic.
+A successful refresh emits an explicit clear replacement, and disconnect or generation closure clears
+the delivery gate before late diagnostics. Recovery is limited to explicit `refresh-tools`, `reconnect`,
+and `open-settings` intents, each reusing existing trust, approval, cancellation and generation
+checks. Protocol incompatibility reports only the configured `modern-only` mode, supported
+`2026-07-28` version, and a fixed next action; it has no probe, fallback, or success claim. Future
+dual-era fields remain owned by ADR 0002/T1804.
+
+### T1803 alternatives considered
+
+#### Put skipped Tools in `extension/mcp-tool-catalog`
+
+Rejected. The success catalog deliberately omits all-rejected snapshots and is authoritative for
+accepted Tool state. Reusing it for failure details would make an empty or retained catalog look like
+a successful refresh and would couple error lifecycle to catalog sequencing.
+
+#### Widen `extension/mcp-connection.error` with arbitrary details
+
+Rejected. Connection errors are shared by all MCP operations and must remain a small stable DTO;
+embedding Tool names, refresh outcomes, or protocol compatibility details would mix connection
+authority with untrusted diagnostic content and make stale refresh errors hard to fence.
+
+#### Add an independent bounded diagnostic projection
+
+Accepted. A strict discriminated projection keeps success, failure and recovery semantics explicit,
+allows older clients to ignore the additive message, and gives the Host/Webview one generation- and
+sequence-fenced surface for truncation, redaction, deduplication and accessibility behavior.
+
 ## Reviewed primary references
 
 - [MCP specification `2026-07-28`](https://modelcontextprotocol.io/specification/2026-07-28)

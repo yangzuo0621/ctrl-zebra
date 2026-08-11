@@ -388,7 +388,7 @@ stderr, stack traces, and causes are forbidden.
 
 ### Message directions and correlation
 
-- Webview intents use `webview/mcp-connect`, `webview/mcp-disconnect`,
+- Webview intents use `webview/mcp-connect`, `webview/mcp-disconnect`, `webview/mcp-refresh-tools`,
   `webview/mcp-resource-read`, `webview/mcp-resource-attach`,
   `webview/mcp-prompt-preview`, `webview/mcp-prompt-confirm`, and
   `webview/mcp-prompt-cancel`. T1408 additively defines `webview/mcp-open-settings`,
@@ -398,7 +398,7 @@ stderr, stack traces, and causes are forbidden.
   connection is required, bounded projected identities/arguments required by that action, and the
   normal envelope. They cannot carry configuration, command, cwd, risk, approval state, Tool
   schema, Resource content, Prompt result, or capability declarations.
-- Extension state uses `extension/mcp-connection`, the unchanged legacy `extension/mcp-tools`, the
+- Extension state uses `extension/mcp-connection`, the additive `extension/mcp-diagnostics`, the unchanged legacy `extension/mcp-tools`, the
   additive atomic `extension/mcp-tool-catalog`, `extension/mcp-resources`, `extension/mcp-prompts`,
   `extension/mcp-resource-preview`, and `extension/mcp-prompt-preview`. The combined catalog is
   authoritative for sequence-aware clients; legacy tools-only state is retained only for older
@@ -419,6 +419,12 @@ detach carries only the Host-generated `snapshotId`; Prompt detach carries only 
 `previewId` retained for the confirmed draft projection. Detach removes only the matching current
 Composer attachment, performs no Server request, and cannot delete a Resource, revoke persisted
 history, cancel a Run, or affect another attachment.
+
+`webview/mcp-refresh-tools` is the T1803 refresh intent `{ protocolVersion, type, requestId,
+serverId, generation }` with no additional properties. It is accepted only while the matching
+generation is connected, runs one bounded Tool-list refresh under the existing generation and
+cancellation gates, and cannot start a process, reuse approval, or mutate the Session. Stale,
+cancelled, or mismatched refresh intents are ignored without state mutation.
 
 ### Tool projection and deterministic names
 
@@ -538,10 +544,10 @@ legacy message cannot overwrite a newer combined projection.
 
 When the complete non-empty Server list rejects every Tool, the Host returns the existing bounded
 `invalid-schema` discovery outcome, retains the prior complete catalog, and emits neither an empty
-combined catalog nor a legacy tools-only catalog for that failed refresh. The future T1803
-diagnostics task may add a separate reviewed, bounded failure projection for skipped names/reasons;
-it must not reuse this success-catalog message or expose raw schema data. Until then, the user-safe
-`invalid-schema` message is the only wire-visible all-failed detail.
+combined catalog nor a legacy tools-only catalog for that failed refresh. T1803 exposes the separately
+reviewed, bounded skipped-name/reason projection defined below; it does not reuse this success-catalog
+message or expose raw schema data. The user-safe `invalid-schema` connection outcome remains the
+authoritative failure state.
 
 The T1801 implementation tests must cover a fully accepted catalog, mixed accepted/rejected
 descriptors, schema-policy failure isolated to one Tool, invalid descriptor envelope/identity as a
@@ -591,6 +597,128 @@ projection is constructed. It is a closed, versioned policy and is not a Webview
   validation is shape-only and performs no coercion, default insertion, or property removal.
   Compilation and runtime validation are mandatory even when a keyword was stripped or renamed;
   compatibility handling must never bypass either stage.
+
+### MCP diagnostic and recovery projection (T1803)
+
+T1803 adds one additive Extension-to-Webview message for bounded failure details that do not belong
+in the success catalog. Older clients ignore the unknown message and keep the existing connection and
+Tool projections. The diagnostic is advisory display state: it never grants a capability, changes
+connection status, authorizes a Tool, or instructs the Webview to reconnect by itself.
+
+`McpDiagnosticRecoveryAction` is the closed union:
+
+```text
+"refresh-tools" | "reconnect" | "open-settings"
+```
+
+`refresh-tools` is an explicit `webview/mcp-refresh-tools` intent bound to the active Server and
+generation. It requests one bounded current-generation Tool-list refresh and does not restart the
+process or bypass the normal delivery gate. `reconnect` reuses the existing explicit connect flow
+after a failed connection, and `open-settings` reuses the existing user-scoped settings action.
+Neither action carries a command, environment, URI, credential, schema, approval, or Server error.
+
+`McpDiagnosticToolEntry` reuses the strict `{ mcpToolName, reason }` shape from the rejection
+projection. The name has the existing bounded, well-formed Unicode constraint and `reason` is the
+closed `McpToolRejectionReason` union; no keyword, schema path, or raw cause is included.
+
+`McpDiagnosticsProjectionDto` is a strict discriminated union:
+
+```text
+{
+  kind: "tool-rejections",
+  server: McpServerIdentityDto,
+  generation: positive safe integer,
+  connectionStatus: "connected" | "failed",
+  skippedTools: McpDiagnosticToolEntry[0..256],
+  skippedToolsTruncated: boolean,
+  recoveryAction: "refresh-tools" | "reconnect"
+}
+```
+
+The `tool-rejections` form is used for a mixed/degraded catalog and for an all-rejected
+`invalid-schema` outcome. `connectionStatus` is a display correlation with the authoritative
+`extension/mcp-connection` message: `failed` means no usable connection was established, while
+`connected` means the prior complete catalog remains usable (including after a failed refresh).
+An all-rejected outcome has no accepted Tool entry and never emits an empty success catalog. A
+mixed outcome retains accepted siblings and may be recovered with `refresh-tools`; a failed initial
+connection uses `reconnect`.
+
+Whole-operation failures that have no safe Tool identity use this strict form:
+
+```text
+{
+  kind: "tool-discovery-failure",
+  server: McpServerIdentityDto,
+  generation: positive safe integer,
+  connectionStatus: "connected" | "failed",
+  code: "invalid-schema" | "limit-exceeded" | "malformed-message",
+  recoveryAction: "refresh-tools" | "reconnect"
+}
+```
+
+It contains no `skippedTools` field. `invalid-schema` with a validated all-rejected prefix uses the
+`tool-rejections` form instead; malformed envelopes, duplicate identities, aggregate limits, and
+other whole-operation failures use `tool-discovery-failure` and reveal no untrusted name.
+
+Protocol incompatibility uses a separate strict form:
+
+```text
+{
+  kind: "protocol-incompatible",
+  server: McpServerIdentityDto,
+  generation: positive safe integer,
+  connectionStatus: "failed",
+  configuredMode: "modern-only",
+  supportedVersions: ["2026-07-28"],
+  connectionEstablished: false,
+  nextStep: "open-settings"
+}
+```
+
+This form is emitted only with a failed `extension/mcp-connection`. It intentionally has no probe,
+fallback, selected-era, capability, or success field: before the handshake completes, the UI must
+not describe detection or fallback as successful. T1804 may extend the mode/version closed unions
+only through its reviewed dual-era contract.
+
+An explicit replacement is represented by:
+
+```text
+{
+  kind: "clear",
+  server: McpServerIdentityDto,
+  generation: positive safe integer
+}
+```
+
+The Extension-to-Webview envelope is strict and accepts no additional properties:
+
+```text
+{
+  protocolVersion: 1,
+  type: "extension/mcp-diagnostics",
+  requestId: opaque request identifier,
+  diagnosticSequence: positive safe integer,
+  diagnostic: McpDiagnosticsProjectionDto
+}
+```
+
+`diagnosticSequence` is Host-owned and monotonic within `(server.serverId, generation)`, starts at
+`1`, is allocated exactly once for every emitted replacement including `clear`, and never wraps.
+The complete strict wrapper is measured incrementally as UTF-8 and must fit the existing
+1,048,576-byte message ceiling. Before the count/byte prefix is selected, `skippedTools` entries are
+de-duplicated by exact `(mcpToolName, reason)` and sorted by `mcpToolName` in lexicographic Unicode
+scalar-value order; the deterministic prefix is at most 256 entries. Any omitted entry sets
+`skippedToolsTruncated: true`. A successful refresh always emits a replacement (often `clear`), so
+stale rejection details cannot survive a refresh. A disconnect, generation change, cancellation,
+Trust loss, or disposal clears the delivery gate before late diagnostic messages are considered.
+
+The Webview ignores a wrong Server/generation, a lower sequence, an exact duplicate, or a
+same-sequence conflicting payload without state mutation; sequence conflicts are local and never
+shown as Server errors. Diagnostics are sent after the authoritative connection/catalog message for
+the same request and generation, but are not a second half of that publication. The implementation
+must test each reason/code, deterministic de-duplication and truncation, all-rejected retention,
+refresh-to-clear recovery, stale races, protocol-incompatible no-success claims, no secrets/raw
+errors, and the ordinary connected path.
 
 ### Resource and Resource Template projections
 
