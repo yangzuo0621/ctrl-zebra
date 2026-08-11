@@ -465,9 +465,11 @@ entry, not only the intermediate object.
   delegates to the Provider's stable-key `SecretStorage.store`; it does not read, delete, or clear the
   old value first. A fulfilled adapter save is the replacement commit boundary. A rejected write has an
   indeterminate state because the VS Code API provides no
-  transaction, compare-and-swap, or rollback guarantee; the command must not read the Secret,
-  compensate, or claim that the old value remains. It performs a fresh presence-only reconciliation
-  and gives fixed safe retry/settings guidance. Cancellation before the store call guarantees no
+  transaction, compare-and-swap, or rollback guarantee; the command must not read the Secret for
+  rollback or compensation, or claim that the old value remains. Only after the adapter call settles
+  may the dedicated presence adapter perform reconciliation; it compares the `get` result only with
+  `undefined` and immediately discards it. An unavailable reconciliation is indeterminate and gives
+  fixed safe retry/settings guidance. Cancellation before the store call guarantees no
   storage side effect; once the call starts, cancellation is not reported as a reversible outcome.
 - Delete, rotation, existing save commands, and presence reads for one Provider share a Host-owned
   serial coordinator. It covers the prompt, confirmation, adapter mutation settlement, presence-only
