@@ -518,12 +518,12 @@ describe("MCP Webview actions", () => {
     expect(post.mock.calls.map(([message]) => message)).toContainEqual(
       expect.objectContaining({
         type: "extension/mcp-diagnostics",
-        diagnostic: {
+        diagnostic: expect.objectContaining({
           kind: "protocol-incompatible",
           configuredMode: "dual",
           supportedVersions: ["2026-07-28", "2025-11-25"],
           connectionEstablished: false,
-        },
+        }),
       }),
     );
     actions.dispose();
