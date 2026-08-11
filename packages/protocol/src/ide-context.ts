@@ -129,6 +129,11 @@ export class IdeTextPrefixCollector {
   #pendingCr = false;
   #finished = false;
 
+  /** True once a hard text budget has been reached and later chunks cannot be retained. */
+  get limitReached(): boolean {
+    return !this.#retained;
+  }
+
   add(value: string): void {
     if (this.#finished) {
       throw new Error("IDE text prefix collector is already finished.");

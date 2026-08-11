@@ -200,7 +200,11 @@ export class VsCodeEditorContext implements IdeContextPort {
               },
             };
       const collector = new IdeTextPrefixCollector();
-      for (let lineNumber = range.start.line; lineNumber <= range.end.line; lineNumber += 1) {
+      for (
+        let lineNumber = range.start.line;
+        lineNumber <= range.end.line && !collector.limitReached;
+        lineNumber += 1
+      ) {
         const line = snapshot.document.lineAt(lineNumber);
         if (typeof line.text !== "string") throw new EditorContextUnavailableError();
         const startCharacter = lineNumber === range.start.line ? range.start.character : 0;
@@ -221,10 +225,11 @@ export class VsCodeEditorContext implements IdeContextPort {
             chunkEnd - character,
           );
           collector.add(chunk);
+          if (collector.limitReached) break;
           character = chunkEnd;
         }
 
-        if (lineNumber < range.end.line) {
+        if (!collector.limitReached && lineNumber < range.end.line) {
           collector.add(
             readDocumentRange(
               snapshot.document,

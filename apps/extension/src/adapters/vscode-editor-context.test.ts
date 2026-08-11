@@ -106,8 +106,35 @@ describe("VsCodeEditorContext", () => {
     );
 
     expect(result.text).toHaveLength(maxIdeTextCodePoints);
-    expect(calls.length).toBeGreaterThan(1);
+    expect(calls).toHaveLength(5);
     expect(calls.every((range) => range !== undefined)).toBe(true);
+  });
+
+  it("stops selection range reads after the first hard limit", async () => {
+    const calls: Array<NonNullable<Parameters<TextDocument["getText"]>[0]> | undefined> = [];
+    const source = "a".repeat(maxIdeTextCodePoints + 100);
+    const document = createDocument(source, "/workspace/src/selection.ts", { calls });
+    const editor = createEditor(document, position(0, 0), position(0, source.length));
+    const result = await createAdapter(editor).readEditorContext({ scope: "selection" }, signal());
+
+    expect(result.text).toHaveLength(maxIdeTextCodePoints);
+    expect(result.source.truncationReasons).toEqual(["code-points"]);
+    expect(calls).toHaveLength(5);
+  });
+
+  it("does not retain a CR when the next CRLF delimiter crosses a hard limit", async () => {
+    const calls: Array<NonNullable<Parameters<TextDocument["getText"]>[0]> | undefined> = [];
+    const source = `${"a".repeat(maxIdeTextCodePoints - 1)}\r\nrest`;
+    const document = createDocument(source, "/workspace/src/crlf.ts", { calls });
+    const result = await createAdapter(createEditor(document)).readEditorContext(
+      { scope: "active-editor" },
+      signal(),
+    );
+
+    expect(result.text).toBe("a".repeat(maxIdeTextCodePoints - 1));
+    expect(result.text.endsWith("\r")).toBe(false);
+    expect(result.source.truncationReasons).toEqual(["code-points"]);
+    expect(calls).toHaveLength(5);
   });
 
   it("maps a failed bounded range read to the fixed unavailable outcome", async () => {
