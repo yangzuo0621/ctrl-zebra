@@ -450,18 +450,21 @@ entry, not only the intermediate object.
   API key will be removed. It never reads or displays the Secret to construct the confirmation and
   never reveals whether a value exists. Cancellation before any storage call performs no
   SecretStorage operation and therefore leaves the state unchanged. After confirmation, the command
-  asks the existing Host-owned presence adapter once. When it reports absent, the command performs a
-  fixed safe no-op outcome and does not call the delete adapter; a non-absent result permits exactly
-  one existing `ApiKeySecretStorage.delete` call. A fulfilled adapter delete is a completed command
+  asks the existing Host-owned presence adapter once. An `absent` result performs a fixed safe no-op
+  and does not call the delete adapter; a `present` result permits exactly one existing
+  `ApiKeySecretStorage.delete` call; an `unavailable` result performs no mutation and returns fixed
+  safe indeterminate retry/settings guidance. A fulfilled adapter delete is a completed command
   outcome, while a rejected call has an indeterminate state. The command must not claim that the old
   value remains or that a rejected call removed it, perform a compensating mutation, or expose
   backend details; it performs a fresh presence-only reconciliation and offers fixed safe
   retry/settings guidance.
 - A rotation command always opens a new password-masked input with no prefilled value. It keeps the
   input open across focus loss, rejects an empty submitted value before storage, and treats dismissal
-  as cancellation. It invokes exactly one existing `ApiKeySecretStorage.save`, which delegates to
-  the Provider's stable-key `SecretStorage.store`; it does not read, delete, or clear the old value
-  first. A fulfilled adapter save is the replacement commit boundary. A rejected write has an
+  as cancellation. After validation, the coordinator reads presence once; `present` or `absent` may
+  proceed to exactly one existing `ApiKeySecretStorage.save`, while `unavailable` invokes no rotation
+  mutation and returns fixed safe indeterminate retry/settings guidance. The adapter delegates to the
+  Provider's stable-key `SecretStorage.store`; it does not read, delete, or clear the old value first.
+  A fulfilled adapter save is the replacement commit boundary. A rejected write has an
   indeterminate state because the VS Code API provides no
   transaction, compare-and-swap, or rollback guarantee; the command must not read the Secret,
   compensate, or claim that the old value remains. It performs a fresh presence-only reconciliation
@@ -473,11 +476,19 @@ entry, not only the intermediate object.
   reconciliation, preventing overlapping commands from observing or reporting an interleaved
   lifecycle; this includes T1603 onboarding status reads. Operations for different Providers may
   proceed independently. Queue state contains only operation promises, never Secret values.
-- Any credential presence/status projection uses a dedicated Host-owned presence adapter and returns
-  only a boolean. The unavoidable VS Code `SecretStorage.get` result is accepted inside that adapter,
-  compared only with `=== undefined`, and immediately discarded; the adapter never checks length,
-  prefix, suffix, hash, or content and never returns the string to its caller. Presence-read failures
-  become a safe unavailable/false status without exposing backend error text.
+- Any credential presence/status projection uses a dedicated Host-owned presence adapter with an
+  internal tri-state result: `present` only when `get` fulfills with a non-`undefined` value, `absent`
+  only when `get` fulfills with `undefined`, and `unavailable` when `get` rejects. `unavailable` is
+  never converted to `absent`/`false`; delete and rotation coordinators do not invoke their mutation
+  in that case and instead return a fixed safe indeterminate retry/settings outcome. The unavoidable
+  VS Code `SecretStorage.get` result is accepted inside the adapter, compared only with
+  `=== undefined`, and immediately discarded; the adapter never checks length, prefix, suffix, hash,
+  or content and never returns the string to its caller.
+- The public T1603 Webview projection remains Boolean-only. A fulfilled tri-state result may map to
+  `true`/`false`; an `unavailable` result uses the existing safe status-failure path and retains the
+  last valid projection (or emits no replacement), never publishing `false` as a fact. A rejected
+  post-mutation reconciliation is likewise indeterminate and cannot be used to claim the old/new
+  value state.
 - Controller disposal and generation changes close a notification gate. An awaited adapter operation
   that settles after disposal or an obsolete generation is still observed by its owning coordinator,
   but emits no user notification, Webview status, or diagnostic/log side effect. Queue cleanup is

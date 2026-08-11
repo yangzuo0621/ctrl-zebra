@@ -30,26 +30,34 @@ settings field, or a new package boundary.
   the Secret before confirmation. A cancellation before any storage call guarantees no side effect.
   After confirmation it asks the existing Host-owned presence adapter once, which compares the
   unavoidable `SecretStorage.get` result only with `=== undefined` and immediately discards it. An
-  absent result produces a fixed no-op and does not call `ApiKeySecretStorage.delete`; a non-absent
-  result permits exactly one adapter delete call. The official API does not promise idempotent delete;
-  a fulfilled adapter call is a completed command outcome and a rejected call is indeterminate,
-  followed by presence-only reconciliation and fixed safe retry/settings guidance.
+  `absent` result (fulfilled `get` with `undefined`) produces a fixed no-op and does not call
+  `ApiKeySecretStorage.delete`; a `present` result (fulfilled `get` with a non-`undefined` value)
+  permits exactly one adapter delete call. A rejected `get` is `unavailable`, never absent: no delete
+  or rotate mutation is invoked, and the command returns indeterminate with fixed safe retry/settings
+  guidance. The official API does not promise idempotent delete; a fulfilled adapter call is a
+  completed command outcome and a rejected call is indeterminate, followed by presence-only
+  reconciliation and fixed safe retry/settings guidance.
 - Rotation uses a new password-masked input with no prefill. It invokes the existing
-  `ApiKeySecretStorage.save` once after validation, without a preceding read/delete. A fulfilled
-  adapter save is the replacement commit boundary; a rejected call is indeterminate because the
-  official API only promises `Thenable<void>` and offers no transaction, compare-and-swap, or rollback
-  guarantee. The command does not read the Secret, compensate, or claim that the old value remains;
-  it performs presence-only reconciliation and gives fixed safe retry/settings guidance. Cancellation
-  before the adapter call guarantees no side effect; once the call starts, it cannot be reported as a
-  reversible cancellation.
+  `ApiKeySecretStorage.save` once after validation. It first asks the presence adapter; `present` or
+  `absent` permits that one save, while `unavailable` invokes no rotation mutation and returns fixed
+  safe indeterminate retry/settings guidance. A fulfilled adapter save is the replacement commit
+  boundary; a rejected call is indeterminate because the official API only promises `Thenable<void>`
+  and offers no transaction, compare-and-swap, or rollback guarantee. The command does not read the
+  Secret, compensate, or claim that the old value remains; it performs presence-only reconciliation
+  and gives fixed safe retry/settings guidance. Cancellation before the adapter call guarantees no
+  side effect; once the call starts, it cannot be reported as a reversible cancellation.
 - Save, delete, rotate, and presence operations are serialized per Provider from prompt start through
   mutation settlement, presence-only reconciliation, and result notification, including T1603 status
   reads. The queue is released only after settlement and reconciliation. It stores only promises;
   different Provider queues are independent. Disposal or an obsolete generation closes the result
   gate: late settlements are still observed for idempotent cleanup but cannot emit notifications,
   Webview status, or logs. The underlying SecretStorage Thenable is not cancellable.
-- Presence/status paths use a dedicated boolean projection. They never return or inspect Secret
-  length, prefix, suffix, hash, or other derived data at the caller boundary.
+- Presence/status paths use an internal tri-state projection: `present` only for fulfilled non-`undefined`,
+  `absent` only for fulfilled `undefined`, and `unavailable` for rejection. `unavailable` never maps
+  to false; T1603's public Boolean-only status uses its safe failure/retain-last-projection path (or
+  emits no replacement). The adapter receives the unavoidable `get` string only transiently, compares
+  it with `=== undefined`, immediately discards it, and never returns/inspects/logs length, prefix,
+  suffix, hash, or content at the caller boundary.
 
 ## Alternatives considered
 
