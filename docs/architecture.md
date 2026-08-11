@@ -416,8 +416,12 @@ port.
 
 - One Extension-owned `McpConnectionController` owns at most one configured Server connection and
   one monotonically increasing connection generation. Concurrent connect callers for the same
-  validated configuration share one in-flight attempt; a different configuration cannot replace
-  it while it is live.
+  normalized effective configuration share one in-flight attempt; a different configuration cannot
+  replace it while it is live. The normalized effective configuration includes the closed
+  `protocolMode` (`version: 1` without a mode normalizes to `modern-only`), Server identity,
+  executable, ordered arguments, and selected cwd. Raw configuration version is not an additional
+  operation identity field: version `1` implicit `modern-only` and version `2` explicit
+  `modern-only` are equivalent when all other fields match.
 - Activation, module import, Webview creation, Session recovery, model output, Tool discovery, and
   background timers never connect or reconnect MCP. The only connection trigger is the
   user's explicit connect operation after configuration, trust, cwd, and startup approval checks.
@@ -445,6 +449,15 @@ port.
   settings are interpreted as `protocolMode: "modern-only"`; version `2` requires the explicit
   closed mode `"modern-only" | "dual"`. Unknown versions, modes, fields, transports, or malformed
   values fail with `configuration-invalid` and cannot start a process.
+- T1804's pure configuration parser and Protocol Schemas recognize version `2` `dual` for strict
+  validation, migration planning, and deterministic fixtures. Until T1807 wires the dual-era
+  lifecycle and user migration action, the current live Extension startup gate is fail-closed:
+  `apps/extension` rejects effective `dual` immediately after normalized configuration validation
+  and before workspace binding, startup approval, generation publication, process creation, or any
+  modern probe. It reports the stable `configuration-invalid` outcome with fixed guidance to keep
+  version `1` or choose version `2` `modern-only`; it never silently coerces `dual` to modern-only.
+  T1807 removes this guard only after mode selection, negotiated projection, and the corresponding
+  integration tests are connected.
 - `modern-only` sends one bounded modern `server/discover` probe and accepts only `2026-07-28`.
   `dual` sends the same probe first and may enter exactly one legacy `initialize` /
   `notifications/initialized` exchange only after a specification-classified non-modern response or
@@ -467,6 +480,14 @@ port.
   the closed internal classifications `modern-version-unsupported`, `legacy-version-unsupported`,
   `probe-timeout-legacy-failed`, `malformed-protocol`, and `capability-rejected`, but never exposes
   their raw protocol data or fallback-attempt state.
+- Startup approval and every pre-spawn revalidation compare the normalized effective operation,
+  including `protocolMode`, Server identity, executable, ordered arguments, and canonical cwd.
+  Version `1` implicit `modern-only` and version `2` explicit `modern-only` therefore reuse the
+  same operation identity when every effective field matches; `dual` is a different operation.
+  A mode change, any other effective configuration change, trust/cwd change, or an explicit retry
+  invalidates pending or approved-but-unconsumed startup approval, closes the affected generation,
+  and requires a fresh approval before a new process attempt. The Extension owns this comparison;
+  SDK and Server values cannot replace it.
 - The Client declares none of Roots, Sampling, Elicitation, Tasks, experimental capabilities, or
   other Server-to-Client primitives. It installs no handler for them. A Server request for an
   undeclared Client capability receives a bounded stable unsupported response and cannot reach
@@ -547,9 +568,11 @@ The matrix is mirrored by Protocol’s closed DTOs and Security’s stable error
 Webview receives only the configured mode, closed supported-version list on failure, or negotiated
 era/version after success; it never receives the decision reason or fallback state.
 
-The T1804 constraint PR intentionally changes documentation and configuration guidance only. Protocol
-schemas, runtime configuration migration, compatibility fixtures, and SDK lifecycle changes are
-implemented by the subsequent gated tasks after this contract is merged.
+The T1804 constraint PR established the cross-boundary documentation and configuration guidance.
+The follow-up T1804 implementation adds strict v1/v2 parsing, normalized Protocol Schemas, bounded
+provenance, and deterministic compatibility fixtures. Runtime dual selection, probe/fallback,
+connection lifecycle, Extension/Webview wiring, and explicit user migration activation remain gated
+to T1805–T1807; until then the fail-closed `dual` startup guard above is authoritative.
 
 ### SDK and JSON Schema isolation
 
