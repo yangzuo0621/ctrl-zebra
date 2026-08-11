@@ -75,9 +75,15 @@ revisions, unknown future versions, and every non-stdio transport remain unsuppo
 Every explicit connection has one configured mode. `modern-only` performs only the modern
 `server/discover` exchange. `dual` performs one bounded modern probe first; only a specification-
 classified non-modern response or a bounded probe timeout may enter one legacy `initialize` /
-`notifications/initialized` exchange. A recognized modern response, malformed framing, overflow,
-cancellation, trust loss, process exit, or cleanup failure is terminal and never authorizes
-fallback. Late probe data is discarded by the connection generation gate.
+`notifications/initialized` exchange. A well-formed `DiscoverResult` locks modern: if its bounded
+advertised list contains `2026-07-28`, the client continues modern; if the list omits that version or
+contains only unsupported/unknown future versions, the result is stable `protocol-incompatible` and
+never fallback. A recognized modern JSON-RPC error follows the same lock: a controlled advertised
+`2026-07-28` continues/selects modern, while a missing/unsupported advertised version is
+`protocol-incompatible` and never fallback. Malformed framing, overflow, cancellation, trust loss,
+process exit, or cleanup failure is terminal and never authorizes fallback. Late probe data is
+discarded by the connection generation gate. The complete eligible/forbidden matrix is authoritative
+in [Architecture](architecture.md#closed-modern-first-fallback-decision-matrix-t1804).
 
 The connected Protocol projection carries a CtrlZebra-owned negotiated value:
 

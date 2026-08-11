@@ -371,9 +371,10 @@ constraint PR. The user-visible setting and versioned representation are owned b
 
 ### Package and dependency ownership
 
-- `packages/mcp-client` owns the MCP `2026-07-28` Client lifecycle, capability projection,
-  request correlation, pagination collectors, Server primitive normalization, and all imports from
-  the official MCP TypeScript SDK. Its public entry point exposes only CtrlZebra-owned interfaces,
+- `packages/mcp-client` owns the package-private dual-era Client lifecycle and closed modern/
+  legacy version negotiation (`2026-07-28` and `2025-11-25`), capability projection, request
+  correlation, pagination collectors, Server primitive normalization, and all imports from the
+  official MCP TypeScript SDK. Its public entry point exposes only CtrlZebra-owned interfaces,
   strict plain values, stable errors, and injected ports.
 - The first implementation pins `@modelcontextprotocol/client` to exactly `2.0.0`. Floating ranges,
   `latest`, SDK deep imports outside its documented public subpaths, and direct imports of
@@ -447,10 +448,14 @@ port.
 - `modern-only` sends one bounded modern `server/discover` probe and accepts only `2026-07-28`.
   `dual` sends the same probe first and may enter exactly one legacy `initialize` /
   `notifications/initialized` exchange only after a specification-classified non-modern response or
-  a bounded probe timeout. A DiscoverResult, recognized modern JSON-RPC error, malformed framing,
-  overflow, cancellation, process exit, trust loss, or cleanup failure is terminal and never
-  authorizes fallback. Probe correlation is closed before fallback; late results are discarded by
-  the generation gate.
+  a bounded probe timeout. A well-formed `DiscoverResult` locks modern: an advertised
+  `2026-07-28` continues modern, while a missing/unsupported advertised version fails
+  `protocol-incompatible` without fallback. A recognized modern JSON-RPC error also locks modern:
+  a bounded advertised `2026-07-28` continues/selects modern, while a missing/unsupported version
+  fails `protocol-incompatible` without fallback. Malformed framing, overflow, cancellation,
+  process exit, trust loss, or cleanup failure is terminal and never authorizes fallback. Probe
+  correlation is closed before an eligible fallback; late results are discarded by the generation
+  gate. See the closed decision matrix below.
 - The connected projection contains a CtrlZebra-owned `{ era, version }` pair: modern/
   `2026-07-28` or legacy/`2025-11-25`. Before this projection is valid, status may expose the
   configured mode but no selected era, version, capability, probe result, fallback result, timing,
@@ -499,6 +504,34 @@ request rejection rules. Negotiated era is evidence of a completed handshake, no
   negotiatedVersion }` provenance. The provenance is historical and cannot reconnect, renegotiate,
   replay, approve, or seed a live generation. Probe/fallback attempts, timing, process data,
   credentials, raw errors, and configuration objects remain non-persistent.
+
+#### Closed modern-first fallback decision matrix (T1804)
+
+The probe decision is a closed classification, not a generic “try the other handshake” rule. A
+recognized modern JSON-RPC error is modern evidence just like a `DiscoverResult`; it is never treated
+as an eligible legacy signal. The advertised-version value below means only a bounded, validated list
+from the recognized result/error, never an open Server field.
+
+| Probe or handshake observation | `modern-only` | `dual` | Stable outcome / projection |
+|---|---|---|---|
+| Well-formed `DiscoverResult` advertises `2026-07-28` | Continue modern; never fallback | Continue modern; never fallback | After the modern handshake completes, connected `modern / 2026-07-28` |
+| Well-formed `DiscoverResult` is modern evidence but its advertised list omits `2026-07-28` or contains only an unknown future version | Do not fallback | Do not fallback | Failed `protocol-incompatible`; no selected era or capability |
+| Recognized modern JSON-RPC error advertises controlled `2026-07-28` | Lock modern and continue/select `2026-07-28`; never fallback | Lock modern and continue/select `2026-07-28`; never fallback | After the modern handshake completes, connected `modern / 2026-07-28` |
+| Recognized modern JSON-RPC error has no controlled supported version or omits `2026-07-28` | Lock modern; do not fallback | Lock modern; do not fallback | Failed `protocol-incompatible`; the error is not a legacy signal |
+| Specification-defined non-modern probe response | Fail; legacy is not allowed | Close probe, then run exactly one legacy `initialize` / `notifications/initialized` | Connected `legacy / 2025-11-25` only after the complete legacy handshake; otherwise stable `protocol-incompatible` |
+| Bounded probe timeout | Fail; legacy is not allowed | Close probe, then run exactly one legacy handshake | Connected legacy only after exact version validation; failed fallback is stable `protocol-incompatible` |
+| Malformed or unclassified response/error | Do not fallback | Do not fallback | Stable `malformed-message` or `protocol-incompatible`; no downgrade |
+| Message/stream/descriptor overflow | Do not fallback | Do not fallback | Stable `limit-exceeded`; generation closes |
+| Cancellation, trust loss, process exit, or cleanup failure | Do not fallback | Do not fallback | Cancellation/non-connected status, `workspace-untrusted`, `server-exited`, or `termination-unconfirmed` as applicable |
+| Legacy initialization advertises an unsupported/unknown version or is malformed | No second lifecycle | No second lifecycle or modern retry | Failed `protocol-incompatible` or `malformed-message`; one attempt only |
+
+`DiscoverResult` and a recognized modern error therefore have distinct modern success/error branches,
+but share the same no-fallback lock. Only the two explicitly eligible rows (defined non-modern
+response and bounded timeout) can enter legacy in `dual`; unknown future versions, malformed data,
+oversize data, cancellation, process exit, trust loss, and cleanup failure are never fallback oracles.
+The matrix is mirrored by Protocol’s closed DTOs and Security’s stable error classification. The
+Webview receives only the configured mode, closed supported-version list on failure, or negotiated
+era/version after success; it never receives the decision reason or fallback state.
 
 The T1804 constraint PR intentionally changes documentation and configuration guidance only. Protocol
 schemas, runtime configuration migration, compatibility fixtures, and SDK lifecycle changes are

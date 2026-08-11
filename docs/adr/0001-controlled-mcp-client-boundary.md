@@ -380,9 +380,14 @@ content, or persistence boundaries above.
   on extension upgrade or in response to a Server.
 - `modern-only` performs one bounded `server/discover` exchange. `dual` probes modern first and may
   enter one legacy `initialize` / `notifications/initialized` exchange only for a
-  specification-classified non-modern response or bounded timeout. Recognized modern errors,
-  malformed framing, overflow, cancellation, process exit, trust loss, and cleanup failure never
-  authorize fallback. A generation gate discards late probe data.
+  specification-classified non-modern response or bounded timeout. A well-formed `DiscoverResult`
+  locks modern: a bounded advertised `2026-07-28` continues modern, while missing/unsupported
+  versions fail `protocol-incompatible` without fallback. A recognized modern JSON-RPC error has
+  the same lock: a controlled advertised `2026-07-28` continues/selects modern, while a
+  missing/unsupported version fails `protocol-incompatible` without fallback. Malformed framing,
+  overflow, cancellation, process exit, trust loss, and cleanup failure never authorize fallback. A
+  generation gate discards late probe data; the closed eligible/forbidden matrix is recorded in
+  Architecture and mirrored by Protocol/Security.
 - A successful connected Protocol projection carries configured mode plus one exact negotiated
   `{ era, version }` pair (`modern/2026-07-28` or `legacy/2025-11-25`). Non-connected and failed
   projections carry no selected era or capabilities. Diagnostics expose only the closed configured

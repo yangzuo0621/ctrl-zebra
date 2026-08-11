@@ -435,7 +435,9 @@ VS Code 主题下，原因、操作和失败状态必须可读且不依赖颜色
   连接中切换 era，不复用启动或 Tool 审批。连接始终是用户动作。
 - 探测和回退是连接卡片内部的不可见实现状态。UI 只在完整握手成功后显示 negotiated
   era/version；失败只显示稳定错误、configured mode、支持版本和固定恢复动作，不显示探测
-  响应、超时、回退尝试、时序、Server 原始错误或“回退成功”文案。
+  响应、超时、回退尝试、时序、Server 原始错误或“回退成功”文案。DiscoverResult 或可识别
+  modern JSON-RPC error 都锁定 modern；其缺少受支持 `2026-07-28` 时显示
+  `protocol-incompatible`，绝不暗示 legacy 回退。
 - 连接状态与恢复组合保持严格：未连接/失败时没有可用能力；connected 才显示对应 era 的
   Tools、Resources/Templates、Prompts。取消、断开、Trust 丢失、清理失败或世代变化立即清空
   旧目录、诊断、恢复控件和 negotiated 值，迟到事件不改变界面。

@@ -245,7 +245,10 @@ Read the full [Privacy Notice](PRIVACY.md) and [security contract](docs/security
 - **Protocol or capability failure**: check the configured mode. Modern-only requires MCP
   `2026-07-28`; dual supports only `2026-07-28` and `2025-11-25`. CtrlZebra never accepts unknown
   versions, exposes probe/fallback details before a successful handshake, or enables undeclared
-  Client capabilities. A version-1 setting must be explicitly migrated before dual can be selected.
+  Client capabilities. A well-formed modern DiscoverResult or recognized modern JSON-RPC error
+  never falls back; if it does not advertise controlled `2026-07-28`, the stable result is
+  `protocol-incompatible`. Dual fallback is limited to a defined non-modern response or bounded
+  timeout. A version-1 setting must be explicitly migrated before dual can be selected.
 - **Server exited or malformed output**: disconnect, inspect the Server outside CtrlZebra without
   sharing secrets, correct its stdout protocol behavior, then reconnect explicitly. CtrlZebra never
   treats stderr or raw protocol data as user-visible content.

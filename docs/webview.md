@@ -341,7 +341,9 @@ override or a configuration object.
 
 The connection card keeps the configured mode visible while `connecting`, but shows no negotiated
 version or capabilities until `connected`. A failed connection exposes only the stable error,
-closed supported-version list, and fixed next action. Disconnect, cancellation, trust loss, cleanup
-failure, generation change, or configuration staleness clears the negotiated pair and all dependent
-catalog/recovery state synchronously. This is a presentation rule; the Extension remains the sole
-owner of negotiation, migration, process cleanup, and capability decisions.
+closed supported-version list, and fixed next action. DiscoverResult and recognized modern JSON-RPC
+errors are modern-locked; a missing/unsupported controlled `2026-07-28` produces only
+`protocol-incompatible` and never a legacy/fallback hint. Disconnect, cancellation, trust loss,
+cleanup failure, generation change, or configuration staleness clears the negotiated pair and all
+dependent catalog/recovery state synchronously. This is a presentation rule; the Extension remains
+the sole owner of negotiation, migration, process cleanup, and capability decisions.

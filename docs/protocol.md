@@ -783,9 +783,15 @@ The Protocol layer never receives SDK lifecycle messages. It receives one comple
 projection only after the selected handshake validates, with `configuredMode` and
 `negotiated: { era, version }`. The pair is exactly `modern/2026-07-28` or
 `legacy/2025-11-25`. Connecting, disconnecting, disconnected, and failed projections contain no
-negotiated pair or usable capabilities. A recognized modern response, malformed framing, overflow,
-cancellation, process exit, trust loss, or cleanup failure cannot trigger legacy fallback; late
-probe results are ignored by generation.
+negotiated pair or usable capabilities. A well-formed `DiscoverResult` locks modern: an advertised
+`2026-07-28` continues modern, while a missing/unsupported advertised version is
+`protocol-incompatible` with no fallback. A recognized modern JSON-RPC error also locks modern: a
+controlled advertised `2026-07-28` continues/selects modern, while a missing/unsupported advertised
+version is `protocol-incompatible` with no fallback. Only a specification-defined non-modern response
+or bounded probe timeout in `dual` can enter one legacy handshake; malformed framing, overflow,
+cancellation, process exit, trust loss, or cleanup failure cannot trigger fallback. Late probe results
+are ignored by generation. The complete eligible/forbidden decision matrix is authoritative in
+[Architecture](architecture.md#closed-modern-first-fallback-decision-matrix-t1804).
 
 `McpErrorDto` remains a closed, user-safe code/message object. Unsupported versions use
 `protocol-incompatible`; malformed protocol uses `malformed-message`; rejected capabilities use
