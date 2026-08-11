@@ -9,7 +9,8 @@ import type {
   McpResourceCatalogDto,
   McpResourceSelectionDto,
   McpResourceSnapshotDto,
-  McpToolCatalogDto,
+  McpToolCatalogMessage,
+  McpToolCatalogProjectionDto,
 } from "@ctrl-zebra/protocol";
 import { createStore, type StoreApi } from "zustand/vanilla";
 
@@ -18,7 +19,7 @@ import type { WebviewHost } from "./vscode-api.js";
 
 export interface McpState {
   readonly connection: McpConnectionDto;
-  readonly tools?: McpToolCatalogDto;
+  readonly tools?: McpToolCatalogProjectionDto;
   readonly resources?: McpResourceCatalogDto;
   readonly prompts?: McpPromptCatalogDto;
   readonly selectedResourceKey?: string;
@@ -68,6 +69,53 @@ export function createMcpStore(
   let connectionRequest: string | undefined;
   let resourceRequest: string | undefined;
   let promptRequest: string | undefined;
+  let committedToolCatalog: ToolCatalogRecord | undefined;
+  let pendingToolCatalog: ToolCatalogRecord | undefined;
+  let toolCatalogDeliveryClosed = false;
+
+  const clearToolCatalogWatermarks = (): void => {
+    committedToolCatalog = undefined;
+    pendingToolCatalog = undefined;
+  };
+
+  const stageToolCatalog = (
+    setState: StoreApi<McpState>["setState"],
+    message: McpToolCatalogMessage,
+  ): void => {
+    const record: ToolCatalogRecord = {
+      requestId: message.requestId,
+      serverId: message.catalog.server.serverId,
+      generation: message.catalog.generation,
+      catalogSequence: message.catalogSequence,
+      catalog: message.catalog,
+    };
+    if (pendingToolCatalog !== undefined) {
+      if (record.catalogSequence < pendingToolCatalog.catalogSequence) return;
+      if (record.catalogSequence === pendingToolCatalog.catalogSequence) {
+        if (sameToolCatalogPublication(pendingToolCatalog, record)) return;
+        return;
+      }
+      pendingToolCatalog = record;
+      setState({ tools: record.catalog });
+      if (pendingToolCatalog !== record) return;
+      committedToolCatalog = record;
+      pendingToolCatalog = undefined;
+      return;
+    }
+    if (committedToolCatalog !== undefined) {
+      if (record.catalogSequence < committedToolCatalog.catalogSequence) return;
+      if (record.catalogSequence === committedToolCatalog.catalogSequence) {
+        if (sameToolCatalogPublication(committedToolCatalog, record)) return;
+        return;
+      }
+    }
+    pendingToolCatalog = record;
+    setState({ tools: record.catalog });
+    if (pendingToolCatalog !== record) return;
+    committedToolCatalog = record;
+    pendingToolCatalog = undefined;
+  };
+
   return createStore<McpState>()((set, get) => ({
     connection: disconnected,
     resourceArguments: {},
@@ -84,6 +132,8 @@ export function createMcpStore(
       connectionRequest = createRequestId();
       resourceRequest = undefined;
       promptRequest = undefined;
+      clearToolCatalogWatermarks();
+      toolCatalogDeliveryClosed = true;
       set({ busy: "disconnecting", announcement: strings.mcpAnnouncements.disconnecting });
       host.disconnectMcp?.(connectionRequest);
     },
@@ -242,19 +292,43 @@ export function createMcpStore(
       if (message.type === "extension/mcp-connection") {
         if (connectionRequest !== undefined && message.requestId !== connectionRequest) return;
         if (message.requestId === connectionRequest) connectionRequest = undefined;
+        const previousConnection = get().connection;
         const active = message.connection.status === "connected";
+        const previousScope =
+          previousConnection.status === "connected"
+            ? {
+                serverId: previousConnection.server.serverId,
+                generation: previousConnection.generation,
+              }
+            : undefined;
+        const nextScope =
+          message.connection.status === "connected"
+            ? {
+                serverId: message.connection.server.serverId,
+                generation: message.connection.generation,
+              }
+            : undefined;
+        const scopeChanged =
+          previousScope?.serverId !== nextScope?.serverId ||
+          previousScope?.generation !== nextScope?.generation;
+        if (scopeChanged) clearToolCatalogWatermarks();
+        toolCatalogDeliveryClosed = !active;
         set({
           connection: message.connection,
           busy: undefined,
           announcement: connectionAnnouncement(message.connection),
+          ...(active && scopeChanged ? { tools: undefined } : {}),
           ...(active ? {} : clearLiveState()),
         });
         return;
       }
-      if (message.type === "extension/mcp-tools") {
-        if (sameGeneration(get().connection, message.catalog)) set({ tools: message.catalog });
+      if (message.type === "extension/mcp-tool-catalog") {
+        if (!toolCatalogDeliveryClosed && sameGeneration(get().connection, message.catalog)) {
+          stageToolCatalog(set, message);
+        }
         return;
       }
+      if (message.type === "extension/mcp-tools") return;
       if (message.type === "extension/mcp-resources") {
         if (!sameGeneration(get().connection, message.catalog)) return;
         const selected = get().selectedResourceKey;
@@ -366,6 +440,34 @@ function clearLiveState() {
     promptArguments: {},
     promptPreview: undefined,
   } as const;
+}
+
+interface ToolCatalogRecord {
+  readonly requestId: string;
+  readonly serverId: string;
+  readonly generation: number;
+  readonly catalogSequence: number;
+  readonly catalog: McpToolCatalogProjectionDto;
+}
+
+function sameToolCatalogPublication(left: ToolCatalogRecord, right: ToolCatalogRecord): boolean {
+  return (
+    left.serverId === right.serverId &&
+    left.generation === right.generation &&
+    left.catalogSequence === right.catalogSequence &&
+    left.requestId === right.requestId &&
+    canonicalJson(left.catalog) === canonicalJson(right.catalog)
+  );
+}
+
+function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map((entry) => canonicalJson(entry)).join(",")}]`;
+  const record = value as Readonly<Record<string, unknown>>;
+  return `{${Object.keys(record)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`)
+    .join(",")}}`;
 }
 
 function connectionAnnouncement(connection: McpConnectionDto): string {

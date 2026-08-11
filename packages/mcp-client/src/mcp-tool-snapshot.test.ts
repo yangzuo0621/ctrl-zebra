@@ -102,6 +102,88 @@ describe("MCP Tool snapshot", () => {
     );
   });
 
+  it("keeps valid siblings and projects stable rejection reasons", () => {
+    let nested: Record<string, unknown> = { type: "string" };
+    for (let index = 0; index < 33; index += 1) {
+      nested = { type: "array", items: nested };
+    }
+    const snapshot = createMcpToolSnapshot(
+      server,
+      1,
+      [
+        { name: "z-forbidden", inputSchema: { type: "object", format: "email" } },
+        { name: "a-unknown", inputSchema: { type: "object", unknownKeyword: true } },
+        { name: "m-reference", inputSchema: { type: "object", $ref: "https://example.com" } },
+        { name: "b-root", inputSchema: true },
+        { name: "l-limit", inputSchema: { type: "object", properties: { nested } } },
+        {
+          name: "c-compile",
+          inputSchema: { ...emptySchema, title: "compile-fails" },
+        },
+        { name: "valid", inputSchema: emptySchema },
+      ],
+      new Set(),
+      {
+        compile(schema) {
+          if (schema.title === "compile-fails") throw new Error("validator failure");
+          return validator.compile(schema);
+        },
+      },
+    );
+
+    expect(snapshot.view.tools.map((tool) => tool.mcpToolName)).toEqual(["valid"]);
+    expect(snapshot.view.rejectedTools).toEqual([
+      { mcpToolName: "a-unknown", reason: "unknown-keyword" },
+      { mcpToolName: "b-root", reason: "non-object-root" },
+      { mcpToolName: "c-compile", reason: "schema-invalid" },
+      { mcpToolName: "l-limit", reason: "limit-exceeded" },
+      { mcpToolName: "m-reference", reason: "invalid-reference" },
+      { mcpToolName: "z-forbidden", reason: "forbidden-keyword" },
+    ]);
+    expect(snapshot.view.rejectedToolsTruncated).toBe(false);
+  });
+
+  it("sorts rejection names by Unicode scalar and truncates only the projection", () => {
+    const rejected = Array.from({ length: 300 }, (_, index) => ({
+      name: `rejected-${String(index).padStart(3, "0")}`,
+      inputSchema: { type: "object", format: "email" },
+    }));
+    const snapshot = createMcpToolSnapshot(
+      server,
+      1,
+      [...rejected, { name: "accepted", inputSchema: emptySchema }],
+      new Set(),
+      validator,
+    );
+
+    expect(snapshot.view.tools.map((tool) => tool.mcpToolName)).toEqual(["accepted"]);
+    expect(snapshot.view.rejectedTools).toHaveLength(256);
+    expect(snapshot.view.rejectedToolsTruncated).toBe(true);
+    expect(snapshot.view.rejectedTools[0]).toEqual({
+      mcpToolName: "rejected-000",
+      reason: "forbidden-keyword",
+    });
+    expect(snapshot.view.rejectedTools.at(-1)).toEqual({
+      mcpToolName: "rejected-255",
+      reason: "forbidden-keyword",
+    });
+    const unicodeSnapshot = createMcpToolSnapshot(
+      server,
+      1,
+      [
+        { name: "😀", inputSchema: { type: "object", format: "email" } },
+        { name: "\ue000", inputSchema: { type: "object", format: "email" } },
+        { name: "accepted", inputSchema: emptySchema },
+      ],
+      new Set(),
+      validator,
+    );
+    const unicodeNames = unicodeSnapshot.view.rejectedTools
+      .filter(({ mcpToolName }) => mcpToolName === "😀" || mcpToolName === "\ue000")
+      .map(({ mcpToolName }) => mcpToolName);
+    expect(unicodeNames).toEqual(["\ue000", "😀"]);
+  });
+
   it("isolates built-in and reserved Registry names", () => {
     const externalName = createMcpRegistryName(server.serverId, "conflict");
     expect(() =>

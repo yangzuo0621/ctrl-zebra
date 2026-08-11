@@ -65,17 +65,24 @@ export {
 } from "./checkpoint.js";
 export type {
   McpConnectionDto,
+  McpRejectedToolDto,
   McpToolCatalogDto,
+  McpToolCatalogProjectionDto,
+  McpToolRejectionReasonDto,
   ToolStateSourceDto,
 } from "./mcp-connection.js";
 export {
   mcpCapabilitiesSchema,
+  mcpCatalogSequenceSchema,
   mcpConnectionSchema,
   mcpErrorCodeSchema,
   mcpErrorSchema,
   mcpProtocolVersionSchema,
+  mcpRejectedToolSchema,
+  mcpToolCatalogProjectionSchema,
   mcpToolCatalogSchema,
   mcpToolDescriptorSchema,
+  mcpToolRejectionReasonSchema,
   toolStateSourceSchema,
 } from "./mcp-connection.js";
 export type {
@@ -163,6 +170,7 @@ export type {
   McpResourcePreviewMessage,
   McpResourceReadMessage,
   McpResourcesMessage,
+  McpToolCatalogMessage,
   McpToolsMessage,
   NewChatMessage,
   OpenExternalLinkMessage,
@@ -231,6 +239,7 @@ export {
   mcpResourcePreviewMessageSchema,
   mcpResourceReadMessageSchema,
   mcpResourcesMessageSchema,
+  mcpToolCatalogMessageSchema,
   mcpToolsMessageSchema,
   newChatMessageSchema,
   openExternalLinkMessageSchema,

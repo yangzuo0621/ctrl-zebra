@@ -17,6 +17,7 @@ export {
   type McpStdioPort,
   type McpStdioPortHandlers,
   type McpToolDiscoveryContext,
+  type McpToolRejectionReason,
   maxMcpDescriptorBytes,
   maxMcpListEntries,
   maxMcpListPages,
@@ -29,6 +30,8 @@ export {
   maxMcpPromptCodePoints,
   maxMcpPromptMessages,
   maxMcpPromptTextBytes,
+  maxMcpRejectedToolProjectionBytes,
+  maxMcpRejectedTools,
   maxMcpResourceCodePoints,
   maxMcpResourceItems,
   maxMcpResourceTextBytes,
@@ -94,7 +97,11 @@ export {
   McpToolSchemaError,
   validateMcpToolSchema,
 } from "./mcp-tool-schema.js";
-export type { McpToolDescriptor, McpToolSnapshotView } from "./mcp-tool-snapshot.js";
+export type {
+  McpRejectedTool,
+  McpToolDescriptor,
+  McpToolSnapshotView,
+} from "./mcp-tool-snapshot.js";
 export {
   McpToolExecutionUnavailableError,
   McpToolSnapshotError,

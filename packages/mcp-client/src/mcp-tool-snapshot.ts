@@ -11,9 +11,12 @@ import {
 
 import {
   type McpServerIdentity,
+  type McpToolRejectionReason,
   maxMcpDescriptorBytes,
   maxMcpListEntries,
   maxMcpListSnapshotBytes,
+  maxMcpRejectedToolProjectionBytes,
+  maxMcpRejectedTools,
   maxMcpToolSnapshotSchemaBytes,
 } from "./contracts.js";
 import {
@@ -49,10 +52,29 @@ export interface McpToolDescriptor {
   readonly schemaId: string;
 }
 
+export interface McpRejectedTool {
+  readonly mcpToolName: string;
+  readonly reason: McpToolRejectionReason;
+}
+
+type McpToolEvaluation =
+  | {
+      readonly kind: "accepted";
+      readonly descriptor: McpToolDescriptor;
+      readonly compiledInput: CompiledExternalJsonSchema;
+      readonly compiledOutput?: CompiledExternalJsonSchema;
+    }
+  | {
+      readonly kind: "rejected";
+      readonly rejection: McpRejectedTool;
+    };
+
 export interface McpToolSnapshotView {
   readonly server: McpServerIdentity;
   readonly generation: number;
   readonly tools: readonly McpToolDescriptor[];
+  readonly rejectedTools: readonly McpRejectedTool[];
+  readonly rejectedToolsTruncated: boolean;
   readonly registry: ToolRegistry;
 }
 
@@ -115,6 +137,7 @@ export function createMcpToolSnapshot(
 
   const descriptors: McpToolDescriptor[] = [];
   const tools: AgentTool[] = [];
+  const rejectedTools: McpRejectedTool[] = [];
   const identities = new Set<string>();
   const registryNames = new Set<string>();
   const outputValidators = new Map<ToolName, CompiledExternalJsonSchema>();
@@ -122,9 +145,9 @@ export function createMcpToolSnapshot(
   let snapshotBytes = 2;
   let snapshot: McpToolSnapshot | undefined;
 
-  for (const value of values) {
+  for (const [index, value] of values.entries()) {
     const serialized = serializeBounded(value, maxMcpDescriptorBytes);
-    snapshotBytes += utf8Bytes(serialized) + (descriptors.length === 0 ? 0 : 1);
+    snapshotBytes += utf8Bytes(serialized) + (index === 0 ? 0 : 1);
     if (snapshotBytes > maxMcpListSnapshotBytes) {
       throw new McpToolSnapshotError("limit-exceeded");
     }
@@ -141,58 +164,96 @@ export function createMcpToolSnapshot(
     }
     registryNames.add(registryName);
 
-    let inputSchema: Readonly<Record<string, JsonValue>>;
-    let outputSchema: Readonly<Record<string, JsonValue>> | undefined;
+    let evaluation: McpToolEvaluation;
     try {
-      inputSchema = validateMcpToolSchema(record.inputSchema);
-      outputSchema =
+      const inputSchema = validateMcpToolSchema(record.inputSchema);
+      const outputSchema =
         record.outputSchema === undefined ? undefined : validateMcpToolSchema(record.outputSchema);
+      schemaBytes += utf8Bytes(JSON.stringify(inputSchema));
+      if (outputSchema !== undefined) {
+        schemaBytes += utf8Bytes(JSON.stringify(outputSchema));
+      }
+      if (schemaBytes > maxMcpToolSnapshotSchemaBytes) {
+        throw new McpToolSnapshotError("limit-exceeded");
+      }
+
+      const compiledInput = compile(validator, inputSchema);
+      const compiledOutput =
+        outputSchema === undefined ? undefined : compile(validator, outputSchema);
+      const schemaId = createHash("sha256")
+        .update(JSON.stringify({ inputSchema, outputSchema }), "utf8")
+        .digest("hex");
+      const descriptor: McpToolDescriptor = {
+        registryName,
+        mcpToolName: name,
+        ...(record.title === undefined ? {} : { title: readText(record.title, true) }),
+        ...(record.description === undefined
+          ? {}
+          : { description: readText(record.description, true) }),
+        schemaId,
+      };
+      evaluation = { kind: "accepted", descriptor, compiledInput, compiledOutput };
     } catch (error) {
       if (error instanceof McpToolSchemaError) {
-        throw new McpToolSnapshotError("invalid-schema");
+        evaluation = {
+          kind: "rejected",
+          rejection: { mcpToolName: name, reason: error.reason },
+        };
+      } else {
+        throw error;
       }
-      throw error;
     }
-    schemaBytes += utf8Bytes(JSON.stringify(inputSchema));
-    if (outputSchema !== undefined) {
-      schemaBytes += utf8Bytes(JSON.stringify(outputSchema));
+    if (evaluation.kind === "rejected") {
+      rejectedTools.push(evaluation.rejection);
+      continue;
     }
-    if (schemaBytes > maxMcpToolSnapshotSchemaBytes) {
-      throw new McpToolSnapshotError("limit-exceeded");
+    descriptors.push(evaluation.descriptor);
+    if (evaluation.compiledOutput !== undefined) {
+      outputValidators.set(registryName, evaluation.compiledOutput);
     }
-
-    const compiledInput = compile(validator, inputSchema);
-    if (outputSchema !== undefined) {
-      outputValidators.set(registryName, compile(validator, outputSchema));
-    }
-    const schemaId = createHash("sha256")
-      .update(JSON.stringify({ inputSchema, outputSchema }), "utf8")
-      .digest("hex");
-    const descriptor: McpToolDescriptor = {
-      registryName,
-      mcpToolName: name,
-      ...(record.title === undefined ? {} : { title: readText(record.title, true) }),
-      ...(record.description === undefined
-        ? {}
-        : { description: readText(record.description, true) }),
-      schemaId,
-    };
-    descriptors.push(descriptor);
     tools.push(
       createExternalTool(
-        descriptor,
+        evaluation.descriptor,
         server,
         generation,
-        compiledInput,
-        outputValidators.get(registryName),
+        evaluation.compiledInput,
+        evaluation.compiledOutput,
         () => snapshot?.isActive() === true,
         callTool,
       ),
     );
   }
 
+  if (values.length > 0 && descriptors.length === 0) {
+    throw new McpToolSnapshotError("invalid-schema");
+  }
+
+  const sortedRejectedTools = [...rejectedTools].sort((left, right) =>
+    compareUnicodeScalars(left.mcpToolName, right.mcpToolName),
+  );
+  const boundedRejectedTools: McpRejectedTool[] = [];
+  let rejectedToolsTruncated = sortedRejectedTools.length > maxMcpRejectedTools;
+  for (const rejection of sortedRejectedTools) {
+    if (boundedRejectedTools.length >= maxMcpRejectedTools) {
+      rejectedToolsTruncated = true;
+      break;
+    }
+    const candidate = [...boundedRejectedTools, rejection];
+    if (utf8Bytes(JSON.stringify(candidate)) > maxMcpRejectedToolProjectionBytes) {
+      rejectedToolsTruncated = true;
+      break;
+    }
+    boundedRejectedTools.push(rejection);
+  }
+
   snapshot = new McpToolSnapshot(
-    { server, generation, tools: descriptors },
+    {
+      server,
+      generation,
+      tools: descriptors,
+      rejectedTools: boundedRejectedTools,
+      rejectedToolsTruncated,
+    },
     tools,
     outputValidators,
   );
@@ -293,8 +354,20 @@ function compile(
   try {
     return validator.compile(schema);
   } catch {
-    throw new McpToolSnapshotError("invalid-schema");
+    throw new McpToolSchemaError("schema-invalid");
   }
+}
+
+function compareUnicodeScalars(left: string, right: string): number {
+  const leftScalars = Array.from(left, (value) => value.codePointAt(0) ?? 0);
+  const rightScalars = Array.from(right, (value) => value.codePointAt(0) ?? 0);
+  const length = Math.min(leftScalars.length, rightScalars.length);
+  for (let index = 0; index < length; index += 1) {
+    const leftScalar = leftScalars[index] ?? 0;
+    const rightScalar = rightScalars[index] ?? 0;
+    if (leftScalar !== rightScalar) return leftScalar - rightScalar;
+  }
+  return leftScalars.length - rightScalars.length;
 }
 
 function readDescriptor(value: unknown): Readonly<Record<string, unknown>> {

@@ -3,6 +3,7 @@ import type { JsonSchemaType } from "@modelcontextprotocol/client";
 import { AjvJsonSchemaValidator } from "@modelcontextprotocol/client/validators/ajv";
 
 import {
+  type McpToolRejectionReason,
   maxMcpToolSchemaBytes,
   maxMcpToolSchemaDepth,
   maxMcpToolSchemaNodes,
@@ -42,6 +43,31 @@ const allowedKeywords = new Set([
   "type",
   "uniqueItems",
 ]);
+const forbiddenKeywords = new Set([
+  "$comment",
+  "$id",
+  "contains",
+  "contentEncoding",
+  "contentMediaType",
+  "contentSchema",
+  "dependentRequired",
+  "dependentSchemas",
+  "deprecated",
+  "else",
+  "format",
+  "if",
+  "minContains",
+  "maxContains",
+  "nullable",
+  "pattern",
+  "patternProperties",
+  "propertyNames",
+  "readOnly",
+  "then",
+  "unevaluatedItems",
+  "unevaluatedProperties",
+  "writeOnly",
+]);
 const allowedTypes = new Set(["array", "boolean", "integer", "null", "number", "object", "string"]);
 
 export interface CompiledExternalJsonSchema {
@@ -54,7 +80,7 @@ export interface ExternalJsonSchemaValidator {
 }
 
 export class McpToolSchemaError extends Error {
-  constructor() {
+  constructor(readonly reason: McpToolRejectionReason = "schema-invalid") {
     super("MCP Tool schema is invalid or unsupported.");
     this.name = "McpToolSchemaError";
   }
@@ -79,10 +105,10 @@ export function validateMcpToolSchema(value: unknown): Readonly<Record<string, J
   const context: WalkContext = { nodes: 0, properties: 0, references: [] };
   const schema = walkSchema(value, context, 1, "#");
   if (schema === true || schema === false || schema.type !== "object") {
-    throw new McpToolSchemaError();
+    throw new McpToolSchemaError("non-object-root");
   }
   if (utf8Bytes(JSON.stringify(schema)) > maxMcpToolSchemaBytes) {
-    throw new McpToolSchemaError();
+    throw new McpToolSchemaError("limit-exceeded");
   }
   assertAcyclicReferences(schema, context.references);
   return schema;
@@ -102,7 +128,7 @@ function walkSchema(
 ): boolean | Readonly<Record<string, JsonValue>> {
   context.nodes += 1;
   if (context.nodes > maxMcpToolSchemaNodes || depth > maxMcpToolSchemaDepth) {
-    throw new McpToolSchemaError();
+    throw new McpToolSchemaError("limit-exceeded");
   }
   if (typeof value === "boolean") {
     return value;
@@ -111,7 +137,9 @@ function walkSchema(
   const result: Record<string, JsonValue> = {};
   for (const [key, nested] of Object.entries(record)) {
     if (!allowedKeywords.has(key)) {
-      throw new McpToolSchemaError();
+      throw new McpToolSchemaError(
+        forbiddenKeywords.has(key) ? "forbidden-keyword" : "unknown-keyword",
+      );
     }
     const childPath = `${path}/${escapePointer(key)}`;
     if (schemaMapKeywords.has(key)) {
@@ -119,7 +147,7 @@ function walkSchema(
       if (key === "properties") {
         context.properties += Object.keys(entries).length;
         if (context.properties > maxMcpToolSchemaProperties) {
-          throw new McpToolSchemaError();
+          throw new McpToolSchemaError("limit-exceeded");
         }
       }
       result[key] = Object.fromEntries(
@@ -139,12 +167,12 @@ function walkSchema(
       );
     } else if (key === "$schema") {
       if (nested !== draft202012) {
-        throw new McpToolSchemaError();
+        throw new McpToolSchemaError("schema-invalid");
       }
       result[key] = nested;
     } else if (key === "$ref") {
       if (typeof nested !== "string" || !nested.startsWith("#/") || nested.includes("%")) {
-        throw new McpToolSchemaError();
+        throw new McpToolSchemaError("invalid-reference");
       }
       context.references.push({ source: path, target: nested });
       result[key] = nested;
@@ -254,7 +282,7 @@ function assertAcyclicReferences(
   const graph = new Map<string, string[]>();
   for (const reference of references) {
     if (resolvePointer(root, reference.target) === undefined) {
-      throw new McpToolSchemaError();
+      throw new McpToolSchemaError("invalid-reference");
     }
     const edges = graph.get(reference.source) ?? [];
     edges.push(reference.target);
@@ -264,7 +292,7 @@ function assertAcyclicReferences(
   const visited = new Set<string>();
   const visit = (path: string): void => {
     if (visiting.has(path)) {
-      throw new McpToolSchemaError();
+      throw new McpToolSchemaError("invalid-reference");
     }
     if (visited.has(path)) {
       return;

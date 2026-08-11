@@ -5,7 +5,10 @@ import {
   mcpConnectionSchema,
   mcpPromptCatalogSchema,
   mcpResourceCatalogSchema,
+  mcpToolCatalogMessageSchema,
+  mcpToolCatalogProjectionSchema,
   mcpToolCatalogSchema,
+  mcpToolsMessageSchema,
   protocolVersion,
 } from "@ctrl-zebra/protocol";
 
@@ -36,12 +39,24 @@ export class McpWebviewActions {
   #poll: ReturnType<typeof setInterval> | undefined;
   #connectionSignature: string | undefined;
   #toolSignature: string | undefined;
+  #catalogScope: string | undefined;
+  #catalogSequence: number;
+  #catalogSequenceBlocked = false;
+  #disconnectPromise: Promise<unknown> | undefined;
   #resourceSignature: string | undefined;
   #promptSignature: string | undefined;
 
-  constructor({ connection, openSettings }: McpWebviewActionsDependencies) {
+  constructor(
+    { connection, openSettings }: McpWebviewActionsDependencies,
+    options: {
+      readonly initialCatalogScope?: string;
+      readonly initialCatalogSequence?: number;
+    } = {},
+  ) {
     this.#connection = connection;
     this.#openSettings = openSettings;
+    this.#catalogScope = options.initialCatalogScope;
+    this.#catalogSequence = options.initialCatalogSequence ?? 0;
   }
 
   bind(post: PostMessage): void {
@@ -55,7 +70,7 @@ export class McpWebviewActions {
   }
 
   async disconnect(requestId: string): Promise<void> {
-    await this.#connection.disconnect();
+    await this.#requestDisconnect();
     this.#publish(requestId, true);
   }
 
@@ -83,12 +98,23 @@ export class McpWebviewActions {
       this.#connectionSignature = connectionSignature;
       post({ protocolVersion, type: "extension/mcp-connection", requestId, connection });
     }
-    if (snapshot.status !== "connected") {
+    if (snapshot.status !== "connected" || snapshot.server === undefined) {
       this.#toolSignature = undefined;
+      this.#catalogScope = undefined;
+      this.#catalogSequence = 0;
+      this.#catalogSequenceBlocked = false;
       this.#resourceSignature = undefined;
       this.#promptSignature = undefined;
       return;
     }
+    const connectionScope = catalogScope(snapshot.server.serverId, snapshot.generation);
+    if (this.#catalogScope !== connectionScope) {
+      this.#catalogScope = connectionScope;
+      this.#catalogSequence = 0;
+      this.#catalogSequenceBlocked = false;
+      this.#toolSignature = undefined;
+    }
+    if (this.#catalogSequenceBlocked) return;
     const tools = this.#connection.getToolSnapshot();
     if (tools !== undefined) {
       const catalog = mcpToolCatalogSchema.parse({
@@ -103,10 +129,39 @@ export class McpWebviewActions {
           description,
         })),
       });
-      const signature = JSON.stringify(catalog);
+      const projection = mcpToolCatalogProjectionSchema.parse({
+        server: tools.server,
+        generation: tools.generation,
+        tools: catalog.tools,
+        rejectedTools: tools.rejectedTools,
+        rejectedToolsTruncated: tools.rejectedToolsTruncated,
+      });
+      const signature = JSON.stringify(projection);
       if (force || signature !== this.#toolSignature) {
-        this.#toolSignature = signature;
-        post({ protocolVersion, type: "extension/mcp-tools", requestId, catalog });
+        const catalogSequence = this.#nextCatalogSequence();
+        if (catalogSequence === undefined) {
+          this.#closeOverflowedGeneration(requestId);
+          return;
+        }
+        const combined = mcpToolCatalogMessageSchema.safeParse({
+          protocolVersion,
+          type: "extension/mcp-tool-catalog",
+          requestId,
+          catalogSequence,
+          catalog: projection,
+        });
+        if (combined.success) {
+          const legacy = mcpToolsMessageSchema.parse({
+            protocolVersion,
+            type: "extension/mcp-tools",
+            requestId,
+            catalog,
+          });
+          this.#toolSignature = signature;
+          this.#catalogSequence = catalogSequence;
+          post(combined.data);
+          post(legacy);
+        }
       }
     }
     const resources = this.#connection.getResourceCatalog();
@@ -128,6 +183,49 @@ export class McpWebviewActions {
       }
     }
   }
+
+  #nextCatalogSequence(): number | undefined {
+    const next = nextMcpCatalogSequence(this.#catalogSequence);
+    if (this.#catalogSequenceBlocked || next === undefined) {
+      this.#catalogSequenceBlocked = true;
+      return undefined;
+    }
+    return next;
+  }
+
+  #closeOverflowedGeneration(requestId: string): void {
+    const disconnect = this.#requestDisconnect();
+    void disconnect.then(
+      () => this.#publish(requestId, true),
+      () => this.#publish(requestId, true),
+    );
+  }
+
+  #requestDisconnect(): Promise<unknown> {
+    if (this.#disconnectPromise !== undefined) return this.#disconnectPromise;
+    const disconnect = this.#connection.disconnect();
+    this.#disconnectPromise = disconnect;
+    void disconnect.then(
+      () => {
+        if (this.#disconnectPromise === disconnect) this.#disconnectPromise = undefined;
+      },
+      () => {
+        if (this.#disconnectPromise === disconnect) this.#disconnectPromise = undefined;
+      },
+    );
+    return disconnect;
+  }
+}
+
+export function nextMcpCatalogSequence(current: number): number | undefined {
+  if (!Number.isSafeInteger(current) || current < 0 || current >= Number.MAX_SAFE_INTEGER) {
+    return undefined;
+  }
+  return current + 1;
+}
+
+function catalogScope(serverId: string, generation: number): string {
+  return `${serverId}\u0000${generation}`;
 }
 
 function projectConnection(snapshot: McpConnectionSnapshot) {

@@ -38,6 +38,89 @@ describe("ControlledMcpClient Tool discovery", () => {
     await client.disconnect();
   });
 
+  it("keeps accepted Tools when a sibling schema is rejected", async () => {
+    const client = new ControlledMcpClient(
+      toolServer(() =>
+        toolPage([
+          { name: "valid", inputSchema: emptySchema },
+          { name: "unsafe", inputSchema: { type: "object", format: "email" } },
+        ]),
+      ),
+    );
+    await client.connect();
+
+    const snapshot = await client.discoverTools(context);
+
+    expect(snapshot.tools.map((tool) => tool.mcpToolName)).toEqual(["valid"]);
+    expect(snapshot.rejectedTools).toEqual([
+      { mcpToolName: "unsafe", reason: "forbidden-keyword" },
+    ]);
+    expect(snapshot.rejectedToolsTruncated).toBe(false);
+    await client.disconnect();
+  });
+
+  it("keeps the rejection prefix stable when pagination order changes", async () => {
+    const rejected = Array.from({ length: 300 }, (_, index) => ({
+      name: `rejected-${String(index).padStart(3, "0")}`,
+      inputSchema: { type: "object", format: "email" },
+    }));
+    const ordered = [
+      ...rejected.slice(0, 150),
+      ...rejected.slice(150),
+      { name: "accepted", inputSchema: emptySchema },
+    ];
+    const reversedPages = [
+      ...rejected.slice(150).reverse(),
+      ...rejected.slice(0, 150).reverse(),
+      { name: "accepted", inputSchema: emptySchema },
+    ];
+    const first = new ControlledMcpClient(
+      toolServer((message) =>
+        readParams(message).cursor === undefined
+          ? toolPage(ordered.slice(0, 151), "next")
+          : toolPage(ordered.slice(151)),
+      ),
+    );
+    const second = new ControlledMcpClient(
+      toolServer((message) =>
+        readParams(message).cursor === undefined
+          ? toolPage(reversedPages.slice(0, 151), "next")
+          : toolPage(reversedPages.slice(151)),
+      ),
+    );
+    await first.connect();
+    await second.connect();
+
+    const firstSnapshot = await first.discoverTools(context);
+    const secondSnapshot = await second.discoverTools(context);
+
+    expect(firstSnapshot.rejectedTools).toEqual(secondSnapshot.rejectedTools);
+    expect(firstSnapshot.rejectedTools.map(({ mcpToolName }) => mcpToolName)).toEqual(
+      rejected.slice(0, 256).map(({ name }) => name),
+    );
+    await first.disconnect();
+    await second.disconnect();
+  });
+
+  it("fails an all-rejected list and retains the last complete snapshot on refresh failure", async () => {
+    let allRejected = false;
+    const client = new ControlledMcpClient(
+      toolServer(() =>
+        allRejected
+          ? toolPage([{ name: "unsafe", inputSchema: { type: "object", format: "email" } }])
+          : toolPage([{ name: "stable", inputSchema: emptySchema }]),
+      ),
+    );
+    await client.connect();
+
+    const stable = await client.discoverTools(context);
+    allRejected = true;
+
+    await expect(client.discoverTools(context)).rejects.toMatchObject({ code: "invalid-schema" });
+    expect(client.getToolSnapshot()).toBe(stable);
+    await client.disconnect();
+  });
+
   it("rejects a duplicate cursor without replacing the previous complete snapshot", async () => {
     let malformed = false;
     const port = toolServer((_message) => {

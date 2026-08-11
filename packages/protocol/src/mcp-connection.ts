@@ -4,6 +4,16 @@ import { mcpGenerationSchema, mcpServerIdentitySchema, mcpServerIdSchema } from 
 import { toolNameSchema } from "./tool.js";
 
 export const mcpProtocolVersionSchema = z.literal("2026-07-28");
+const maxMcpToolNameCodePoints = 65_536;
+const mcpToolNameSchema = z
+  .string()
+  .min(1)
+  .max(maxMcpToolNameCodePoints)
+  .refine(isWellFormedUnicode, "Tool names must contain well-formed Unicode.")
+  .refine(
+    (value) => [...value].length <= maxMcpToolNameCodePoints,
+    `Tool names must not exceed ${maxMcpToolNameCodePoints} Unicode code points.`,
+  );
 export const mcpCapabilitiesSchema = z.strictObject({
   tools: z.boolean(),
   toolsListChanged: z.boolean(),
@@ -72,7 +82,7 @@ export const mcpToolDescriptorSchema = z.strictObject({
   server: mcpServerIdentitySchema,
   generation: mcpGenerationSchema,
   registryName: toolNameSchema,
-  mcpToolName: z.string().min(1).max(65_536),
+  mcpToolName: mcpToolNameSchema,
   title: z.string().max(65_536).optional(),
   description: z.string().max(65_536).optional(),
 });
@@ -81,17 +91,54 @@ export const mcpToolCatalogSchema = z.strictObject({
   generation: mcpGenerationSchema,
   tools: z.array(mcpToolDescriptorSchema).max(1_000),
 });
+export const mcpToolRejectionReasonSchema = z.enum([
+  "forbidden-keyword",
+  "unknown-keyword",
+  "invalid-reference",
+  "non-object-root",
+  "schema-invalid",
+  "limit-exceeded",
+]);
+export const mcpRejectedToolSchema = z.strictObject({
+  mcpToolName: mcpToolNameSchema,
+  reason: mcpToolRejectionReasonSchema,
+});
+export const mcpCatalogSequenceSchema = z.number().int().positive().safe();
+export const mcpToolCatalogProjectionSchema = z.strictObject({
+  server: mcpServerIdentitySchema,
+  generation: mcpGenerationSchema,
+  tools: z.array(mcpToolDescriptorSchema).max(1_000),
+  rejectedTools: z.array(mcpRejectedToolSchema).max(256),
+  rejectedToolsTruncated: z.boolean(),
+});
 export const toolStateSourceSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("builtin") }),
   z.strictObject({
     kind: z.literal("mcp"),
     server: mcpServerIdentitySchema,
     generation: mcpGenerationSchema,
-    mcpToolName: z.string().min(1).max(65_536),
+    mcpToolName: mcpToolNameSchema,
   }),
 ]);
 
 export type McpConnectionDto = z.infer<typeof mcpConnectionSchema>;
 export type McpToolCatalogDto = z.infer<typeof mcpToolCatalogSchema>;
+export type McpToolCatalogProjectionDto = z.infer<typeof mcpToolCatalogProjectionSchema>;
+export type McpToolRejectionReasonDto = z.infer<typeof mcpToolRejectionReasonSchema>;
+export type McpRejectedToolDto = z.infer<typeof mcpRejectedToolSchema>;
 export type ToolStateSourceDto = z.infer<typeof toolStateSourceSchema>;
 export { mcpServerIdSchema };
+
+function isWellFormedUnicode(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const codeUnit = value.charCodeAt(index);
+    if (codeUnit >= 0xd800 && codeUnit <= 0xdbff) {
+      const next = value.charCodeAt(index + 1);
+      if (!(next >= 0xdc00 && next <= 0xdfff)) return false;
+      index += 1;
+    } else if (codeUnit >= 0xdc00 && codeUnit <= 0xdfff) {
+      return false;
+    }
+  }
+  return true;
+}
