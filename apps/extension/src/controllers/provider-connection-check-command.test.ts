@@ -218,6 +218,7 @@ describe("Provider connection check", () => {
       },
       outcome: "completed",
       errorCode: "unknown",
+      guidance: "provider-documentation",
     });
     expect(fetch).not.toHaveBeenCalled();
     expect(secrets.read).not.toHaveBeenCalled();
@@ -340,6 +341,61 @@ describe("Provider connection check", () => {
     });
 
     expect(report).toMatchObject({ outcome: "failed", errorCode: "timeout" });
+  });
+
+  it("bounds a hung SecretStorage read with the operation deadline", async () => {
+    const controller = new AbortController();
+    const read = vi.fn(() => new Promise<string | undefined>(() => undefined));
+    const fetch = createFetch(jsonResponse({ id: "gpt-test" }));
+
+    const report = await checkProviderConnection({
+      configuration: openAIConfiguration(),
+      secrets: { read },
+      fetch,
+      signal: controller.signal,
+      timeoutMs: 1,
+    });
+
+    expect(report).toMatchObject({ outcome: "failed", errorCode: "timeout" });
+    expect(read).toHaveBeenCalledOnce();
+    expect(fetch).not.toHaveBeenCalled();
+
+    controller.abort();
+    await Promise.resolve();
+    expect(report).toMatchObject({ outcome: "failed", errorCode: "timeout" });
+  });
+
+  it("gives dedicated custom endpoints fixed service-documentation guidance", async () => {
+    const handlers = new Map<string, () => Promise<ProviderConnectionCheckReport | undefined>>();
+    const showInformationMessage = vi.fn(async (_message: string) => undefined);
+    const showErrorMessage = vi.fn(async (_message: string) => undefined);
+    const fetch = createFetch(jsonResponse({ id: "gpt-test" }));
+    const customEndpoint = "https://custom.example.test/v1?secret=must-not-display";
+
+    const disposable = registerProviderConnectionCheckCommand({
+      registerCommand: vi.fn((commandId, handler) => {
+        handlers.set(commandId, handler);
+        return { dispose: vi.fn() };
+      }),
+      readConfiguration: () => openAIConfiguration(customEndpoint),
+      secrets: createSecrets({ openai: "test-key" }),
+      fetch,
+      runWithProgress: async (task) => task(createCancellationToken()),
+      showInformationMessage,
+      showErrorMessage,
+    });
+
+    const report = await handlers.get(checkProviderConnectionCommandId)?.();
+    const message = showInformationMessage.mock.calls[0]?.[0] ?? "";
+    expect(report).toMatchObject({ outcome: "completed", guidance: "provider-documentation" });
+    expect(showInformationMessage).toHaveBeenCalledWith(
+      "OpenAI connection check for model gpt-test: Authentication unknown; Model unknown; Streaming unknown; Tool Calling unknown; Required capabilities unknown. The configured dedicated Provider endpoint was not probed. Check the OpenAI service documentation for its model metadata route and authentication.",
+    );
+    expect(message).not.toContain(customEndpoint);
+    expect(message).not.toContain("secret=must-not-display");
+    expect(fetch).not.toHaveBeenCalled();
+
+    disposable.dispose();
   });
 
   it("registers a discoverable cancellable command and redacts raw failures", async () => {

@@ -34,6 +34,8 @@ export interface ProviderConnectionCheckCapabilities {
   readonly required: ProviderConnectionCheckStatus;
 }
 
+export type ProviderConnectionCheckGuidance = "provider-documentation";
+
 export interface ProviderConnectionCheckReport {
   readonly provider: ProviderId;
   readonly modelId: string;
@@ -42,6 +44,7 @@ export interface ProviderConnectionCheckReport {
   readonly capabilities: ProviderConnectionCheckCapabilities;
   readonly outcome: "completed" | "failed" | "cancelled";
   readonly errorCode?: ProviderConnectionCheckErrorCode;
+  readonly guidance?: ProviderConnectionCheckGuidance;
 }
 
 export interface ProviderConnectionCheckLogEntry {
@@ -96,6 +99,11 @@ const unknownCapabilities: ProviderConnectionCheckCapabilities = {
 
 const cancelledReason = new Error("Provider connection check cancelled.");
 const timeoutReason = new Error("Provider connection check timed out.");
+
+interface OperationDeadline {
+  readonly signal: AbortSignal;
+  dispose(): void;
+}
 
 type MetadataTarget =
   | { readonly provider: "openai"; readonly url: string; readonly auth: "bearer" }
@@ -199,42 +207,50 @@ export async function checkProviderConnection({
     return failedReport(configuration, "configuration");
   }
 
-  let target: MetadataTarget | undefined;
+  const deadline = createOperationDeadline(signal, timeoutMs);
   try {
-    target = createMetadataTarget(configuration);
-  } catch {
-    return failedReport(configuration, "configuration");
-  }
+    let target: MetadataTarget | undefined;
+    try {
+      target = createMetadataTarget(configuration);
+    } catch {
+      return failedReport(configuration, "configuration");
+    }
 
-  if (signal.aborted) {
-    return reportForFailure(configuration, signal.reason ?? cancelledReason, signal);
-  }
+    if (deadline.signal.aborted) {
+      return reportForFailure(
+        configuration,
+        deadline.signal.reason ?? cancelledReason,
+        deadline.signal,
+      );
+    }
 
-  if (target === undefined) {
-    return {
-      provider: configuration.provider,
-      modelId: configuration.modelId,
-      authentication: "unknown",
-      modelExistence: "unknown",
-      capabilities: unknownCapabilities,
-      outcome: "completed",
-      errorCode: "unknown",
-    };
-  }
+    if (target === undefined) {
+      return {
+        provider: configuration.provider,
+        modelId: configuration.modelId,
+        authentication: "unknown",
+        modelExistence: "unknown",
+        capabilities: unknownCapabilities,
+        outcome: "completed",
+        errorCode: "unknown",
+        guidance: "provider-documentation",
+      };
+    }
 
-  try {
-    throwIfAborted(signal);
-    const apiKey = await readApiKey(configuration, secrets, signal);
-    throwIfAborted(signal);
-    const response = await requestMetadata(target, apiKey, fetchMetadata, signal, timeoutMs);
-    throwIfAborted(signal);
+    throwIfAborted(deadline.signal);
+    const apiKey = await readApiKey(configuration, secrets, deadline.signal);
+    throwIfAborted(deadline.signal);
+    const response = await requestMetadata(target, apiKey, fetchMetadata, deadline.signal);
+    throwIfAborted(deadline.signal);
     const parsed = parseMetadata(target.provider, configuration.modelId, response);
     return completedReport(
       configuration,
       withRequiredCapability(parsed.textStreaming, parsed.toolCalling),
     );
   } catch (error) {
-    return reportForFailure(configuration, error, signal);
+    return reportForFailure(configuration, error, deadline.signal);
+  } finally {
+    deadline.dispose();
   }
 }
 
@@ -308,8 +324,11 @@ async function readApiKey(
 
   let apiKey: string | undefined;
   try {
-    apiKey = await secrets.read(configuration.provider);
+    apiKey = await awaitWithAbort(secrets.read(configuration.provider), signal);
   } catch (error) {
+    if (signal.aborted) {
+      throw signal.reason ?? cancelledReason;
+    }
     if (error instanceof ApiKeySecretStorageError) {
       throw new ConnectionCheckFailure("configuration");
     }
@@ -330,7 +349,6 @@ async function requestMetadata(
   apiKey: string | undefined,
   fetchMetadata: typeof fetch,
   signal: AbortSignal,
-  timeoutMs: number,
 ): Promise<string> {
   const headers: Record<string, string> = { Accept: "application/json" };
   if (target.auth === "gemini") {
@@ -342,44 +360,35 @@ async function requestMetadata(
     headers.Authorization = `Bearer ${apiKey}`;
   }
 
-  const timeout = new AbortController();
-  const timeoutHandle = setTimeout(() => timeout.abort(timeoutReason), timeoutMs);
-  const abortListener = () => timeout.abort(signal.reason ?? cancelledReason);
-  signal.addEventListener("abort", abortListener, { once: true });
-
+  let response: Response;
   try {
-    let response: Response;
-    try {
-      response = await awaitWithAbort(
-        fetchMetadata(target.url, {
-          method: "GET",
-          headers,
-          redirect: "error",
-          signal: timeout.signal,
-        }),
-        timeout.signal,
-      );
-    } catch (error) {
-      if (timeout.signal.aborted) {
-        throw timeout.signal.reason ?? error;
-      }
-      throw new ConnectionCheckFailure("network");
+    response = await awaitWithAbort(
+      fetchMetadata(target.url, {
+        method: "GET",
+        headers,
+        redirect: "error",
+        signal,
+      }),
+      signal,
+    );
+  } catch (error) {
+    if (signal.aborted) {
+      throw signal.reason ?? error;
     }
-
-    if (!response.ok) {
-      cancelResponseBody(response);
-      throw new ConnectionCheckFailure(classifyHttpStatus(response.status));
-    }
-    if (response.status !== 200) {
-      cancelResponseBody(response);
-      throw new ConnectionCheckFailure("unknown");
-    }
-
-    return await readBoundedResponseBody(response, timeout.signal);
-  } finally {
-    clearTimeout(timeoutHandle);
-    signal.removeEventListener("abort", abortListener);
+    throw new ConnectionCheckFailure("network");
   }
+
+  throwIfAborted(signal);
+  if (!response.ok) {
+    cancelResponseBody(response);
+    throw new ConnectionCheckFailure(classifyHttpStatus(response.status));
+  }
+  if (response.status !== 200) {
+    cancelResponseBody(response);
+    throw new ConnectionCheckFailure("unknown");
+  }
+
+  return await readBoundedResponseBody(response, signal);
 }
 
 function parseMetadata(provider: ProviderId, modelId: string, body: string): ParsedMetadata {
@@ -593,7 +602,11 @@ function withRequiredCapability(
 
 function formatConnectionCheckReport(report: ProviderConnectionCheckReport): string {
   const providerLabel = providerLabels[report.provider];
-  return `${providerLabel} connection check for model ${formatModelId(report.modelId)}: Authentication ${report.authentication}; Model ${report.modelExistence}; Streaming ${report.capabilities.textStreaming}; Tool Calling ${report.capabilities.toolCalling}; Required capabilities ${report.capabilities.required}.`;
+  const summary = `${providerLabel} connection check for model ${formatModelId(report.modelId)}: Authentication ${report.authentication}; Model ${report.modelExistence}; Streaming ${report.capabilities.textStreaming}; Tool Calling ${report.capabilities.toolCalling}; Required capabilities ${report.capabilities.required}.`;
+  if (report.guidance === "provider-documentation") {
+    return `${summary} The configured dedicated Provider endpoint was not probed. Check the ${providerLabel} service documentation for its model metadata route and authentication.`;
+  }
+  return summary;
 }
 
 function connectionCheckErrorMessage(
@@ -668,6 +681,30 @@ function formatModelId(value: string): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function createOperationDeadline(
+  externalSignal: AbortSignal,
+  timeoutMs: number,
+): OperationDeadline {
+  const controller = new AbortController();
+  const timeoutHandle = setTimeout(() => controller.abort(timeoutReason), timeoutMs);
+  const onExternalAbort = () => controller.abort(externalSignal.reason ?? cancelledReason);
+  externalSignal.addEventListener("abort", onExternalAbort, { once: true });
+  if (externalSignal.aborted) {
+    onExternalAbort();
+  }
+
+  let disposed = false;
+  return {
+    signal: controller.signal,
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      clearTimeout(timeoutHandle);
+      externalSignal.removeEventListener("abort", onExternalAbort);
+    },
+  };
 }
 
 async function awaitWithAbort<T>(operation: PromiseLike<T>, signal: AbortSignal): Promise<T> {
