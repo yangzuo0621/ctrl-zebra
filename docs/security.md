@@ -653,11 +653,13 @@ side effects independent of what it advertises.
 - Reading a version `1` object never writes a version `2` object or silently enables dual behavior.
   Migration and selection of `protocolMode: "dual"` are explicit user actions. A change while
   connected marks the configuration stale and requires disconnect, a new generation, and fresh
-  startup approval; it cannot mutate the live process or switch era in place. The pure T1804
-  parser/schema may recognize `dual` for strict migration validation and fixtures, but the current
-  live Extension path remains fail-closed until T1807 wiring: it rejects effective `dual` with the
-  stable `configuration-invalid` outcome and fixed guidance before workspace binding, approval, or
-  process spawn. It never treats `dual` as modern-only.
+  startup approval; it cannot mutate the live process or switch era in place. The Extension
+  normalizes the effective mode and passes it to the controlled MCP client only after configuration,
+  Workspace Trust, and the exact startup approval have been revalidated. `modern-only` accepts only
+  `2026-07-28`; `dual` performs one bounded modern probe and may use one legacy `initialize` for
+  `2025-11-25` only after the closed non-modern/timeout classification. Recognized-modern,
+  malformed, unknown, overflow, cancellation, and cleanup failures remain failures and never
+  authorize fallback. Neither mode automatically reconnects or retries.
 - Configuration has no cwd, environment, shell, transport, endpoint, headers, credential,
   SecretStorage name, auto-start, retry, or capability fields. The canonical cwd is the exact
   Extension-selected trusted workspace root at connect time. The normalized effective
@@ -927,7 +929,7 @@ environment, URI query/fragment, credentials, or arbitrary Server metadata.
   all-rejected/whole-operation failure, failed+`open-settings` for protocol incompatibility, and no
   recovery action for `clear`.
 
-### T1804 dual-era negotiation and information boundary
+### T1804–T1807 dual-era negotiation and information boundary
 
 The configured mode is a user choice, not a Server capability. Version `1` settings remain
 `modern-only`; version `2` requires an explicit `protocolMode`. `modern-only` accepts only
@@ -968,6 +970,7 @@ The configured mode is a user choice, not a Server capability. Version `1` setti
   historical display data and never starts, reconnects, probes, renegotiates, retries, or authorizes
   an operation.
 
-The T1804 constraint PR documents these rules only. Configuration parsing, Protocol schema changes,
-negotiation lifecycle, and compatibility fixtures are gated on its reviewed merge and belong to the
-subsequent phase tasks.
+The T1804–T1807 implementation applies these rules end to end: configuration parsing and Protocol
+schemas normalize the closed modes, the controlled lifecycle owns negotiation, and deterministic
+local fixtures cover modern, legacy, malformed, and cleanup outcomes. The VSIX policy excludes those
+fixtures and all credentials or process details from the release artifact.

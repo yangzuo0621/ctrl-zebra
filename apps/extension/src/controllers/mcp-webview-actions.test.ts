@@ -5,6 +5,29 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { McpConnectionSnapshot } from "./mcp-connection-controller.js";
 import { McpWebviewActions, nextMcpCatalogSequence } from "./mcp-webview-actions.js";
 
+const modernConnectionState = {
+  status: "connected" as const,
+  protocolVersion: "2026-07-28" as const,
+  configuredMode: "modern-only" as const,
+  negotiated: { era: "modern" as const, version: "2026-07-28" as const },
+  capabilities: {
+    tools: true,
+    toolsListChanged: false,
+    resources: false,
+    resourceTemplates: false,
+    resourcesListChanged: false,
+    prompts: false,
+    promptsListChanged: false,
+  },
+};
+
+const disconnectedSnapshot = {
+  status: "disconnected" as const,
+  generation: 0,
+  configuredMode: "modern-only" as const,
+  configurationStale: false as const,
+};
+
 describe("MCP Webview actions", () => {
   afterEach(() => vi.useRealTimers());
 
@@ -13,6 +36,7 @@ describe("MCP Webview actions", () => {
     let snapshot: McpConnectionSnapshot = {
       status: "disconnected",
       generation: 0,
+      configuredMode: "modern-only",
       configurationStale: false,
     };
     const post = vi.fn();
@@ -45,16 +69,12 @@ describe("MCP Webview actions", () => {
     const post = vi.fn();
     const actions = new McpWebviewActions({
       connection: {
-        getState: () => ({ status: "disconnected", generation: 0, configurationStale: false }),
+        getState: () => disconnectedSnapshot,
         getToolSnapshot: () => undefined,
         getResourceCatalog: () => undefined,
         getPromptCatalog: () => undefined,
-        connect: async () => ({ status: "disconnected", generation: 0, configurationStale: false }),
-        disconnect: async () => ({
-          status: "disconnected",
-          generation: 0,
-          configurationStale: false,
-        }),
+        connect: async () => disconnectedSnapshot,
+        disconnect: async () => disconnectedSnapshot,
       },
       openSettings: vi.fn(),
     });
@@ -71,20 +91,9 @@ describe("MCP Webview actions", () => {
       status: "connected",
       generation: 3,
       server,
+      configuredMode: "modern-only",
       configurationStale: false,
-      connection: {
-        status: "connected",
-        protocolVersion: "2026-07-28",
-        capabilities: {
-          tools: true,
-          toolsListChanged: false,
-          resources: false,
-          resourceTemplates: false,
-          resourcesListChanged: false,
-          prompts: false,
-          promptsListChanged: false,
-        },
-      },
+      connection: modernConnectionState,
     };
     const tools = {
       server,
@@ -140,20 +149,9 @@ describe("MCP Webview actions", () => {
       status: "connected",
       generation: 3,
       server,
+      configuredMode: "modern-only",
       configurationStale: false,
-      connection: {
-        status: "connected",
-        protocolVersion: "2026-07-28",
-        capabilities: {
-          tools: true,
-          toolsListChanged: false,
-          resources: false,
-          resourceTemplates: false,
-          resourcesListChanged: false,
-          prompts: false,
-          promptsListChanged: false,
-        },
-      },
+      connection: modernConnectionState,
     };
     const tools = {
       server,
@@ -202,24 +200,14 @@ describe("MCP Webview actions", () => {
 
   it("disconnects and resets the generation after overflow before an explicit reconnect", async () => {
     const server = { serverId: "local_fixture", displayName: "Local fixture" } as const;
-    const connectionState = {
-      protocolVersion: "2026-07-28" as const,
-      capabilities: {
-        tools: true,
-        toolsListChanged: false,
-        resources: false,
-        resourceTemplates: false,
-        resourcesListChanged: false,
-        prompts: false,
-        promptsListChanged: false,
-      },
-    };
+    const connectionState = modernConnectionState;
     let snapshot: McpConnectionSnapshot = {
       status: "connected",
       generation: 3,
       server,
+      configuredMode: "modern-only",
       configurationStale: false,
-      connection: { status: "connected", ...connectionState },
+      connection: connectionState,
     };
     const createTools = (generation: number) => ({
       server,
@@ -241,7 +229,7 @@ describe("MCP Webview actions", () => {
         ...snapshot,
         status: "connected",
         generation: 4,
-        connection: { status: "connected", ...connectionState },
+        connection: connectionState,
       };
       return snapshot;
     });
@@ -299,20 +287,9 @@ describe("MCP Webview actions", () => {
       status: "connected",
       generation: 3,
       server,
+      configuredMode: "modern-only",
       configurationStale: false,
-      connection: {
-        status: "connected",
-        protocolVersion: "2026-07-28",
-        capabilities: {
-          tools: true,
-          toolsListChanged: false,
-          resources: false,
-          resourceTemplates: false,
-          resourcesListChanged: false,
-          prompts: false,
-          promptsListChanged: false,
-        },
-      },
+      connection: modernConnectionState,
     };
     let tools = {
       server,
@@ -376,20 +353,9 @@ describe("MCP Webview actions", () => {
       status: "connected",
       generation: 3,
       server,
+      configuredMode: "modern-only",
       configurationStale: false,
-      connection: {
-        status: "connected",
-        protocolVersion: "2026-07-28",
-        capabilities: {
-          tools: true,
-          toolsListChanged: false,
-          resources: false,
-          resourceTemplates: false,
-          resourcesListChanged: false,
-          prompts: false,
-          promptsListChanged: false,
-        },
-      },
+      connection: modernConnectionState,
     };
     const baseRejectedTools = Array.from({ length: 16 }, (_, index) => ({
       mcpToolName: `${index}${"x".repeat(60_000)}`,
@@ -485,6 +451,7 @@ describe("MCP Webview actions", () => {
       status: "failed",
       generation: 3,
       server,
+      configuredMode: "modern-only",
       configurationStale: false,
       error: {
         code: "protocol-incompatible",
@@ -521,12 +488,54 @@ describe("MCP Webview actions", () => {
     actions.dispose();
   });
 
+  it("projects the dual supported version set without exposing fallback details", () => {
+    const server = { serverId: "local_fixture", displayName: "Local fixture" } as const;
+    const snapshot: McpConnectionSnapshot = {
+      status: "failed",
+      generation: 3,
+      server,
+      configuredMode: "dual",
+      configurationStale: false,
+      error: {
+        code: "protocol-incompatible",
+        message: "The MCP Server does not support the required protocol version.",
+      },
+    };
+    const post = vi.fn();
+    const actions = new McpWebviewActions({
+      connection: {
+        getState: () => snapshot,
+        getToolSnapshot: () => undefined,
+        getResourceCatalog: () => undefined,
+        getPromptCatalog: () => undefined,
+        connect: async () => snapshot,
+        disconnect: async () => snapshot,
+      },
+      openSettings: vi.fn(),
+    });
+    actions.bind(post);
+    actions.refresh("dual-incompatible");
+    expect(post.mock.calls.map(([message]) => message)).toContainEqual(
+      expect.objectContaining({
+        type: "extension/mcp-diagnostics",
+        diagnostic: expect.objectContaining({
+          kind: "protocol-incompatible",
+          configuredMode: "dual",
+          supportedVersions: ["2026-07-28", "2025-11-25"],
+          connectionEstablished: false,
+        }),
+      }),
+    );
+    actions.dispose();
+  });
+
   it("publishes bounded all-rejected diagnostics after failed initial discovery", () => {
     const server = { serverId: "local_fixture", displayName: "Local fixture" } as const;
     const snapshot: McpConnectionSnapshot = {
       status: "failed",
       generation: 3,
       server,
+      configuredMode: "modern-only",
       configurationStale: false,
       error: { code: "invalid-schema", message: "The MCP Server supplied an invalid schema." },
     };
@@ -574,6 +583,7 @@ describe("MCP Webview actions", () => {
       status: "failed",
       generation: 3,
       server,
+      configuredMode: "modern-only",
       configurationStale: false,
       error: { code: "invalid-schema", message: "The MCP Server supplied an invalid schema." },
     };
@@ -634,20 +644,9 @@ describe("MCP Webview actions", () => {
       status: "connected",
       generation: 3,
       server,
+      configuredMode: "modern-only",
       configurationStale: false,
-      connection: {
-        status: "connected",
-        protocolVersion: "2026-07-28",
-        capabilities: {
-          tools: true,
-          toolsListChanged: false,
-          resources: false,
-          resourceTemplates: false,
-          resourcesListChanged: false,
-          prompts: false,
-          promptsListChanged: false,
-        },
-      },
+      connection: modernConnectionState,
     };
     const post = vi.fn();
     const refreshTools = vi.fn(async () => false);
@@ -690,20 +689,9 @@ describe("MCP Webview actions", () => {
       status: "connected",
       generation: 3,
       server,
+      configuredMode: "modern-only",
       configurationStale: false,
-      connection: {
-        status: "connected",
-        protocolVersion: "2026-07-28",
-        capabilities: {
-          tools: true,
-          toolsListChanged: false,
-          resources: false,
-          resourceTemplates: false,
-          resourcesListChanged: false,
-          prompts: false,
-          promptsListChanged: false,
-        },
-      },
+      connection: modernConnectionState,
     };
     const post = vi.fn();
     const refreshTools = vi.fn(async () => true);
@@ -756,10 +744,10 @@ describe("MCP Webview actions", () => {
       status: "connected",
       generation: 3,
       server,
+      configuredMode: "modern-only",
       configurationStale: false,
       connection: {
-        status: "connected",
-        protocolVersion: "2026-07-28",
+        ...modernConnectionState,
         capabilities: {
           tools: false,
           toolsListChanged: false,

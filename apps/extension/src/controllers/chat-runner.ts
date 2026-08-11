@@ -22,6 +22,7 @@ import {
 } from "@ctrl-zebra/core";
 import {
   jsonValueSchema,
+  type McpNegotiatedProvenanceDto,
   type McpPromptConfirmation,
   type McpResourceAttachment,
   type PersistedMcpToolSource,
@@ -51,7 +52,10 @@ type RuntimeToolStateEvent = Extract<
   NonReasoningAgentRuntimeEvent,
   { readonly type: "agent.tool-state" }
 >;
-type RuntimeMcpToolSource = PersistedMcpToolSource & { readonly displayName?: string };
+type RuntimeMcpToolSource = PersistedMcpToolSource & {
+  readonly displayName?: string;
+  readonly provenance?: McpNegotiatedProvenanceDto;
+};
 export type ChatRunnerEvent =
   | Exclude<NonReasoningAgentRuntimeEvent, { readonly type: "agent.tool-state" }>
   | (RuntimeToolStateEvent & { readonly source?: ToolStateSourceDto })
@@ -453,12 +457,20 @@ function projectPersistedEvents(
   if (event.status === "pending") {
     events.push({
       type: "session.mcp-tool-call",
-      data: jsonValueSchema.parse({ call: event.call, source: persistedSource(source) }),
+      data: jsonValueSchema.parse({
+        call: event.call,
+        source: persistedSource(source),
+        ...(source.provenance === undefined ? {} : { provenance: source.provenance }),
+      }),
     });
   } else if (event.status === "success" || event.status === "error") {
     events.push({
       type: "session.mcp-tool-result",
-      data: jsonValueSchema.parse({ result: event.result, source: persistedSource(source) }),
+      data: jsonValueSchema.parse({
+        result: event.result,
+        source: persistedSource(source),
+        ...(source.provenance === undefined ? {} : { provenance: source.provenance }),
+      }),
     });
   }
   return events;

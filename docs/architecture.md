@@ -365,8 +365,8 @@ second Agent Runtime.
 
 [ADR 0002](adr/0002-mcp-dual-era-stdio-compatibility.md) approves the stage 18 extension for
 explicit modern-only/dual stdio compatibility. T1804 records the cross-boundary contract and
-configuration migration in this document; its runtime implementation remains gated on the reviewed
-constraint PR. The user-visible setting and versioned representation are owned by the
+configuration migration in this document. The current Extension runtime applies the reviewed
+mode-aware lifecycle. The user-visible setting and versioned representation are owned by the
 [configuration contract](configuration.md).
 
 ### Package and dependency ownership
@@ -449,15 +449,12 @@ port.
   settings are interpreted as `protocolMode: "modern-only"`; version `2` requires the explicit
   closed mode `"modern-only" | "dual"`. Unknown versions, modes, fields, transports, or malformed
   values fail with `configuration-invalid` and cannot start a process.
-- T1804's pure configuration parser and Protocol Schemas recognize version `2` `dual` for strict
-  validation, migration planning, and deterministic fixtures. Until T1807 wires the dual-era
-  lifecycle and user migration action, the current live Extension startup gate is fail-closed:
-  `apps/extension` rejects effective `dual` immediately after normalized configuration validation
-  and before workspace binding, startup approval, generation publication, process creation, or any
-  modern probe. It reports the stable `configuration-invalid` outcome with fixed guidance to keep
-  version `1` or choose version `2` `modern-only`; it never silently coerces `dual` to modern-only.
-  T1807 removes this guard only after mode selection, negotiated projection, and the corresponding
-  integration tests are connected.
+- The normalized configuration selects the mode before workspace binding and startup approval.
+  `apps/extension` passes `modern-only` or `dual` to the controlled Client; it never silently
+  coerces `dual` to modern-only. Version `1` remains an implicit modern-only operation, while an
+  effective mode change invalidates approval and requires a fresh exact operation. The lifecycle
+  and integration tests cover modern, legacy, malformed, and cleanup paths without network or
+  credentials.
 - `modern-only` sends one bounded modern `server/discover` probe and accepts only `2026-07-28`.
   `dual` sends the same probe first and may enter exactly one legacy `initialize` /
   `notifications/initialized` exchange only after a specification-classified non-modern response or
@@ -504,7 +501,7 @@ port.
   advertises them. Notifications schedule one serialized, generation-bound full refresh; they do
   not patch the trusted snapshot from notification content.
 
-### T1804 dual-era contract and migration gate
+### T1804–T1807 dual-era contract and migration
 
 T1804 changes the protocol-era/version boundary only; it does not add a second runtime, process,
 approval scope, capability set, or persistence authority. Both eras use the same selected workspace,
@@ -560,7 +557,7 @@ non-modern classifications (including unknown future or otherwise unclassified v
 but share the same no-fallback lock. Only the two explicitly eligible rows (defined non-modern
 response and bounded timeout) can enter legacy in `dual`; unknown future versions, unclassified
 responses, malformed data, oversize data, cancellation, process exit, trust loss, and cleanup failure
-are never fallback oracles. The T1804 implementation gate must add deterministic, no-network/no-secret
+are never fallback oracles. The T1804–T1807 verification set includes deterministic, no-network/no-secret
 fixtures and tests for each closed classification, including malformed/validation-failing to
 `malformed-message`, structurally valid unknown/unclassified to `protocol-incompatible`, recognized
 modern error version selection, defined non-modern fallback, and bounded timeout fallback.
@@ -568,11 +565,10 @@ The matrix is mirrored by Protocol’s closed DTOs and Security’s stable error
 Webview receives only the configured mode, closed supported-version list on failure, or negotiated
 era/version after success; it never receives the decision reason or fallback state.
 
-The T1804 constraint PR established the cross-boundary documentation and configuration guidance.
-The follow-up T1804 implementation adds strict v1/v2 parsing, normalized Protocol Schemas, bounded
-provenance, and deterministic compatibility fixtures. Runtime dual selection, probe/fallback,
-connection lifecycle, Extension/Webview wiring, and explicit user migration activation remain gated
-to T1805–T1807; until then the fail-closed `dual` startup guard above is authoritative.
+The cross-boundary constraint and implementation now include strict v1/v2 parsing, normalized
+Protocol Schemas, bounded provenance, deterministic local fixtures, runtime dual selection,
+probe/fallback lifecycle, and Extension/Webview wiring. Explicit user migration remains a settings
+action; recovery never reconnects, probes, or renegotiates from persisted state.
 
 ### SDK and JSON Schema isolation
 

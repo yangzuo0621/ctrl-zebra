@@ -5,6 +5,7 @@ import type {
   McpDisconnectOutcome,
   McpPromptCatalogView,
   McpPromptResultView,
+  McpProtocolMode,
   McpResourceCatalogView,
   McpResourceSelection,
   McpResourceSnapshotView,
@@ -43,6 +44,7 @@ export interface McpHostError {
 export interface McpConnectionSnapshot {
   readonly generation: number;
   readonly status: "disconnected" | "connecting" | "connected" | "disconnecting" | "failed";
+  readonly configuredMode: McpProtocolMode;
   readonly server?: { readonly serverId: string; readonly displayName: string };
   readonly configurationStale: boolean;
   readonly connection?: McpConnectedState;
@@ -110,7 +112,10 @@ interface McpConnectionControllerDependencies {
     operation: McpProcessOperation,
     onFailure: (failure: McpHostProcessFailure) => void,
   ) => HostMcpStdioPort;
-  readonly createClient: (port: McpStdioPort) => ControlledMcpClientPort;
+  readonly createClient: (
+    port: McpStdioPort,
+    options: { readonly protocolMode: McpProtocolMode },
+  ) => ControlledMcpClientPort;
   readonly notifyInformation: (message: string) => void;
   readonly notifyError: (message: string) => void;
   readonly log: (entry: Readonly<Record<string, unknown>>) => void;
@@ -120,6 +125,7 @@ interface McpConnectionControllerDependencies {
 const emptySnapshot: McpConnectionSnapshot = {
   generation: 0,
   status: "disconnected",
+  configuredMode: "modern-only",
   configurationStale: false,
 };
 
@@ -364,13 +370,16 @@ export class McpConnectionController {
       this.#snapshot = {
         generation,
         status: "connecting",
+        configuredMode: effectiveProtocolMode(operation.configuration),
         server: identity(operation.configuration),
         configurationStale: false,
       };
       this.#port = this.#dependencies.createPort(operation, (failure) =>
         this.#handleHostFailure(generation, failure),
       );
-      this.#client = this.#dependencies.createClient(this.#port);
+      this.#client = this.#dependencies.createClient(this.#port, {
+        protocolMode: effectiveProtocolMode(operation.configuration),
+      });
       const outcome = await this.#client.connect(signal);
 
       if (outcome.kind === "cancelled") {
@@ -428,6 +437,7 @@ export class McpConnectionController {
       this.#snapshot = {
         generation,
         status: "connected",
+        configuredMode: effectiveProtocolMode(operation.configuration),
         server: identity(operation.configuration),
         configurationStale: false,
         connection: outcome.connection,
@@ -467,9 +477,6 @@ export class McpConnectionController {
     this.#dependencies.workspaceTrust.requireTrusted();
     signal.throwIfAborted();
     const configuration = this.#dependencies.readConfiguration();
-    if (configuration.protocolMode === "dual") {
-      throw new McpServerConfigurationError("configuration-invalid");
-    }
     const binding = await this.#dependencies.bindWorkspace(signal);
     signal.throwIfAborted();
     this.#dependencies.workspaceTrust.requireTrusted();
@@ -552,6 +559,10 @@ export class McpConnectionController {
     this.#snapshot = {
       generation: this.#snapshot.generation,
       status: "failed",
+      configuredMode:
+        configuration === undefined
+          ? this.#snapshot.configuredMode
+          : effectiveProtocolMode(configuration),
       server,
       configurationStale: this.#snapshot.configurationStale,
       error: { code, message: mcpHostErrorMessages[code] },
@@ -575,6 +586,7 @@ export class McpConnectionController {
     this.#snapshot = {
       generation: this.#snapshot.generation,
       status: "disconnected",
+      configuredMode: this.#snapshot.configuredMode,
       server: this.#snapshot.server,
       configurationStale: false,
     };
@@ -607,6 +619,10 @@ const mcpHostErrorMessages = {
 
 function identity(configuration: McpServerConfiguration) {
   return { serverId: configuration.serverId, displayName: configuration.displayName };
+}
+
+function effectiveProtocolMode(configuration: McpServerConfiguration): McpProtocolMode {
+  return configuration.protocolMode ?? "modern-only";
 }
 
 export class McpConnectionDisposalError extends Error {

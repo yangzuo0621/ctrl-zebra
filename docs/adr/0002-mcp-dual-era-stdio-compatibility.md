@@ -1,6 +1,6 @@
 # ADR 0002: MCP Dual-Era stdio Compatibility
 
-- Status: Accepted; T1804 parser/schema/fixture implementation pending merge, live dual activation pending T1805–T1807
+- Status: Accepted; the T1804–T1807 parser, lifecycle, projection, persistence, fixture, and VSIX evidence is implemented
 - Date: 2026-08-09
 - Decision: Roadmap change control before T1804
 - Supersedes: ADR 0001 only for protocol-era/version negotiation and compatibility
@@ -44,11 +44,11 @@ capabilities that CtrlZebra does not authorize, and results from the probe canno
   identity, alongside Server identity, executable, ordered arguments, and canonical selected cwd. Version `1`
   without a mode normalizes to `modern-only`; it is therefore operation-equivalent to version `2` with explicit
   `modern-only` when all other effective fields match. `dual` is a different operation.
-- The T1804 pure parser, Protocol Schemas, and deterministic fixtures may recognize `dual` for strict migration
-  validation, but the current Extension startup owner remains modern-only until the dual lifecycle is wired. The
-  owner must fail closed with stable `configuration-invalid` guidance before workspace binding, generation,
-  startup approval, process spawn, or probing; it must never reinterpret `dual` as modern-only. T1807 removes
-  this guard only with the mode-aware connection, Webview, persistence, and integration evidence.
+- The pure parser and Protocol Schemas recognize only the closed configuration modes. The Extension startup owner
+  normalizes the effective mode, binds Workspace Trust and exact startup approval, then creates the controlled MCP
+  client with that mode. `modern-only` performs no legacy lifecycle; `dual` performs one bounded modern probe and
+  enters the legacy lifecycle only for the defined non-modern/timeout classification. It never reinterprets `dual`
+  as modern-only, reconnects automatically, or retries an era after a terminal failure.
 - A mode change or any other effective operation change between approval wait and pre-spawn revalidation, or on
   an explicit retry, invalidates the old approval and generation. A fresh exact approval is required. The
   Extension owns this normalized comparison; SDK/Server data cannot replace it.
@@ -130,15 +130,14 @@ bounded probe and fallback sequence.
 
 ## Consequences
 
-- T1804 must update Architecture, Security, Protocol, Persistence, UX, Webview and configuration compatibility
-  before implementation. Its parser/schema/fixture implementation is additive and does not activate dual on the
-  live Extension path. It must also mark the affected ADR 0001 statements as superseded rather than rewriting
-  history.
-- T1805 owns the package-private dual-era lifecycle and version negotiation behind existing CtrlZebra interfaces.
-- T1806 owns the legacy-specific security matrix, rejected Client requests, notification/cancellation races and
-  complete fixtures.
-- T1807 owns removal of the fail-closed dual guard, Extension configuration migration activation, user-visible
-  mode/era, persisted provenance, documentation and VSIX smoke evidence.
+- T1804 updated Architecture, Security, Protocol, Persistence, UX and configuration compatibility with the additive
+  parser/schema/provenance contract, while preserving the historical ADR 0001 record.
+- T1805 implemented the package-private dual-era lifecycle and version negotiation behind existing CtrlZebra
+  interfaces.
+- T1806 established the legacy-specific security matrix, rejected Client requests, notification/cancellation races
+  and complete fixtures.
+- T1807 integrates configuration mode selection in the Extension, user-visible mode/era projection, bounded
+  persisted provenance, deterministic stdio evidence, documentation and VSIX smoke coverage.
 - The implementation and test matrix approximately doubles for connection negotiation, but Core Agent, Tool approval,
   workspace and process ownership remain unchanged.
 

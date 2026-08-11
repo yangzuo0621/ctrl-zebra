@@ -407,14 +407,13 @@ content, or persistence boundaries above.
   negotiation, probe/fallback state, process data, credentials, and raw errors remain outside
   persistence.
 
-This is the T1804 documentation/configuration gate. Its implementation PR must add strict config and
-Protocol schemas plus deterministic, no-network/no-secret modern/legacy compatibility fixtures and
-tests for the closed matrix: malformed/validation-failing response/error to `malformed-message`,
-structurally valid unknown/unclassified response/error to `protocol-incompatible`, recognized modern
-error version selection, defined non-modern fallback, and bounded-timeout fallback. It must not
-implement SDK lifecycle in the constraint PR. T1805–T1807 remain responsible for runtime negotiation,
-legacy security handling, Extension migration, Webview integration, persistence wiring, and
-end-to-end evidence.
+The T1804 documentation/configuration gate was completed with strict config and Protocol schemas plus
+deterministic, no-network/no-secret modern/legacy compatibility fixtures for the closed matrix:
+malformed/validation-failing response/error to `malformed-message`, structurally valid
+unknown/unclassified response/error to `protocol-incompatible`, recognized modern error version
+selection, defined non-modern fallback, and bounded-timeout fallback. T1805–T1807 subsequently
+implemented the package lifecycle, legacy security handling, Extension migration, Webview integration,
+persistence wiring, and end-to-end evidence without changing the boundaries recorded above.
 
 ## Reviewed primary references
 

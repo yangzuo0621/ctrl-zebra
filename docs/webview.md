@@ -221,17 +221,11 @@ This document defines the React Webview constraints established before T0103. It
 
 ## MCP Rendering and State Boundary
 
-This boundary renders the validated stage 14/T1804 MCP projection and does not negotiate protocol or
-capabilities in the browser. Modern/legacy selection, configuration migration, probing, fallback,
-and SDK lifecycle remain Host-owned.
-
-Before T1807 wiring lands, this boundary also reflects the T1804 interim activation guard: a normalized
-version `2` `dual` setting is rejected by the Host with stable `configuration-invalid` before workspace
-binding, startup approval, generation publication, or process start. The Webview receives only the
-bounded error and `open-settings` intent; it renders no approval card, connecting/connected state,
-negotiated era/version, capabilities, or legacy/fallback hint for that attempt. The dual-era connection
-and migration display below is the normative post-T1807 target after the guard is removed and the
-mode-aware lifecycle is wired.
+This boundary renders the validated MCP projection and does not negotiate protocol or capabilities
+in the browser. Modern/legacy selection, configuration migration, probing, fallback, and SDK
+lifecycle remain Host-owned. The Host now supplies the configured mode in every status, a negotiated
+era/version only after a complete connected handshake, and bounded errors/capabilities for the
+remaining states.
 
 - One MCP feature store owns the current validated connection snapshot and generation-bound Tool,
   Resource, Resource Template, Prompt, Resource preview, and Prompt preview snapshots. Components
@@ -338,14 +332,12 @@ selection, disclosure state, and scroll position remain stable during polling, r
 message rejection. Normal connected operation with no diagnostics follows the same path without a
 diagnostic announcement or recovery control.
 
-### Dual-era display and migration (T1804)
+### Dual-era display and migration (T1804/T1807)
 
-The following display and migration journey is activated only after T1807 removes the interim Host
-guard and wires mode-aware connection lifecycle. During T1804, Protocol/configuration schemas may
-validate `dual` for migration and deterministic fixtures, but a live `dual` submit/start fails closed
-before workspace binding, approval, or process side effects. The Webview shows stable
-`configuration-invalid` guidance with `Open settings` only; it does not render an approval card,
-connecting/connected/negotiated UI, or a guessed modern/legacy state for the rejected attempt.
+The Webview renders the mode selected in settings and the negotiated era/version returned by the
+Host. A live `dual` connection still uses the same workspace trust, exact startup approval, process
+cleanup, and generation fences as modern-only; no Webview message can override the mode or request a
+hidden reconnect.
 
 The Webview renders configured mode as a setting fact and negotiated era/version as a successful
 connection fact. It uses fixed localized labels for `modern-only`, `dual`, `modern / 2026-07-28`, and

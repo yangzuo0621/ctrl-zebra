@@ -340,12 +340,12 @@ values, raw capability objects, arbitrary metadata, Server error data, or unboun
 lower `snake_case` identity and `displayName` is its bounded user label. It does not contain command,
 arguments, cwd, configuration scope, credentials, or transport details.
 
-`McpConnectionDto` is the strict object:
+`McpConnectionProjectionDto` is the strict object used by `extension/mcp-connection`:
 
 ```text
 {
-  server: McpServerIdentityDto,
-  generation: positive safe integer,
+  server?: McpServerIdentityDto,
+  generation: non-negative safe integer,
   status: "disconnected" | "connecting" | "connected" | "disconnecting" | "failed",
   configuredMode: "modern-only" | "dual",
   negotiated?:
@@ -365,7 +365,11 @@ arguments, cwd, configuration scope, credentials, or transport details.
 }
 ```
 
-`configuredMode` is present in every status and reflects the validated user setting. `negotiated` is
+`configuredMode` is present in every status and reflects the effective setting (the safe default is
+`modern-only`). The initial unconfigured boot projection, and a configuration failure before an
+identity exists, may omit `server` and use generation `0`; once a configuration has been validated,
+failed and connected projections carry the selected Server identity, and connected uses a positive
+generation. `negotiated` is
 present only in `connected`; it is the exact mutually supported era/version pair and never a
 user-selected or SDK enum value. Projected capabilities are all false before the complete selected
 handshake. Extra advertised Server capabilities are absent rather than copied into an open map. The
@@ -373,8 +377,8 @@ Schema refines this object by status: `connected` requires one exact `negotiated
 `error`; `failed` requires `error`, omits `negotiated`, and has all capabilities false; all other
 states omit both `negotiated` and `error` and expose no usable capability. `generation` is an opaque
 freshness fence for consumers, not authorization. The modern-only `protocolVersion` field from the
-T1803 contract is replaced by this T1804 negotiated DTO after the constraint PR; the implementation
-PR must not accept both shapes or silently infer an era.
+T1803 contract is replaced by this mode-aware negotiated DTO. The active Extension/Webview path
+accepts the negotiated projection only; it does not accept both shapes or silently infer an era.
 
 `McpErrorDto` contains only `{ code, message }`. `message` is a fixed user-safe string of at most
 1,024 code points. The stable closed code set is:
@@ -817,7 +821,7 @@ Persisted MCP events may include the strict historical provenance
 connection snapshot, capability claim, approval, retry token, or reconnection instruction. No
 configuration, probe/fallback state, process detail, credential, raw error, or unbounded protocol
 value crosses this boundary. The Protocol schema and compatibility fixtures for these unions are
-implemented after the T1804 constraint PR is merged.
+implemented and exercised by the Extension/Webview integration paths.
 
 ### Resource and Resource Template projections
 

@@ -3,6 +3,8 @@ import type {
   McpConnectOutcome,
   McpDisconnectOutcome,
   McpProcessTermination,
+  McpProtocolMode,
+  McpStdioPort,
   McpStdioPortHandlers,
   McpToolSnapshotView,
 } from "@ctrl-zebra/mcp-client";
@@ -29,6 +31,8 @@ const connectedOutcome = {
   connection: {
     status: "connected",
     protocolVersion: "2026-07-28",
+    configuredMode: "modern-only",
+    negotiated: { era: "modern", version: "2026-07-28" },
     capabilities: {
       tools: false,
       toolsListChanged: false,
@@ -65,6 +69,9 @@ describe("MCP connection controller", () => {
       }),
       expect.any(Function),
     );
+    expect(harness.createClient).toHaveBeenCalledWith(expect.anything(), {
+      protocolMode: "modern-only",
+    });
     expect(harness.client.connect).toHaveBeenCalledOnce();
     expect(harness.notifyInformation).toHaveBeenCalledWith(
       "Connected to MCP Server “Local fixture”.",
@@ -264,21 +271,18 @@ describe("MCP connection controller", () => {
     expect(harness.createPort).not.toHaveBeenCalled();
   });
 
-  it("fails closed for dual before workspace binding, approval, or process creation", async () => {
+  it("selects dual mode and passes it to the lifecycle client", async () => {
     const harness = createHarness({ ...configuration, version: 2, protocolMode: "dual" });
     const controller = new McpConnectionController(harness.values);
 
     await expect(controller.connect()).resolves.toMatchObject({
-      generation: 0,
-      status: "failed",
-      error: { code: "configuration-invalid" },
+      generation: 1,
+      status: "connected",
+      configuredMode: "dual",
     });
-    expect(harness.bindWorkspace).not.toHaveBeenCalled();
-    expect(harness.requestStartupApproval).not.toHaveBeenCalled();
-    expect(harness.createPort).not.toHaveBeenCalled();
-    expect(harness.notifyError).toHaveBeenCalledWith(
-      "Configure one valid MCP Server in your user settings.",
-    );
+    expect(harness.bindWorkspace).toHaveBeenCalled();
+    expect(harness.requestStartupApproval).toHaveBeenCalled();
+    expect(harness.createClient).toHaveBeenCalledWith(expect.anything(), { protocolMode: "dual" });
   });
 
   it("invalidates an approval when workspace trust is lost before consumption", async () => {
@@ -443,6 +447,7 @@ describe("MCP connection controller", () => {
     expect(controller.getState()).toEqual<McpConnectionSnapshot>({
       generation: 0,
       status: "disconnected",
+      configuredMode: "modern-only",
       configurationStale: false,
     });
     await controller.dispose();
@@ -526,6 +531,9 @@ function createHarness(initialConfiguration: McpServerConfiguration = configurat
   const notifyInformation = vi.fn();
   const notifyError = vi.fn();
   const log = vi.fn();
+  const createClient = vi.fn(
+    (_port: McpStdioPort, _options: { readonly protocolMode: McpProtocolMode }) => client,
+  );
 
   return {
     values: {
@@ -542,7 +550,7 @@ function createHarness(initialConfiguration: McpServerConfiguration = configurat
       environment: { PATH: "/bin" },
       requestStartupApproval,
       createPort,
-      createClient: () => client,
+      createClient,
       notifyInformation,
       notifyError,
       log,
@@ -551,6 +559,7 @@ function createHarness(initialConfiguration: McpServerConfiguration = configurat
     bindWorkspace,
     requestStartupApproval,
     createPort,
+    createClient,
     client,
     notifyInformation,
     notifyError,

@@ -133,12 +133,11 @@ explicitly migrate the setting to version `2`, then choose the closed `protocolM
 
 `dual` supports exactly modern `2026-07-28` and legacy `2025-11-25` over local `stdio`. The full
 configuration, migration, and exclusion rules are in the [configuration contract](docs/configuration.md).
-The strict T1804 v1/v2 parser, normalized Protocol Schemas, bounded provenance, deterministic
-compatibility fixtures, and the pre-T1807 fail-closed `dual` startup guard are implemented. Live dual
-connection selection, probe/fallback lifecycle, Extension/Webview wiring, and explicit user migration
-activation remain gated by T1805–T1807. Until that wiring lands, a version `2` `dual` setting fails
-closed with stable `configuration-invalid` guidance before workspace binding, approval, or process
-start; it is never silently treated as modern-only.
+The strict v1/v2 parser, normalized Protocol Schemas, bounded provenance, deterministic local
+compatibility fixtures, mode-aware Extension/Webview wiring, and negotiated modern/legacy lifecycle
+are implemented. A version `2` `dual` setting selects the controlled dual-era Client after the same
+trusted-workspace and fresh startup-approval checks; it is never silently treated as modern-only.
+Recovery remains explicit: no reconnect, re-probe, or renegotiation is started from persisted data.
 
 Open one trusted workspace, review the exact executable, arguments, and canonical working directory,
 then run **CtrlZebra: Connect MCP Server** or select **Connect** in the Agent view. After connection:
@@ -255,8 +254,9 @@ Read the full [Privacy Notice](PRIVACY.md) and [security contract](docs/security
   uses `malformed-message`; structurally valid unknown-future or otherwise unclassified response/error
   uses `protocol-incompatible`; neither falls back. Dual fallback is limited to a defined non-modern
   response or bounded timeout. A version-1 setting must be explicitly migrated before dual can be
-  selected. Until T1807 runtime wiring lands, configured `dual` is rejected before startup approval
-  with stable `configuration-invalid` guidance; no modern probe or fallback is attempted.
+  selected. A malformed response fails as `malformed-message`; an unknown or unclassified valid
+  response fails as `protocol-incompatible`; neither authorizes fallback. Only the closed non-modern
+  response or bounded-timeout cases can enter one legacy handshake in `dual`.
 - **Server exited or malformed output**: disconnect, inspect the Server outside CtrlZebra without
   sharing secrets, correct its stdout protocol behavior, then reconnect explicitly. CtrlZebra never
   treats stderr or raw protocol data as user-visible content.

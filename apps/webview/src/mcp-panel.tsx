@@ -32,11 +32,20 @@ export function McpPanel({ store }: { readonly store: StoreApi<McpState> }) {
           <strong>{strings.mcp.status}</strong>{" "}
           {strings.mcp.connectionStatus[state.connection.status]}
         </p>
+        <p>
+          <strong>{strings.mcp.configuredMode}</strong> {state.connection.configuredMode}
+        </p>
         {state.connection.server === undefined ? null : (
           <p>
             <strong>{strings.mcp.server}</strong> {state.connection.server.displayName}
           </p>
         )}
+        {state.connection.status === "connected" ? (
+          <p>
+            <strong>{strings.mcp.negotiated}</strong> {state.connection.negotiated.era} /{" "}
+            {state.connection.negotiated.version}
+          </p>
+        ) : null}
         {state.connection.status === "connected" ? (
           <ul className={styles.compactList} aria-label={strings.mcp.capabilitiesLabel}>
             <li>
@@ -80,8 +89,12 @@ export function McpPanel({ store }: { readonly store: StoreApi<McpState> }) {
             <h3 id="mcp-diagnostics-title">{strings.mcp.diagnostics}</h3>
             {state.diagnostics.kind === "protocol-incompatible" ? (
               <div>
-                <p>{strings.mcp.diagnosticConfiguredMode}</p>
-                <p>{strings.mcp.diagnosticSupportedVersion}</p>
+                <p>{strings.mcp.diagnosticConfiguredMode(state.diagnostics.configuredMode)}</p>
+                <p>
+                  {strings.mcp.diagnosticSupportedVersion(
+                    state.diagnostics.supportedVersions.join(", "),
+                  )}
+                </p>
                 <p>{strings.mcp.diagnosticNextStep}</p>
                 <Button size="sm" variant="secondary" onClick={() => state.openSettings()}>
                   {strings.mcp.diagnosticOpenSettings}

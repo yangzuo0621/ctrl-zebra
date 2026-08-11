@@ -3,7 +3,7 @@ import type { McpToolDiagnostic, McpToolSnapshotView } from "@ctrl-zebra/mcp-cli
 import {
   type ExtensionToWebviewMessage,
   type McpDiagnosticsProjectionDto,
-  mcpConnectionSchema,
+  mcpConnectionProjectionSchema,
   mcpDiagnosticsMessageSchema,
   mcpPromptCatalogSchema,
   mcpResourceCatalogSchema,
@@ -306,21 +306,41 @@ function projectConnection(snapshot: McpConnectionSnapshot) {
   const base = {
     generation: snapshot.generation,
     server: snapshot.server,
+    configuredMode: snapshot.configuredMode,
     configurationStale: snapshot.configurationStale,
   };
   if (snapshot.status === "connected" && snapshot.connection !== undefined) {
-    return mcpConnectionSchema.parse({
+    return mcpConnectionProjectionSchema.parse({
       ...base,
       status: "connected",
-      protocolVersion: snapshot.connection.protocolVersion,
+      negotiated: snapshot.connection.negotiated,
       capabilities: snapshot.connection.capabilities,
     });
   }
   if (snapshot.status === "failed" && snapshot.error !== undefined) {
-    return mcpConnectionSchema.parse({ ...base, status: "failed", error: snapshot.error });
+    return mcpConnectionProjectionSchema.parse({
+      ...base,
+      status: "failed",
+      capabilities: unavailableCapabilities,
+      error: snapshot.error,
+    });
   }
-  return mcpConnectionSchema.parse({ ...base, status: snapshot.status });
+  return mcpConnectionProjectionSchema.parse({
+    ...base,
+    status: snapshot.status,
+    capabilities: unavailableCapabilities,
+  });
 }
+
+const unavailableCapabilities = {
+  tools: false,
+  toolsListChanged: false,
+  resources: false,
+  resourceTemplates: false,
+  resourcesListChanged: false,
+  prompts: false,
+  promptsListChanged: false,
+} as const;
 
 function projectDiagnostic(
   snapshot: McpConnectionSnapshot,
@@ -331,15 +351,25 @@ function projectDiagnostic(
   if (snapshot.server === undefined) return undefined;
   const source = { server: snapshot.server, generation: snapshot.generation };
   if (snapshot.status === "failed" && snapshot.error?.code === "protocol-incompatible") {
-    return {
-      kind: "protocol-incompatible",
-      ...source,
-      connectionStatus: "failed",
-      configuredMode: "modern-only",
-      supportedVersions: ["2026-07-28"],
-      connectionEstablished: false,
-      nextStep: "open-settings",
-    };
+    return snapshot.configuredMode === "dual"
+      ? {
+          kind: "protocol-incompatible",
+          ...source,
+          connectionStatus: "failed",
+          configuredMode: "dual",
+          supportedVersions: ["2026-07-28", "2025-11-25"],
+          connectionEstablished: false,
+          nextStep: "open-settings",
+        }
+      : {
+          kind: "protocol-incompatible",
+          ...source,
+          connectionStatus: "failed",
+          configuredMode: "modern-only",
+          supportedVersions: ["2026-07-28"],
+          connectionEstablished: false,
+          nextStep: "open-settings",
+        };
   }
   if (snapshot.status === "failed") {
     const diagnostic = retained;

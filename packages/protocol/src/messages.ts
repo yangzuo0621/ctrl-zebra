@@ -8,7 +8,7 @@ import { assistantMessageSchema, userMessageSchema } from "./chat-message.js";
 import { checkpointIdSchema, checkpointSummarySchema } from "./checkpoint.js";
 import {
   mcpCatalogSequenceSchema,
-  mcpConnectionSchema,
+  mcpConnectionProjectionSchema,
   mcpDiagnosticsProjectionSchema,
   mcpToolCatalogProjectionSchema,
   mcpToolCatalogSchema,
@@ -201,7 +201,7 @@ export const mcpRefreshToolsMessageSchema = z.strictObject({
 export const mcpConnectionMessageSchema = z.strictObject({
   ...protocolEnvelopeSchema.shape,
   type: z.literal("extension/mcp-connection"),
-  connection: mcpConnectionSchema,
+  connection: mcpConnectionProjectionSchema,
 });
 export const mcpToolsMessageSchema = z.strictObject({
   ...protocolEnvelopeSchema.shape,

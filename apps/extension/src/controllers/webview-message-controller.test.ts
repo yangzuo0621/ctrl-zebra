@@ -79,8 +79,24 @@ describe("bindWebviewMessageController", () => {
     const connectionState = {
       generation: 2,
       status: "connected" as const,
+      configuredMode: "modern-only" as const,
       server: { serverId: "local_fixture", displayName: "Local fixture" },
       configurationStale: false,
+      connection: {
+        status: "connected" as const,
+        protocolVersion: "2026-07-28" as const,
+        configuredMode: "modern-only" as const,
+        negotiated: { era: "modern" as const, version: "2026-07-28" as const },
+        capabilities: {
+          tools: false,
+          toolsListChanged: false,
+          resources: false,
+          resourceTemplates: false,
+          resourcesListChanged: false,
+          prompts: false,
+          promptsListChanged: false,
+        },
+      },
     };
     const resourceActions = new McpResourceActions({
       connection: {
@@ -160,6 +176,11 @@ describe("bindWebviewMessageController", () => {
         mimeType: "text/plain",
         text: "ordinary context",
         truncated: false,
+        provenance: {
+          configuredMode: "modern-only",
+          negotiatedEra: "modern",
+          negotiatedVersion: "2026-07-28",
+        },
       },
     ]);
     expect(runs[0]?.[5]).toBe("session-existing");
@@ -173,8 +194,24 @@ describe("bindWebviewMessageController", () => {
     const state = {
       generation: 2,
       status: "connected" as const,
+      configuredMode: "modern-only" as const,
       server,
       configurationStale: false,
+      connection: {
+        status: "connected" as const,
+        protocolVersion: "2026-07-28" as const,
+        configuredMode: "modern-only" as const,
+        negotiated: { era: "modern" as const, version: "2026-07-28" as const },
+        capabilities: {
+          tools: false,
+          toolsListChanged: false,
+          resources: false,
+          resourceTemplates: false,
+          resourcesListChanged: false,
+          prompts: false,
+          promptsListChanged: false,
+        },
+      },
     };
     const catalog = {
       server,
@@ -404,6 +441,7 @@ describe("bindWebviewMessageController", () => {
           ({
             status: "disconnected",
             generation: 0,
+            configuredMode: "modern-only",
             configurationStale: false,
           }) as const,
         readResource: async () => {
@@ -417,6 +455,7 @@ describe("bindWebviewMessageController", () => {
           ({
             status: "disconnected",
             generation: 0,
+            configuredMode: "modern-only",
             configurationStale: false,
           }) as const,
         getPromptCatalog: () => undefined,

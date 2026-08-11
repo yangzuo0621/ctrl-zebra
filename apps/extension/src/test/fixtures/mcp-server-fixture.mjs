@@ -2,8 +2,10 @@ import { appendFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 
 const protocolVersion = "2026-07-28";
+const legacyProtocolVersion = "2025-11-25";
 const eventPath = readArgument("--events");
-const mode = readArgument("--mode") ?? "normal";
+const requestedMode = readArgument("--mode") ?? "modern";
+const mode = requestedMode === "normal" ? "modern" : requestedMode;
 const pending = new Map();
 let catalogVersion = 1;
 let changeScheduled = false;
@@ -39,6 +41,10 @@ function handle(message) {
     if (mode === "exit") {
       process.exit(17);
     }
+    if (mode === "legacy") {
+      respondError(message.id, -32_601, "Method not found");
+      return;
+    }
     respond(message.id, {
       resultType: "complete",
       supportedVersions: [protocolVersion],
@@ -51,6 +57,25 @@ function handle(message) {
     });
     return;
   }
+
+  if (message.method === "initialize") {
+    if (mode === "legacy") {
+      respond(message.id, {
+        protocolVersion: legacyProtocolVersion,
+        capabilities: {
+          tools: { listChanged: true },
+          resources: { listChanged: true },
+          prompts: { listChanged: true },
+        },
+        serverInfo: { name: "ctrl-zebra-fixture", version: "1.0.0" },
+      });
+      return;
+    }
+    respondError(message.id, -32_601, "Method not found");
+    return;
+  }
+
+  if (message.method === "notifications/initialized") return;
 
   if (message.method === "tools/list") {
     const cursor = message.params?.cursor;

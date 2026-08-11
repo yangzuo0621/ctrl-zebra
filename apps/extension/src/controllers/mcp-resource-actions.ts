@@ -96,6 +96,15 @@ export class McpResourceActions {
     ) {
       throw new McpResourceError("resource-unavailable");
     }
+    const provenance =
+      current.connection?.configuredMode !== undefined &&
+      current.connection.negotiated !== undefined
+        ? {
+            configuredMode: current.connection.configuredMode,
+            negotiatedEra: current.connection.negotiated.era,
+            negotiatedVersion: current.connection.negotiated.version,
+          }
+        : undefined;
     const attachment = mcpResourceAttachmentSchema.parse({
       snapshotId,
       serverId,
@@ -103,6 +112,7 @@ export class McpResourceActions {
       mimeType: snapshot.mimeType,
       text: snapshot.items.map(({ text }) => text).join(""),
       truncated: snapshot.truncated,
+      ...(provenance === undefined ? {} : { provenance }),
     });
     const proposed = [...this.#attachments.values(), attachment];
     projectExternalResourceContext(

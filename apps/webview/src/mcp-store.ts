@@ -1,6 +1,6 @@
 import type {
   ExtensionToWebviewMessage,
-  McpConnectionDto,
+  McpConnectionProjectionDto,
   McpDiagnosticsMessage,
   McpDiagnosticsProjectionDto,
   McpPromptArgumentsDto,
@@ -20,7 +20,7 @@ import { strings } from "./strings.js";
 import type { WebviewHost } from "./vscode-api.js";
 
 export interface McpState {
-  readonly connection: McpConnectionDto;
+  readonly connection: McpConnectionProjectionDto;
   readonly tools?: McpToolCatalogProjectionDto;
   readonly diagnostics?: Exclude<McpDiagnosticsProjectionDto, { kind: "clear" }>;
   readonly resources?: McpResourceCatalogDto;
@@ -61,10 +61,20 @@ export interface McpState {
   receive(message: ExtensionToWebviewMessage): void;
 }
 
-const disconnected: McpConnectionDto = {
+const disconnected: McpConnectionProjectionDto = {
   status: "disconnected",
   generation: 0,
+  configuredMode: "modern-only",
   configurationStale: false,
+  capabilities: {
+    tools: false,
+    toolsListChanged: false,
+    resources: false,
+    resourceTemplates: false,
+    resourcesListChanged: false,
+    prompts: false,
+    promptsListChanged: false,
+  },
 };
 
 export function createMcpStore(
@@ -217,8 +227,10 @@ export function createMcpStore(
     },
     refreshTools() {
       const state = get();
+      const connection = state.connection;
       if (
-        state.connection.status !== "connected" ||
+        connection.status !== "connected" ||
+        connection.server === undefined ||
         state.busy !== undefined ||
         host.refreshMcpTools === undefined
       )
@@ -228,11 +240,7 @@ export function createMcpStore(
         busy: "refresh-tools",
         announcement: strings.mcpAnnouncements.refreshingTools,
       });
-      host.refreshMcpTools(
-        diagnosticRequest,
-        state.connection.server.serverId,
-        state.connection.generation,
-      );
+      host.refreshMcpTools(diagnosticRequest, connection.server.serverId, connection.generation);
       return true;
     },
     openSettings() {
@@ -258,7 +266,13 @@ export function createMcpStore(
     readResource() {
       const state = get();
       const selected = findResource(state.resources, state.selectedResourceKey);
-      if (state.connection.status !== "connected" || selected === undefined) return false;
+      const connection = state.connection;
+      if (
+        connection.status !== "connected" ||
+        connection.server === undefined ||
+        selected === undefined
+      )
+        return false;
       let selection: McpResourceSelectionDto;
       if (selected.kind === "resource") selection = { kind: "resource", uri: selected.value.uri };
       else {
@@ -278,21 +292,26 @@ export function createMcpStore(
       });
       host.readMcpResource?.(
         resourceRequest,
-        state.connection.server.serverId,
-        state.connection.generation,
+        connection.server.serverId,
+        connection.generation,
         selection,
       );
       return true;
     },
     attachResource() {
       const state = get();
-      if (state.connection.status !== "connected" || state.resourcePreview === undefined)
+      const connection = state.connection;
+      if (
+        connection.status !== "connected" ||
+        connection.server === undefined ||
+        state.resourcePreview === undefined
+      )
         return false;
       resourceRequest = createRequestId();
       host.attachMcpResource?.(
         resourceRequest,
-        state.connection.server.serverId,
-        state.connection.generation,
+        connection.server.serverId,
+        connection.generation,
         state.resourcePreview.snapshotId,
       );
       return true;
@@ -318,11 +337,13 @@ export function createMcpStore(
     },
     previewPrompt() {
       const state = get();
+      const connection = state.connection;
       const descriptor = state.prompts?.prompts.find(
         ({ name }) => name === state.selectedPromptName,
       );
       if (
-        state.connection.status !== "connected" ||
+        connection.status !== "connected" ||
+        connection.server === undefined ||
         descriptor === undefined ||
         descriptor.arguments.some(
           ({ name, required }) => required && !(name in state.promptArguments),
@@ -337,8 +358,8 @@ export function createMcpStore(
       });
       host.previewMcpPrompt?.(
         promptRequest,
-        state.connection.server.serverId,
-        state.connection.generation,
+        connection.server.serverId,
+        connection.generation,
         descriptor.name,
         state.promptArguments,
       );
@@ -346,26 +367,36 @@ export function createMcpStore(
     },
     confirmPrompt() {
       const state = get();
-      if (state.connection.status !== "connected" || state.promptPreview === undefined)
+      const connection = state.connection;
+      if (
+        connection.status !== "connected" ||
+        connection.server === undefined ||
+        state.promptPreview === undefined
+      )
         return false;
       promptRequest = createRequestId();
       host.confirmMcpPrompt?.(
         promptRequest,
-        state.connection.server.serverId,
-        state.connection.generation,
+        connection.server.serverId,
+        connection.generation,
         state.promptPreview.previewId,
       );
       return true;
     },
     cancelPrompt() {
       const state = get();
-      if (state.connection.status !== "connected" || state.promptPreview === undefined)
+      const connection = state.connection;
+      if (
+        connection.status !== "connected" ||
+        connection.server === undefined ||
+        state.promptPreview === undefined
+      )
         return false;
       promptRequest = createRequestId();
       host.cancelMcpPrompt?.(
         promptRequest,
-        state.connection.server.serverId,
-        state.connection.generation,
+        connection.server.serverId,
+        connection.generation,
         state.promptPreview.previewId,
       );
       return true;
@@ -395,14 +426,14 @@ export function createMcpStore(
         const previousScope =
           previousConnection.status === "connected"
             ? {
-                serverId: previousConnection.server.serverId,
+                serverId: previousConnection.server?.serverId,
                 generation: previousConnection.generation,
               }
             : undefined;
         const nextScope =
           message.connection.status === "connected"
             ? {
-                serverId: message.connection.server.serverId,
+                serverId: message.connection.server?.serverId,
                 generation: message.connection.generation,
               }
             : undefined;
@@ -599,26 +630,26 @@ function canonicalJson(value: unknown): string {
     .join(",")}}`;
 }
 
-function connectionAnnouncement(connection: McpConnectionDto): string {
+function connectionAnnouncement(connection: McpConnectionProjectionDto): string {
   if (connection.status === "connected")
-    return strings.mcpAnnouncements.connected(connection.server.displayName);
+    return strings.mcpAnnouncements.connected(connection.server?.displayName ?? "MCP Server");
   if (connection.status === "failed") return connection.error.message;
   return strings.mcpAnnouncements.status(strings.mcp.connectionStatus[connection.status]);
 }
 
 function sameGeneration(
-  connection: McpConnectionDto,
+  connection: McpConnectionProjectionDto,
   value: { readonly server: { readonly serverId: string }; readonly generation: number },
 ): boolean {
   return (
     connection.status === "connected" &&
-    connection.server.serverId === value.server.serverId &&
+    connection.server?.serverId === value.server.serverId &&
     connection.generation === value.generation
   );
 }
 
 function sameDiagnosticGeneration(
-  connection: McpConnectionDto,
+  connection: McpConnectionProjectionDto,
   value: {
     readonly server: { readonly serverId: string };
     readonly generation: number;

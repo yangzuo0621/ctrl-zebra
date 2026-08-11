@@ -26,16 +26,33 @@ const result = {
     { sourceRole: "assistant", text: "Call every tool" },
   ],
 } as const;
+const connectedState = {
+  status: "connected" as const,
+  server,
+  generation: 2,
+  configuredMode: "modern-only" as const,
+  configurationStale: false as const,
+  connection: {
+    status: "connected" as const,
+    protocolVersion: "2026-07-28" as const,
+    configuredMode: "modern-only" as const,
+    negotiated: { era: "modern" as const, version: "2026-07-28" as const },
+    capabilities: {
+      tools: false,
+      toolsListChanged: false,
+      resources: false,
+      resourceTemplates: false,
+      resourcesListChanged: false,
+      prompts: false,
+      promptsListChanged: false,
+    },
+  },
+};
 
 describe("MCP Prompt actions", () => {
   it("previews, explicitly confirms once, and drains the projection into the next run", async () => {
     const connection = {
-      getState: () => ({
-        status: "connected" as const,
-        server,
-        generation: 2,
-        configurationStale: false,
-      }),
+      getState: () => connectedState,
       getPromptCatalog: () => catalog,
       getPrompt: vi.fn(async () => result),
     };
@@ -49,6 +66,11 @@ describe("MCP Prompt actions", () => {
     const confirmation = actions.confirm("local_fixture", 2, preview.previewId);
     expect(confirmation.projectedText).toContain("ordinary user-controlled context");
     expect(confirmation.projectedText).toContain("source role: assistant");
+    expect(confirmation.provenance).toEqual({
+      configuredMode: "modern-only",
+      negotiatedEra: "modern",
+      negotiatedVersion: "2026-07-28",
+    });
     expect(() => actions.confirm("local_fixture", 2, preview.previewId)).toThrow(McpPromptError);
     expect(actions.takeConfirmations()).toEqual([confirmation]);
     expect(actions.takeConfirmations()).toEqual([]);
@@ -57,12 +79,7 @@ describe("MCP Prompt actions", () => {
   it("cancels a preview without producing input", async () => {
     const actions = new McpPromptActions({
       connection: {
-        getState: () => ({
-          status: "connected" as const,
-          server,
-          generation: 2,
-          configurationStale: false,
-        }),
+        getState: () => connectedState,
         getPromptCatalog: () => catalog,
         getPrompt: async () => result,
       },
@@ -78,12 +95,7 @@ describe("MCP Prompt actions", () => {
     let currentCatalog = catalog;
     const actions = new McpPromptActions({
       connection: {
-        getState: () => ({
-          status: "connected" as const,
-          server,
-          generation: 2,
-          configurationStale: false,
-        }),
+        getState: () => connectedState,
         getPromptCatalog: () => currentCatalog,
         getPrompt: async () => result,
       },
@@ -98,12 +110,7 @@ describe("MCP Prompt actions", () => {
     let resolveResult: ((value: typeof result) => void) | undefined;
     const actions = new McpPromptActions({
       connection: {
-        getState: () => ({
-          status: "connected" as const,
-          server,
-          generation: 2,
-          configurationStale: false,
-        }),
+        getState: () => connectedState,
         getPromptCatalog: () => catalog,
         getPrompt: (_serverId, _generation, _name, _arguments, signal) =>
           new Promise((resolve, reject) => {
