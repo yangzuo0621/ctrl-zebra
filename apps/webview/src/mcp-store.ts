@@ -70,6 +70,7 @@ export function createMcpStore(
   let connectionRequest: string | undefined;
   let resourceRequest: string | undefined;
   let promptRequest: string | undefined;
+  let latestToolRequestId: string | undefined;
   let pendingToolPair:
     | {
         readonly requestId: string;
@@ -93,14 +94,20 @@ export function createMcpStore(
   ): void => {
     const serverId = value.server.serverId;
     const generation = value.generation;
+    if (pendingToolPair !== undefined && pendingToolPair.requestId !== requestId) {
+      return;
+    }
     if (
       pendingToolPair !== undefined &&
-      (pendingToolPair.requestId !== requestId ||
-        pendingToolPair.serverId !== serverId ||
-        pendingToolPair.generation !== generation)
+      (pendingToolPair.serverId !== serverId || pendingToolPair.generation !== generation)
     ) {
       clearPendingToolPair();
+      return;
     }
+    if (pendingToolPair === undefined && latestToolRequestId !== requestId) {
+      latestToolRequestId = requestId;
+    }
+    if (latestToolRequestId === undefined) latestToolRequestId = requestId;
     if (pendingToolPair === undefined) {
       const timer = setTimeout(() => {
         pendingToolPair = undefined;
@@ -133,6 +140,7 @@ export function createMcpStore(
       resourceRequest = undefined;
       promptRequest = undefined;
       clearPendingToolPair();
+      latestToolRequestId = undefined;
       set({ busy: "disconnecting", announcement: strings.mcpAnnouncements.disconnecting });
       host.disconnectMcp?.(connectionRequest);
     },
@@ -279,6 +287,7 @@ export function createMcpStore(
       resourceRequest = undefined;
       promptRequest = undefined;
       clearPendingToolPair();
+      latestToolRequestId = undefined;
       set({
         attachments: [],
         confirmations: [],
@@ -294,6 +303,7 @@ export function createMcpStore(
         if (message.requestId === connectionRequest) connectionRequest = undefined;
         clearPendingToolPair();
         const active = message.connection.status === "connected";
+        latestToolRequestId = active ? message.requestId : undefined;
         set({
           connection: message.connection,
           busy: undefined,

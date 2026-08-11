@@ -289,18 +289,95 @@ describe("unified MCP feature store", () => {
     expect(store.getState().tools).toEqual(tools);
     store.getState().receive({
       protocolVersion,
+      type: "extension/mcp-tools",
+      requestId: "catalog-1",
+      catalog: tools,
+    });
+    expect(store.getState().tools).toEqual(tools);
+    store.getState().receive({
+      protocolVersion,
       type: "extension/mcp-tool-rejections",
       requestId: "catalog-2",
       catalog: { ...rejections, rejectedTools: [] },
     });
+    expect(store.getState().tools).toEqual(refreshedTools);
+    expect(store.getState().toolRejections?.rejectedTools).toEqual([]);
+  });
+
+  it("fences the opposite Tool-pair order against a late prior request", () => {
+    const store = createMcpStore(host(), () => "request");
+    store.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-connection",
+      requestId: "initial",
+      connection: {
+        status: "connected",
+        server,
+        generation: 1,
+        configurationStale: false,
+        protocolVersion: "2026-07-28",
+        capabilities,
+      },
+    });
+    const stableTools: McpToolCatalogDto = { server, generation: 1, tools: [] };
+    const refreshedTools: McpToolCatalogDto = {
+      server,
+      generation: 1,
+      tools: [
+        {
+          server,
+          generation: 1,
+          registryName: "mcp_local_fixture_lookup",
+          mcpToolName: "lookup",
+        },
+      ],
+    };
+    const emptyRejections: McpToolRejectionCatalogDto = {
+      server,
+      generation: 1,
+      rejectedTools: [],
+      rejectedToolsTruncated: false,
+    };
+    store.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-tool-rejections",
+      requestId: "catalog-a",
+      catalog: emptyRejections,
+    });
     store.getState().receive({
       protocolVersion,
       type: "extension/mcp-tools",
-      requestId: "catalog-2",
+      requestId: "catalog-a",
+      catalog: stableTools,
+    });
+    expect(store.getState().tools).toEqual(stableTools);
+
+    store.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-tool-rejections",
+      requestId: "catalog-b",
+      catalog: emptyRejections,
+    });
+    store.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-tools",
+      requestId: "catalog-a",
+      catalog: stableTools,
+    });
+    store.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-tool-rejections",
+      requestId: "catalog-a",
+      catalog: emptyRejections,
+    });
+    expect(store.getState().tools).toEqual(stableTools);
+    store.getState().receive({
+      protocolVersion,
+      type: "extension/mcp-tools",
+      requestId: "catalog-b",
       catalog: refreshedTools,
     });
     expect(store.getState().tools).toEqual(refreshedTools);
-    expect(store.getState().toolRejections?.rejectedTools).toEqual([]);
   });
 
   it("discards an unmatched half at the fixed deadline and on generation change", () => {
