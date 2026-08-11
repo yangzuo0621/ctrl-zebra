@@ -443,4 +443,170 @@ describe("MCP Webview actions", () => {
     });
     actions.dispose();
   });
+
+  it("ignores stale refresh intents without publishing catalog or diagnostics", async () => {
+    const server = { serverId: "local_fixture", displayName: "Local fixture" } as const;
+    const snapshot: McpConnectionSnapshot = {
+      status: "connected",
+      generation: 3,
+      server,
+      configurationStale: false,
+      connection: {
+        status: "connected",
+        protocolVersion: "2026-07-28",
+        capabilities: {
+          tools: true,
+          toolsListChanged: false,
+          resources: false,
+          resourceTemplates: false,
+          resourcesListChanged: false,
+          prompts: false,
+          promptsListChanged: false,
+        },
+      },
+    };
+    const post = vi.fn();
+    const refreshTools = vi.fn(async () => false);
+    const actions = new McpWebviewActions({
+      connection: {
+        getState: () => snapshot,
+        getToolSnapshot: () => undefined,
+        getToolDiagnostic: () => ({ kind: "failure", code: "limit-exceeded" as const }),
+        getResourceCatalog: () => undefined,
+        getPromptCatalog: () => undefined,
+        refreshTools,
+        connect: async () => snapshot,
+        disconnect: async () => snapshot,
+      },
+      openSettings: vi.fn(),
+    });
+    actions.bind(post);
+
+    await actions.refreshTools("stale", "other_server", 3);
+
+    expect(refreshTools).toHaveBeenCalledWith("other_server", 3);
+    expect(post).not.toHaveBeenCalled();
+
+    refreshTools.mockResolvedValueOnce(true);
+    await actions.refreshTools("accepted", server.serverId, 3);
+    expect(post.mock.calls.map(([message]) => message)).toEqual([
+      expect.objectContaining({ type: "extension/mcp-connection", requestId: "accepted" }),
+      expect.objectContaining({
+        type: "extension/mcp-diagnostics",
+        requestId: "accepted",
+        diagnosticSequence: 1,
+      }),
+    ]);
+    actions.dispose();
+  });
+
+  it("publishes accepted refresh success and failure paths", async () => {
+    const server = { serverId: "local_fixture", displayName: "Local fixture" } as const;
+    const snapshot: McpConnectionSnapshot = {
+      status: "connected",
+      generation: 3,
+      server,
+      configurationStale: false,
+      connection: {
+        status: "connected",
+        protocolVersion: "2026-07-28",
+        capabilities: {
+          tools: true,
+          toolsListChanged: false,
+          resources: false,
+          resourceTemplates: false,
+          resourcesListChanged: false,
+          prompts: false,
+          promptsListChanged: false,
+        },
+      },
+    };
+    const post = vi.fn();
+    const refreshTools = vi.fn(async () => true);
+    let diagnostic: { readonly kind: "failure"; readonly code: "limit-exceeded" } | undefined;
+    const actions = new McpWebviewActions({
+      connection: {
+        getState: () => snapshot,
+        getToolSnapshot: () => undefined,
+        getToolDiagnostic: () => diagnostic,
+        getResourceCatalog: () => undefined,
+        getPromptCatalog: () => undefined,
+        refreshTools,
+        connect: async () => snapshot,
+        disconnect: async () => snapshot,
+      },
+      openSettings: vi.fn(),
+    });
+    actions.bind(post);
+
+    await actions.refreshTools("accepted-success", server.serverId, 3);
+    expect(post.mock.calls.map(([message]) => message)).toEqual([
+      expect.objectContaining({ type: "extension/mcp-connection", requestId: "accepted-success" }),
+    ]);
+
+    diagnostic = { kind: "failure", code: "limit-exceeded" };
+    await actions.refreshTools("accepted-failure", server.serverId, 3);
+
+    expect(refreshTools).toHaveBeenCalledWith(server.serverId, 3);
+    expect(post.mock.calls.map(([message]) => message)).toHaveLength(3);
+    expect(post.mock.calls[1]?.[0]).toMatchObject({
+      type: "extension/mcp-connection",
+      requestId: "accepted-failure",
+    });
+    expect(post.mock.calls[2]?.[0]).toMatchObject({
+      type: "extension/mcp-diagnostics",
+      requestId: "accepted-failure",
+      diagnosticSequence: 1,
+      diagnostic: {
+        kind: "tool-discovery-failure",
+        outcome: "refresh",
+        code: "limit-exceeded",
+      },
+    });
+    actions.dispose();
+  });
+
+  it("propagates refresh cancellation or unexpected failures without publishing", async () => {
+    const server = { serverId: "local_fixture", displayName: "Local fixture" } as const;
+    const snapshot: McpConnectionSnapshot = {
+      status: "connected",
+      generation: 3,
+      server,
+      configurationStale: false,
+      connection: {
+        status: "connected",
+        protocolVersion: "2026-07-28",
+        capabilities: {
+          tools: false,
+          toolsListChanged: false,
+          resources: false,
+          resourceTemplates: false,
+          resourcesListChanged: false,
+          prompts: false,
+          promptsListChanged: false,
+        },
+      },
+    };
+    const post = vi.fn();
+    const failure = new Error("refresh cancelled");
+    const actions = new McpWebviewActions({
+      connection: {
+        getState: () => snapshot,
+        getToolSnapshot: () => undefined,
+        getResourceCatalog: () => undefined,
+        getPromptCatalog: () => undefined,
+        refreshTools: async () => {
+          throw failure;
+        },
+        connect: async () => snapshot,
+        disconnect: async () => snapshot,
+      },
+      openSettings: vi.fn(),
+    });
+    actions.bind(post);
+
+    await expect(actions.refreshTools("cancelled", server.serverId, 3)).rejects.toBe(failure);
+    expect(post).not.toHaveBeenCalled();
+    actions.dispose();
+  });
 });

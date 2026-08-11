@@ -131,14 +131,34 @@ describe("MCP connection controller", () => {
     await controller.connect();
 
     harness.client.refreshTools.mockRejectedValueOnce(new McpToolDiscoveryError("limit-exceeded"));
-    await controller.refreshTools("local_fixture", 1);
+    await expect(controller.refreshTools("local_fixture", 1)).resolves.toBe(true);
     expect(controller.getToolDiagnostic()).toEqual({
       kind: "failure",
       code: "limit-exceeded",
     });
 
-    await controller.refreshTools("local_fixture", 1);
+    await expect(controller.refreshTools("local_fixture", 1)).resolves.toBe(true);
     expect(controller.getToolDiagnostic()).toBeUndefined();
+  });
+
+  it("rejects stale refresh intents without invoking the MCP client", async () => {
+    const harness = createHarness();
+    const controller = new McpConnectionController(harness.values);
+    await controller.connect();
+
+    await expect(controller.refreshTools("other_server", 1)).resolves.toBe(false);
+    await expect(controller.refreshTools("local_fixture", 2)).resolves.toBe(false);
+    expect(harness.client.refreshTools).not.toHaveBeenCalled();
+  });
+
+  it("does not swallow cancellation or unexpected refresh failures", async () => {
+    const harness = createHarness();
+    const controller = new McpConnectionController(harness.values);
+    await controller.connect();
+    const failure = new Error("refresh cancelled");
+    harness.client.refreshTools.mockRejectedValueOnce(failure);
+
+    await expect(controller.refreshTools("local_fixture", 1)).rejects.toBe(failure);
   });
 
   it("fails and closes the connection when initial Resource discovery is rejected", async () => {

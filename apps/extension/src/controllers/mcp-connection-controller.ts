@@ -154,7 +154,7 @@ export class McpConnectionController {
     );
   }
 
-  async refreshTools(serverId: string, generation: number): Promise<void> {
+  async refreshTools(serverId: string, generation: number): Promise<boolean> {
     const client = this.#client;
     if (
       client?.refreshTools === undefined ||
@@ -162,15 +162,21 @@ export class McpConnectionController {
       this.#snapshot.server?.serverId !== serverId ||
       this.#snapshot.generation !== generation
     ) {
-      return;
+      return false;
     }
     try {
       await client.refreshTools();
       this.#toolDiagnostic = undefined;
+      return true;
     } catch (error) {
       if (error instanceof McpToolDiscoveryError) {
-        this.#toolDiagnostic = diagnosticFromToolError(error);
+        const diagnostic = diagnosticFromToolError(error);
+        if (diagnostic !== undefined) {
+          this.#toolDiagnostic = diagnostic;
+          return true;
+        }
       }
+      throw error;
     }
   }
 

@@ -32,7 +32,7 @@ interface McpWebviewActionsDependencies {
     | "getPromptCatalog"
   > & {
     readonly getToolDiagnostic?: () => McpToolDiagnostic | undefined;
-    readonly refreshTools?: (serverId: string, generation: number) => Promise<void>;
+    readonly refreshTools?: (serverId: string, generation: number) => Promise<boolean>;
   };
   readonly openSettings: () => void;
 }
@@ -91,7 +91,8 @@ export class McpWebviewActions {
   }
 
   async refreshTools(requestId: string, serverId: string, generation: number): Promise<void> {
-    await this.#connection.refreshTools?.(serverId, generation);
+    const accepted = (await this.#connection.refreshTools?.(serverId, generation)) === true;
+    if (!accepted) return;
     this.#publish(requestId, true);
   }
 
