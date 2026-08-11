@@ -460,14 +460,17 @@ entry, not only the intermediate object.
   result, prompt, or other model context. It is a metadata-only request initiated by the user's
   command. No provider response body, headers, authorization material, or SDK error text may enter
   Webview state, Session persistence, diagnostics, or logs.
-- The response is untrusted third-party input. The Extension accepts only a bounded JSON list of
-  non-empty model IDs (each at most 256 Unicode code points and at most 256 entries), removes exact
-  duplicates, and discards all other metadata. Oversized, malformed, or unsupported responses are
-  treated as an unavailable list and never become configuration values.
-- Missing credentials, authentication failures, network/timeout failures, malformed or empty lists,
-  and cancellation are distinct outcomes. Missing credentials, an unavailable list, or an empty
-  list offer manual model-ID entry. Cancellation performs no write and shows no success message.
-  A failed request or a cancelled manual prompt leaves the existing model setting untouched.
+- The response is untrusted third-party input. Before parsing, the Extension enforces a fixed body
+  limit of 256 KiB. It accepts only a bounded JSON object with a `data` array; for each array entry it
+  validates a required `id` string (at most 256 Unicode code points and at most 256 entries total),
+  extracts only `data[].id`, removes exact duplicates, and discards all top-level, entry-level, and
+  provider metadata or unknown fields. A missing/non-array `data`, invalid entry, malformed JSON, or
+  oversized response is a safe unavailable-list failure; no other field becomes a configuration value.
+- Missing credentials, authentication failures, network/timeout failures, malformed or over-limit
+  responses, empty lists, and cancellation are distinct outcomes. Missing credentials, an unavailable
+  list, or an empty list offer manual model-ID entry. Cancellation performs no write and shows no
+  success message. A failed request or a cancelled manual prompt leaves the existing model setting
+  untouched.
 - The user must explicitly choose a Quick Pick item or submit a validated manual model ID before the
   Extension updates `ctrlZebra.provider.model`. The update changes only that setting; it never
   clears or rewrites Provider, endpoint, capability, or SecretStorage values. A configuration write
