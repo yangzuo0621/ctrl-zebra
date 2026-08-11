@@ -32,7 +32,7 @@ const providerLabels = {
 } as const;
 
 const actionLabels = {
-  "save-key": "Save or replace API key",
+  "save-key": "Save API key",
   "select-model": "Select model",
   "open-settings": "Open Provider settings",
 } as const satisfies Record<ProviderAction, string>;
@@ -55,6 +55,7 @@ export function OnboardingCard({
   const headingRef = useRef<HTMLHeadingElement>(null);
   const actionButtonRefs = useRef<Partial<Record<ProviderAction, HTMLButtonElement | null>>>({});
   const lastOutcomeRequestId = useRef<string | undefined>(undefined);
+  const fallbackOutcomeRequestId = useRef<string | undefined>(undefined);
   const providerLabel = status === undefined ? "Provider" : providerLabels[status.provider];
   const missingItems = [
     ...(status?.apiKeyConfigured === false ? ["API key"] : []),
@@ -62,17 +63,31 @@ export function OnboardingCard({
   ];
 
   useEffect(() => {
-    if (actionOutcome === undefined || actionOutcome.requestId === lastOutcomeRequestId.current) {
+    if (actionOutcome === undefined) {
       return;
     }
-    lastOutcomeRequestId.current = actionOutcome.requestId;
     const trigger = actionButtonRefs.current[actionOutcome.action];
-    if (trigger?.isConnected) {
-      trigger.focus();
-    } else {
-      headingRef.current?.focus();
+    const isNewOutcome = actionOutcome.requestId !== lastOutcomeRequestId.current;
+    if (isNewOutcome) {
+      lastOutcomeRequestId.current = actionOutcome.requestId;
+      if (trigger?.isConnected) {
+        trigger.focus();
+      } else {
+        headingRef.current?.focus();
+      }
+      return;
     }
-  }, [actionOutcome]);
+    if (
+      actionOutcome.action === "save-key" &&
+      status?.apiKeyConfigured === true &&
+      fallbackOutcomeRequestId.current !== actionOutcome.requestId
+    ) {
+      fallbackOutcomeRequestId.current = actionOutcome.requestId;
+      headingRef.current?.focus();
+    } else if (trigger?.isConnected) {
+      trigger.focus();
+    }
+  }, [actionOutcome, status]);
 
   const handleAction = (action: ProviderAction, event: React.MouseEvent<HTMLButtonElement>) => {
     if (onAction(action)) {
@@ -109,21 +124,23 @@ export function OnboardingCard({
               )}
               <fieldset className={styles.providerActions}>
                 <legend className={styles.srOnly}>Provider actions</legend>
-                {(Object.keys(actionLabels) as ProviderAction[]).map((action) => (
-                  <Button
-                    key={action}
-                    className={styles.providerAction}
-                    variant={action === "open-settings" ? "secondary" : "primary"}
-                    size="sm"
-                    disabled={status === undefined || pendingAction !== undefined}
-                    aria-busy={pendingAction?.action === action}
-                    onClick={(event) => handleAction(action, event)}
-                  >
-                    {pendingAction?.action === action
-                      ? `${actionLabels[action]}…`
-                      : actionLabels[action]}
-                  </Button>
-                ))}
+                {(Object.keys(actionLabels) as ProviderAction[])
+                  .filter((action) => action !== "save-key" || status?.apiKeyConfigured === false)
+                  .map((action) => (
+                    <Button
+                      key={action}
+                      className={styles.providerAction}
+                      variant={action === "open-settings" ? "secondary" : "primary"}
+                      size="sm"
+                      disabled={status === undefined || pendingAction !== undefined}
+                      aria-busy={pendingAction?.action === action}
+                      onClick={(event) => handleAction(action, event)}
+                    >
+                      {pendingAction?.action === action
+                        ? `${actionLabels[action]}…`
+                        : actionLabels[action]}
+                    </Button>
+                  ))}
               </fieldset>
               <p className={styles.srOnly} aria-live="polite">
                 {announcement}

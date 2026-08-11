@@ -55,14 +55,18 @@ function renderCard(
 
 describe("OnboardingCard", () => {
   it.each([
-    ["OpenAI", statuses[0]],
-    ["Gemini", statuses[1]],
-    ["OpenAI-Compatible", statuses[2]],
-  ])("renders bounded setup status for %s", (providerLabel, status) => {
+    ["OpenAI", statuses[0], true],
+    ["Gemini", statuses[1], false],
+    ["OpenAI-Compatible", statuses[2], false],
+  ])("renders bounded setup status for %s", (providerLabel, status, showSave) => {
     renderCard(status);
 
     expect(screen.getByRole("heading", { name: `${providerLabel} setup` })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Save or replace API key" })).toBeEnabled();
+    if (showSave) {
+      expect(screen.getByRole("button", { name: "Save API key" })).toBeEnabled();
+    } else {
+      expect(screen.queryByRole("button", { name: "Save API key" })).not.toBeInTheDocument();
+    }
     expect(screen.getByRole("button", { name: "Select model" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Open Provider settings" })).toBeEnabled();
   });
@@ -71,7 +75,8 @@ describe("OnboardingCard", () => {
     const user = userEvent.setup();
     const onAction = vi.fn(() => true);
     const view = renderCard(undefined, onAction);
-    expect(screen.getByRole("button", { name: "Save or replace API key" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Save API key" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Select model" })).toBeDisabled();
 
     view.rerender(
       <OnboardingCard
@@ -81,7 +86,7 @@ describe("OnboardingCard", () => {
         onSelectPrompt={() => {}}
       />,
     );
-    const button = screen.getByRole("button", { name: "Save or replace API key" });
+    const button = screen.getByRole("button", { name: "Save API key" });
     await user.click(button);
     expect(onAction).toHaveBeenCalledWith("save-key");
 
@@ -100,8 +105,34 @@ describe("OnboardingCard", () => {
         onSelectPrompt={() => {}}
       />,
     );
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Save API key" }));
+  });
+
+  it("moves focus to the heading when a completed save removes its trigger", async () => {
+    const user = userEvent.setup();
+    const onAction = vi.fn(() => true);
+    const view = renderCard(statuses[0], onAction);
+    await user.click(screen.getByRole("button", { name: "Save API key" }));
+
+    view.rerender(
+      <OnboardingCard
+        status={{ ...statuses[0], apiKeyConfigured: true }}
+        announcement="Save API key completed."
+        actionOutcome={{
+          protocolVersion,
+          type: "extension/provider-action",
+          requestId: "action-2",
+          action: "save-key",
+          status: "completed",
+        }}
+        onAction={onAction}
+        onSelectPrompt={() => {}}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "Save API key" })).not.toBeInTheDocument();
     expect(document.activeElement).toBe(
-      screen.getByRole("button", { name: "Save or replace API key" }),
+      screen.getByRole("heading", { name: "Welcome to CtrlZebra" }),
     );
   });
 
