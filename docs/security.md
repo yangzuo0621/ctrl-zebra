@@ -371,8 +371,9 @@ entry, not only the intermediate object.
   `ctrlZebra.provider.openai.apiKey`. Secret names are implementation contracts and must not be
   derived from Webview input, workspace content, model output, or the secret value itself.
 - Saving stores the supplied value exactly and replaces any value already held under that name.
-  Reading returns `undefined` when no value exists. Deleting is idempotent, including when the
-  value is already absent.
+  Reading returns `undefined` when no value exists. The VS Code API does not promise idempotent
+  deletion or a compare-and-swap/transaction boundary; the Host therefore checks presence before a
+  delete and does not call the adapter delete operation when the key is absent.
 - The Extension Host is the only owner of SecretStorage access. API keys must not enter Webview
   state, protocol messages, workspace or global state, persisted sessions, fixtures, snapshots,
   command arguments, environment variables, or model-visible content.
@@ -447,24 +448,41 @@ entry, not only the intermediate object.
   onboarding remains limited to save-key, select-model, and open-settings.
 - A delete command shows a modal confirmation that names the Provider and explains that its saved
   API key will be removed. It never reads or displays the Secret to construct the confirmation and
-  never reveals whether a value exists. Cancellation performs no SecretStorage operation. After
-  confirmation, the command invokes the Provider's idempotent `SecretStorage.delete`; an already
-  absent key is a successful completed deletion.
+  never reveals whether a value exists. Cancellation before any storage call performs no
+  SecretStorage operation and therefore leaves the state unchanged. After confirmation, the command
+  asks the existing Host-owned presence adapter once. When it reports absent, the command performs a
+  fixed safe no-op outcome and does not call the delete adapter; a non-absent result permits exactly
+  one existing `ApiKeySecretStorage.delete` call. A fulfilled adapter delete is a completed command
+  outcome, while a rejected call has an indeterminate state. The command must not claim that the old
+  value remains or that a rejected call removed it, perform a compensating mutation, or expose
+  backend details; it performs a fresh presence-only reconciliation and offers fixed safe
+  retry/settings guidance.
 - A rotation command always opens a new password-masked input with no prefilled value. It keeps the
   input open across focus loss, rejects an empty submitted value before storage, and treats dismissal
-  as cancellation. It invokes exactly the Provider's `SecretStorage.store` with the new value; it
-  does not read, delete, or clear the old value first. A successful `store` is the replacement commit
-  boundary. A rejected write reports a fixed safe failure and leaves the old value untouched; no
-  success message is shown on cancellation or failure.
-- Delete, rotation, and existing save commands for one Provider share a Host-owned serial operation
-  queue covering the prompt, confirmation, SecretStorage mutation, and result notification. This
-  prevents overlapping commands from observing or reporting an interleaved lifecycle. Operations
-  for different Providers may proceed independently. Queue state contains only operation promises,
-  never Secret values.
-- Any credential presence/status projection uses a dedicated Host-owned presence reader and returns
-  only a boolean. It must not expose a Secret, length, prefix, suffix, hash, timing-derived detail,
-  or any other value from which the Secret could be inferred. Presence-read failures become a safe
-  unavailable/false status without exposing backend error text.
+  as cancellation. It invokes exactly one existing `ApiKeySecretStorage.save`, which delegates to
+  the Provider's stable-key `SecretStorage.store`; it does not read, delete, or clear the old value
+  first. A fulfilled adapter save is the replacement commit boundary. A rejected write has an
+  indeterminate state because the VS Code API provides no
+  transaction, compare-and-swap, or rollback guarantee; the command must not read the Secret,
+  compensate, or claim that the old value remains. It performs a fresh presence-only reconciliation
+  and gives fixed safe retry/settings guidance. Cancellation before the store call guarantees no
+  storage side effect; once the call starts, cancellation is not reported as a reversible outcome.
+- Delete, rotation, existing save commands, and presence reads for one Provider share a Host-owned
+  serial coordinator. It covers the prompt, confirmation, adapter mutation settlement, presence-only
+  reconciliation, and result notification. The queue is released only after settlement and
+  reconciliation, preventing overlapping commands from observing or reporting an interleaved
+  lifecycle; this includes T1603 onboarding status reads. Operations for different Providers may
+  proceed independently. Queue state contains only operation promises, never Secret values.
+- Any credential presence/status projection uses a dedicated Host-owned presence adapter and returns
+  only a boolean. The unavoidable VS Code `SecretStorage.get` result is accepted inside that adapter,
+  compared only with `=== undefined`, and immediately discarded; the adapter never checks length,
+  prefix, suffix, hash, or content and never returns the string to its caller. Presence-read failures
+  become a safe unavailable/false status without exposing backend error text.
+- Controller disposal and generation changes close a notification gate. An awaited adapter operation
+  that settles after disposal or an obsolete generation is still observed by its owning coordinator,
+  but emits no user notification, Webview status, or diagnostic/log side effect. Queue cleanup is
+  idempotent. The underlying VS Code SecretStorage Thenable is not cancellable; cancellation only
+  prevents a not-yet-started call.
 - User-facing success and failure messages may name the Provider and operation, but never include a
   Secret value, Secret name, authorization material, submitted input, or original SecretStorage
   error. The commands do not initialize a model client or contact a Provider endpoint.

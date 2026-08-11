@@ -38,10 +38,16 @@ Provider、已配置/部分配置/无配置、键盘和焦点、错误恢复、�
 ### T1604：实现 Provider 凭据删除与轮换
 
 提供用户可发现的删除和替换入口；删除前显示 Provider 身份但不显示 Secret；轮换使用新的遮蔽输入，
-只有 SecretStorage 写入成功后才替换旧值；取消或失败保持原值。状态查询只回答是否存在，不返回长度、
-前后缀或其他可推断内容。删除和轮换为 Extension Host-only Command Palette workflows，不扩展
-T1603 Onboarding、Webview 或 Protocol；同一 Provider 的命令必须串行。测试删除、轮换、取消、
-存储失败、并发命令、无现有密钥和日志不泄密。
+只有现有 `ApiKeySecretStorage.save` fulfilled 后才将新值视为提交。取消若发生在 storage side effect 前则
+不调用适配器；调用开始后的 rejected 结果为 indeterminate，不读取 Secret、不补偿写入或声称旧值仍在，
+而是进行仅布尔的存在性 reconciliation 并给出固定安全重试/设置提示。删除确认后先由现有 presence
+adapter 查询；明确 absent 时返回固定 no-op 且不调用 delete，非 absent 时才调用一次现有 adapter delete；
+VS Code API 不保证 delete 幂等，rejected 同样是 indeterminate。状态查询只回答是否存在，presence adapter
+只能将不可避免的 `get` 结果与 `undefined` 比较后立即丢弃，不检查长度/前后缀/内容。删除和轮换为
+Extension Host-only Command Palette workflows，不扩展 T1603 Onboarding、Webview 或 Protocol；同一
+Provider 的 save/delete/rotate/presence 命令必须等待 mutation settlement 与 reconciliation 后再释放。
+dispose 或过期 generation 后不得发布通知、Webview status 或日志。测试删除、轮换、取消、存储失败、
+并发命令、无现有密钥和日志不泄密。
 
 ### T1605：验证 Provider/Model 连接与必需能力
 
@@ -53,7 +59,9 @@ T1603 Onboarding、Webview 或 Protocol；同一 Provider 的命令必须串行�
 ## 4. 阶段门禁
 
 - 三个 Provider 都能在不编辑秘密配置文本的情况下完成密钥保存。
-- 用户可以删除或轮换每个 Provider 的凭据，失败不会丢失原有 Secret。
+- 用户可以删除或轮换每个 Provider 的凭据；fulfilled 变更可确认，rejected 变更明确显示为
+  indeterminate 并通过仅布尔存在性 reconciliation 提供安全重试/设置下一步，不声称旧 Secret
+  必然保留或已删除；不存在时删除走 presence-only no-op，不依赖 VS Code delete 的幂等保证。
 - 模型配置错误可被用户发现和修复，网络失败有手工降级。
 - 用户触发的连接检查区分支持、不支持和未知，不发送工作区或会话内容。
 - 无 Secret、授权头或敏感第三方响应进入 Webview、日志、持久化、fixture 或提交。

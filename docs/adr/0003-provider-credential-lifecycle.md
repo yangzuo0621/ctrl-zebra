@@ -9,9 +9,9 @@
 The Provider configuration boundary already keeps API keys in Extension-owned `SecretStorage` and
 T1601 exposes password-masked save commands for the three supported Providers. T1604 adds deletion
 and rotation. The existing Security and Architecture contracts specified the SecretStorage adapter
-and idempotent deletion, but did not define the user-facing command surface, the no-read delete
-confirmation, the replacement commit boundary, presence-only status, or the race behavior of
-overlapping commands.
+but did not define the user-facing command surface, the no-read delete confirmation, the replacement
+commit boundary, presence-only status, or the race behavior of overlapping commands. The official
+VS Code API also does not promise idempotent delete or transactional failure semantics.
 
 The product foundation already authorizes save, delete, and rotation of the three Provider
 credentials. This decision does not add a Provider, a Webview capability, a Protocol message, a
@@ -27,12 +27,27 @@ settings field, or a new package boundary.
   owned by `ExtensionContext.subscriptions`; no lifecycle intent enters Protocol or Webview and
   T1603 Onboarding remains unchanged.
 - Delete confirmation names only the Provider and generic consequence. The command does not read
-  the Secret before confirmation, and `SecretStorage.delete` remains idempotent when no value exists.
-- Rotation uses a new password-masked input with no prefill. It invokes `SecretStorage.store` once
-  after validation, without a preceding read/delete. A successful store is the replacement commit
-  boundary; a rejected store is a failure and the old value remains authoritative.
-- Save, delete, and rotate operations are serialized per Provider from prompt start through result
-  notification. The queue stores only promises. Different Provider queues are independent.
+  the Secret before confirmation. A cancellation before any storage call guarantees no side effect.
+  After confirmation it asks the existing Host-owned presence adapter once, which compares the
+  unavoidable `SecretStorage.get` result only with `=== undefined` and immediately discards it. An
+  absent result produces a fixed no-op and does not call `ApiKeySecretStorage.delete`; a non-absent
+  result permits exactly one adapter delete call. The official API does not promise idempotent delete;
+  a fulfilled adapter call is a completed command outcome and a rejected call is indeterminate,
+  followed by presence-only reconciliation and fixed safe retry/settings guidance.
+- Rotation uses a new password-masked input with no prefill. It invokes the existing
+  `ApiKeySecretStorage.save` once after validation, without a preceding read/delete. A fulfilled
+  adapter save is the replacement commit boundary; a rejected call is indeterminate because the
+  official API only promises `Thenable<void>` and offers no transaction, compare-and-swap, or rollback
+  guarantee. The command does not read the Secret, compensate, or claim that the old value remains;
+  it performs presence-only reconciliation and gives fixed safe retry/settings guidance. Cancellation
+  before the adapter call guarantees no side effect; once the call starts, it cannot be reported as a
+  reversible cancellation.
+- Save, delete, rotate, and presence operations are serialized per Provider from prompt start through
+  mutation settlement, presence-only reconciliation, and result notification, including T1603 status
+  reads. The queue is released only after settlement and reconciliation. It stores only promises;
+  different Provider queues are independent. Disposal or an obsolete generation closes the result
+  gate: late settlements are still observed for idempotent cleanup but cannot emit notifications,
+  Webview status, or logs. The underlying SecretStorage Thenable is not cancellable.
 - Presence/status paths use a dedicated boolean projection. They never return or inspect Secret
   length, prefix, suffix, hash, or other derived data at the caller boundary.
 
@@ -46,9 +61,11 @@ changes. Command Palette workflows are already discoverable and preserve the Hos
 
 ### Read/delete/store during rotation
 
-Rejected. Clearing the old value before the new write would lose a working credential when the write
-fails. A single `SecretStorage.store` is the only available replacement operation; its fulfilled
-result is treated as the commit boundary.
+Rejected. Clearing the old value before the new write introduces a known missing state before the
+replacement request settles and cannot be repaired safely when the write is rejected. A single
+`ApiKeySecretStorage.save` is the only available replacement operation; it maps to one underlying
+`SecretStorage.store`, whose fulfilled result is treated as the commit boundary while a rejected
+result remains indeterminate because the API has no rollback guarantee.
 
 ### Use one global queue for all Providers
 
@@ -59,8 +76,11 @@ smaller user-visible impact.
 ## Consequences
 
 - The command IDs and their titles are public Extension contribution contracts and must remain stable.
-- Tests must cover cancellation, storage failure, absent-key deletion, concurrent same-Provider
-  commands, and inspection of all user-facing/logged text for credential leakage.
+- Tests must cover pre-side-effect cancellation, fulfilled and rejected adapter calls (including the
+  indeterminate outcome and presence-only reconciliation), absent-key delete no-op without an adapter
+  delete call, concurrent same-Provider save/delete/rotate/presence commands through settlement and
+  reconciliation, disposal/generation late-settlement suppression, and inspection of all
+  user-facing/logged text for credential leakage.
 - No Protocol, Webview, Core, Provider SDK, or persisted-data changes are required for T1604.
 - Any future lifecycle surface outside Host commands requires a new change-control decision.
 
@@ -72,5 +92,7 @@ smaller user-visible impact.
 
 These official references were resolved and queried through Context7 on 2026-08-11. The API
 specifies `undefined` for dismissed input, `undefined` for an unselected message item, and
-`SecretStorage.get` returning `undefined` for an absent key; it does not provide a compare-and-swap
-operation, so T1604 keeps replacement atomic at the single fulfilled `store` call boundary.
+`SecretStorage.get` returning `undefined` for an absent key. `store` and `delete` only promise
+`Thenable<void>`; they do not provide transaction, compare-and-swap, rollback, or post-rejection
+state guarantees. T1604 therefore treats only a fulfilled call as a commit/absence observation and
+handles rejected calls as indeterminate with presence-only reconciliation.

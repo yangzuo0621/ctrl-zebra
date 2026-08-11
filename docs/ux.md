@@ -49,6 +49,13 @@ CtrlZebra 应让用户在不理解内部 Agent 状态机的情况下完成以下
   已完成、已取消或失败的固定安全结果；取消不是失败，失败后保留原状态并保留可重试操作。
   配置错误、SecretStorage 失败、模型发现不可用和未知失败分别使用稳定的下一步，不显示
   原始错误、端点、授权材料或 Provider 响应。
+- T1604 的删除和轮换不进入上述 Onboarding action。Host Command Palette 命令在 storage 调用前
+  取消时保证没有调用和状态副作用；调用开始后不把取消伪装成可回滚结果。删除先执行 presence-only
+  查询：明确 absent 显示固定 no-op 且不调用 delete；非 absent 才调用一次 adapter delete。fulfilled
+  后显示对应的已提交/已删除结果；rejected 后显示“状态无法确认”及固定的重试或打开设置下一步，
+  并仅使用布尔存在性 reconciliation，不声称旧值仍在或已删除。Provider 身份可显示在删除确认中，
+  但 Secret、长度、前后缀和任何推断信息不可见。取消、dispose 或过期 generation 后不发布迟到通知或
+  status；底层不可取消的 SecretStorage Thenable 由 Host 等待结算并安全清理队列。
 - 空状态的所有按钮可仅用键盘操作，焦点顺序与视觉顺序一致；状态刷新或错误不得抢焦点。
   动作结束后焦点返回触发按钮，触发按钮消失时只将焦点移到空状态标题。约 300px 窄侧栏、
   200% 缩放、长本地化文案和四类 VS Code 主题下，缺失项、主要动作、错误和消息输入仍可见
