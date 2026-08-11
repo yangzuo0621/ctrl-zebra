@@ -63,6 +63,7 @@ export function createOnboardingStore(
         "open-settings": host.openProviderSettings,
       }[action];
       if (dispatch === undefined) return false;
+      statusRequestId = undefined;
       set({
         pendingAction: { requestId, action },
         actionOutcome: undefined,

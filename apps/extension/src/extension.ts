@@ -357,29 +357,43 @@ export function activate(context: ExtensionContext): void {
         }
       },
       async run(action): Promise<ProviderOnboardingActionResult> {
-        try {
-          if (action === "open-settings") {
+        if (action === "open-settings") {
+          try {
             await commands.executeCommand("workbench.action.openSettings", "ctrlZebra.provider");
             return { status: "completed" };
+          } catch {
+            return { status: "failed", code: "internal" };
           }
+        }
 
-          if (action === "select-model") {
+        if (action === "select-model") {
+          try {
             return (
               (await commands.executeCommand<ProviderOnboardingActionResult>(
                 selectModelCommandId,
               )) ?? { status: "failed", code: "internal" }
             );
+          } catch {
+            return { status: "failed", code: "internal" };
           }
+        }
 
+        let commandId: string;
+        try {
           const settings = workspace.getConfiguration("ctrlZebra.provider");
           const provider = readProviderOnboardingConfiguration({
             get: (setting) => settings.get(setting),
           }).provider;
-          const commandId = {
+          commandId = {
             openai: saveOpenAIApiKeyCommandId,
             gemini: saveGeminiApiKeyCommandId,
             "openai-compatible": saveOpenAICompatibleApiKeyCommandId,
           }[provider];
+        } catch {
+          return { status: "failed", code: "configuration" };
+        }
+
+        try {
           return (
             (await commands.executeCommand<ProviderOnboardingActionResult>(commandId)) ?? {
               status: "failed",
@@ -387,7 +401,7 @@ export function activate(context: ExtensionContext): void {
             }
           );
         } catch {
-          return { status: "failed", code: "configuration" };
+          return { status: "failed", code: "internal" };
         }
       },
     });
