@@ -45,6 +45,44 @@ explicit user choice.
   projection reports one of them, it must preserve cancellation as distinct from failure and expose
   only bounded user-safe status, never raw provider text.
 
+## Provider Onboarding Display and Actions (T1603)
+
+T1603 adds a small, additive Provider onboarding contract for the empty Webview state. The Host
+remains authoritative for Provider settings, model selection, and SecretStorage. The Webview receives
+only a validated display projection and sends intent-only actions; it never receives or supplies a
+command ID, endpoint, model ID, Secret reference, credential value, authorization header, workspace
+or Session content.
+
+- `webview/provider-status` is the strict status request `{ protocolVersion, type:
+  "webview/provider-status", requestId }`. It has no payload. The Host reads the active Provider
+  configuration and returns the bounded `extension/provider-status` response; opening the Webview,
+  restoring a Session, and starting a Run do not perform a Provider request.
+- `webview/provider-save-key`, `webview/provider-select-model`, and
+  `webview/provider-open-settings` are separate strict intent messages containing only the common
+  envelope. The Host resolves the active Provider itself, then invokes the existing T1601/T1602
+  host workflow (or the VS Code settings command for the last intent). A stale Webview projection
+  cannot select a different Provider or Secret name.
+- `extension/provider-status` is strict and contains only `{ protocolVersion, type:
+  "extension/provider-status", requestId, provider, apiKeyConfigured, modelConfigured }`, where
+  `provider` is the closed enum `"openai" | "gemini" | "openai-compatible"` and both status fields
+  are booleans. `apiKeyConfigured` means the active Provider's credential requirement is satisfied;
+  a validated loopback OpenAI-Compatible endpoint may therefore report `true` without a stored key.
+  `modelConfigured` means that a valid non-empty model setting exists; the model ID itself never
+  crosses this boundary. No endpoint or capability state is included. This projection is not a
+  configuration instruction and is ignored when its `requestId` is stale or unrelated.
+- `extension/provider-action` reports one bounded outcome for a matching action request. The
+  strict `action` enum is `"save-key" | "select-model" | "open-settings"`; `status` is
+  `"completed" | "cancelled" | "failed"`. A failed response carries only one stable code from
+  `"configuration" | "storage" | "unavailable" | "internal"` and a fixed, user-safe message of
+  at most 256 characters; completed and cancelled responses carry no error details. Cancellation
+  is distinct from failure and performs no configuration or SecretStorage side effect. The Host
+  sends a fresh `extension/provider-status` snapshot after an action settles without exposing the
+  action's input or third-party response.
+- The Host maps invalid input, configuration errors, SecretStorage failures, unavailable model
+  discovery, and unexpected failures to those fixed categories. Raw Provider responses, SDK errors,
+  endpoint URLs, settings values, credentials, and authorization material are never copied into a
+  message. These messages do not create a Run error or Session event.
+
 ## Session and Run Commands
 
 The multi-turn contract is additive within protocol version `1`. The Extension and Webview are shipped

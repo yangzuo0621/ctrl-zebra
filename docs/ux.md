@@ -25,6 +25,33 @@ CtrlZebra 应让用户在不理解内部 Agent 状态机的情况下完成以下
 - 工作区信任、凭据和模型配置的说明分层呈现，避免一次暴露全部技术细节。
 - 用户完成配置后无需重载 Webview 或重新输入草稿即可继续。
 
+#### Provider 可操作空状态（T1603）
+
+- Onboarding 从 Host 接收一个严格、非权威的 Provider 展示投影，只包含当前 Provider 的
+  `openai`、`gemini` 或 `openai-compatible` 标识，以及 `apiKeyConfigured` 和
+  `modelConfigured` 两个布尔值。界面可以据此明确显示“缺少 API key”“缺少模型 ID”或“已
+  配置”；不显示模型 ID、端点、Secret 名称、密钥任何部分或第三方响应。
+- 当 `apiKeyConfigured` 为 false 时显示“保存 API key”按钮；当 `modelConfigured` 为 false
+  时显示“选择模型”按钮。OpenAI-Compatible 的已验证本地 loopback 端点可以在没有 Secret
+  时报告 API key requirement 已满足。三个 Provider 都显示“打开设置”入口，以便修复端点、
+  能力或其他不在展示投影中的配置错误；T1603 不提供凭据轮换或删除入口。
+- 状态矩阵必须保持可操作：
+
+  | Provider 状态 | API key | 模型 | 空状态必须说明和提供的操作 |
+  |---|---|---|---|
+  | 无配置 | 缺少 | 缺少 | 同时说明两项缺失；保存 API key、选择模型、打开设置 |
+  | 部分配置 | 缺少或已满足 | 缺少或已配置 | 只说明实际缺失项；保留对应修复操作和打开设置 |
+  | 已配置 | 已满足 | 已配置 | 说明可开始对话；仍提供选择模型和打开设置，不显示 Secret |
+
+- 保存、选择和设置动作由 Host 执行，Webview 只发送对应的严格意图消息。每个动作显示
+  已完成、已取消或失败的固定安全结果；取消不是失败，失败后保留原状态并保留可重试操作。
+  配置错误、SecretStorage 失败、模型发现不可用和未知失败分别使用稳定的下一步，不显示
+  原始错误、端点、授权材料或 Provider 响应。
+- 空状态的所有按钮可仅用键盘操作，焦点顺序与视觉顺序一致；状态刷新或错误不得抢焦点。
+  动作结束后焦点返回触发按钮，触发按钮消失时只将焦点移到空状态标题。约 300px 窄侧栏、
+  200% 缩放、长本地化文案和四类 VS Code 主题下，缺失项、主要动作、错误和消息输入仍可见
+  且可用，状态不只靠颜色或图标表达。
+
 #### Provider 模型选择与手工降级
 
 - 用户从 Command Palette 明确执行 `CtrlZebra: Select Model` 后，Host 才读取当前 Provider
