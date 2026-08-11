@@ -8,8 +8,11 @@ export {
   type McpDisconnectOutcome,
   type McpFailedState,
   type McpInactiveState,
+  type McpNegotiatedProtocol,
   type McpProcessTermination,
   type McpPromptDiscoveryContext,
+  type McpProtocolEra,
+  type McpProtocolMode,
   type McpResourceDiscoveryContext,
   type McpServerCapabilities,
   type McpServerIdentity,
@@ -49,6 +52,7 @@ export {
   maxMcpToolTextBytes,
   maxMcpToolTextCodePoints,
   maxMcpToolTextItems,
+  mcpLegacyProtocolVersion,
   mcpProtocolVersion,
 } from "./contracts.js";
 export { ControlledMcpClient, McpToolDiscoveryError } from "./controlled-mcp-client.js";
