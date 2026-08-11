@@ -347,7 +347,10 @@ arguments, cwd, configuration scope, credentials, or transport details.
   server: McpServerIdentityDto,
   generation: positive safe integer,
   status: "disconnected" | "connecting" | "connected" | "disconnecting" | "failed",
-  protocolVersion?: "2026-07-28",
+  configuredMode: "modern-only" | "dual",
+  negotiated?:
+    { era: "modern", version: "2026-07-28" }
+    | { era: "legacy", version: "2025-11-25" },
   capabilities: {
     tools: boolean,
     toolsListChanged: boolean,
@@ -362,13 +365,16 @@ arguments, cwd, configuration scope, credentials, or transport details.
 }
 ```
 
-`protocolVersion` exists only in `connected`; projected capabilities are all false before a
-successful modern `server/discover` exchange. Extra advertised Server capabilities are absent
-rather than copied into an open map. The Schema refines this object by status: `connected` requires
-the exact protocol version and forbids `error`; `failed` requires `error`, omits the protocol
-version, and has all capabilities false; all other states omit both protocol version and error and
-expose no usable capability. `generation` is an opaque freshness fence for consumers, not
-authorization.
+`configuredMode` is present in every status and reflects the validated user setting. `negotiated` is
+present only in `connected`; it is the exact mutually supported era/version pair and never a
+user-selected or SDK enum value. Projected capabilities are all false before the complete selected
+handshake. Extra advertised Server capabilities are absent rather than copied into an open map. The
+Schema refines this object by status: `connected` requires one exact `negotiated` pair and forbids
+`error`; `failed` requires `error`, omits `negotiated`, and has all capabilities false; all other
+states omit both `negotiated` and `error` and expose no usable capability. `generation` is an opaque
+freshness fence for consumers, not authorization. The modern-only `protocolVersion` field from the
+T1803 contract is replaced by this T1804 negotiated DTO after the constraint PR; the implementation
+PR must not accept both shapes or silently infer an era.
 
 `McpErrorDto` contains only `{ code, message }`. `message` is a fixed user-safe string of at most
 1,024 code points. The stable closed code set is:
@@ -684,8 +690,8 @@ Webview:
   server: McpServerIdentityDto,
   generation: positive safe integer,
   connectionStatus: "failed",
-  configuredMode: "modern-only",
-  supportedVersions: ["2026-07-28"],
+  configuredMode: "modern-only" | "dual",
+  supportedVersions: ["2026-07-28"] | ["2026-07-28", "2025-11-25"],
   connectionEstablished: false,
   nextStep: "open-settings"
 }
@@ -706,10 +712,12 @@ new explicit `refresh-tools`. `tool-discovery-failure` contains no `skippedTools
 whole-operation failures therefore reveal no untrusted name. The `clear` variant is the explicit
 replacement for a successful refresh with no diagnostic.
 
-The `protocol-incompatible` variant is emitted only with a failed `extension/mcp-connection`. It
-intentionally has no probe, fallback, selected-era, capability, or success field: before the
-handshake completes, the UI must not describe detection or fallback as successful. T1804 may extend
-the mode/version closed unions only through its reviewed dual-era contract.
+The `protocol-incompatible` variant is emitted only with a failed `extension/mcp-connection`. Its
+`configuredMode` and `supportedVersions` are closed facts derived from the validated setting, not
+from Server output. It intentionally has no probe, fallback, selected-era, capability, timing, or
+success field: before the handshake completes, the UI must not describe detection or fallback as
+successful. A connected message carries the negotiated era/version separately; the diagnostic never
+claims one.
 
 The Extension-to-Webview envelope is strict and accepts no additional properties:
 
@@ -753,6 +761,63 @@ refresh-to-clear recovery, connection-driven clear on disconnect/generation/canc
 and Server-identity transitions,
 stale races, protocol-incompatible no-success claims, no secrets/raw errors, and the ordinary
 connected path with no diagnostics.
+
+### Dual-era configuration and negotiated projection (T1804)
+
+The T1804 contract adds a strict configuration boundary without changing the Protocol envelope
+version. `ctrlZebra.mcp.server` is one machine-scoped local `stdio` object. Version `1` has the
+existing `{ version, serverId, displayName, command, args }` shape and means `modern-only`; version
+`2` requires the additional closed `protocolMode: "modern-only" | "dual"`. Unknown versions,
+modes, fields, transports, credentials, and malformed values are rejected as
+`configuration-invalid`. An existing version `1` value is never silently rewritten or broadened;
+the user must explicitly migrate to version `2` and then select `dual`.
+
+The mode selects a closed version set:
+
+| Configured mode | Accepted versions | Bootstrap |
+|---|---|---|
+| `modern-only` | `2026-07-28` | one bounded `server/discover`; no legacy initialize |
+| `dual` | `2026-07-28`, `2025-11-25` | modern probe first; one legacy initialize fallback only for a specification-classified non-modern response or bounded timeout |
+
+The Protocol layer never receives SDK lifecycle messages. It receives one complete connected
+projection only after the selected handshake validates, with `configuredMode` and
+`negotiated: { era, version }`. The pair is exactly `modern/2026-07-28` or
+`legacy/2025-11-25`. Connecting, disconnecting, disconnected, and failed projections contain no
+negotiated pair or usable capabilities. A well-formed `DiscoverResult` locks modern: an advertised
+`2026-07-28` continues modern, while a missing/unsupported advertised version is
+`protocol-incompatible` with no fallback. A recognized modern JSON-RPC error also locks modern: a
+controlled advertised `2026-07-28` continues/selects modern, while a missing/unsupported advertised
+version is `protocol-incompatible` with no fallback. Only a specification-defined non-modern response
+or bounded probe timeout in `dual` can enter one legacy handshake. After independent overflow checks,
+a syntactically/structurally malformed or shape-validation-failing response/error maps to
+`malformed-message`; a structurally valid response/error outside the closed recognized-modern or
+defined non-modern classifications (including unknown future or otherwise unclassified values) maps
+to `protocol-incompatible`. Both are no-fallback outcomes. Cancellation, process exit, trust loss, or
+cleanup failure cannot trigger fallback. Late probe results are ignored by generation. The complete
+eligible/forbidden decision matrix is authoritative in
+[Architecture](architecture.md#closed-modern-first-fallback-decision-matrix-t1804).
+
+`McpErrorDto` remains a closed, user-safe code/message object. Unsupported versions use
+`protocol-incompatible`; malformed protocol uses `malformed-message`; rejected capabilities use
+`capability-unsupported`; process, cleanup, and other failures use their existing stable codes.
+For the modern-first boundary, syntactically/structurally malformed or shape-validation-failing
+response/error values use `malformed-message`, while structurally valid values outside the closed
+recognized-modern or defined non-modern classifications (including unknown future or unclassified
+values) use `protocol-incompatible`; neither permits fallback.
+The Host may classify failures internally as `modern-version-unsupported`,
+`legacy-version-unsupported`, `probe-timeout-legacy-failed`, `malformed-protocol`, or
+`capability-rejected`, but these names are not open wire values. Internal probe/fallback
+classifications never add a raw error, JSON-RPC code, timing, Server data, or fallback-attempt flag
+to the DTO. The only protocol-incompatible recovery facts are the
+configured mode, its closed supported-version list, `connectionEstablished: false`, and the fixed
+`open-settings` next step.
+
+Persisted MCP events may include the strict historical provenance
+`{ configuredMode, negotiatedEra, negotiatedVersion }` after a successful connection. It is not a
+connection snapshot, capability claim, approval, retry token, or reconnection instruction. No
+configuration, probe/fallback state, process detail, credential, raw error, or unbounded protocol
+value crosses this boundary. The Protocol schema and compatibility fixtures for these unions are
+implemented after the T1804 constraint PR is merged.
 
 ### Resource and Resource Template projections
 

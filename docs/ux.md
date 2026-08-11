@@ -316,18 +316,19 @@ MCP 作为当前聊天的渐进披露辅助能力，不成为默认视觉焦点�
 
 ### 11.1 配置、连接与断开
 
-最小路径是：打开 MCP 区域 → 查看用户级配置说明或打开设置 → 显式选择“连接” → 查看完整
-Server 启动操作和外部进程警告 → 批准或拒绝 → 查看协商后的 Server 身份、协议版本、能力和
-状态。配置缺失或无效时，连接入口解释具体缺失项并提供打开用户设置的操作，不要求用户阅读
-日志或手工编辑未知 JSON。
+最小路径是：打开 MCP 区域 → 查看用户级配置说明或打开设置 → 确认 configured mode
+（`modern-only` 或 `dual`）→ 显式选择“连接” → 查看完整 Server 启动操作和外部进程警告 →
+批准或拒绝 → 查看协商后的 Server 身份、era/version、能力和状态。配置缺失或无效时，连接
+入口解释具体缺失项并提供打开用户设置的操作，不要求用户阅读日志或手工编辑未知 JSON。
 
 - MCP 区域默认折叠或紧凑显示在对话次级位置；待处理启动审批、连接失败或清理失败可提高视觉
   优先级，但不覆盖 Composer、活动 Run 或普通聊天错误。
 - “连接”永远是用户动作。激活、恢复会话、打开侧栏或模型提到 Tool 都不显示伪连接进度或自动
   启动。连接中可以取消；失败后只提供显式重试，不倒计时或静默重连。
-- 连接卡显示配置的 Server 名称、固定协议 `2026-07-28`、`connecting/connected/
-  disconnecting/failed` 的本地化状态及 Tools、Resources/Templates、Prompts 可用性。额外或未
-  支持能力不作为可操作入口。
+- 连接卡显示配置的 Server 名称、configured mode、`connecting/connected/disconnecting/failed`
+  的本地化状态及 Tools、Resources/Templates、Prompts 可用性。只有 connected 才显示实际
+  negotiated era/version：`modern / 2026-07-28` 或 `legacy / 2025-11-25`。额外或未支持能力不
+  作为可操作入口。
 - 配置在连接期间改变时显示“配置已更改；断开后重新连接生效”，不静默替换进程。断开按钮在
   连接存活时始终可达；断开先让功能入口失效，再等待清理。无法确认进程树终止必须明确警告，
   不能显示为普通“已断开”。
@@ -404,9 +405,9 @@ MCP 诊断是连接卡片中的次级、可操作状态，不改变连接、能�
   截断；Webview 再次防御性按同一键去重。
   截断时显示固定“部分被跳过的 Tool 未显示”说明，不猜测总数或遗漏名称。重复诊断、旧
   generation、过期 sequence 和同 sequence 冲突不会改变当前内容或产生新的提示。
-- `protocol-incompatible` 只显示“配置模式：modern-only”“支持版本：2026-07-28”和固定的
-  “打开设置/更新 Server 后重新连接”下一步，并保持连接状态为失败。连接完成前不得显示
-  探测成功、回退成功、已协商版本或可用能力；不得暗示双纪元（由 T1804 定义）。
+- `protocol-incompatible` 只显示 configured mode、该模式的闭合支持版本列表和固定的“打开
+  设置/更新 Server 后重新连接”下一步，并保持连接状态为失败。连接完成前不得显示探测成功、
+  回退成功、已协商版本、回退时序或可用能力；不得把双纪元配置误报为已协商 legacy。
 - 恢复动作是明确的用户操作：`refresh-tools`、`reconnect` 或 `open-settings`。它们不能自动
   连接、静默重试、复用启动或 Tool 审批，也不能在取消、断开或清理失败后恢复旧能力。
 
@@ -422,3 +423,25 @@ Tool 的路径不显示诊断区域或恢复按钮，也不播报失败。
 恢复按钮和“显示更多/截断”状态均可仅用键盘操作，按钮具备可见焦点和原因说明；刷新、轮询
 和迟到事件不得抢焦点、重置选择或折叠用户正在阅读的目录。约 300px、200% 缩放以及四类
 VS Code 主题下，原因、操作和失败状态必须可读且不依赖颜色或图标。
+
+### 11.7 双纪元配置与迁移（T1804）
+
+- 版本 `1` 的既有设置继续显示并运行 `modern-only`；升级不会自动写入版本 `2`，也不会因
+  Server 响应而静默进入 dual。用户必须先确认迁移，再选择 `modern-only` 或 `dual`。
+- `modern-only` 的固定支持版本是 `2026-07-28`；`dual` 的闭合集是 `2026-07-28` 和
+  `2025-11-25`。设置页明确显示模式含义、仅支持本地 stdio，以及不支持 HTTP、OAuth、远程
+  Server、多 Server、自动连接、自动重启和新增 Client 原语。
+- 配置改变会显示“配置已更改；断开后重新连接生效”，并使当前连接/目录/审批失效；不在
+  连接中切换 era，不复用启动或 Tool 审批。连接始终是用户动作。
+- 探测和回退是连接卡片内部的不可见实现状态。UI 只在完整握手成功后显示 negotiated
+  era/version；失败只显示稳定错误、configured mode、支持版本和固定恢复动作，不显示探测
+  响应、超时、回退尝试、时序、Server 原始错误或“回退成功”文案。DiscoverResult 或可识别
+  modern JSON-RPC error 都锁定 modern；其缺少受支持 `2026-07-28` 时显示
+  `protocol-incompatible`，绝不暗示 legacy 回退。语法/结构错误或响应/错误形状校验失败显示
+  `malformed-message`；结构有效但不属于闭合的 recognized-modern/defined-non-modern 分类（含
+  unknown future 或未分类值）显示 `protocol-incompatible`；两者均不触发回退。
+- 连接状态与恢复组合保持严格：未连接/失败时没有可用能力；connected 才显示对应 era 的
+  Tools、Resources/Templates、Prompts。取消、断开、Trust 丢失、清理失败或世代变化立即清空
+  旧目录、诊断、恢复控件和 negotiated 值，迟到事件不改变界面。
+- 配置错误、未知模式、额外字段、旧/未来版本或不支持传输均显示固定的
+  `configuration-invalid` 文案，并提供“打开设置”；不要求用户粘贴命令、环境或原始 JSON。

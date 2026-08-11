@@ -29,8 +29,10 @@ Templates), and Prompts.
 
 ### Protocol and SDK
 
-- CtrlZebra targets and accepts only protocol version `2026-07-28` in stage 14. Older versions and
-  unknown future versions fail connection negotiation rather than automatically changing behavior.
+- Stage 14 targets and accepts only protocol version `2026-07-28`. Older versions and unknown future
+  versions fail connection negotiation rather than automatically changing behavior. ADR 0002 and
+  the T1804 supplement below supersede this protocol-era/version choice for the reviewed version-2
+  dual-era configuration; the remaining stage 14 boundaries stay accepted.
 - The implementation adopts the official `@modelcontextprotocol/client` package and initially pins
   it to exactly `2.0.0`, with its transitive `@modelcontextprotocol/core` remaining private to the
   SDK. Dependency declarations use no caret, tilde, or `latest` tag.
@@ -66,10 +68,11 @@ explicitly starts and disconnects it. Activation, restore, model output, list no
 background work cannot connect or retry. Closing a generation shuts the result gate before abort
 and cleanup, so late data has no Core, persistence, Protocol, or UI effect.
 
-The pinned modern era connects through `server/discover`. It does not send the legacy
+The stage 14 modern era connects through `server/discover`. It does not send the legacy
 `initialize` / `notifications/initialized` exchange, which the SDK reserves for pre-`2026-07-28`
 protocols. Capabilities remain unavailable until discovery completes and the exact pinned version
-is accepted.
+is accepted. T1804 adds the separately reviewed dual-era path without changing these ownership and
+security boundaries.
 
 ### Capabilities and content
 
@@ -322,7 +325,7 @@ T1803 adds a separate additive `extension/mcp-diagnostics` message rather than w
 successful connection or Tool-catalog DTOs. This preserves the invariant that accepted Tool state
 is authoritative only in the catalog and that a failure cannot masquerade as an empty success. The
 message carries only a bounded, de-duplicated prefix of already-validated Tool names and the closed
-Schema rejection reasons, a stable whole-operation error code, or the fixed modern-only/version
+Schema rejection reasons, a stable whole-operation error code, or the fixed configured-mode/version
 compatibility facts. It never carries raw MCP/SDK errors, Schema values or paths, command, environment,
 stderr, credentials, or arbitrary Server metadata.
 
@@ -335,9 +338,9 @@ refresh and recovery controls on every authoritative `extension/mcp-connection` 
 Server/generation change, cancellation, Trust-loss or disposal projection; it never waits for clear.
 Recovery is limited to explicit `refresh-tools`, `reconnect`,
 and `open-settings` intents, each reusing existing trust, approval, cancellation and generation
-checks. Protocol incompatibility reports only the configured `modern-only` mode, supported
-`2026-07-28` version, and a fixed next action; it has no probe, fallback, or success claim. Future
-dual-era fields remain owned by ADR 0002/T1804.
+checks. Protocol incompatibility reports only the configured mode, its closed supported-version list,
+and a fixed next action; it has no probe, fallback, or success claim. Dual-era fields remain owned
+by ADR 0002/T1804.
 
 The projection uses a strict discriminated union: connected `degraded` and refresh-all-rejected
 variants allow only `refresh-tools`; failed initial all-rejected and whole-operation variants allow
@@ -364,6 +367,54 @@ authority with untrusted diagnostic content and make stale refresh errors hard t
 Accepted. A strict discriminated projection keeps success, failure and recovery semantics explicit,
 allows older clients to ignore the additive message, and gives the Host/Webview one generation- and
 sequence-fenced surface for truncation, redaction, deduplication and accessibility behavior.
+
+## T1804 supplement: dual-era configuration and compatibility boundary
+
+ADR 0002 supersedes the original modern-only protocol-era decision. This supplement records the
+cross-boundary consequences without rewriting the stage 14 module, process, capability, approval,
+content, or persistence boundaries above.
+
+- The only supported mode values are `modern-only` and `dual`. Existing `version: 1` settings remain
+  modern-only and accept only `2026-07-28`; a reviewed `version: 2` setting requires an explicit
+  `protocolMode` field. Migration and selecting dual are user actions and never happen implicitly
+  on extension upgrade or in response to a Server.
+- `modern-only` performs one bounded `server/discover` exchange. `dual` probes modern first and may
+  enter one legacy `initialize` / `notifications/initialized` exchange only for a
+  specification-classified non-modern response or bounded timeout. A well-formed `DiscoverResult`
+  locks modern: a bounded advertised `2026-07-28` continues modern, while missing/unsupported
+  versions fail `protocol-incompatible` without fallback. A recognized modern JSON-RPC error has
+  the same lock: a controlled advertised `2026-07-28` continues/selects modern, while a
+  missing/unsupported version fails `protocol-incompatible` without fallback. After independent
+  overflow checks, a syntactically/structurally malformed or shape-validation-failing response/error
+  maps to `malformed-message`; a structurally valid response/error outside the closed recognized-
+  modern or defined non-modern classifications (including unknown future or otherwise unclassified
+  values) maps to `protocol-incompatible`. Neither authorizes fallback. Cancellation, process exit,
+  trust loss, and cleanup failure also never authorize fallback. A generation gate discards late
+  probe data; the closed eligible/forbidden matrix is recorded in Architecture and mirrored by
+  Protocol/Security.
+- A successful connected Protocol projection carries configured mode plus one exact negotiated
+  `{ era, version }` pair (`modern/2026-07-28` or `legacy/2025-11-25`). Non-connected and failed
+  projections carry no selected era or capabilities. Diagnostics expose only the closed configured
+  mode/version facts and stable next action; probe, fallback, timing, raw SDK/JSON-RPC data, and
+  compatibility success claims remain invisible before connection succeeds.
+- Both eras use the same selected-workspace identity, startup approval, exact Tool approval,
+  cancellation, generation, limits, process-tree cleanup, and rejected Server-to-Client capability
+  matrix. Era selection is not an authorization scope and cannot add Roots, Sampling, Elicitation,
+  Tasks, logging, completion, subscriptions, or experimental capabilities.
+- New completed MCP events may retain strict historical provenance
+  `{ configuredMode, negotiatedEra, negotiatedVersion }`; old events may omit it. Provenance cannot
+  reconnect, renegotiate, replay, approve, or seed a live connection. Configuration, failed
+  negotiation, probe/fallback state, process data, credentials, and raw errors remain outside
+  persistence.
+
+This is the T1804 documentation/configuration gate. Its implementation PR must add strict config and
+Protocol schemas plus deterministic, no-network/no-secret modern/legacy compatibility fixtures and
+tests for the closed matrix: malformed/validation-failing response/error to `malformed-message`,
+structurally valid unknown/unclassified response/error to `protocol-incompatible`, recognized modern
+error version selection, defined non-modern fallback, and bounded-timeout fallback. It must not
+implement SDK lifecycle in the constraint PR. T1805–T1807 remain responsible for runtime negotiation,
+legacy security handling, Extension migration, Webview integration, persistence wiring, and
+end-to-end evidence.
 
 ## Reviewed primary references
 

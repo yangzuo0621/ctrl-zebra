@@ -302,10 +302,10 @@ forbidden. Encryption does not make an otherwise forbidden reasoning payload acc
 
 ## MCP persistence projection
 
-The projection below is defined for the exact MCP `2026-07-28` stage 14 contract. MCP persistence
-records bounded provenance and conversation-visible outcomes, never a live Client,
-connection capability, or replayable authorization. The user-scoped Server configuration remains in
-VS Code configuration and is not copied into Session storage.
+The projection below covers the stage 14 MCP surface and the T1804 dual-era contract. MCP
+persistence records bounded provenance and conversation-visible outcomes, never a live Client,
+connection capability, probe/fallback state, or replayable authorization. The user-scoped Server
+configuration remains in VS Code configuration and is not copied into Session storage.
 
 ### Additive version `1` events
 
@@ -313,16 +313,18 @@ The existing extensible event envelope admits the following strict additive even
 changing the `v1` directory layout, manifest, Chat Message schema, or existing event meanings:
 
 - `session.mcp-tool-call` contains the existing bounded Tool Call identity and validated JSON input
-  plus strict source `{ serverId, registryName, mcpToolName, generation }`.
+  plus strict source `{ serverId, registryName, mcpToolName, generation }` and, for new records,
+  `provenance`.
 - `session.mcp-tool-result` contains the existing normalized Tool Result plus the same source
   identity. It stores only supported bounded text/structured content and the existing truncation
-  marker, never an SDK result, JSON-RPC error, raw Server error data, or unsupported content.
+  marker and the same optional `provenance`, never an SDK result, JSON-RPC error, raw Server error
+  data, or unsupported content.
 - `session.mcp-resource-attached` contains `{ snapshotId, serverId, uri, mimeType, text,
-  truncated }` for the exact bounded immutable snapshot inserted into the Run context.
+  truncated, provenance? }` for the exact bounded immutable snapshot inserted into the Run context.
 - `session.mcp-prompt-confirmed` contains `{ serverId, promptName, projectedText }`, where
   `projectedText` is the exact bounded ordinary user attachment—including the reviewed argument and
-  source-role provenance labels—sent to the current input flow. Ephemeral preview structure is not
-  duplicated in persistence.
+  source-role provenance labels—sent to the current input flow. New records may include the same
+  `provenance`; ephemeral preview structure is not duplicated in persistence.
 
 All objects are strict and use the identifier, entry, code-point, UTF-8, item, and serialized limits
 owned by [Protocol](protocol.md) and [Security](security.md). A Tool Call and matching Result remain
@@ -336,6 +338,30 @@ stdout, stderr, SDK/JSON-RPC values, Server error data, approvals, and credentia
 `displayName` is not persisted because `serverId` is the stable provenance identity and the current
 configuration label may change independently.
 
+### Negotiated provenance (T1804)
+
+For an operation that completed a successful handshake, `provenance` is the strict bounded object:
+
+```text
+{
+  configuredMode: "modern-only" | "dual",
+  negotiatedEra: "modern" | "legacy",
+  negotiatedVersion: "2026-07-28" | "2025-11-25"
+}
+```
+
+The pair is constrained: `modern` is only `2026-07-28`, and `legacy` is only `2025-11-25`.
+`modern-only` cannot carry legacy provenance. The field is historical evidence for the exact
+Tool/Resource/Prompt outcome; it is never a capability snapshot, approval, retry token, config copy,
+connection identity, or reconnect instruction. Version `1` events written before T1804 may omit the
+field and remain readable; new events write it whenever a negotiated connection exists. Missing
+provenance is not upgraded by guessing or by reading current configuration.
+
+Probe responses, fallback attempts or timing, failed negotiations, process state, command/args/cwd,
+environment, credentials, SDK/JSON-RPC errors, Server metadata, and raw protocol values are never
+persisted. Recovery displays provenance only as bounded historical text and performs no connect,
+probe, fallback, renegotiation, Tool call, Resource read, Prompt get, approval, or catalog refresh.
+
 ### Compatibility and recovery
 
 - A pre-MCP version `1` Session contains none of these events and restores normally with no MCP
@@ -343,9 +369,10 @@ configuration label may change independently.
   source identity, mismatched Tool Call/Result provenance, unsupported content, excessive data, or
   an impossible lifecycle makes the current-version Session corrupt rather than guessed or repaired.
 - The events are additive because the event envelope already admits later dotted types and no
-  existing record meaning changes. A legacy reader may ignore them and retain the history it already
-  understands. Any future change to their field meaning, role projection, identity mapping, or
-  replay semantics requires a new persisted-format decision and compatibility fixtures.
+  existing record meaning changes. A legacy reader may ignore the bounded provenance field and retain
+  the history it already understands. Any future change to its field meaning, role projection,
+  identity mapping, or replay semantics requires a new persisted-format decision and compatibility
+  fixtures.
 - Recovery may display completed MCP Tool outcomes and reconstruct bounded Resource/Prompt ordinary
   context provenance. Persisted generation, snapshot ID, or Tool identity
   is historical evidence only and cannot match, authorize, or seed a new live connection.
@@ -360,9 +387,9 @@ configuration label may change independently.
 
 ### MCP fixtures
 
-Version `1` compatibility fixtures added by the implementation tasks must cover a complete Tool
-Call/Result pair, a truncated Resource snapshot, a confirmed multi-message Prompt projection, a
-pre-MCP Session, an interrupted call without a Result, mismatched Server provenance, unsupported
-content, limit overflow, and tail damage. They use deterministic fake Server identities and content
-and never start a Server or contain a developer configuration, command, path, environment, or real
-credential.
+Version `1` compatibility fixtures added by the implementation tasks must cover complete modern and
+legacy Tool Call/Result provenance, a truncated Resource snapshot, a confirmed multi-message Prompt
+projection, a pre-MCP Session, an interrupted call without a Result, missing/old provenance,
+mismatched Server or era/version provenance, unsupported content, limit overflow, extra fields, and
+tail damage. They use deterministic fake Server identities and content and never start a Server or
+contain a developer configuration, command, path, environment, or real credential.

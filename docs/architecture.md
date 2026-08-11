@@ -363,16 +363,18 @@ The long-term decision and rejected alternatives are recorded in
 [ADR 0001](adr/0001-controlled-mcp-client-boundary.md). MCP is an external protocol adapter, not a
 second Agent Runtime.
 
-[ADR 0002](adr/0002-mcp-dual-era-stdio-compatibility.md) approves a later stage 18 extension for
-explicit modern-only/dual stdio compatibility. Until T1804–T1807 complete, the production contract
-in this section remains the stage 14 modern-only `2026-07-28` implementation; the dual-era tasks
-must update this document before changing runtime behavior.
+[ADR 0002](adr/0002-mcp-dual-era-stdio-compatibility.md) approves the stage 18 extension for
+explicit modern-only/dual stdio compatibility. T1804 records the cross-boundary contract and
+configuration migration in this document; its runtime implementation remains gated on the reviewed
+constraint PR. The user-visible setting and versioned representation are owned by the
+[configuration contract](configuration.md).
 
 ### Package and dependency ownership
 
-- `packages/mcp-client` owns the MCP `2026-07-28` Client lifecycle, capability projection,
-  request correlation, pagination collectors, Server primitive normalization, and all imports from
-  the official MCP TypeScript SDK. Its public entry point exposes only CtrlZebra-owned interfaces,
+- `packages/mcp-client` owns the package-private dual-era Client lifecycle and closed modern/
+  legacy version negotiation (`2026-07-28` and `2025-11-25`), capability projection, request
+  correlation, pagination collectors, Server primitive normalization, and all imports from the
+  official MCP TypeScript SDK. Its public entry point exposes only CtrlZebra-owned interfaces,
   strict plain values, stable errors, and injected ports.
 - The first implementation pins `@modelcontextprotocol/client` to exactly `2.0.0`. Floating ranges,
   `latest`, SDK deep imports outside its documented public subpaths, and direct imports of
@@ -424,10 +426,10 @@ port.
   `failed` owns no usable Client and requires a new explicit connect action; there is no automatic
   retry, health polling, silent restart, or Session-owned connection.
 - The connection controller is the single owner of the SDK Client, process port, request registry,
-  list snapshots, notification handlers, stderr collector, and cleanup promise. For the pinned
-  modern `2026-07-28` era, the SDK completes `server/discover` instead of the legacy
-  `initialize` / `notifications/initialized` exchange. The controller publishes no capabilities
-  until discovery completes and the exact protocol version is accepted.
+  list snapshots, notification handlers, stderr collector, and cleanup promise. For the modern
+  `2026-07-28` era it completes `server/discover`; for the legacy `2025-11-25` era it completes
+  `initialize` / `notifications/initialized`. The controller publishes no capabilities or
+  negotiated-era projection until the complete selected handshake succeeds.
 - Disconnect, Server exit, failed connection negotiation, cancellation of connection setup,
   Extension disposal, or loss of Workspace Trust first closes the delivery gate and increments the
   generation, then aborts requests, closes stdin, and awaits bounded process-tree cleanup. Cleanup
@@ -439,10 +441,32 @@ port.
 
 ### Protocol and capability negotiation
 
-- CtrlZebra constructs the SDK Client with
-  `versionNegotiation: { mode: { pin: "2026-07-28" } }` and accepts only that result. A Server
-  selecting an older version or an unknown future version fails connection negotiation with
-  `protocol-incompatible`; SDK automatic legacy behavior is not a product compatibility promise.
+- The Extension validates one strict machine-scoped configuration before startup. Version `1`
+  settings are interpreted as `protocolMode: "modern-only"`; version `2` requires the explicit
+  closed mode `"modern-only" | "dual"`. Unknown versions, modes, fields, transports, or malformed
+  values fail with `configuration-invalid` and cannot start a process.
+- `modern-only` sends one bounded modern `server/discover` probe and accepts only `2026-07-28`.
+  `dual` sends the same probe first and may enter exactly one legacy `initialize` /
+  `notifications/initialized` exchange only after a specification-classified non-modern response or
+  a bounded probe timeout. A well-formed `DiscoverResult` locks modern: an advertised
+  `2026-07-28` continues modern, while a missing/unsupported advertised version fails
+  `protocol-incompatible` without fallback. A recognized modern JSON-RPC error also locks modern:
+  a bounded advertised `2026-07-28` continues/selects modern, while a missing/unsupported version
+  fails `protocol-incompatible` without fallback. After independent overflow checks, a syntactically
+  or structurally malformed, or shape-validation-failing, response/error maps to `malformed-message`;
+  a structurally valid response/error outside the closed recognized-modern or defined non-modern
+  classifications (including unknown future or otherwise unclassified values) maps to
+  `protocol-incompatible`. Neither classification authorizes fallback. Cancellation, process exit,
+  trust loss, or cleanup failure is terminal and never authorizes fallback. Probe correlation is
+  closed before an eligible fallback; late results are discarded by the generation gate. See the
+  closed decision matrix below.
+- The connected projection contains a CtrlZebra-owned `{ era, version }` pair: modern/
+  `2026-07-28` or legacy/`2025-11-25`. Before this projection is valid, status may expose the
+  configured mode but no selected era, version, capability, probe result, fallback result, timing,
+  SDK value, or Server claim. Public failures remain the small stable error union; the Host may use
+  the closed internal classifications `modern-version-unsupported`, `legacy-version-unsupported`,
+  `probe-timeout-legacy-failed`, `malformed-protocol`, and `capability-rejected`, but never exposes
+  their raw protocol data or fallback-attempt state.
 - The Client declares none of Roots, Sampling, Elicitation, Tasks, experimental capabilities, or
   other Server-to-Client primitives. It installs no handler for them. A Server request for an
   undeclared Client capability receives a bounded stable unsupported response and cannot reach
@@ -458,6 +482,74 @@ port.
 - List-changed handlers are installed only when the corresponding projected Server capability
   advertises them. Notifications schedule one serialized, generation-bound full refresh; they do
   not patch the trusted snapshot from notification content.
+
+### T1804 dual-era contract and migration gate
+
+T1804 changes the protocol-era/version boundary only; it does not add a second runtime, process,
+approval scope, capability set, or persistence authority. Both eras use the same selected workspace,
+immutable executable and ordered arguments, startup approval, minimal environment, process-tree
+cleanup, cancellation, resource limits, generation fence, Tool approval, and Server-to-Client
+request rejection rules. Negotiated era is evidence of a completed handshake, not authorization.
+
+- The public status is a strict discriminated union. Every state includes the configured mode; only
+  `connected` includes the negotiated era/version pair and projected capabilities. `connecting`,
+  `disconnecting`, `disconnected`, and `failed` expose no usable capability or selected era. A
+  failed connection exposes a stable bounded error and fixed next step, never a raw SDK/JSON-RPC
+  value or an assertion that fallback succeeded.
+- The modern-first algorithm owns one probe and at most one legacy initialization per explicit
+  connection attempt. It never retries, respawns, switches era after `connected`, or uses probe
+  timing as a user-visible compatibility result. Cancellation and closed generations accept no late
+  probe, initialization, notification, capability, catalog, persistence, or Webview effect.
+- The allowed capability projection remains Tools, Resources, Resource Templates, Prompts, and
+  already reviewed list-change behavior. Roots, Sampling, Elicitation, Tasks, logging, completions,
+  subscriptions, experimental values, and unknown Server requests are rejected before Core,
+  Provider, Workspace, approval, or persistence. Legacy annotations cannot lower Tool risk.
+- Completed Tool/Resource/Prompt events may carry bounded `{ configuredMode, negotiatedEra,
+  negotiatedVersion }` provenance. The provenance is historical and cannot reconnect, renegotiate,
+  replay, approve, or seed a live generation. Probe/fallback attempts, timing, process data,
+  credentials, raw errors, and configuration objects remain non-persistent.
+
+#### Closed modern-first fallback decision matrix (T1804)
+
+The probe decision is a closed classification, not a generic “try the other handshake” rule. A
+recognized modern JSON-RPC error is modern evidence just like a `DiscoverResult`; it is never treated
+as an eligible legacy signal. The advertised-version value below means only a bounded, validated list
+from the recognized result/error, never an open Server field. After independent overflow checks,
+syntactically/structurally malformed or shape-validation-failing response/error values map only to
+`malformed-message`; structurally valid values outside the closed recognized-modern or defined
+non-modern classifications (including unknown future or otherwise unclassified values) map only to
+`protocol-incompatible`. Both are terminal and never authorize fallback.
+
+| Probe or handshake observation | `modern-only` | `dual` | Stable outcome / projection |
+|---|---|---|---|
+| Well-formed `DiscoverResult` advertises `2026-07-28` | Continue modern; never fallback | Continue modern; never fallback | After the modern handshake completes, connected `modern / 2026-07-28` |
+| Well-formed `DiscoverResult` is modern evidence but its advertised list omits `2026-07-28` or contains only an unknown future version | Do not fallback | Do not fallback | Failed `protocol-incompatible`; no selected era or capability |
+| Recognized modern JSON-RPC error advertises controlled `2026-07-28` | Lock modern and continue/select `2026-07-28`; never fallback | Lock modern and continue/select `2026-07-28`; never fallback | After the modern handshake completes, connected `modern / 2026-07-28` |
+| Recognized modern JSON-RPC error has no controlled supported version or omits `2026-07-28` | Lock modern; do not fallback | Lock modern; do not fallback | Failed `protocol-incompatible`; the error is not a legacy signal |
+| Specification-defined non-modern probe response | Fail; legacy is not allowed | Close probe, then run exactly one legacy `initialize` / `notifications/initialized` | Connected `legacy / 2025-11-25` only after the complete legacy handshake; otherwise stable `protocol-incompatible` |
+| Bounded probe timeout | Fail; legacy is not allowed | Close probe, then run exactly one legacy handshake | Connected legacy only after exact version validation; failed fallback is stable `protocol-incompatible` |
+| Syntactically/structurally malformed or shape-validation-failing response/error | Do not fallback | Do not fallback | Stable `malformed-message`; no downgrade |
+| Structurally valid response/error outside the closed recognized-modern or defined non-modern classifications (including unknown future or otherwise unclassified values) | Do not fallback | Do not fallback | Stable `protocol-incompatible`; no downgrade |
+| Message/stream/descriptor overflow | Do not fallback | Do not fallback | Stable `limit-exceeded`; generation closes |
+| Cancellation, trust loss, process exit, or cleanup failure | Do not fallback | Do not fallback | Cancellation/non-connected status, `workspace-untrusted`, `server-exited`, or `termination-unconfirmed` as applicable |
+| Legacy initialization advertises an unsupported/unknown version | No second lifecycle | No second lifecycle or modern retry | Failed `protocol-incompatible`; one attempt only |
+| Legacy initialization is syntactically/structurally malformed or shape-validation-failing | No second lifecycle | No second lifecycle or modern retry | Failed `malformed-message`; one attempt only |
+
+`DiscoverResult` and a recognized modern error therefore have distinct modern success/error branches,
+but share the same no-fallback lock. Only the two explicitly eligible rows (defined non-modern
+response and bounded timeout) can enter legacy in `dual`; unknown future versions, unclassified
+responses, malformed data, oversize data, cancellation, process exit, trust loss, and cleanup failure
+are never fallback oracles. The T1804 implementation gate must add deterministic, no-network/no-secret
+fixtures and tests for each closed classification, including malformed/validation-failing to
+`malformed-message`, structurally valid unknown/unclassified to `protocol-incompatible`, recognized
+modern error version selection, defined non-modern fallback, and bounded timeout fallback.
+The matrix is mirrored by Protocol’s closed DTOs and Security’s stable error classification. The
+Webview receives only the configured mode, closed supported-version list on failure, or negotiated
+era/version after success; it never receives the decision reason or fallback state.
+
+The T1804 constraint PR intentionally changes documentation and configuration guidance only. Protocol
+schemas, runtime configuration migration, compatibility fixtures, and SDK lifecycle changes are
+implemented by the subsequent gated tasks after this contract is merged.
 
 ### SDK and JSON Schema isolation
 
@@ -654,12 +746,13 @@ approval, capability, connection, or retry grant.
   Exact duplicate publications at a committed or pending sequence are no-ops. A same-sequence
   candidate with a different request ID or payload is discarded as a local diagnostic sequence
   conflict, without changing the rendered state.
-- A protocol-incompatible connection diagnostic contains only the configured mode
-  (`modern-only` in the T1803 contract), the closed supported version set (`2026-07-28`), and a
-  fixed next action. It is emitted with the failed connection state and explicitly records that no
-  connection was established. It never reports a probe, fallback, version selection, or
-  compatibility success before the connection handshake has completed; T1804 may extend the mode
-  and version union only through its own reviewed contract.
+- A protocol-incompatible connection diagnostic contains only the configured mode (`modern-only` or
+  `dual`), the corresponding closed supported version set (`["2026-07-28"]` or
+  `["2026-07-28", "2025-11-25"]`), and a fixed next action. It is emitted with the failed
+  connection state and explicitly records that no connection was established. It never reports a
+  probe, fallback attempt, timing, version selection, or compatibility success before the connection
+  handshake has completed. The negotiated era/version is available only on a successful connected
+  projection.
 - Recovery actions are closed Host-owned intents (`refresh-tools`, `reconnect`, or `open-settings`).
   They do not carry a command, environment, URI, credentials, raw schema, SDK/JSON-RPC error,
   stderr, stack, schema path, or Server metadata. A recovery action only requests the normal
@@ -671,8 +764,9 @@ The strict union constrains recovery combinations: `degraded` is connected plus
 `refresh-tools`; initial `all-rejected` is failed plus `reconnect`; refresh `all-rejected` is
 connected plus `refresh-tools`; initial whole-operation failure is failed plus `reconnect`; refresh
 whole-operation failure is connected plus `refresh-tools`; protocol incompatibility is failed with
-`modern-only`, `2026-07-28`, `connectionEstablished: false`, and `open-settings`; and `clear` has no
-recovery action. The Webview does not infer a legal combination from independent fields.
+the configured mode, its closed version set, `connectionEstablished: false`, and `open-settings`;
+and `clear` has no recovery action. The Webview does not infer a legal combination from independent
+fields.
 
 The diagnostic message is additive and ignored by older clients. It is sent after the authoritative
 connection/catalog state for the same request and generation, but it is never a second half of a
