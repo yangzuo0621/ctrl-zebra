@@ -143,6 +143,6 @@
 - Deleted or replaced old implementations: copied Tool/Prompt/Resource pagination loops and refresh
   lifecycle state in `controlled-mcp-client.ts`, replaced by the two package-private owners.
 - Design deviation: none.
-- PR/branch: branch `codex/eo-005-mcp-catalog-refresh`; commit/PR details pending explicit MANUAL Git
-  authorization and reviewer handoff.
+- PR/branch: [draft PR #220](https://github.com/yangzuo0621/ctrl-zebra/pull/220), branch
+  `codex/eo-005-mcp-catalog-refresh`, implementation commit `52b8744d571e4069a9c8224a7e3e8db80f82acac`.
 - Completion date: 2026-08-13 implementation verification; finalizer owns closure date.
