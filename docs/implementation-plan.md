@@ -237,7 +237,7 @@
 
 ### T1902 完成记录
 
-- 完成摘要：实现 IDE editor context Host adapter、read-only Tool 注册与 bounded editor context projection，覆盖文档、符号、诊断、selection、可见范围和打开编辑器信息，并保留 workspace/trust、取消、预算与硬限制边界。
+- 完成摘要：实现 IDE editor context Host adapter、read-only Tool 注册与 bounded editor/selection projection，覆盖活动编辑器、selection、可见范围和打开编辑器信息；接入 protocol、builtin Tool、registry，并保留 workspace/trust、取消、预算、竞态与硬限制边界，同时遵守 disabled setting boundary（T1905）。
 - 完成证据：[PR #203](https://github.com/yangzuo0621/ctrl-zebra/pull/203)，实现 revision `2bbe094e30cf9aed2fdc14322e1e4601ad75840d`；GitHub Actions run `31548420686` 的 Ubuntu、macOS、Windows 验证均通过（Ubuntu integration tests、coverage gate、build 均通过）；实现 revision 的单元测试、类型检查、格式/lint、构建及 `git diff --check` 均通过。
 - 完成日期：2026-08-12
 - 下一任务：T1903
