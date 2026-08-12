@@ -46,7 +46,7 @@
 | 机会 | 类型 | 优先级 | 建议窗口或依赖 | 状态 |
 |---|---|---:|---|---|
 | [EO-001 Provider endpoint policy](#eo-001-provider-endpoint-policy) | 深化 | P0 | 首个独立 maintenance 窗口 | `已晋升` |
-| [EO-002 Extension test support](#eo-002-extension-test-support) | 复用 | P1 | EO-003、EO-004 前 | `评估中` |
+| [EO-002 Extension test support](#eo-002-extension-test-support) | 复用 | P1 | EO-003、EO-004 前 | `已晋升` |
 | [EO-003 IDE source projection](#eo-003-ide-source-projection) | 深化 | P1 | EO-002 后；新增 IDE 投影前 | `评估中` |
 | [EO-004 Bounded text persistence](#eo-004-bounded-text-persistence) | 深化 | P1 | EO-002 后；Phase 21 数据控制前优先评估 | `评估中` |
 | [EO-005 MCP catalog refresh](#eo-005-mcp-catalog-refresh) | 深化 | P1 | MCP 再次演进或独立 maintenance 窗口 | `评估中` |
@@ -220,3 +220,4 @@ EO-001 可以独立进行。EO-009 和 EO-011 不应阻塞 Phase 20–22。
 |---|---|---|---|---|
 | 2026-08-12 | EO-001–EO-011 | 初始登记 | — | 来自 Phase 19 后的重复实现与 Build vs Buy 审查 |
 | 2026-08-12 | EO-001 | 已晋升为独立 maintenance | [EO-001 maintenance](maintenance/EO-001-provider-endpoint-policy.md) / [PR #215](https://github.com/yangzuo0621/ctrl-zebra/pull/215) | 在最新 `origin/main` 上重新验证两处重复 endpoint/loopback 判定后建立 Extension-private policy seam |
+| 2026-08-12 | EO-002 | 已晋升为独立 maintenance | [EO-002 maintenance](maintenance/EO-002-extension-test-support.md) | 在最新 `origin/main` 上重新验证六份 Extension `TestUri` 与两份 Webview host fake 后建立两个 application-private test-support seam |

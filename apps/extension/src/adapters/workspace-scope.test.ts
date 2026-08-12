@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import type { Uri } from "vscode";
 
+import { createTestUri as uri } from "../test/support/test-uri.js";
 import {
   type CanonicalizeWorkspaceUri,
   WorkspaceScope,
@@ -125,60 +125,4 @@ describe("WorkspaceScope", () => {
 
 function identityCanonicalizer() {
   return vi.fn<CanonicalizeWorkspaceUri>(async (value) => value);
-}
-
-interface UriParts {
-  readonly scheme?: string;
-  readonly authority?: string;
-  readonly path?: string;
-  readonly query?: string;
-  readonly fragment?: string;
-}
-
-class TestUri implements Uri {
-  readonly scheme: string;
-  readonly authority: string;
-  readonly path: string;
-  readonly query: string;
-  readonly fragment: string;
-
-  constructor(parts: UriParts) {
-    this.scheme = parts.scheme ?? "file";
-    this.authority = parts.authority ?? "";
-    this.path = parts.path ?? "/";
-    this.query = parts.query ?? "";
-    this.fragment = parts.fragment ?? "";
-  }
-
-  get fsPath(): string {
-    return this.path;
-  }
-
-  with(change: UriParts): Uri {
-    return new TestUri({
-      scheme: change.scheme ?? this.scheme,
-      authority: change.authority ?? this.authority,
-      path: change.path ?? this.path,
-      query: change.query ?? this.query,
-      fragment: change.fragment ?? this.fragment,
-    });
-  }
-
-  toString(): string {
-    return `${this.scheme}://${this.authority}${this.path}`;
-  }
-
-  toJSON(): UriParts {
-    return {
-      scheme: this.scheme,
-      authority: this.authority,
-      path: this.path,
-      query: this.query,
-      fragment: this.fragment,
-    };
-  }
-}
-
-function uri(parts: UriParts): Uri {
-  return new TestUri(parts);
 }

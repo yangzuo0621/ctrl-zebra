@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Uri } from "vscode";
 
+import { createTestUri as uri } from "../test/support/test-uri.js";
 import {
   type JoinWorkspacePath,
   type ReadWorkspaceFilePrefix,
@@ -53,38 +54,3 @@ describe("WorkspaceFileReader", () => {
     expect(readPrefix).not.toHaveBeenCalled();
   });
 });
-
-class TestUri implements Uri {
-  readonly scheme = "file";
-  readonly authority = "";
-  readonly query = "";
-  readonly fragment = "";
-
-  constructor(readonly path: string) {}
-
-  get fsPath(): string {
-    return this.path;
-  }
-
-  with(change: { path?: string }): Uri {
-    return new TestUri(change.path ?? this.path);
-  }
-
-  toString(): string {
-    return `file://${this.path}`;
-  }
-
-  toJSON() {
-    return {
-      scheme: this.scheme,
-      authority: this.authority,
-      path: this.path,
-      query: this.query,
-      fragment: this.fragment,
-    };
-  }
-}
-
-function uri(path: string): Uri {
-  return new TestUri(path);
-}
