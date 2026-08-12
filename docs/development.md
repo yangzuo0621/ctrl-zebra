@@ -88,6 +88,8 @@ owned by Biome, EditorConfig, and Git attributes.
   abstraction over the duplicate implementation.
 - Before completion, repeat the search against actual added symbols and behavior. Record remaining
   similarities, removed implementations, and any follow-up disposition in the Similarity Audit.
+- Record useful out-of-scope reuse or deepening discoveries in `docs/engineering-opportunities.md`;
+  ledger entry does not authorize implementation or change roadmap order.
 - Automated duplication reports are evidence, not an automatic abstraction decision. Exclude generated
   data and required compatibility fixtures, and review security, lifecycle, and test-support duplicates
   independently.
@@ -117,6 +119,8 @@ owned by Biome, EditorConfig, and Git attributes.
   validation, budgets, cancellation, security, or error normalization.
 - Keep the evidence synchronized when implementation findings change the selected mechanism or its
   impact. A recommendation does not authorize a dependency or work outside the confirmed scope.
+- Record out-of-scope dependency candidates in `docs/engineering-opportunities.md`; promote them into
+  an authorized roadmap task or maintenance change before adding a package.
 
 ### Dependency Management
 
