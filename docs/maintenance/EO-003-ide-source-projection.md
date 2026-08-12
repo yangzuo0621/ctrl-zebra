@@ -40,10 +40,12 @@
   the same search was revalidated against latest `origin/main` `ec33eeb01aea5c2ceb8e6917ef5887147a25ed26`;
   EO-002 changes do not add another owner for this IDE projection seam. The three adapter-local
   implementations were the only equivalent runtime owners. Existing Protocol limits and DTO types,
-  VS Code `Uri`/`TextDocument` APIs, and the prior adapter tests were reused; no package-level utility
-  or new dependency was available. Decision: deepen the Extension adapter seam, keep error mapping
-  in each caller, and do not create a repository-wide helper. No third equivalent implementation was
-  found after migration.
+  VS Code `Uri`/`TextDocument` APIs, and the prior adapter tests were reused. `WorkspaceScope` was
+  considered but deliberately not reused: its canonical containment policy has configurable path
+  case-sensitivity, permits root equality, and reports `WorkspaceScopeError` codes rather than a
+  non-empty relative projection. No package-level utility or new dependency was available. Decision:
+  deepen the Extension adapter seam, keep error mapping in each caller, and do not create a
+  repository-wide helper. No third equivalent implementation was found after migration.
 - Verification: Contract tests are added before caller migration and cover normal, boundary, and
   invalid input. Run the focused projector/adapter tests, Extension typecheck, repository checks, full
   unit tests, build/integration smoke checks, `git diff --check`, and final status/diff review.
