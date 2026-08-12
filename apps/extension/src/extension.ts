@@ -15,6 +15,7 @@ import {
   commands,
   type ExtensionContext,
   languages,
+  Position,
   ProgressLocation,
   Uri,
   env as vscodeEnv,
@@ -50,6 +51,7 @@ import { createStructuredLogger } from "./adapters/structured-logger.js";
 import { createWorkspaceCheckpointStoreProvider } from "./adapters/vscode-checkpoint-storage.js";
 import { VsCodeDiagnostics } from "./adapters/vscode-diagnostics.js";
 import { VsCodeEditorContext } from "./adapters/vscode-editor-context.js";
+import { VsCodeLanguageServices } from "./adapters/vscode-language-services.js";
 import { VsCodeProposeFileEditWorkspace } from "./adapters/vscode-propose-file-edit-workspace.js";
 import { createWorkspaceSessionRepositoryProvider } from "./adapters/vscode-session-storage.js";
 import { findWorkspaceFiles } from "./adapters/vscode-workspace-find-files.js";
@@ -155,6 +157,9 @@ export function activate(context: ExtensionContext): void {
       "read_file",
       "read_editor_context",
       "get_diagnostics",
+      "find_definition",
+      "find_references",
+      "list_symbols",
       "run_command",
       "search_files",
     ],
@@ -281,6 +286,29 @@ export function activate(context: ExtensionContext): void {
     isTrusted: () => workspace.isTrusted,
     isEnabled: () => true,
   });
+  const languageServices = new VsCodeLanguageServices({
+    getSelectedRoot: () => getSelectedRoot(),
+    createScope: (root) => new WorkspaceScope(root, canonicalize),
+    joinPath: joinWorkspacePath,
+    getDocument: (uri) =>
+      workspace.textDocuments.find((document) => document.uri.toString() === uri.toString()),
+    executeDefinitionProvider: async (uri, position) =>
+      commands.executeCommand<unknown>(
+        "vscode.executeDefinitionProvider",
+        uri,
+        new Position(position.line, position.character),
+      ),
+    executeReferenceProvider: async (uri, position) =>
+      commands.executeCommand<unknown>(
+        "vscode.executeReferenceProvider",
+        uri,
+        new Position(position.line, position.character),
+      ),
+    executeDocumentSymbolProvider: async (uri) =>
+      commands.executeCommand<unknown>("vscode.executeDocumentSymbolProvider", uri),
+    isTrusted: () => workspace.isTrusted,
+    isEnabled: () => true,
+  });
   const workspaceTools = createWorkspaceToolRegistryProvider({
     getWorkspaceRoots: () => workspace.workspaceFolders?.map((folder) => folder.uri) ?? [],
     canonicalize,
@@ -295,6 +323,7 @@ export function activate(context: ExtensionContext): void {
     workspaceTrust,
     editorContext,
     diagnostics,
+    languageServices,
   });
   const selectSessionRepository = createWorkspaceSessionRepositoryProvider(
     context.storageUri,
@@ -487,6 +516,7 @@ export function activate(context: ExtensionContext): void {
     workspaceTools,
     editorContext,
     diagnostics,
+    languageServices,
     diffPresenter,
     approvalWorkflow,
     {

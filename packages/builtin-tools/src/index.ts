@@ -1,3 +1,17 @@
+export type { FindDefinitionInput } from "./find-definition.js";
+export {
+  createFindDefinitionTool,
+  findDefinitionInputSchema,
+  findDefinitionToolDescription,
+  findDefinitionToolName,
+} from "./find-definition.js";
+export type { FindReferencesInput } from "./find-references.js";
+export {
+  createFindReferencesTool,
+  findReferencesInputSchema,
+  findReferencesToolDescription,
+  findReferencesToolName,
+} from "./find-references.js";
 export type {
   GetDiagnosticsInput,
   GetDiagnosticsScope,
@@ -12,6 +26,20 @@ export {
   InvalidDiagnosticsOutputError,
   parseGetDiagnosticsInput,
 } from "./get-diagnostics.js";
+export type {
+  IdeLanguageServicePort,
+  LanguageLocationOperation,
+  LanguageServiceInput,
+  ListSymbolsInput,
+} from "./language-service.js";
+export {
+  InvalidLanguageServiceOutputError,
+  LanguageServiceUnavailableError,
+  languageLocationInputSchema,
+  listSymbolsInputSchema,
+  parseLanguageServiceInput,
+  parseListSymbolsInput,
+} from "./language-service.js";
 export type {
   ListFilesInput,
   ListFilesOutput,
@@ -28,6 +56,13 @@ export {
   listFilesToolName,
   maxListFilesLimit,
 } from "./list-files.js";
+export type { ListSymbolsInput as ListSymbolsToolInput } from "./list-symbols.js";
+export {
+  createListSymbolsTool,
+  listSymbolsInputSchema as listSymbolsToolInputSchema,
+  listSymbolsToolDescription,
+  listSymbolsToolName,
+} from "./list-symbols.js";
 export type {
   CaptureFileEditRevisionRequest,
   FileEditRevisionSnapshot,

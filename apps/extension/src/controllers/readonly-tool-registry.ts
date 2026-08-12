@@ -1,6 +1,9 @@
 import {
+  createFindDefinitionTool,
+  createFindReferencesTool,
   createGetDiagnosticsTool,
   createListFilesTool,
+  createListSymbolsTool,
   createProposeFileEditTool,
   createReadEditorContextTool,
   createReadFileTool,
@@ -8,6 +11,7 @@ import {
   createSearchFilesTool,
   type IdeContextPort,
   type IdeDiagnosticsPort,
+  type IdeLanguageServicePort,
   type ProposeFileEditWorkspace,
   type RunCommandExecutor,
 } from "@ctrl-zebra/builtin-tools";
@@ -57,6 +61,7 @@ interface WorkspaceToolRegistryDependencies {
   readonly workspaceTrust: WorkspaceTrustPolicy;
   readonly editorContext?: IdeContextPort;
   readonly diagnostics?: IdeDiagnosticsPort;
+  readonly languageServices?: IdeLanguageServicePort;
 }
 
 export function createWorkspaceToolRegistryProvider({
@@ -72,6 +77,7 @@ export function createWorkspaceToolRegistryProvider({
   workspaceTrust,
   editorContext,
   diagnostics,
+  languageServices,
 }: WorkspaceToolRegistryDependencies): WorkspaceToolRegistryProvider {
   let initialization: Promise<ToolRegistry> | undefined;
   let disposed = false;
@@ -97,6 +103,11 @@ export function createWorkspaceToolRegistryProvider({
     }
     if (diagnostics !== undefined) {
       registry.register(createGetDiagnosticsTool(diagnostics));
+    }
+    if (languageServices !== undefined) {
+      registry.register(createFindDefinitionTool(languageServices));
+      registry.register(createFindReferencesTool(languageServices));
+      registry.register(createListSymbolsTool(languageServices));
     }
     registry.register(createSearchFilesTool(new WorkspaceSearchFiles(lister, reader)));
     if (workspaceTrust.isTrusted()) {
