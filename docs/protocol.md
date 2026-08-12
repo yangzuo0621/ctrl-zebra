@@ -642,8 +642,9 @@ owner queue. The deterministic order is:
    `cleared` event. If no owner exists, it emits no stale/cleared event and may emit only the fixed
    `unavailable` outcome for the initiating command.
 5. A newer ready replaces the old owner only after its enqueue commit; the old owner then cannot accept a
-   transition. A stale event keeps the same owner and is deduplicated only by the canonical full event record
-   (including `eventSequence`, Host `requestId`, and every validated field).
+   transition. Host stale transitions are deduplicated by the per-owner normalized `staleTransitionWatermark`
+   before `eventSequence`/`requestId` allocation; after delivery, the Webview deduplicates only exact
+   same-sequence/Host-`requestId`/canonical-payload retransmissions.
 
 The Webview accepts an event only when `viewGeneration` and `sessionGeneration` equal its active owner and
 the card/context tuple is valid for the status. It first performs strict same-sequence comparison against the
