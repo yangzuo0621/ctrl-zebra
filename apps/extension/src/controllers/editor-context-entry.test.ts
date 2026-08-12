@@ -160,6 +160,55 @@ describe("EditorContextEntryController", () => {
     ).toHaveLength(1);
   });
 
+  it("deduplicates an identical Refresh intent without starting another capture", async () => {
+    const messages: ExtensionToWebviewMessage[] = [];
+    let readCount = 0;
+    let release: (() => void) | undefined;
+    const controller = createController(messages, {
+      readContext: async (_scope, signal) => {
+        readCount += 1;
+        if (readCount > 1) {
+          await new Promise<void>((resolve) => {
+            release = resolve;
+          });
+        }
+        signal.throwIfAborted();
+        return context;
+      },
+    });
+    await controller.entry.ask("active-editor");
+    const ready = messages[0] as Extract<
+      ExtensionToWebviewMessage,
+      { type: "extension/editor-context"; status: "ready" }
+    >;
+    const refresh = {
+      protocolVersion: 1 as const,
+      type: "webview/editor-context-refresh" as const,
+      requestId: "refresh-duplicate",
+      viewGeneration: ready.viewGeneration,
+      sessionGeneration: ready.sessionGeneration,
+      cardGeneration: ready.cardGeneration,
+      contextId: ready.contextId,
+      scope: ready.scope,
+    };
+    controller.actions.refresh(refresh);
+    controller.actions.refresh(refresh);
+    await vi.waitFor(() => expect(readCount).toBe(2));
+    expect(
+      messages.filter(
+        (message) => message.type === "extension/editor-context" && message.status === "ready",
+      ),
+    ).toHaveLength(1);
+    release?.();
+    await vi.waitFor(() =>
+      expect(
+        messages.filter(
+          (message) => message.type === "extension/editor-context" && message.status === "ready",
+        ),
+      ).toHaveLength(2),
+    );
+  });
+
   it("closes the owner when ready delivery is rejected", async () => {
     const messages: ExtensionToWebviewMessage[] = [];
     const lifetime = { onDidDispose: (_listener: () => void) => ({ dispose() {} }) };

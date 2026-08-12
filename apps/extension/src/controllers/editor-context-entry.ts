@@ -472,8 +472,7 @@ export class EditorContextEntryController {
     if (view.disposed || this.#disposed || view.overflowed) return false;
     const payload = JSON.stringify(message);
     const previous = view.intents.get(message.requestId);
-    if (previous !== undefined)
-      return previous.type === message.type && previous.payload === payload;
+    if (previous !== undefined) return false;
     view.intents.set(message.requestId, { type: message.type, payload });
     return (
       message.viewGeneration === view.viewGeneration &&
