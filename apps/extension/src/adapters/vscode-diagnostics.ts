@@ -136,7 +136,7 @@ export class VsCodeDiagnostics implements IdeDiagnosticsPort {
       diagnostics,
       stale,
       truncated,
-      ...(truncated ? { truncationReasons: orderedReasons(reasons) } : {}),
+      ...(truncated ? { truncationReasons: ideSourceProjector.orderedReasons(reasons) } : {}),
     });
     if (!result.success) throw new InvalidDiagnosticsOutputError();
     this.#assertOpen(signal, snapshot.generation);
@@ -513,7 +513,7 @@ export class VsCodeDiagnostics implements IdeDiagnosticsPort {
     const path = toWorkspaceRelativePath(root, uri);
     const languageId = document === undefined ? undefined : readLanguageId(document);
     const version =
-      snapshot.target !== undefined && sameUri(uri, snapshot.target)
+      snapshot.target !== undefined && ideSourceProjector.sameUri(uri, snapshot.target)
         ? snapshot.targetVersion
         : document === undefined
           ? undefined
@@ -546,7 +546,9 @@ export class VsCodeDiagnostics implements IdeDiagnosticsPort {
         ...base,
         stale,
         truncated,
-        ...(truncated ? { truncationReasons: [...orderedReasons(reasons)] } : {}),
+        ...(truncated
+          ? { truncationReasons: [...ideSourceProjector.orderedReasons(reasons)] }
+          : {}),
       };
     }
     if (snapshot.target !== undefined) {
@@ -568,7 +570,9 @@ export class VsCodeDiagnostics implements IdeDiagnosticsPort {
           : { documentVersion: source.documentVersion }),
         stale,
         truncated,
-        ...(truncated ? { truncationReasons: [...orderedReasons(reasons)] } : {}),
+        ...(truncated
+          ? { truncationReasons: [...ideSourceProjector.orderedReasons(reasons)] }
+          : {}),
       };
     }
     return {
@@ -583,7 +587,7 @@ export class VsCodeDiagnostics implements IdeDiagnosticsPort {
       },
       stale,
       truncated,
-      ...(truncated ? { truncationReasons: [...orderedReasons(reasons)] } : {}),
+      ...(truncated ? { truncationReasons: [...ideSourceProjector.orderedReasons(reasons)] } : {}),
     };
   }
 
@@ -601,7 +605,7 @@ export class VsCodeDiagnostics implements IdeDiagnosticsPort {
       throw new DiagnosticsUnavailableError();
     }
     const root = this.#dependencies.getSelectedRoot();
-    if (root === undefined || !sameUri(root, snapshot.root)) {
+    if (root === undefined || !ideSourceProjector.sameUri(root, snapshot.root)) {
       throw new DiagnosticsUnavailableError();
     }
     const trusted = this.#dependencies.isTrusted?.();
@@ -615,7 +619,7 @@ export class VsCodeDiagnostics implements IdeDiagnosticsPort {
       editor !== snapshot.editor ||
       editor.document !== snapshot.document ||
       snapshot.documentUri === undefined ||
-      !sameUri(editor.document.uri, snapshot.documentUri)
+      !ideSourceProjector.sameUri(editor.document.uri, snapshot.documentUri)
     ) {
       throw new DiagnosticsUnavailableError();
     }
@@ -663,7 +667,11 @@ class DiagnosticBudget {
 }
 
 function normalizeRange(value: unknown, document: TextDocument | undefined): IdeRangeDto {
-  if (!isRecord(value) || !isPosition(value.start) || !isPosition(value.end)) {
+  if (
+    !isRecord(value) ||
+    !ideSourceProjector.isPosition(value.start) ||
+    !ideSourceProjector.isPosition(value.end)
+  ) {
     throw new InvalidDiagnosticsOutputError();
   }
   if (document === undefined) throw new InvalidDiagnosticsOutputError();
@@ -677,10 +685,6 @@ function normalizeRange(value: unknown, document: TextDocument | undefined): Ide
   validateDocumentPosition(document, range.start);
   validateDocumentPosition(document, range.end);
   return range;
-}
-
-function isPosition(value: unknown): value is IdePositionDto {
-  return ideSourceProjector.isPosition(value);
 }
 
 function validateDocumentPosition(document: TextDocument, position: IdePositionDto): void {
@@ -722,10 +726,6 @@ function boundedRequired(value: string, maxCodePoints: number, maxBytes: number)
   }
 }
 
-function sameUri(left: Uri, right: Uri): boolean {
-  return ideSourceProjector.sameUri(left, right);
-}
-
 function toWorkspaceRelativePath(root: Uri, target: Uri): string {
   try {
     return ideSourceProjector.toWorkspaceRelativePath(root, target);
@@ -757,25 +757,6 @@ function utf8ByteLength(value: string): number {
     }
     throw error;
   }
-}
-
-function orderedReasons(reasons: Iterable<IdeTruncationReason>): readonly IdeTruncationReason[] {
-  return ideSourceProjector.orderedReasons(reasons);
-}
-
-function compareOptionalRanges(
-  left: IdeRangeDto | undefined,
-  right: IdeRangeDto | undefined,
-): number {
-  return ideSourceProjector.compareOptionalRanges(left, right);
-}
-
-function compareOptionalStrings(left: string | undefined, right: string | undefined): number {
-  return ideSourceProjector.compareOptionalStrings(left, right);
-}
-
-function compareStrings(left: string, right: string): number {
-  return ideSourceProjector.compareStrings(left, right);
 }
 
 function mapSeverity(value: unknown): IdeDiagnosticDto["severity"] | undefined {
@@ -879,22 +860,22 @@ function compareCandidates(left: NormalizedCandidate, right: NormalizedCandidate
   const leftSource = left.source;
   const rightSource = right.source;
   return (
-    compareStrings(leftSource.uri.scheme, rightSource.uri.scheme) ||
-    compareStrings(leftSource.uri.authority, rightSource.uri.authority) ||
-    compareStrings(leftSource.uri.path, rightSource.uri.path) ||
-    compareOptionalRanges(leftSource.range, rightSource.range) ||
+    ideSourceProjector.compareStrings(leftSource.uri.scheme, rightSource.uri.scheme) ||
+    ideSourceProjector.compareStrings(leftSource.uri.authority, rightSource.uri.authority) ||
+    ideSourceProjector.compareStrings(leftSource.uri.path, rightSource.uri.path) ||
+    ideSourceProjector.compareOptionalRanges(leftSource.range, rightSource.range) ||
     compareNumbers(
       severityOrder(left.diagnostic.severity),
       severityOrder(right.diagnostic.severity),
     ) ||
-    compareStrings(left.diagnostic.message, right.diagnostic.message) ||
-    compareOptionalStrings(left.diagnostic.code, right.diagnostic.code) ||
-    compareOptionalStrings(left.diagnostic.origin, right.diagnostic.origin) ||
-    compareOptionalStrings(leftSource.languageId, rightSource.languageId) ||
+    ideSourceProjector.compareStrings(left.diagnostic.message, right.diagnostic.message) ||
+    ideSourceProjector.compareOptionalStrings(left.diagnostic.code, right.diagnostic.code) ||
+    ideSourceProjector.compareOptionalStrings(left.diagnostic.origin, right.diagnostic.origin) ||
+    ideSourceProjector.compareOptionalStrings(leftSource.languageId, rightSource.languageId) ||
     compareOptionalNumbers(leftSource.documentVersion, rightSource.documentVersion) ||
     compareNumbers(Number(leftSource.stale), Number(rightSource.stale)) ||
     compareNumbers(Number(leftSource.truncated), Number(rightSource.truncated)) ||
-    compareStrings(candidateKey(left), candidateKey(right))
+    ideSourceProjector.compareStrings(candidateKey(left), candidateKey(right))
   );
 }
 

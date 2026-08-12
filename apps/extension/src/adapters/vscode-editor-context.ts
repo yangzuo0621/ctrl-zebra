@@ -217,7 +217,10 @@ export class VsCodeEditorContext implements IdeContextPort {
 
         for (let character = startCharacter; character < endCharacter; ) {
           let chunkEnd = Math.min(character + maxTextChunkCodeUnits, endCharacter);
-          if (chunkEnd < endCharacter && isHighSurrogate(line.text.charCodeAt(chunkEnd - 1))) {
+          if (
+            chunkEnd < endCharacter &&
+            ideSourceProjector.isHighSurrogate(line.text.charCodeAt(chunkEnd - 1))
+          ) {
             chunkEnd -= 1;
           }
           if (chunkEnd <= character) throw new EditorContextUnavailableError();
@@ -255,12 +258,12 @@ export class VsCodeEditorContext implements IdeContextPort {
         editor === undefined ||
         editor !== snapshot.editor ||
         editor.document !== snapshot.document ||
-        !sameUri(editor.document.uri, snapshot.uri)
+        !ideSourceProjector.sameUri(editor.document.uri, snapshot.uri)
       ) {
         throw new EditorContextUnavailableError();
       }
       const root = this.#dependencies.getSelectedRoot();
-      if (root === undefined || !sameUri(root, snapshot.root)) {
+      if (root === undefined || !ideSourceProjector.sameUri(root, snapshot.root)) {
         throw new EditorContextUnavailableError();
       }
       if (this.#dependencies.isTrusted?.() !== snapshot.trusted) {
@@ -287,7 +290,7 @@ export class VsCodeEditorContext implements IdeContextPort {
         editor === undefined ||
         editor !== snapshot.editor ||
         editor.document !== snapshot.document ||
-        !sameUri(editor.document.uri, snapshot.uri)
+        !ideSourceProjector.sameUri(editor.document.uri, snapshot.uri)
       ) {
         throw new EditorContextUnavailableError();
       }
@@ -366,10 +369,6 @@ function toRange(
   } as unknown as Range;
 }
 
-function isHighSurrogate(value: number): boolean {
-  return ideSourceProjector.isHighSurrogate(value);
-}
-
 function validateDocumentPosition(document: TextDocument, position: IdePositionDto): void {
   let line: { readonly text: string };
   try {
@@ -394,10 +393,6 @@ function sameSelection(left: SelectionSnapshot, right: SelectionSnapshot): boole
     left.end.line === right.end.line &&
     left.end.character === right.end.character
   );
-}
-
-function sameUri(left: Uri, right: Uri): boolean {
-  return ideSourceProjector.sameUri(left, right);
 }
 
 function toWorkspaceRelativePath(root: Uri, target: Uri): string {

@@ -181,7 +181,7 @@ export class VsCodeLanguageServices implements IdeLanguageServicePort {
       symbols: collected.symbols,
       stale,
       truncated,
-      ...(truncated ? { truncationReasons: [...orderedReasons(reasons)] } : {}),
+      ...(truncated ? { truncationReasons: [...ideSourceProjector.orderedReasons(reasons)] } : {}),
     });
     if (!result.success) throw new InvalidLanguageServiceOutputError();
     this.#assertOpen(signal, snapshot.generation);
@@ -237,7 +237,7 @@ export class VsCodeLanguageServices implements IdeLanguageServicePort {
       locations: collected.locations,
       stale,
       truncated,
-      ...(truncated ? { truncationReasons: [...orderedReasons(reasons)] } : {}),
+      ...(truncated ? { truncationReasons: [...ideSourceProjector.orderedReasons(reasons)] } : {}),
     });
     if (!result.success) throw new InvalidLanguageServiceOutputError();
     this.#assertOpen(signal, snapshot.generation);
@@ -660,7 +660,7 @@ export class VsCodeLanguageServices implements IdeLanguageServicePort {
       const document = this.#dependencies.getDocument?.(canonical);
       if (document === undefined) throw new InvalidLanguageServiceOutputError();
       validateRangeDocument(range, document);
-      if (!sameUri(canonical, snapshot.target)) {
+      if (!ideSourceProjector.sameUri(canonical, snapshot.target)) {
         throw new InvalidLanguageServiceOutputError();
       }
       const symbol: IdeSymbolDto = {
@@ -758,7 +758,7 @@ export class VsCodeLanguageServices implements IdeLanguageServicePort {
   ): IdeSourceDto {
     const relativePath = toWorkspaceRelativePath(snapshot.canonicalRoot, uri);
     const languageId = document === undefined ? undefined : readLanguageId(document);
-    const sameTarget = sameUri(uri, snapshot.target);
+    const sameTarget = ideSourceProjector.sameUri(uri, snapshot.target);
     const version = sameTarget ? snapshot.targetVersion : readDocumentVersion(document);
     return {
       uri: {
@@ -770,7 +770,7 @@ export class VsCodeLanguageServices implements IdeLanguageServicePort {
       ...(version === undefined ? {} : { documentVersion: version }),
       stale,
       truncated,
-      ...(truncated ? { truncationReasons: [...orderedReasons(reasons)] } : {}),
+      ...(truncated ? { truncationReasons: [...ideSourceProjector.orderedReasons(reasons)] } : {}),
     };
   }
 
@@ -786,7 +786,7 @@ export class VsCodeLanguageServices implements IdeLanguageServicePort {
 
   #assertSnapshotIdentity(snapshot: QuerySnapshot, allowDocumentChange = false): void {
     const root = this.#dependencies.getSelectedRoot();
-    if (root === undefined || !sameUri(root, snapshot.root)) {
+    if (root === undefined || !ideSourceProjector.sameUri(root, snapshot.root)) {
       throw new LanguageServiceUnavailableError();
     }
     if (this.#dependencies.isTrusted?.() !== snapshot.trusted) {
@@ -836,7 +836,11 @@ function normalizeRange(value: unknown, document: TextDocument): IdeRangeDto {
 }
 
 function normalizeRangeShape(value: unknown): IdeRangeDto {
-  if (!isRecord(value) || !isPosition(value.start) || !isPosition(value.end)) {
+  if (
+    !isRecord(value) ||
+    !ideSourceProjector.isPosition(value.start) ||
+    !ideSourceProjector.isPosition(value.end)
+  ) {
     throw new InvalidLanguageServiceOutputError();
   }
   const range = { start: value.start, end: value.end } as IdeRangeDto;
@@ -849,10 +853,6 @@ function normalizeRangeShape(value: unknown): IdeRangeDto {
 function validateRangeDocument(range: IdeRangeDto, document: TextDocument): void {
   validateDocumentPosition(document, range.start);
   validateDocumentPosition(document, range.end);
-}
-
-function isPosition(value: unknown): value is IdePositionDto {
-  return ideSourceProjector.isPosition(value);
 }
 
 function validateDocumentPosition(document: TextDocument, position: IdePositionDto): void {
@@ -1038,8 +1038,16 @@ function isUriLike(value: unknown): value is Uri {
 
 function assertProviderUriShape(uri: Uri): void {
   if (
-    !isBoundedWellFormedUnicode(uri.scheme, maxIdeUriSchemeCodePoints, maxIdeUriSchemeBytes) ||
-    !isBoundedWellFormedUnicode(uri.path, maxIdeUriPathCodePoints, maxIdeUriPathBytes) ||
+    !ideSourceProjector.isBoundedWellFormedUnicode(
+      uri.scheme,
+      maxIdeUriSchemeCodePoints,
+      maxIdeUriSchemeBytes,
+    ) ||
+    !ideSourceProjector.isBoundedWellFormedUnicode(
+      uri.path,
+      maxIdeUriPathCodePoints,
+      maxIdeUriPathBytes,
+    ) ||
     uri.scheme.length === 0 ||
     uri.path.length === 0 ||
     uri.query.length > 0 ||
@@ -1057,14 +1065,6 @@ function assertProviderUriShape(uri: Uri): void {
   }
 }
 
-function isBoundedWellFormedUnicode(
-  value: string,
-  maxCodePoints: number,
-  maxBytes: number,
-): boolean {
-  return ideSourceProjector.isBoundedWellFormedUnicode(value, maxCodePoints, maxBytes);
-}
-
 function toWorkspaceRelativePath(root: Uri, target: Uri): string {
   try {
     return ideSourceProjector.toWorkspaceRelativePath(root, target);
@@ -1076,27 +1076,19 @@ function toWorkspaceRelativePath(root: Uri, target: Uri): string {
   }
 }
 
-function sameUri(left: Uri, right: Uri): boolean {
-  return ideSourceProjector.sameUri(left, right);
-}
-
-function comparePositions(left: IdePositionDto, right: IdePositionDto): number {
-  return ideSourceProjector.comparePositions(left, right);
-}
-
 function locationKey(location: IdeLanguageLocationDto): string {
   return JSON.stringify(location);
 }
 
 function compareLocations(left: IdeLanguageLocationDto, right: IdeLanguageLocationDto): number {
   return (
-    compareStrings(left.source.uri.scheme, right.source.uri.scheme) ||
-    compareStrings(left.source.uri.authority, right.source.uri.authority) ||
-    compareStrings(left.source.uri.path, right.source.uri.path) ||
-    comparePositions(left.range.start, right.range.start) ||
-    comparePositions(left.range.end, right.range.end) ||
-    compareStrings(left.kind, right.kind) ||
-    compareStrings(locationKey(left), locationKey(right))
+    ideSourceProjector.compareStrings(left.source.uri.scheme, right.source.uri.scheme) ||
+    ideSourceProjector.compareStrings(left.source.uri.authority, right.source.uri.authority) ||
+    ideSourceProjector.compareStrings(left.source.uri.path, right.source.uri.path) ||
+    ideSourceProjector.comparePositions(left.range.start, right.range.start) ||
+    ideSourceProjector.comparePositions(left.range.end, right.range.end) ||
+    ideSourceProjector.compareStrings(left.kind, right.kind) ||
+    ideSourceProjector.compareStrings(locationKey(left), locationKey(right))
   );
 }
 
@@ -1106,26 +1098,21 @@ function symbolKey(symbol: IdeSymbolDto): string {
 
 function compareSymbolCandidates(left: SymbolCandidate, right: SymbolCandidate): number {
   return (
-    comparePositions(left.symbol.range.start, right.symbol.range.start) ||
-    compareStrings(left.symbol.name, right.symbol.name) ||
-    compareStrings(left.symbol.kind, right.symbol.kind) ||
-    compareOptionalStrings(left.symbol.containerName, right.symbol.containerName) ||
-    compareOptionalStrings(left.symbol.detail, right.symbol.detail) ||
-    compareOptionalRanges(left.symbol.selectionRange, right.symbol.selectionRange) ||
-    comparePositions(left.symbol.range.end, right.symbol.range.end) ||
-    compareStrings(symbolKey(left.symbol), symbolKey(right.symbol))
+    ideSourceProjector.comparePositions(left.symbol.range.start, right.symbol.range.start) ||
+    ideSourceProjector.compareStrings(left.symbol.name, right.symbol.name) ||
+    ideSourceProjector.compareStrings(left.symbol.kind, right.symbol.kind) ||
+    ideSourceProjector.compareOptionalStrings(
+      left.symbol.containerName,
+      right.symbol.containerName,
+    ) ||
+    ideSourceProjector.compareOptionalStrings(left.symbol.detail, right.symbol.detail) ||
+    ideSourceProjector.compareOptionalRanges(
+      left.symbol.selectionRange,
+      right.symbol.selectionRange,
+    ) ||
+    ideSourceProjector.comparePositions(left.symbol.range.end, right.symbol.range.end) ||
+    ideSourceProjector.compareStrings(symbolKey(left.symbol), symbolKey(right.symbol))
   );
-}
-
-function compareOptionalRanges(
-  left: IdeRangeDto | undefined,
-  right: IdeRangeDto | undefined,
-): number {
-  return ideSourceProjector.compareOptionalRanges(left, right);
-}
-
-function compareOptionalStrings(left: string | undefined, right: string | undefined): number {
-  return ideSourceProjector.compareOptionalStrings(left, right);
 }
 
 function countCodePoints(value: string): number {
@@ -1148,12 +1135,4 @@ function utf8ByteLength(value: string): number {
     }
     throw error;
   }
-}
-
-function compareStrings(left: string, right: string): number {
-  return ideSourceProjector.compareStrings(left, right);
-}
-
-function orderedReasons(reasons: Iterable<IdeTruncationReason>): readonly IdeTruncationReason[] {
-  return ideSourceProjector.orderedReasons(reasons);
 }
