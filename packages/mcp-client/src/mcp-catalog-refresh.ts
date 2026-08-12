@@ -22,6 +22,7 @@ export interface McpCatalogRefreshOptions<TContext, TValue> {
     signal: AbortSignal,
   ) => Promise<TValue>;
   readonly commit?: (value: TValue, previous: TValue | undefined) => void;
+  readonly clearValue?: (value: TValue) => void;
   readonly clearReason: string;
 }
 
@@ -67,6 +68,9 @@ export class McpCatalogRefresh<TContext, TValue> {
   clear(): void {
     const previous = this.state;
     this.state = undefined;
+    if (previous?.value !== undefined) {
+      this.options.clearValue?.(previous.value);
+    }
     previous?.controller.abort(new Error(this.options.clearReason));
   }
 

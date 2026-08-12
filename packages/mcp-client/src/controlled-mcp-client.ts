@@ -90,6 +90,7 @@ export class ControlledMcpClient {
     createUnavailableError: () => new McpToolDiscoveryError("disconnected"),
     load: (context, controller, signal) => this.loadToolCatalog(context, controller, signal),
     commit: (_replacement, previous) => previous?.revoke(),
+    clearValue: (snapshot) => snapshot.revoke(),
     clearReason: "MCP Tool snapshot connection generation ended.",
   });
   private readonly resourceRefresh = new McpCatalogRefresh<

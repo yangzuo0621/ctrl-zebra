@@ -90,8 +90,10 @@
 - Actual new symbols and definitions: `collectMcpCatalogPages` (one definition in
   `mcp-catalog-collector.ts`, three direct callers), `McpCatalogCollectionError` (one definition,
   three caller translations), `McpCatalogRefresh` (one definition, three instances in
-  `ControlledMcpClient`), and `McpCatalogRefreshState`/options interfaces (one package-private
-  definition each). These symbols have no public entry-point export.
+  `ControlledMcpClient`), `McpCatalogRefreshState`/options interfaces (one package-private
+  definition each), and collector-private `readRecord` (one definition at
+  `mcp-catalog-collector.ts:72`, one call from the collector page walk). These symbols have no
+  public entry-point export.
 - Removed implementations: the three `cursors`/page-limit loops and their `nextCursor` validation;
   `toolRefreshPromise`/`toolRefreshRequested`/`toolController`/`toolContext` coordination;
   equivalent Prompt coordination; equivalent Resource coordination. Domain-specific Tool snapshot
@@ -102,6 +104,18 @@
   publish both complete collections atomically. Existing constructors and read/call operations remain
   distinct semantic owners. No copied cursor set or refresh request flag remains in
   `controlled-mcp-client.ts`.
+- `readRecord` comparison and disposition: the new collector guard (one definition, page-shape call)
+  only rejects non-object/null/array MCP list pages into `McpCatalogCollectionError("malformed-message")`.
+  It is part of the pagination collector's private page-shape boundary, not a second catalog/refresh
+  mechanism. Existing `mcp-prompt.ts:222`, `mcp-resource.ts:334`, and
+  `mcp-tool-snapshot.ts:396` each have one domain-owned definition with the same prototype check but
+  distinct stable error classes and callers; `mcp-tool-schema.ts:625` additionally validates own-key
+  descriptors for untrusted JSON Schema; `packages/providers/src/ai-sdk-model-gateway.ts:474` maps
+  provider responses and clones via `Object.fromEntries`; the test-only
+  `packages/providers/src/openai-model-gateway.test.ts:720` fake maps malformed fixtures to TypeError.
+  These seven definitions have different semantic owners/error contracts, so direct reuse would cross
+  boundaries and change behavior. They remain separate; no readRecord consolidation is authorized by
+  EO-005. Future generic record validation requires its own evidence and maintenance tranche.
 - Disposition: shared pagination and refresh behavior is centralized; domain policy remains local.
   Future catalog types must use these package-private owners rather than add a fourth page walk or
   refresh coordinator. Any change to public protocol or lifecycle semantics requires separate change
@@ -121,27 +135,31 @@
 
 - Implementation summary: Added one package-private bounded cursor collector and one isolated
   generation-bound `McpCatalogRefresh` lifecycle. Tool, Prompt, and Resource discovery now call the
-  shared owners; Tool snapshot revocation remains a commit callback, while Tool schema/diagnostics
-  and Prompt/Resource domain normalization remain local. No public contract, dependency, SDK, or
-  host module changed.
-- Test results: focused MCP catalog/discovery/schema/snapshot/security tests passed (8 files, 71
-  tests); full unit suite passed (146 files, 1,730 tests, `pnpm run test:unit`); package and workspace
+  shared owners; Tool snapshot revocation remains a commit callback and now also runs on lifecycle
+  clear, while Tool schema/diagnostics and Prompt/Resource domain normalization remain local. No
+  public contract, dependency, SDK, or host module changed.
+- Test results: focused MCP catalog/discovery/schema/snapshot/security tests passed (8 files, 74
+  tests); full unit suite passed (146 files, 1,733 tests, `pnpm run test:unit`); package and workspace
   typechecks passed (`pnpm --filter @ctrl-zebra/mcp-client exec tsc --noEmit`, `pnpm run typecheck`);
   Biome check passed for 383 files (`pnpm run check`); workspace build passed (`pnpm run build`);
   Extension integration exited 0 (`pnpm run test:integration`) with the existing non-fatal
   `Canceled Failed to load custom agents` warning; `git diff --check` passed.
 - Similarity Audit: final repository search found one `collectMcpCatalogPages` definition with three
   direct catalog callers and one `McpCatalogRefresh` definition with three `ControlledMcpClient`
-  instances. The old three cursor/page-limit loops and three refresh promise/request/controller/
-  context coordinators are gone. Remaining `collectToolDescriptors`, `collectPromptList`, and
-  `collectResourceList` methods are narrow SDK request plus caller-specific error translation, not
-  duplicate pagination; remaining `Set<string>` matches belong to Tool/Prompt/Resource identity or
-  schema validation semantics. Reviewer must independently repeat the documented search and compare
-  this disposition.
+  instances. The collector-private `readRecord` is one page-shape guard; six pre-existing
+  domain/provider/test `readRecord` definitions were compared and remain separate because of their
+  distinct error, prototype, descriptor, or cloning semantics. The old three cursor/page-limit loops
+  and three refresh promise/request/controller/context coordinators are gone. Remaining
+  `collectToolDescriptors`, `collectPromptList`, and `collectResourceList` methods are narrow SDK
+  request plus caller-specific error translation, not duplicate pagination; remaining `Set<string>`
+  matches belong to Tool/Prompt/Resource identity or schema validation semantics. Reviewer must
+  independently repeat the documented search and compare this disposition.
 - Actual direct reuse/deepening: existing MCP Client request/transport, catalog constructors,
   Tool snapshot/schema validator, and stable error types; no new dependency or public export.
 - Deleted or replaced old implementations: copied Tool/Prompt/Resource pagination loops and refresh
-  lifecycle state in `controlled-mcp-client.ts`, replaced by the two package-private owners.
+  lifecycle state in `controlled-mcp-client.ts`, replaced by the two package-private owners. Tool
+  snapshot revocation is retained on both replacement commit and lifecycle clear, including disconnect
+  and context replacement, so stale registry Tools cannot parse input or prepare approval.
 - Design deviation: none.
 - PR/branch: [draft PR #220](https://github.com/yangzuo0621/ctrl-zebra/pull/220), branch
   `codex/eo-005-mcp-catalog-refresh`, implementation commit `52b8744d571e4069a9c8224a7e3e8db80f82acac`.

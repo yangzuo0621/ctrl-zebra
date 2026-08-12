@@ -107,6 +107,25 @@ describe("MCP catalog primitives", () => {
     await expect(request).rejects.toMatchObject({ message: "generation ended" });
     expect(refresh.getState().value).toBeUndefined();
   });
+
+  it("clears the prior value through the owner callback", async () => {
+    let cleared: string | undefined;
+    const refresh = new McpCatalogRefresh<string, string>({
+      sameContext: (current, next) => current === next,
+      isActive: () => true,
+      createUnavailableError: () => new Error("unavailable"),
+      clearReason: "generation ended",
+      clearValue: (value) => {
+        cleared = value;
+      },
+      load: async () => "stable",
+    });
+    refresh.setContext("generation-1");
+    await refresh.request();
+    refresh.clear();
+    expect(cleared).toBe("stable");
+    expect(refresh.getState().value).toBeUndefined();
+  });
 });
 
 async function waitFor(predicate: () => boolean): Promise<void> {
