@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { mcpProtocolVersion } from "./contracts.js";
 import { ControlledMcpClient } from "./controlled-mcp-client.js";
 import { FixtureStdioPort, isMethod, jsonRpcId } from "./fixture-stdio-port.js";
+import { McpToolUnavailableError } from "./mcp-tool-snapshot.js";
 
 const context = {
   server: { serverId: "local_fixture", displayName: "Local fixture" },
@@ -256,6 +257,45 @@ describe("ControlledMcpClient Tool discovery", () => {
     port.emitJson({ jsonrpc: "2.0", id: jsonRpcId(request), result: toolPage([]) });
 
     expect(client.getToolSnapshot()).toBeUndefined();
+  });
+
+  it("revokes an old Tool registry after disconnect", async () => {
+    const client = new ControlledMcpClient(
+      toolServer(() => toolPage([{ name: "stale", inputSchema: emptySchema }])),
+    );
+    await client.connect();
+    const snapshot = await client.discoverTools(context);
+    const descriptor = snapshot.tools[0];
+    const tool =
+      descriptor === undefined ? undefined : snapshot.registry.get(descriptor.registryName);
+
+    await client.disconnect();
+
+    expect(() => tool?.parseInput({})).toThrow(McpToolUnavailableError);
+    if (tool?.prepareApproval === undefined) throw new Error("Expected Tool approval preparation.");
+    await expect(
+      tool.prepareApproval({}, { signal: new AbortController().signal }),
+    ).rejects.toBeInstanceOf(McpToolUnavailableError);
+  });
+
+  it("revokes an old Tool registry when its discovery context changes", async () => {
+    const client = new ControlledMcpClient(
+      toolServer(() => toolPage([{ name: "stale", inputSchema: emptySchema }])),
+    );
+    await client.connect();
+    const first = await client.discoverTools(context);
+    const descriptor = first.tools[0];
+    const oldTool =
+      descriptor === undefined ? undefined : first.registry.get(descriptor.registryName);
+
+    await client.discoverTools({ ...context, generation: context.generation + 1 });
+
+    expect(() => oldTool?.parseInput({})).toThrow(McpToolUnavailableError);
+    if (oldTool?.prepareApproval === undefined)
+      throw new Error("Expected Tool approval preparation.");
+    await expect(
+      oldTool.prepareApproval({}, { signal: new AbortController().signal }),
+    ).rejects.toBeInstanceOf(McpToolUnavailableError);
   });
 
   it("calls a current-generation Tool with validated arguments and normalizes its result", async () => {

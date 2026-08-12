@@ -49,7 +49,7 @@
 | [EO-002 Extension test support](#eo-002-extension-test-support) | 复用 | P1 | EO-003、EO-004 前 | `已晋升` |
 | [EO-003 IDE source projection](#eo-003-ide-source-projection) | 深化 | P1 | EO-002 后；新增 IDE 投影前 | `已晋升` |
 | [EO-004 Bounded text persistence](#eo-004-bounded-text-persistence) | 深化 | P1 | EO-002 后；Phase 21 数据控制前优先评估 | `已晋升` |
-| [EO-005 MCP catalog refresh](#eo-005-mcp-catalog-refresh) | 深化 | P1 | MCP 再次演进或独立 maintenance 窗口 | `评估中` |
+| [EO-005 MCP catalog refresh](#eo-005-mcp-catalog-refresh) | 深化 | P1 | MCP 再次演进或独立 maintenance 窗口 | `已晋升` |
 | [EO-006 MCP error ownership](#eo-006-mcp-error-ownership) | 深化 | P2 | EO-005 后；需要契约影响确认 | `已发现` |
 | [EO-007 Package-local text primitives](#eo-007-package-local-text-primitives) | 复用 | P2 | EO-003、EO-004 后；每次只处理一个 package | `已发现` |
 | [EO-008 Safe regex engine](#eo-008-safe-regex-engine) | Buy | P0 | 纳入 T2001 决策、T2005 实施，不单独插队 | `评估中` |
@@ -223,3 +223,4 @@ EO-001 可以独立进行。EO-009 和 EO-011 不应阻塞 Phase 20–22。
 | 2026-08-12 | EO-001 | 已晋升为独立 maintenance | [EO-001 maintenance](maintenance/EO-001-provider-endpoint-policy.md) / [PR #215](https://github.com/yangzuo0621/ctrl-zebra/pull/215) | 在最新 `origin/main` 上重新验证两处重复 endpoint/loopback 判定后建立 Extension-private policy seam |
 | 2026-08-12 | EO-002 | 已晋升为独立 maintenance | [EO-002 maintenance](maintenance/EO-002-extension-test-support.md) | 在最新 `origin/main` 上重新验证六份 Extension `TestUri` 与两份 Webview host fake 后建立两个 application-private test-support seam |
 | 2026-08-12 | EO-004 | 已晋升为独立 maintenance | [EO-004 maintenance](maintenance/EO-004-bounded-text-persistence.md) | 在最新 `origin/main` `6ef3a3b` 上重新验证 Session/Checkpoint 的重复 bounded text I/O 后建立 Extension-private `VscodeBoundedTextStorage` seam |
+| 2026-08-13 | EO-005 | 已晋升为独立 maintenance | [EO-005 maintenance](maintenance/EO-005-mcp-catalog-refresh.md) | 在最新 `origin/main` `9e9e98e` 上重新验证 Tool/Prompt/Resource 的重复分页与刷新生命周期后建立 package-private MCP catalog collector/refresh seam |
