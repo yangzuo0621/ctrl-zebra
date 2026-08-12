@@ -63,8 +63,21 @@
 
 ## Completion
 
-- Implementation summary: Pending implementation verification.
-- Test results: Pending.
-- PR/branch: `codex/eo-001-provider-endpoint-policy` (draft PR pending publication).
+- Implementation summary: `providerEndpointPolicy` now owns endpoint normalization, explicit
+  loopback recognition, and `requiresApiKey`; both Extension callers use the policy and retain
+  their existing error/reporting behavior. The former caller-local algorithms and duplicate test
+  matrices are removed. No configuration, command, public contract, persistence, or dependency
+  changed.
+- Test results:
+  - Affected policy/configuration/connection tests: 61 passed.
+  - Full unit suite: 143 files, 1,706 tests passed (`pnpm run test:unit`).
+  - Full workspace typecheck passed (`pnpm run typecheck`).
+  - Biome repository check passed (`pnpm run check`).
+  - Workspace build passed (`pnpm run build`).
+  - Extension integration passed with exit code 0; the existing VS Code harness logged the
+    non-fatal warning `Canceled Failed to load custom agents`.
+  - `git diff --check` passed before commit and final review.
+- PR/branch: [draft PR #215](https://github.com/yangzuo0621/ctrl-zebra/pull/215),
+  `codex/eo-001-provider-endpoint-policy`.
 - Review handoff: Task-reviewer must independently verify endpoint policy equivalence, deletion of
   superseded logic/tests, public-contract stability, and the evidence above.
