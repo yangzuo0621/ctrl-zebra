@@ -100,24 +100,35 @@ decide whether a source is current, in scope, trusted, or authorized.
 The Extension contributes `ctrlZebra.askAboutSelection` and `ctrlZebra.askAboutFile` and the
 `ctrlZebra.editorContext.enabled` setting (default off). The Webview never invokes those commands; it
 receives a validated `extension/editor-context` message after the user explicitly invokes a command or
-Refresh. The message carries only `contextId`, `scope`, and the bounded `IdeTextContextDto` projection.
+Refresh. Each event has Host-issued `requestId` and `eventSequence`, `viewGeneration`,
+`sessionGeneration`, and (for a card) `cardGeneration`/`contextId`, exactly as defined by [Protocol](protocol.md).
 Unknown, old, duplicate, cancelled, or mismatched request/context messages are ignored before state
 mutation.
 
-The editor context store owns one pending card and one in-flight refresh request. A ready projection is
-rendered above the Composer as a semantic `Editor context` card with source kind, workspace-relative path,
-optional language/range, and non-color-only `Truncated`/reason status. The bounded text is inserted into the
-ordinary Composer draft with the fixed provenance prefix from [Protocol](protocol.md); it remains visible
-and editable until send. The store does not retain a VS Code object, absolute path, Trust state, source
-revision, or authoritative snapshot in `getState`/`setState` restoration.
+The Webview mirrors the Host's two gates. Its **capture delivery state** tracks only the newest refresh
+intent and is cleared synchronously when the user cancels, removes, starts New chat, switches Session, or
+the view is disposed; a late `ready` or `unavailable` event cannot recreate a card. Its **delivered-card
+owner state** tracks the exact `(viewGeneration, sessionGeneration, cardGeneration, contextId)` tuple. It
+accepts bounded `stale`/`cleared` events only for that tuple and only after a newer `eventSequence`; clear
+closes the owner state. A same-sequence identical event is a no-op, while a conflicting duplicate, lower
+sequence, old request/capture, cross-view/session event, or event after disposal is rejected. Host event
+ordering is authoritative; the Webview never infers freshness from arrival timing.
 
-`Refresh` posts `webview/editor-context-refresh` for the card's original scope. `Remove` synchronously
-clears the card, generated prefix (only if the draft is still unchanged), and stale decision before trying
-one `webview/editor-context-remove`; it never waits for a Host acknowledgement or steals Composer focus.
-`Use stale context` is available only for the exact stale `contextId`; it records the explicit send decision
-and posts one `webview/editor-context-use-stale`. A stale card blocks Send until that decision or a fresh
-capture. The setting-off/Trust-lost/cleared projection synchronously removes the card and stale decision,
-while preserving unrelated user draft text.
+A ready projection is rendered above the Composer as a semantic `Editor context` card with source kind,
+workspace-relative path, optional language/range, and non-color-only `Truncated`/reason status. The bounded
+text is inserted into the ordinary Composer draft with the fixed provenance prefix from [Protocol](protocol.md);
+it remains visible and editable until send. A ready card may be sent after review/editing. The store does
+not retain a VS Code object, absolute path, Trust state, source revision, or authoritative snapshot in
+`getState`/`setState` restoration.
+
+`Refresh` posts the exact owner tuple in `webview/editor-context-refresh`; the Host closes the old capture
+first and leaves the old delivered card unchanged until a newer ready commit. `Remove` synchronously clears
+the card, generated prefix (only if the draft is still unchanged), and stale decision before trying one
+`webview/editor-context-remove`; it never waits for a Host acknowledgement or steals Composer focus.
+`Use stale context` is available only for the exact stale tuple; it records the explicit send decision and
+posts one `webview/editor-context-use-stale`. A stale card blocks Send until that decision or a fresh capture.
+The setting-off/Trust-lost/cleared projection synchronously removes the card and stale decision, while
+preserving unrelated user draft text.
 
 The editor entry path has no Send/Run side effect: it does not call the model, execute a Tool, create an
 Approval, edit a file, or retry a capture automatically. Cancellation and disposal clear pending state and

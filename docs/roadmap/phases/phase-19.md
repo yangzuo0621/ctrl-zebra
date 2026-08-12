@@ -55,18 +55,57 @@
   替代 Host 校验。
 - Host 向当前 Agent Webview 发送严格的 `extension/editor-context` 投影。成功状态携带 Host 生成的
   有界 `contextId`、`scope` 和 `IdeTextContextDto`；`stale` 状态只携带同一来源的 DTO（其中
-  `source.stale` 必须为 `true`）；清除和不可用状态使用闭合 reason。每条消息带有触发请求的
-  `requestId`，旧请求、旧 `contextId`、已取消或已关闭的 view 均被 Webview 忽略。
-- Webview 只发送窄意图 `webview/editor-context-refresh`（带 `scope`）、
-  `webview/editor-context-remove`（带 `contextId`）和 `webview/editor-context-use-stale`（带
-  `contextId`）。Refresh 会取消同一 view 上一个未完成 capture；Remove 先同步清除本地卡片，再
-  尝试发送一次意图；Use stale 只记录当前发送确认，不改变 Host 的 URI、范围、版本、Trust 或文本。
+  `source.stale` 必须为 `true`）；清除和不可用状态使用闭合 reason。每条 Host 事件严格携带
+  Host-issued `requestId`/`eventSequence`、`viewGeneration`、`sessionGeneration`，以及适用的
+  `cardGeneration`/`contextId`；旧请求、旧 `captureId`/`contextId`、已取消或已关闭的 view 均被
+  Webview 忽略。
+- Webview 只发送严格、带完整当前 owner tuple 的窄意图：
+  `webview/editor-context-refresh`（`requestId`、`viewGeneration`、`sessionGeneration`、
+  `cardGeneration`、`contextId`、`scope`）、`webview/editor-context-remove`（除 `scope` 外同样
+  字段）和 `webview/editor-context-use-stale`（除 `scope` 外同样字段）。Refresh 会取消同一 view
+  上一个未完成 capture；Remove 先同步清除本地卡片，再尝试发送一次意图；Use stale 只记录当前
+  发送确认，不改变 Host 的 URI、范围、版本、Trust 或文本。
   取消、dispose、Session/New chat、设置关闭和 Trust 丢失关闭 delivery gate，之后不得发送文本、
   失败结果、重试或迟到 Webview 消息。
 - 成功投影在 Composer 上方显示固定 `Editor context` 来源、工作区相对路径、语言、精确范围以及
   `Stale`/`Truncated` 状态；Host 产生的文本作为普通、不可信用户上下文插入 Composer 的可编辑草稿。
   用户在发送前可以修改或删除草稿，也可以 Remove；未明确 `Use stale context` 前 stale 草稿的
-  Send 必须禁用。该入口只填充草稿和来源卡片，绝不创建 Run、执行模型、调用 Tool 或授予 Approval。
+  Send 必须禁用；ready 草稿在审阅/编辑后可以直接 Send。该入口只填充草稿和来源卡片，绝不创建
+  Run、执行模型、调用 Tool 或授予 Approval。
+
+生命周期必须区分两个 gate：capture delivery gate 在有界读取和 `postMessage` enqueue 前拥有
+`AbortController`，取消/Refresh/关闭/设置/Trust/工作区/编辑器或 Session 变化先关闭它，之后不
+产生任何 capture completion；delivered-card/event projection owner gate 只在 ready enqueue commit
+后以 `(viewGeneration, sessionGeneration, cardGeneration, contextId)` 建立。只有当前 owner gate
+存在时，capture gate 关闭后才允许一次有界 stale（编辑器/选区/文档变化）或 cleared（设置/Trust/
+工作区/不支持编辑器/Session/Remove/dispose）事件；没有已交付 card 时不得发送迟到 stale/cleared。
+Host 在一个 owner queue 中先关 capture gate，再投影 transition，并以 eventSequence 保证顺序。
+
+### T1905 fencing and race matrix
+
+实现和测试必须覆盖以下决定性矩阵；每个拒绝分支验证无文本分配、无模型/Tool/Approval、无持久化
+变更和无迟到 Webview 事件：
+
+| Race / boundary | Required order and result |
+|---|---|
+| command capture completes normally | capture gate open → one `ready` commit → owner gate opens; ready draft remains editable and Send is allowed |
+| cancel/close before capture completion | capture gate closes first; completion is dropped; no `ready`, `stale`, `cleared`, retry, or unavailable result |
+| editor/selection/document change with delivered card | close any capture gate → one current-owner `stale` with same card/context and `source.stale: true`; duplicate transition is a no-op |
+| setting disable, Trust loss, root/workspace change, unsupported editor, Session/New chat, Remove, dispose | close capture gate → one current-owner `cleared`; owner gate closes; no later event is accepted |
+| transition while capture is in flight and no delivered card | capture is cancelled; no stale/cleared event is emitted |
+| Refresh A then Refresh B | A gate closes before B opens; late A result is dropped; only B can commit ready; prior delivered card remains until B ready |
+| completion vs transition same turn | owner queue order decides: completion first commits ready then transition may stale/clear; transition first suppresses completion and emits no card event without an existing owner |
+| old request/capture/context after newer ready | reject by captureId/cardGeneration/eventSequence; current card and draft are unchanged |
+| cross-view or cross-session event | reject by viewGeneration/sessionGeneration before state mutation |
+| duplicate/conflicting event or intent | identical same-sequence payload is idempotent; same ID/sequence with different fields is rejected |
+| event after disposal | reject by closed view gate; no post, live-region announcement, or focus change |
+| `editorTextFocus` menu visible but Host cannot capture | return fixed `unavailable` code (`no-editor`, `unsupported-document`, `outside-workspace`, or `untrusted-workspace`); no fallback read |
+
+The focused tests must also assert command registration/menu enablement hints, setting default/disable
+clearing, active-file versus exact-selection source/range, collapsed selection, ready-send/edit/remove,
+stale blocking and Use-stale, focus preservation, Host-issued generation allocation/increment/reset,
+strict DTO extra-field rejection, and Webview acceptance of out-of-order, duplicate, conflicting,
+cross-view/session, post-refresh, and post-disposal messages.
 
 ## 4. 阶段门禁
 

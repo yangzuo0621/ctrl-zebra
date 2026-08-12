@@ -115,18 +115,43 @@ only discoverability hints. The controller rechecks the setting, active editor, 
 selection command), selected root, Trust, supported text identity, and document version immediately before
 capture. A direct `commands.executeCommand` invocation cannot bypass those checks.
 
-Each Agent Webview view owns at most one pending capture. A refresh aborts and closes the previous capture
-gate before starting the next; an editor/selection/document/workspace event marks the pending source stale
-without reading the document in the background. Setting disable, Trust loss, Session/New chat, view
-disposal, or Extension disposal clears the pending projection and closes its delivery gate. The controller
-keeps no editor text, URI, revision, or stale state in Session persistence or Webview restoration.
+Each Agent Webview view owns two explicit gates, as defined by the Protocol contract. The **capture delivery
+gate** owns one bounded read, an AbortController, and a Host-issued `captureId`; Refresh closes the prior
+gate before opening the next. Cancellation, supersession, editor/selection/document/workspace transition,
+setting disable, Trust loss, Session/New chat, view disposal, or Extension disposal closes this gate before
+cleanup. A completion whose gate, source tuple, or document revision is no longer current is dropped and
+cannot post `ready`, `stale`, or `unavailable`.
 
-The Agent view exposes only a narrow validated poster for the additive `extension/editor-context` messages.
-It queues at most the newest command result until the view is resolved, drops queued data on disposal, and
-never exposes `Webview`, `TextEditor`, `Uri`, or `AbortController` objects to Webview/Core. The command
-focuses the Agent view, then posts one projection; it does not call the model or create a Run. Message
-delivery is correlated by `requestId` and Host-generated `contextId`, and a late result cannot overwrite a
-newer view/session generation.
+The **delivered-card/event projection owner gate** opens only at the ordered `ready` enqueue commit and owns
+the immutable `(viewGeneration, sessionGeneration, cardGeneration, contextId)` tuple. It remains the sole
+owner of that card until replacement or invalidation. After all affected capture gates close, an editor,
+selection, or document transition may pass one bounded `stale` event through this gate; setting disable,
+Trust loss, selected-root/workspace change, unsupported current editor, Session change, Remove, or disposal
+passes one `cleared` event and closes it. If no card has been committed, transitions emit no stale/clear
+projection and a cancelled capture emits no result. A card gate never reopens a capture gate or authorizes a
+model/Tool action.
+
+The controller serializes capture completion, Webview intents, and spontaneous transitions in one owner
+queue. `viewGeneration` is allocated monotonically for each Webview resolution (counter starts at `1` per
+Extension activation); `sessionGeneration` starts at `0` per view and increments for each Session/New chat
+owner change; `cardGeneration` increments on card allocation/invalidation; and `eventSequence` increments
+for every Host-to-Webview editor event. Counters reset only with their owning view/session generation and
+are never reused within an Extension activation. Outbound `requestId` values are Host-issued event IDs;
+inbound Webview request IDs are intent IDs and are deduplicated by exact payload. The active owner tuple and
+generation fences reject old capture results, old requests, cross-view/session events, same-sequence
+conflicts, and post-disposal messages before any state mutation.
+
+The Agent view exposes only the strict `extension/editor-context` projection. It queues at most the newest
+event for a resolved owner, drops queued data on disposal, and never exposes `Webview`, `TextEditor`, `Uri`,
+or `AbortController` objects to Webview/Core. A command focuses the Agent view, then posts one projection;
+it does not call the model or create a Run. A ready card can be sent after review/editing; only stale state
+blocks Send until refresh or explicit `Use stale context`.
+
+Required adapter/controller tests cover normal ready → editable/send, collapsed selection, no editor, an
+`editorTextFocus` menu-visible but unsupported/outside/untrusted document, setting disable, focus and
+selection preservation, cancel/close races, Refresh A→B, transition-before-capture-completion,
+completion-before-transition, stale/clear deduplication, generation allocation/reset, strict message
+validation, cross-view/session fences, conflicting duplicate sequences, and post-disposal suppression.
 
 ## Lazy Initialization
 

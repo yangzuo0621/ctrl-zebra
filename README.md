@@ -75,8 +75,9 @@ Repository maintainers can create a verified local artifact with `pnpm package:v
 To ask about the current editor explicitly, enable **CtrlZebra › Editor Context: Enabled** in Settings,
 then use **CtrlZebra: Ask about Selection** or **CtrlZebra: Ask about Active File** from the Command
 Palette or editor context menu. CtrlZebra fills a visible, editable Composer draft with the bounded,
-workspace-relative source context; it never sends the request or runs a model automatically. Refresh or
-remove the context before sending, and explicitly choose **Use stale context** if the source changed.
+workspace-relative source context; after you review or edit a ready draft, select **Send** to create the
+normal Run. It never sends the request or runs a model automatically. Refresh or remove the context before
+sending, and explicitly choose **Use stale context** if the source changed.
 
 Do not paste API keys into chat, workspace files, settings, logs, or command arguments.
 
