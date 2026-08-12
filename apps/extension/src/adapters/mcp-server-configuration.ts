@@ -117,7 +117,7 @@ export function parseMcpServerConfiguration(value: unknown): McpServerConfigurat
     serverId.length > maxServerIdCharacters ||
     !/^[a-z][a-z0-9_]*$/u.test(serverId) ||
     typeof displayName !== "string" ||
-    !isWellFormedUnicode(displayName) ||
+    !displayName.isWellFormed() ||
     displayName.length === 0 ||
     containsDisplayControl(displayName) ||
     [...displayName].length > maxDisplayNameCodePoints ||
@@ -139,7 +139,7 @@ export function parseMcpServerConfiguration(value: unknown): McpServerConfigurat
   for (const argument of args) {
     if (
       typeof argument !== "string" ||
-      !isWellFormedUnicode(argument) ||
+      !argument.isWellFormed() ||
       argument.includes("\0") ||
       utf8Bytes(argument) > maxArgumentBytes ||
       containsCredentialMaterial(argument)
@@ -221,22 +221,6 @@ function containsDisplayControl(value: string): boolean {
       codePoint === 0x2029
     );
   });
-}
-
-function isWellFormedUnicode(value: string): boolean {
-  for (let index = 0; index < value.length; index += 1) {
-    const code = value.charCodeAt(index);
-    if (code >= 0xd800 && code <= 0xdbff) {
-      const next = value.charCodeAt(index + 1);
-      if (!(next >= 0xdc00 && next <= 0xdfff)) {
-        return false;
-      }
-      index += 1;
-    } else if (code >= 0xdc00 && code <= 0xdfff) {
-      return false;
-    }
-  }
-  return true;
 }
 
 function containsCredentialMaterial(value: string): boolean {

@@ -110,11 +110,7 @@ export function normalizeMcpToolResult(
   let textBytes = 0;
   for (const item of record.content) {
     const block = readStrictRecord(item, ["_meta", "annotations", "text", "type"]);
-    if (
-      block.type !== "text" ||
-      typeof block.text !== "string" ||
-      !isWellFormedUnicode(block.text)
-    ) {
+    if (block.type !== "text" || typeof block.text !== "string" || !block.text.isWellFormed()) {
       throw invalidResult();
     }
     textCodePoints += [...block.text].length;
@@ -191,18 +187,4 @@ function isJsonObject(value: JsonValue): value is Record<string, JsonValue> {
 
 function utf8Bytes(value: string): number {
   return new TextEncoder().encode(value).byteLength;
-}
-
-function isWellFormedUnicode(value: string): boolean {
-  for (let index = 0; index < value.length; index += 1) {
-    const codeUnit = value.charCodeAt(index);
-    if (codeUnit >= 0xd800 && codeUnit <= 0xdbff) {
-      const next = value.charCodeAt(index + 1);
-      if (!(next >= 0xdc00 && next <= 0xdfff)) return false;
-      index += 1;
-    } else if (codeUnit >= 0xdc00 && codeUnit <= 0xdfff) {
-      return false;
-    }
-  }
-  return true;
 }

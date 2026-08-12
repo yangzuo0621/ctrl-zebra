@@ -490,7 +490,7 @@ export function takeIdeTextPrefix(value: string): IdeTextPrefix {
 function boundedTextSchema(maxCodePoints: number, maxBytes: number) {
   return z
     .string()
-    .refine(isWellFormedUnicode, "Text must contain well-formed Unicode.")
+    .refine((value) => value.isWellFormed(), "Text must contain well-formed Unicode.")
     .refine(
       (value) => [...value].length <= maxCodePoints,
       `Text must not exceed ${maxCodePoints} Unicode code points.`,
@@ -562,17 +562,6 @@ function readCodePoint(
     throw new TypeError("IDE text must contain well-formed Unicode.");
   }
   return { value: codeUnit, width: 1 };
-}
-
-function isWellFormedUnicode(value: string): boolean {
-  try {
-    for (let index = 0; index < value.length; ) {
-      index += readCodePoint(value, index).width;
-    }
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 function hasAtMostIdeTextLines(value: string): boolean {

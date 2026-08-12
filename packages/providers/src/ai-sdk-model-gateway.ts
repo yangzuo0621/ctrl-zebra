@@ -320,7 +320,7 @@ class ReasoningStreamNormalizer {
   start(sourceId: string): readonly ModelEvent[] {
     if (
       sourceId === "" ||
-      !isWellFormedUnicode(sourceId) ||
+      !sourceId.isWellFormed() ||
       this.#openSourceId !== undefined ||
       this.#seenSourceIds.has(sourceId)
     ) {
@@ -337,7 +337,7 @@ class ReasoningStreamNormalizer {
 
   delta(sourceId: string, text: string): Iterable<ModelEvent> {
     const blockId = this.#readOpenBlock(sourceId);
-    if (!isWellFormedUnicode(text)) {
+    if (!text.isWellFormed()) {
       throw new ModelGatewayError("malformed-response");
     }
     if (text === "") {
@@ -363,7 +363,7 @@ class ReasoningStreamNormalizer {
   #readOpenBlock(sourceId: string): string {
     if (
       sourceId === "" ||
-      !isWellFormedUnicode(sourceId) ||
+      !sourceId.isWellFormed() ||
       sourceId !== this.#openSourceId ||
       this.#openBlockId === undefined
     ) {
@@ -422,22 +422,6 @@ function utf8LengthOfCodePoint(codePoint: number): number {
     return 3;
   }
   return 4;
-}
-
-function isWellFormedUnicode(value: string): boolean {
-  for (let index = 0; index < value.length; index += 1) {
-    const codeUnit = value.charCodeAt(index);
-    if (codeUnit >= 0xd800 && codeUnit <= 0xdbff) {
-      const next = value.charCodeAt(index + 1);
-      if (next < 0xdc00 || next > 0xdfff) {
-        return false;
-      }
-      index += 1;
-    } else if (codeUnit >= 0xdc00 && codeUnit <= 0xdfff) {
-      return false;
-    }
-  }
-  return true;
 }
 
 function parseToolCall(value: unknown) {

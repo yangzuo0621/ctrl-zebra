@@ -48,6 +48,12 @@ describe("language service built-in tools", () => {
     ).toThrow();
     expect(() =>
       parseLanguageServiceInput({
+        path: `src/${String.fromCharCode(0xd800)}.ts`,
+        position: { line: 0, character: 0 },
+      }),
+    ).toThrow();
+    expect(() =>
+      parseLanguageServiceInput({
         path: "src/index.ts",
         position: { line: 0, character: 0, extra: true },
       }),

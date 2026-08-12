@@ -221,14 +221,14 @@ function walkSchema(
       }
       setRecordValue(result, key, nested);
     } else if (key === "$ref") {
-      if (typeof nested !== "string" || !isWellFormedUnicode(nested)) {
+      if (typeof nested !== "string" || !nested.isWellFormed()) {
         throw new McpToolSchemaError("invalid-reference");
       }
       const target = normalizeLocalReference(nested);
       context.references.push({ sourceAnchor, target });
       setRecordValue(result, key, target);
     } else if (key === "title" || key === "description") {
-      if (typeof nested !== "string" || !isWellFormedUnicode(nested)) {
+      if (typeof nested !== "string" || !nested.isWellFormed()) {
         throw new McpToolSchemaError();
       }
       setRecordValue(result, key, nested);
@@ -337,7 +337,7 @@ function walkStrippedKeyword(
   sourceAnchor: string | undefined,
 ): void {
   if (strippedStringKeywords.has(key)) {
-    if (typeof value !== "string" || !isWellFormedUnicode(value)) {
+    if (typeof value !== "string" || !value.isWellFormed()) {
       throw new McpToolSchemaError();
     }
     return;
@@ -413,10 +413,7 @@ function validateUniqueStrings(value: unknown): string[] {
     throw new McpToolSchemaError();
   }
   const values = value.map((entry) => String(entry));
-  if (
-    new Set(values).size !== values.length ||
-    values.some((entry) => !isWellFormedUnicode(entry))
-  ) {
+  if (new Set(values).size !== values.length || values.some((entry) => !entry.isWellFormed())) {
     throw new McpToolSchemaError();
   }
   return values;
@@ -424,7 +421,7 @@ function validateUniqueStrings(value: unknown): string[] {
 
 function cloneJsonValue(value: unknown, ancestors = new Set<object>()): JsonValue {
   if (value === null || typeof value === "string" || typeof value === "boolean") {
-    if (typeof value === "string" && !isWellFormedUnicode(value)) {
+    if (typeof value === "string" && !value.isWellFormed()) {
       throw new McpToolSchemaError();
     }
     return value;
@@ -551,7 +548,7 @@ function decodePointerToken(value: string): string {
       decoded += character;
     }
   }
-  if (!isWellFormedUnicode(decoded)) {
+  if (!decoded.isWellFormed()) {
     throw new McpToolSchemaError("invalid-reference");
   }
   return decoded;
@@ -569,7 +566,7 @@ function measureRawJsonBytes(
   if (value === null) return 4;
   if (typeof value === "boolean") return value ? 4 : 5;
   if (typeof value === "string") {
-    if (!isWellFormedUnicode(value)) throw new McpToolSchemaError();
+    if (!value.isWellFormed()) throw new McpToolSchemaError();
     return measuredStringBytes(value);
   }
   if (typeof value === "number") {
@@ -663,7 +660,7 @@ function hasOwn(value: object, key: string): boolean {
 }
 
 function assertWellFormed(value: string): void {
-  if (!isWellFormedUnicode(value)) {
+  if (!value.isWellFormed()) {
     throw new McpToolSchemaError();
   }
 }
@@ -674,20 +671,4 @@ function escapePointer(value: string): string {
 
 function utf8Bytes(value: string): number {
   return new TextEncoder().encode(value).byteLength;
-}
-
-function isWellFormedUnicode(value: string): boolean {
-  for (let index = 0; index < value.length; index += 1) {
-    const codeUnit = value.charCodeAt(index);
-    if (codeUnit >= 0xd800 && codeUnit <= 0xdbff) {
-      const next = value.charCodeAt(index + 1);
-      if (next < 0xdc00 || next > 0xdfff) {
-        return false;
-      }
-      index += 1;
-    } else if (codeUnit >= 0xdc00 && codeUnit <= 0xdfff) {
-      return false;
-    }
-  }
-  return true;
 }

@@ -217,26 +217,13 @@ function parsePath(value: unknown): string {
 }
 
 function isCanonicalPath(value: string): boolean {
-  if (!isWellFormedUnicode(value)) return false;
+  if (!value.isWellFormed()) return false;
+  if (value.split("/").some((segment) => segment.length === 0)) return false;
   if (value.includes("?") || value.includes("#") || /%(?:2e|2f|5c)/iu.test(value)) {
     return false;
   }
   if ([...value].length > maxIdeUriPathCodePoints) return false;
   return utf8ByteLength(value) <= maxIdeUriPathBytes;
-}
-
-function isWellFormedUnicode(value: string): boolean {
-  for (let index = 0; index < value.length; index += 1) {
-    const codeUnit = value.charCodeAt(index);
-    if (codeUnit >= 0xd800 && codeUnit <= 0xdbff) {
-      const next = value.charCodeAt(index + 1);
-      if (!(next >= 0xdc00 && next <= 0xdfff)) return false;
-      index += 1;
-    } else if (codeUnit >= 0xdc00 && codeUnit <= 0xdfff) {
-      return false;
-    }
-  }
-  return !value.split("/").some((segment) => segment.length === 0);
 }
 
 function utf8ByteLength(value: string): number {

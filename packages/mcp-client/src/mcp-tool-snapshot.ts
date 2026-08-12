@@ -405,11 +405,7 @@ function readRecord(value: unknown): Readonly<Record<string, unknown>> {
 }
 
 function readText(value: unknown, allowEmpty: boolean): string {
-  if (
-    typeof value !== "string" ||
-    (!allowEmpty && value.length === 0) ||
-    !isWellFormedUnicode(value)
-  ) {
+  if (typeof value !== "string" || (!allowEmpty && value.length === 0) || !value.isWellFormed()) {
     throw new McpToolSnapshotError("malformed-message");
   }
   return value;
@@ -430,20 +426,4 @@ function serializeBounded(value: unknown, maximumBytes: number): string {
 
 function utf8Bytes(value: string): number {
   return new TextEncoder().encode(value).byteLength;
-}
-
-function isWellFormedUnicode(value: string): boolean {
-  for (let index = 0; index < value.length; index += 1) {
-    const codeUnit = value.charCodeAt(index);
-    if (codeUnit >= 0xd800 && codeUnit <= 0xdbff) {
-      const next = value.charCodeAt(index + 1);
-      if (!(next >= 0xdc00 && next <= 0xdfff)) {
-        return false;
-      }
-      index += 1;
-    } else if (codeUnit >= 0xdc00 && codeUnit <= 0xdfff) {
-      return false;
-    }
-  }
-  return true;
 }
