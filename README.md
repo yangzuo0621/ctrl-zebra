@@ -72,6 +72,13 @@ Repository maintainers can create a verified local artifact with `pnpm package:v
 8. Use **Saved sessions** to inspect interrupted history and **Agent changes** to restore a
    conflict-free Checkpoint.
 
+To ask about the current editor explicitly, enable **CtrlZebra › Editor Context: Enabled** in Settings,
+then use **CtrlZebra: Ask about Selection** or **CtrlZebra: Ask about Active File** from the Command
+Palette or editor context menu. CtrlZebra fills a visible, editable Composer draft with the bounded,
+workspace-relative source context; after you review or edit a ready draft, select **Send** to create the
+normal Run. It never sends the request or runs a model automatically. If the source becomes stale, select
+**Refresh** or explicitly **Use stale context**; select **Remove** whenever you do not want the context included.
+
 Do not paste API keys into chat, workspace files, settings, logs, or command arguments.
 
 ## Local OpenAI-compatible setup
@@ -158,7 +165,7 @@ CtrlZebra never reconnects or resumes them from a saved Session.
 
 ## Configuration
 
-All settings have machine scope.
+Provider and MCP settings have machine scope; the editor-context opt-in is window scoped.
 
 | Setting | Default | Description |
 |---|---|---|
@@ -166,6 +173,7 @@ All settings have machine scope.
 | `ctrlZebra.provider.model` | empty | Required exact model ID. Surrounding whitespace is rejected. |
 | `ctrlZebra.provider.endpoint` | empty | Optional override for OpenAI/Gemini; required for OpenAI-compatible. Remote URLs must use HTTPS. Plain HTTP is allowed only for `localhost`, `127.0.0.0/8`, or `::1`. User info, query strings, and fragments are rejected. |
 | `ctrlZebra.provider.capabilities` | `["text-streaming"]` | Used only by OpenAI-compatible endpoints. Values are `text-streaming` and `tool-calling`, without duplicates. CtrlZebra currently requires both to start an Agent run. |
+| `ctrlZebra.editorContext.enabled` | `false` | Window-scoped opt-in for explicit editor context commands. It captures no text in the background and does not grant Trust or side-effecting permissions. |
 | `ctrlZebra.mcp.server` | `null` | One local stdio Server object. Existing `version: 1` means modern-only; explicit `version: 2` adds `protocolMode: "modern-only" | "dual"`. Stable lower-snake-case `serverId`, bounded `displayName`, exact `command`, and ordered `args` are required; credentials and shell command lines are forbidden. A trusted single-folder workspace and fresh startup approval are required. See the [configuration contract](docs/configuration.md). |
 
 OpenAI and Gemini always use their adapter-declared text-streaming and tool-calling capabilities.

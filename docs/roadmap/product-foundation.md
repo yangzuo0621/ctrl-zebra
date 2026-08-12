@@ -31,7 +31,9 @@
   作为有界、不可信、可关闭的上下文或只读 Tool Result；不建立自有语义、向量或代码索引。
   这些能力只通过 Extension-owned Host adapter 接入；跨边界只允许 `Ide*Dto` 和普通用户上下文，
   不把 VS Code 对象、绝对主机路径、编辑器快照或 Provider 结果变成 System 指令、授权材料或
-  跨会话记忆。
+  跨会话记忆。用户可以显式启用 `ctrlZebra.editorContext.enabled`，并从
+  `ctrlZebra.askAboutSelection`/`ctrlZebra.askAboutFile` 命令把当前选区或活动文件填充到可见、
+  可编辑的 Composer 草稿；入口不自动发送、运行模型或授予权限。
 - 一个用户显式配置并连接的本地 stdio MCP Server 可以提供 Tools、Resources（含 Templates）和
   Prompts。MCP Tool 进入现有 Core Tool、审批、取消和结果边界；Resource 与 Prompt 只通过用户或
   应用控制的有界路径进入普通不可信上下文。阶段 18 获准显式 `modern-only | dual` 模式，闭集支持
@@ -200,6 +202,11 @@ Workspace Trust。T1901 不实现这些工具；T1902–T1904 分别接入其宿
 - 审批界面。
 - 会话选择和设置。
 - 显示用户可移除的 IDE 上下文来源、范围、陈旧/截断状态和只读 Tool 结果。
+
+T1905 的编辑器入口由 Extension-owned controller 捕获并发布严格的
+`extension/editor-context` projection；Webview 只维护 pending card、草稿和
+`webview/editor-context-refresh|remove|use-stale` intents。配置、命令、VS Code 生命周期、Trust、
+URI 规范化和取消仍归 Extension；Protocol 拥有这些消息的闭合集和 `Ide*Dto` Schema。
 
 约束：
 

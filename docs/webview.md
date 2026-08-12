@@ -95,6 +95,67 @@ decide whether a source is current, in scope, trusted, or authorized.
   Composer focus, selection, disclosure state, and scroll position and remain operable at approximately
   300px width, 200% zoom, reduced motion, and all supported VS Code themes.
 
+### T1905 editor entry projection
+
+The Extension contributes `ctrlZebra.askAboutSelection` and `ctrlZebra.askAboutFile` and the
+`ctrlZebra.editorContext.enabled` setting (default off). The Webview never invokes those commands; it
+receives a validated `extension/editor-context` message after the user explicitly invokes a command or
+Refresh. Each event has Host-issued `requestId` and `eventSequence`, `viewGeneration`,
+`sessionGeneration`, and (for a card) `cardGeneration`/`contextId`, exactly as defined by [Protocol](protocol.md).
+Unknown, old, duplicate, cancelled, or mismatched request/context messages are ignored before state
+mutation.
+
+The Webview mirrors the Host's two gates. Its **capture delivery state** tracks only the newest refresh
+intent and is cleared synchronously when the user cancels, removes, starts New chat, or the view is disposed;
+a late `ready` or `unavailable` event cannot recreate a card. A Host-driven Session restore/switch clears
+the store transactionally before committing its new session generation. Capture delivery is fenced by the
+exact `(viewGeneration, sessionGeneration, captureId)`; `captureId` appears only on `ready`/`stale`
+projections for capture correlation. Its **delivered-card owner state** tracks the exact
+`(viewGeneration, sessionGeneration, cardGeneration, contextId)` tuple; `cleared` intentionally omits
+`captureId` and correlates by the card/context fields. It
+accepts bounded `stale`/Host-driven `cleared` events only for that tuple and only after all affected capture
+gates have closed; a Host-driven clear closes the owner state. Remove and accepted New chat clear the editor
+store locally before their one intent/action, so the Host emits no editor `cleared` event. Host-driven Session
+restore/switch clears the store transactionally before committing the new session generation, and disposal
+closes the gates without an editor event. A same-sequence event is compared against the retained canonical
+record first: an exact duplicate is a no-op, a conflicting duplicate is discarded, then only a greater
+`eventSequence` may commit and advance the watermark; a lower sequence is a stale no-op. Old request/capture,
+cross-view/session, or post-disposal events are rejected. The Host independently suppresses repeated source
+transitions with its per-owner normalized stale-reason/source-fingerprint watermark before allocating event
+IDs; Webview same-sequence comparison is only transport retransmission de-duplication. Host event ordering is
+authoritative; the Webview never infers freshness from arrival timing.
+
+A ready projection is rendered above the Composer as a semantic `Editor context` card with source kind,
+workspace-relative path, optional language/range, and non-color-only `Truncated`/reason status. The bounded
+text is inserted into the ordinary Composer draft with the fixed provenance prefix from [Protocol](protocol.md);
+it remains visible and editable until send. A ready card may be sent after review/editing. The store does
+not retain a VS Code object, absolute path, Trust state, source revision, or authoritative snapshot in
+`getState`/`setState` restoration.
+
+`Refresh` posts the exact owner tuple in `webview/editor-context-refresh`; the Host closes the old capture
+first and leaves the old delivered card unchanged until a newer ready commit. `Remove` synchronously clears
+the card, generated prefix (only if the draft is still unchanged), and stale decision before trying one
+`webview/editor-context-remove`; it never waits for a Host acknowledgement or steals Composer focus. The Host
+may send an acknowledgement, but it is optional and ignored. Accepted New chat performs the same local clear
+before posting its action; restore/session switch clears the store transactionally before the new session
+generation is committed. None of these boundaries expects an editor `cleared` event. The setting-off/
+Trust-lost/Host-cleared projection synchronously removes the card and stale decision, while preserving
+unrelated user draft text.
+`Use stale context` is available only for the exact stale tuple; it records the explicit send decision and
+posts one `webview/editor-context-use-stale`. A stale card blocks Send until that decision or a fresh capture.
+
+The projection tests must assert that `captureId` is accepted only on `ready`/`stale`, while `cleared` is
+accepted only with its owner tuple/card/context and rejects any `captureId` extra field. They must also verify
+that one repeated editor/selection/document transition causes one Host stale projection/ID pair, while an
+exact same-sequence/requestId/payload retransmission is a Webview no-op.
+
+The editor entry path has no Send/Run side effect: it does not call the model, execute a Tool, create an
+Approval, edit a file, or retry a capture automatically. Cancellation and disposal clear pending state and
+accept no late messages. One polite live region announces only replacement, clear, stale, truncation, or
+unavailable outcomes; it never reads source text character-by-character. Refresh/remove/use-stale controls
+have semantic labels, keyboard paths, visible focus, and fixed disabled reasons, and preserve Composer
+focus, selection, disclosure state, and transcript scroll position.
+
 ## Product Language and String Ownership (T1701)
 
 - The Marketplace target language is English (`en`). This is a minimum-localization policy: T1701 does not

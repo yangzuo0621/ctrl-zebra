@@ -105,6 +105,84 @@ Host lifecycle and freshness are explicit:
   execute, MCP, or other side-effecting operation. If VS Code or a provider refuses an operation, the
   Host returns a stable unavailable outcome without a hidden fallback.
 
+### T1905 editor entry lifecycle
+
+The explicit entry path is an Extension-owned controller layered on the T1902 adapter. The public
+configuration key is `ctrlZebra.editorContext.enabled` (boolean, default `false`, `window` scope). The
+public commands are `ctrlZebra.askAboutSelection` and `ctrlZebra.askAboutFile`; both are registered and
+contributed to Command Palette and `editor/context`, but their menu `when` clauses and `enablement` are
+only discoverability hints. The controller rechecks the setting, active editor, exact selection (for the
+selection command), selected root, Trust, supported text identity, and document version immediately before
+capture. A direct `commands.executeCommand` invocation cannot bypass those checks.
+
+Each Agent Webview view owns two explicit gates, as defined by the Protocol contract. The **capture delivery
+gate** owns one bounded read, an AbortController, and a Host-issued `captureId`; Refresh closes the prior
+gate before opening the next. Cancellation, supersession, editor/selection/document/workspace transition,
+setting disable, Trust loss, Session/New chat, view disposal, or Extension disposal closes this gate before
+cleanup. A completion whose gate, source tuple, or document revision is no longer current is dropped and
+cannot post a `ready` or `unavailable` capture result, owner transition, or card.
+
+The capture fence is `(viewGeneration, sessionGeneration, captureId)`. The delivered-card owner tuple is
+exactly `(viewGeneration, sessionGeneration, cardGeneration, contextId)`; `captureId` appears only on
+`ready`/`stale` projections for capture correlation and is not part of a Webview intent tuple. `cleared`
+intentionally omits `captureId` and correlates by the current owner tuple's card/context fields.
+
+The **delivered-card/event projection owner gate** opens only at the ordered `ready` enqueue commit and owns
+the immutable `(viewGeneration, sessionGeneration, cardGeneration, contextId)` tuple. It remains the sole
+owner of that card until replacement or invalidation. After all affected capture gates close, an editor,
+selection, or document transition may pass one bounded `stale` event through this gate; setting disable,
+Trust loss, selected-root/workspace change, or unsupported current editor passes one Host-driven `cleared`
+event and closes it. Remove and accepted New chat are Webview-local transitions: the Webview clears the
+editor card, stale decision, and capture-local state synchronously before posting the single intent or new-chat
+action. Session switch/restore is Host-driven but transactional: the Host closes both gates and the Webview
+clears its editor store before the new session generation is committed; the Host emits no editor `cleared`
+event for that boundary. Disposal likewise closes both gates and emits no editor event. If no card has been
+committed, transitions emit no stale/clear projection and a cancelled capture emits no result. A card gate
+never reopens a capture gate or authorizes a model/Tool action.
+
+The controller serializes capture completion, Webview intents, and spontaneous transitions in one owner
+queue. `viewGeneration` is allocated monotonically for each Webview resolution (counter starts at `1` per
+Extension activation); `sessionGeneration` starts at `0` per view and increments for each Host-accepted
+Session owner replacement (restore/selection commit, Session switch, or New chat); `cardGeneration`
+increments on card allocation/invalidation; and `eventSequence` increments for every Host-to-Webview editor
+event. Every counter is a non-negative safe integer. Before incrementing, the owner checks the next value
+against `Number.MAX_SAFE_INTEGER`; overflow fails closed with no event, wrap, reuse, or silent reset, closes
+the affected gate, and rejects further editor entry. Session/card/event overflow requires a new Webview
+generation; view overflow requires a new Extension activation. Counters otherwise reset only with their
+owning view/session generation and are never reused within an Extension activation. Outbound `requestId`
+values are Host-issued event IDs; inbound Webview request IDs are intent IDs and are deduplicated by exact
+payload. The active owner tuple and generation fences reject old capture results, old requests, cross-view/
+session events, same-sequence conflicts, and post-disposal messages before any state mutation.
+
+When the Webview receives a Host event, it compares the canonical validated payload with the retained record
+for the exact same `eventSequence` before applying monotonic ordering. An identical same-sequence event is an
+idempotent no-op; a conflicting same-sequence event is discarded. Only an event with a greater sequence can
+commit and advance the watermark; a lower sequence is a stale no-op. This ordering applies before any UI
+mutation and is covered by the deterministic race tests.
+
+For each delivered owner the Host keeps a one-way `staleTransitionWatermark` containing bounded normalized
+stale reasons and a deterministic source fingerprint (Host-owned source identity, document version, language,
+and exact range/selection). The owner queue checks this record before allocating an event sequence or request
+ID. The first transition reserves it and emits one stale projection; matching pending/committed transitions,
+and any later transition while the owner is stale-latched, emit nothing and allocate no IDs. A newer ready
+owner resets the watermark. This Host transition check is separate from Webview exact same-sequence,
+requestId, and canonical-payload retransmission de-duplication.
+
+The Agent view exposes only the strict `extension/editor-context` projection. It queues at most the newest
+event for a resolved owner, drops queued data on disposal, and never exposes `Webview`, `TextEditor`, `Uri`,
+or `AbortController` objects to Webview/Core. A command focuses the Agent view, then posts one projection;
+it does not call the model or create a Run. A ready card can be sent after review/editing; only stale state
+blocks Send until refresh or explicit `Use stale context`.
+
+Required adapter/controller tests cover normal ready → editable/send, collapsed selection, no editor, an
+`editorTextFocus` menu-visible but unsupported/outside/untrusted document, setting disable, focus and
+selection preservation, cancel/close races, Refresh A→B, transition-before-capture-completion,
+completion-before-transition, one-stale-per-owner transition watermarking before event ID allocation,
+Webview retransmission deduplication, stale/clear deduplication, local Remove/New-chat/disposal clearing with no Host
+clear event, transactional Host restore/session-switch clearing, generation allocation/reset, safe-integer
+overflow fail-closed/new-view requirements, strict message validation, cross-view/session fences,
+same-sequence duplicate/conflict comparison before monotonic checks, and post-disposal suppression.
+
 ## Lazy Initialization
 
 - Activation creates only the registrations and lightweight state required to make the extension available.

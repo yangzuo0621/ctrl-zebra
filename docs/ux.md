@@ -264,6 +264,32 @@ IDE 上下文是用户可以看见、关闭和控制的普通上下文，不是�
   和稳定顺序，状态不能只靠颜色表达。在约 300px、200% 缩放、四类 VS Code 主题和长本地化文本
   下仍可完成关闭、刷新、移除和发送。
 
+### T1905 编辑器发起入口
+
+设置 `CtrlZebra › Editor Context: Enabled` 默认关闭。用户打开后，在编辑器右键菜单和 Command
+Palette 可见 `CtrlZebra: Ask about Selection`（`editorHasSelection`，有非折叠选区时）与
+`CtrlZebra: Ask about Active File`（`editorTextFocus`，有编辑器焦点时）；这些 when/enablement
+条件只是可发现性提示，Host 必须再次验证当前编辑器、选区、工作区范围、Trust、文本类型和版本。
+
+命令只打开或聚焦 Agent 侧栏，并把带固定 `Editor context` 来源标签、工作区相对路径、语言、
+精确范围和截断状态的普通不可信上下文放入 Composer 草稿。草稿在发送前始终可见、可编辑、可
+删除；命令绝不自动发送、运行模型、执行 Tool、写入文件或授予权限。折叠选区保持空文本和精确
+范围；即使 `editorTextFocus` 菜单可见，Host 仍可能返回固定 `No editor`、`Unsupported document`、
+`Outside workspace` 或 `Untrusted workspace` 不可用状态；无选区、无活动文件、不可信工作区、
+关闭设置或取消均不回退到活动行或整个工作区。
+
+卡片提供 `Refresh`、`Remove` 和 stale 时的 `Use stale context`。ready 卡片在用户审阅或编辑后可
+直接 Send；Refresh 只重新捕获原 scope，
+Remove 先同步清卡并保留用户修改过的非上下文草稿，Use stale 只对同一 context ID 做一次明确
+发送决定；stale 未刷新或确认前 Send 禁用并显示原因。编辑器、选区或文档变化显示 stale；设置关闭、
+Trust/工作区变化或不支持编辑器由 Host 当前 owner 投影一次 cleared。Remove 和 New chat 先由
+Webview 同步清卡，Session restore/switch 在新 Session 提交前事务性清卡，侧栏关闭/disposal 关闭
+边界；这些本地/事务性边界不等待或要求 Host editor cleared，迟到结果没有 UI 效果。
+
+入口和卡片使用固定产品文案、语义按钮、可见焦点、键盘路径和一个 polite live region；刷新、移除
+和结果替换不抢 Composer 焦点、光标、选择或滚动。状态不能只靠颜色表达，来源文本按纯文本显示，
+不解析 Markdown、HTML、链接、命令或 Provider 字段。
+
 ## 5. Tool、审批与进度反馈
 
 - Tool 默认摘要使用面向用户的动作和对象描述，不以内部 Tool 名称作为唯一标题。

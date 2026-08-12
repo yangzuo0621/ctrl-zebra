@@ -5,6 +5,21 @@ Security, Persistence, UX, and Webview contracts. The strict v1/v2 parser, norma
 Schemas, mode-aware lifecycle, negotiated projection, bounded provenance, and deterministic local
 fixtures are implemented. Migration remains explicit and live recovery never reconnects implicitly.
 
+## Editor context setting (T1905)
+
+`ctrlZebra.editorContext.enabled` is a boolean, `window`-scoped VS Code setting and defaults to
+`false`. It is the user's opt-in for the explicit editor entry commands; it is not a Trust grant and does
+not authorize writes, commands, MCP, or model activity. When disabled, the Extension rejects captures,
+clears pending Webview context, and never reads an editor in the background. The setting accepts no other
+shape or value.
+
+The only public entry commands are `ctrlZebra.askAboutSelection` and `ctrlZebra.askAboutFile`. They appear
+in Command Palette and the editor context menu when the corresponding editor condition is true, but the
+Extension repeats the setting, active-editor, selection, selected-root, Trust, text-identity, and revision
+checks before each bounded capture. A direct command invocation therefore cannot bypass the setting or
+Workspace Trust boundary. The captured context stays in a visible, editable Composer draft until the user
+sends or removes it; opening the Agent view, changing focus, or model activity never captures implicitly.
+
 ## Scope and ownership
 
 `ctrlZebra.mcp.server` is one optional, machine-scoped VS Code setting. The Extension Host is the
