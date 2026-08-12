@@ -208,19 +208,19 @@ export class EditorContextEntryController {
     sourceFingerprint?: string,
   ): void {
     if (this.#disposed) return;
+    const normalizedReasons = normalizeReasons(reasons);
+    if (normalizedReasons.length === 0) return;
     for (const view of this.#views) {
       if (view.disposed) continue;
-      this.#closeCapture(view);
+      if (
+        view.capture !== undefined &&
+        transitionAffectsScope(view.capture.scope, normalizedReasons)
+      ) {
+        this.#closeCapture(view);
+      }
       const owner = view.owner;
       if (owner === undefined) continue;
-      const normalizedReasons = normalizeReasons(reasons);
-      if (normalizedReasons.length === 0) continue;
-      if (
-        owner.scope === "active-editor" &&
-        normalizedReasons.every((reason) => reason === "selection-changed")
-      ) {
-        continue;
-      }
+      if (!transitionAffectsScope(owner.scope, normalizedReasons)) continue;
       const fingerprint =
         sourceFingerprint ?? this.#dependencies.getSourceFingerprint?.(owner.scope) ?? "";
       const watermark = `${normalizedReasons.join(",")}\u0000${fingerprint}`;
@@ -565,6 +565,13 @@ function normalizeReasons(
   ];
   const set = new Set(reasons);
   return order.filter((reason) => set.has(reason));
+}
+
+function transitionAffectsScope(
+  scope: EditorContextScope,
+  reasons: readonly EditorContextTransitionReason[],
+): boolean {
+  return scope === "selection" ? true : reasons.some((reason) => reason !== "selection-changed");
 }
 
 function markContextStale(context: IdeTextContextDto): IdeTextContextDto {

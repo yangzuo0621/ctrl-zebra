@@ -65,6 +65,50 @@ describe("EditorContextEntryController", () => {
     expect(messages).toEqual([]);
   });
 
+  it("cancels an in-flight selection capture on a selection transition", async () => {
+    const messages: ExtensionToWebviewMessage[] = [];
+    let release: (() => void) | undefined;
+    const controller = createController(messages, {
+      readContext: async (_scope, signal) => {
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        signal.throwIfAborted();
+        return context;
+      },
+    });
+    const capture = controller.entry.ask("selection");
+    await vi.waitFor(() => expect(release).toBeDefined());
+    controller.entry.notifyTransition(["selection-changed"]);
+    release?.();
+    await capture;
+    expect(messages).toEqual([]);
+  });
+
+  it("keeps an active-editor capture open through a selection transition", async () => {
+    const messages: ExtensionToWebviewMessage[] = [];
+    let release: (() => void) | undefined;
+    const controller = createController(messages, {
+      readContext: async (scope, signal) => {
+        expect(scope).toBe("active-editor");
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        signal.throwIfAborted();
+        return context;
+      },
+    });
+    const capture = controller.entry.ask("active-editor");
+    await vi.waitFor(() => expect(release).toBeDefined());
+    controller.entry.notifyTransition(["selection-changed"]);
+    release?.();
+    await capture;
+    expect(messages.filter((message) => message.type === "extension/editor-context")).toHaveLength(
+      1,
+    );
+    expect(messages[0]).toMatchObject({ status: "ready", scope: "active-editor" });
+  });
+
   it("emits one stale transition per owner and then one Host clear", async () => {
     const messages: ExtensionToWebviewMessage[] = [];
     const controller = createController(messages);
