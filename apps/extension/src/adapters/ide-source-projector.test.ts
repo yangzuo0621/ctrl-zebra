@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  IdeSourceProjectionError,
-  ideSourceProjector,
-} from "./ide-source-projector.js";
+import { IdeSourceProjectionError, ideSourceProjector } from "./ide-source-projector.js";
 
 const root = (overrides: Partial<Parameters<typeof ideSourceProjector.sameUri>[0]> = {}) => ({
   scheme: "file",
@@ -76,6 +73,8 @@ describe("IDE source projector", () => {
     expect(ideSourceProjector.isBoundedWellFormedUnicode("😀", 1, 4)).toBe(true);
     expect(ideSourceProjector.isBoundedWellFormedUnicode("😀", 1, 3)).toBe(false);
     expect(ideSourceProjector.isBoundedWellFormedUnicode("\udc00", 1, 3)).toBe(false);
+    expect(ideSourceProjector.isWellFormedUnicode("name")).toBe(true);
+    expect(ideSourceProjector.isWellFormedUnicode("\ud800")).toBe(false);
   });
 
   it("validates UTF-16 positions against document lines and surrogate boundaries", () => {

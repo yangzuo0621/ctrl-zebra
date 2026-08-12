@@ -11,7 +11,6 @@ import {
   type IdeSourceDto,
   type IdeTruncationReason,
   ideDiagnosticsResultSchema,
-  ideTruncationReasons,
   maxIdeDiagnosticAggregateBytes,
   maxIdeDiagnosticAggregateCodePoints,
   maxIdeDiagnosticEntries,
@@ -21,15 +20,13 @@ import {
   maxIdeDiagnosticMessageCodePoints,
   maxIdeLanguageIdBytes,
   maxIdeLanguageIdCodePoints,
-  maxIdePositionCharacter,
-  maxIdePositionLine,
   maxIdeUriPathBytes,
   maxIdeUriPathCodePoints,
   maxIdeUriSchemeBytes,
   maxIdeUriSchemeCodePoints,
 } from "@ctrl-zebra/protocol";
 import type { Diagnostic, TextDocument, TextEditor, Uri } from "vscode";
-
+import { IdeSourceProjectionError, ideSourceProjector } from "./ide-source-projector.js";
 import type { WorkspaceScope } from "./workspace-scope.js";
 import { WorkspaceScopeError } from "./workspace-scope.js";
 
@@ -674,43 +671,111 @@ function normalizeRange(value: unknown, document: TextDocument | undefined): Ide
     start: value.start,
     end: value.end,
   } as IdeRangeDto;
-  if (comparePositions(range.start, range.end) > 0) throw new InvalidDiagnosticsOutputError();
+  if (ideSourceProjector.comparePositions(range.start, range.end) > 0) {
+    throw new InvalidDiagnosticsOutputError();
+  }
   validateDocumentPosition(document, range.start);
   validateDocumentPosition(document, range.end);
   return range;
 }
 
 function isPosition(value: unknown): value is IdePositionDto {
-  return (
-    isRecord(value) &&
-    typeof value.line === "number" &&
-    typeof value.character === "number" &&
-    Number.isSafeInteger(value.line) &&
-    Number.isSafeInteger(value.character) &&
-    value.line >= 0 &&
-    value.line <= maxIdePositionLine &&
-    value.character >= 0 &&
-    value.character <= maxIdePositionCharacter
-  );
+  return ideSourceProjector.isPosition(value);
 }
 
 function validateDocumentPosition(document: TextDocument, position: IdePositionDto): void {
-  if (!Number.isSafeInteger(document.lineCount) || document.lineCount <= position.line) {
-    throw new InvalidDiagnosticsOutputError();
-  }
   let line: { readonly text: string };
   try {
     line = document.lineAt(position.line);
   } catch {
     throw new InvalidDiagnosticsOutputError();
   }
-  if (
-    typeof line.text !== "string" ||
-    position.character > line.text.length ||
-    isInsideSurrogate(line.text, position.character)
-  ) {
-    throw new InvalidDiagnosticsOutputError();
+  try {
+    ideSourceProjector.validateDocumentPosition(document.lineCount, line.text, position);
+  } catch (error) {
+    if (error instanceof IdeSourceProjectionError) {
+      throw new InvalidDiagnosticsOutputError();
+    }
+    throw error;
   }
+}
+
+function takeBoundedText(value: string, maxCodePoints: number, maxBytes: number): BoundedText {
+  try {
+    return ideSourceProjector.takeBoundedText(value, maxCodePoints, maxBytes);
+  } catch (error) {
+    if (error instanceof IdeSourceProjectionError) {
+      throw new InvalidDiagnosticsOutputError();
+    }
+    throw error;
+  }
+}
+
+function boundedRequired(value: string, maxCodePoints: number, maxBytes: number): string {
+  try {
+    return ideSourceProjector.boundedRequired(value, maxCodePoints, maxBytes);
+  } catch (error) {
+    if (error instanceof IdeSourceProjectionError) {
+      throw new InvalidDiagnosticsOutputError();
+    }
+    throw error;
+  }
+}
+
+function sameUri(left: Uri, right: Uri): boolean {
+  return ideSourceProjector.sameUri(left, right);
+}
+
+function toWorkspaceRelativePath(root: Uri, target: Uri): string {
+  try {
+    return ideSourceProjector.toWorkspaceRelativePath(root, target);
+  } catch (error) {
+    if (error instanceof IdeSourceProjectionError) {
+      throw new InvalidDiagnosticsOutputError();
+    }
+    throw error;
+  }
+}
+
+function countCodePoints(value: string): number {
+  try {
+    return ideSourceProjector.countCodePoints(value);
+  } catch (error) {
+    if (error instanceof IdeSourceProjectionError) {
+      throw new InvalidDiagnosticsOutputError();
+    }
+    throw error;
+  }
+}
+
+function utf8ByteLength(value: string): number {
+  try {
+    return ideSourceProjector.utf8ByteLength(value);
+  } catch (error) {
+    if (error instanceof IdeSourceProjectionError) {
+      throw new InvalidDiagnosticsOutputError();
+    }
+    throw error;
+  }
+}
+
+function orderedReasons(reasons: Iterable<IdeTruncationReason>): readonly IdeTruncationReason[] {
+  return ideSourceProjector.orderedReasons(reasons);
+}
+
+function compareOptionalRanges(
+  left: IdeRangeDto | undefined,
+  right: IdeRangeDto | undefined,
+): number {
+  return ideSourceProjector.compareOptionalRanges(left, right);
+}
+
+function compareOptionalStrings(left: string | undefined, right: string | undefined): number {
+  return ideSourceProjector.compareOptionalStrings(left, right);
+}
+
+function compareStrings(left: string, right: string): number {
+  return ideSourceProjector.compareStrings(left, right);
 }
 
 function mapSeverity(value: unknown): IdeDiagnosticDto["severity"] | undefined {
@@ -758,56 +823,6 @@ function normalizeDiagnosticOrigin(value: unknown): string | undefined {
   return value;
 }
 
-function takeBoundedText(value: string, maxCodePoints: number, maxBytes: number): BoundedText {
-  const output: string[] = [];
-  const reasons = new Set<IdeTruncationReason>();
-  let codePoints = 0;
-  let bytes = 0;
-  let retained = true;
-  for (let index = 0; index < value.length; ) {
-    const point = readCodePoint(value, index);
-    const candidateBytes = utf8BytesForCodePoint(point.value);
-    if (retained) {
-      if (codePoints + 1 > maxCodePoints) reasons.add("code-points");
-      if (bytes + candidateBytes > maxBytes) reasons.add("utf8-bytes");
-      if (reasons.size > 0) {
-        retained = false;
-      } else {
-        output.push(value.slice(index, index + point.width));
-        codePoints += 1;
-        bytes += candidateBytes;
-      }
-    }
-    index += point.width;
-  }
-  return {
-    text: output.join(""),
-    truncated: reasons.size > 0,
-    reasons: orderedReasons(reasons),
-  };
-}
-
-function boundedRequired(value: string, maxCodePoints: number, maxBytes: number): string {
-  const projection = takeBoundedText(value, maxCodePoints, maxBytes);
-  if (projection.truncated || projection.text.length === 0)
-    throw new InvalidDiagnosticsOutputError();
-  return projection.text;
-}
-
-function readCodePoint(
-  value: string,
-  index: number,
-): { readonly value: number; readonly width: 1 | 2 } {
-  const codeUnit = value.charCodeAt(index);
-  if (codeUnit >= 0xd800 && codeUnit <= 0xdbff) {
-    const next = value.charCodeAt(index + 1);
-    if (!(next >= 0xdc00 && next <= 0xdfff)) throw new InvalidDiagnosticsOutputError();
-    return { value: value.codePointAt(index) ?? 0, width: 2 };
-  }
-  if (codeUnit >= 0xdc00 && codeUnit <= 0xdfff) throw new InvalidDiagnosticsOutputError();
-  return { value: codeUnit, width: 1 };
-}
-
 function readDocumentVersion(document: TextDocument): number | undefined {
   return Number.isSafeInteger(document.version) && document.version >= 0
     ? document.version
@@ -847,90 +862,6 @@ function isDiagnosticTuple(value: unknown): value is readonly [Uri, readonly Dia
   );
 }
 
-function comparePositions(left: IdePositionDto, right: IdePositionDto): number {
-  return left.line - right.line || left.character - right.character;
-}
-
-function sameUri(left: Uri, right: Uri): boolean {
-  return (
-    left.scheme.toLocaleLowerCase("en-US") === right.scheme.toLocaleLowerCase("en-US") &&
-    left.authority.toLocaleLowerCase("en-US") === right.authority.toLocaleLowerCase("en-US") &&
-    left.path === right.path &&
-    left.query === right.query &&
-    left.fragment === right.fragment
-  );
-}
-
-function toWorkspaceRelativePath(root: Uri, target: Uri): string {
-  const rootSegments = pathSegments(root.path);
-  const targetSegments = pathSegments(target.path);
-  if (
-    targetSegments.length <= rootSegments.length ||
-    !sameIdentityPart(root.scheme, target.scheme) ||
-    !sameIdentityPart(root.authority, target.authority)
-  ) {
-    throw new InvalidDiagnosticsOutputError();
-  }
-  for (let index = 0; index < rootSegments.length; index += 1) {
-    if (!sameIdentityPart(rootSegments[index] ?? "", targetSegments[index] ?? "")) {
-      throw new InvalidDiagnosticsOutputError();
-    }
-  }
-  const relative = targetSegments.slice(rootSegments.length).join("/");
-  if (relative.length === 0) throw new InvalidDiagnosticsOutputError();
-  return relative;
-}
-
-function pathSegments(path: string): readonly string[] {
-  if (!path.startsWith("/") || path.includes("\\")) throw new InvalidDiagnosticsOutputError();
-  if (path === "/") return [];
-  const segments = path.slice(1).split("/");
-  if (segments.some((segment) => segment.length === 0 || segment === "." || segment === "..")) {
-    throw new InvalidDiagnosticsOutputError();
-  }
-  return segments;
-}
-
-function sameIdentityPart(left: string, right: string): boolean {
-  return left.toLocaleLowerCase("en-US") === right.toLocaleLowerCase("en-US");
-}
-
-function isInsideSurrogate(line: string, character: number): boolean {
-  if (character <= 0 || character >= line.length) return false;
-  const previous = line.charCodeAt(character - 1);
-  const next = line.charCodeAt(character);
-  return previous >= 0xd800 && previous <= 0xdbff && next >= 0xdc00 && next <= 0xdfff;
-}
-
-function countCodePoints(value: string): number {
-  let count = 0;
-  for (let index = 0; index < value.length; ) {
-    const point = readCodePoint(value, index);
-    index += point.width;
-    count += 1;
-  }
-  return count;
-}
-
-function utf8ByteLength(value: string): number {
-  let bytes = 0;
-  for (let index = 0; index < value.length; ) {
-    const point = readCodePoint(value, index);
-    index += point.width;
-    bytes += utf8BytesForCodePoint(point.value);
-  }
-  return bytes;
-}
-
-function utf8BytesForCodePoint(codePoint: number): number {
-  return codePoint <= 0x7f ? 1 : codePoint <= 0x7ff ? 2 : codePoint <= 0xffff ? 3 : 4;
-}
-
-function orderedReasons(reasons: Iterable<IdeTruncationReason>): readonly IdeTruncationReason[] {
-  const set = new Set(reasons);
-  return ideTruncationReasons.filter((reason) => set.has(reason));
-}
-
 function candidateKey(candidate: NormalizedCandidate): string {
   return JSON.stringify({ source: candidate.source, diagnostic: candidate.diagnostic });
 }
@@ -967,16 +898,6 @@ function compareCandidates(left: NormalizedCandidate, right: NormalizedCandidate
   );
 }
 
-function compareOptionalRanges(
-  left: IdeRangeDto | undefined,
-  right: IdeRangeDto | undefined,
-): number {
-  if (left === undefined && right === undefined) return 0;
-  if (left === undefined) return -1;
-  if (right === undefined) return 1;
-  return comparePositions(left.start, right.start) || comparePositions(left.end, right.end);
-}
-
 function severityOrder(value: IdeDiagnosticDto["severity"]): number {
   return value === "error" ? 0 : value === "warning" ? 1 : value === "information" ? 2 : 3;
 }
@@ -990,24 +911,4 @@ function compareOptionalNumbers(left: number | undefined, right: number | undefi
   if (left === undefined) return -1;
   if (right === undefined) return 1;
   return compareNumbers(left, right);
-}
-
-function compareOptionalStrings(left: string | undefined, right: string | undefined): number {
-  if (left === undefined && right === undefined) return 0;
-  if (left === undefined) return -1;
-  if (right === undefined) return 1;
-  return compareStrings(left, right);
-}
-
-function compareStrings(left: string, right: string): number {
-  if (left === right) return 0;
-  const leftPoints = Array.from(left, (value) => value.codePointAt(0) ?? 0);
-  const rightPoints = Array.from(right, (value) => value.codePointAt(0) ?? 0);
-  const length = Math.min(leftPoints.length, rightPoints.length);
-  for (let index = 0; index < length; index += 1) {
-    const leftPoint = leftPoints[index] ?? 0;
-    const rightPoint = rightPoints[index] ?? 0;
-    if (leftPoint !== rightPoint) return leftPoint - rightPoint;
-  }
-  return leftPoints.length - rightPoints.length;
 }

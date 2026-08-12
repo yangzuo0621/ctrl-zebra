@@ -141,7 +141,11 @@ function utf8ByteLength(value: string): number {
   return bytes;
 }
 
-function takeBoundedText(value: string, maxCodePoints: number, maxBytes: number): IdeTextProjection {
+function takeBoundedText(
+  value: string,
+  maxCodePoints: number,
+  maxBytes: number,
+): IdeTextProjection {
   const output: string[] = [];
   const reasons = new Set<IdeTruncationReason>();
   let codePoints = 0;
@@ -196,6 +200,10 @@ function isBoundedWellFormedUnicode(
     if (codePoints > maxCodePoints || bytes > maxBytes) return false;
   }
   return true;
+}
+
+function isWellFormedUnicode(value: string): boolean {
+  return value.isWellFormed();
 }
 
 function sameUri(left: IdeSourceUriLike, right: IdeSourceUriLike): boolean {
@@ -260,14 +268,12 @@ export const ideSourceProjector = {
   countCodePoints,
   isBoundedWellFormedUnicode,
   isHighSurrogate,
-  isInsideSurrogate,
   isPosition,
+  isWellFormedUnicode,
   orderedReasons,
-  readCodePoint,
   sameUri,
   takeBoundedText,
   toWorkspaceRelativePath,
   utf8ByteLength,
-  utf8BytesForCodePoint,
   validateDocumentPosition,
 };
