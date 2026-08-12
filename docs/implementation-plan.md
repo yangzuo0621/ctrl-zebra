@@ -65,12 +65,12 @@
 **进度摘要**：
 
 - 总任务：148
-- 已完成：127
-- 进行中：1
+- 已完成：128
+- 进行中：0
 - 受阻：0
 - 待开始：20
-- 当前任务：T1904
-- 下一任务：T1905
+- 当前任务：T1905
+- 下一任务：T2001（须先完成 T1905，并通过 Phase 19 归档门禁）
 - 最后更新：2026-08-12
 
 | 阶段 | 任务 | 状态 | 完成 PR | 完成日期 |
@@ -202,7 +202,7 @@
 | 19 | T1901 | 已完成 | [#201](https://github.com/yangzuo0621/ctrl-zebra/pull/201) | 2026-08-12 |
 | 19 | T1902 | 已完成 | [#203](https://github.com/yangzuo0621/ctrl-zebra/pull/203) | 2026-08-12 |
 | 19 | T1903 | 已完成 | [#204](https://github.com/yangzuo0621/ctrl-zebra/pull/204) | 2026-08-12 |
-| 19 | T1904 | 进行中 | — | — |
+| 19 | T1904 | 已完成 | [#205](https://github.com/yangzuo0621/ctrl-zebra/pull/205) | 2026-08-12 |
 | 19 | T1905 | 待开始 | — | — |
 | 20 | T2001 | 待开始 | — | — |
 | 20 | T2002 | 待开始 | — | — |
@@ -250,6 +250,13 @@
 - 完成证据：[PR #204](https://github.com/yangzuo0621/ctrl-zebra/pull/204)，实现 revision `8d1ce7f4356293984774010080a376f30232579f`；聚焦测试、完整单元测试、类型检查、Biome 检查、构建、Ubuntu 集成测试、coverage gate 及 `git diff --check` 均通过；GitHub Actions run `31551947592` 的 Ubuntu、macOS、Windows 验证均通过。
 - 完成日期：2026-08-12
 - 下一任务：T1904
+
+### T1904 完成记录
+
+- 完成摘要：实现 VS Code 语言服务定义、引用和符号查询的最小只读 Tool 集合；复用现有 Provider 命令，校验返回 URI 与范围，并对 workspace/trust、取消、Provider 失败、结果数量和 URI 组件实施确定性边界。
+- 完成证据：[PR #205](https://github.com/yangzuo0621/ctrl-zebra/pull/205)，实现 revision `94f75d55c00a3b00ca1b1b7948be5317c4ca857a`；GitHub Actions run `31556983168` 的 Ubuntu、macOS、Windows 验证均通过（实际 required checks）；实现 revision 的聚焦/完整测试、类型检查、Biome 检查、构建及 `git diff --check` 均通过。
+- 完成日期：2026-08-12
+- 下一任务：T1905；Phase 19 归档门禁完成后方可进入 T2001。
 
 ---
 
