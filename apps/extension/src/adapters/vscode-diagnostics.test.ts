@@ -1,5 +1,9 @@
 import { DiagnosticsUnavailableError } from "@ctrl-zebra/builtin-tools";
-import { maxIdeDiagnosticEntries, maxIdeDiagnosticMessageCodePoints } from "@ctrl-zebra/protocol";
+import {
+  maxIdeDiagnosticAggregateCodePoints,
+  maxIdeDiagnosticEntries,
+  maxIdeDiagnosticMessageCodePoints,
+} from "@ctrl-zebra/protocol";
 import { describe, expect, it, vi } from "vitest";
 import type { Diagnostic, TextDocument, TextEditor, Uri } from "vscode";
 
@@ -149,6 +153,46 @@ describe("VsCodeDiagnostics", () => {
 
     expect(result.diagnostics.map(({ message }) => message)).toEqual(["alpha", "zulu"]);
     expect(result.truncated).toBe(false);
+  });
+
+  it("deduplicates a duplicate flood before aggregate accounting", async () => {
+    const document = createDocument("x", "/workspace/src/index.ts");
+    const repeated = diagnostic(0, 0, 0, 1, 2, "x".repeat(maxIdeDiagnosticMessageCodePoints));
+    const result = await createAdapter(createEditor(document), () =>
+      Array.from({ length: 128 }, () => repeated),
+    ).getDiagnostics({ scope: "active-file" }, signal());
+
+    expect(result.diagnostics).toHaveLength(1);
+    expect(result.truncated).toBe(false);
+  });
+
+  it("keeps aggregate truncation and the accepted prefix independent of provider order", async () => {
+    const document = createDocument("x", "/workspace/src/index.ts");
+    const diagnostics = Array.from({ length: 40 }, (_, index) =>
+      diagnostic(
+        0,
+        0,
+        0,
+        1,
+        2,
+        `${String(index).padStart(4, "0")}${"x".repeat(maxIdeDiagnosticMessageCodePoints - 4)}`,
+      ),
+    );
+    const forward = await createAdapter(createEditor(document), () => diagnostics).getDiagnostics(
+      { scope: "active-file" },
+      signal(),
+    );
+    const reverse = await createAdapter(createEditor(document), () =>
+      [...diagnostics].reverse(),
+    ).getDiagnostics({ scope: "active-file" }, signal());
+
+    expect(forward.diagnostics).toEqual(reverse.diagnostics);
+    expect(forward.diagnostics.length).toBeLessThan(diagnostics.length);
+    expect(forward.truncated).toBe(true);
+    expect(forward.truncationReasons).toContain("code-points");
+    expect(forward.diagnostics.length).toBeLessThanOrEqual(
+      Math.floor(maxIdeDiagnosticAggregateCodePoints / maxIdeDiagnosticMessageCodePoints),
+    );
   });
 
   it("rejects ranges from a closed file when the host cannot verify document bounds", async () => {

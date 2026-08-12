@@ -78,6 +78,7 @@ interface BoundedText {
 interface NormalizedCandidate {
   readonly source: IdeSourceDto;
   readonly diagnostic: IdeDiagnosticDto;
+  readonly aggregateValues: readonly string[];
 }
 
 interface CollectedDiagnostics {
@@ -300,7 +301,6 @@ export class VsCodeDiagnostics implements IdeDiagnosticsPort {
     let sawProviderResource = false;
     let sawInWorkspaceResource = false;
     let overflowed = false;
-    const budget = new DiagnosticBudget();
 
     const addCandidate = (candidate: NormalizedCandidate): void => {
       const key = candidateKey(candidate);
@@ -353,14 +353,9 @@ export class VsCodeDiagnostics implements IdeDiagnosticsPort {
             document,
             diagnostic,
             stale,
-            budget,
           );
-          if (candidate === undefined) {
-            if (!budget.lastRejectedByAggregate) reasons.add("entries");
-            break;
-          }
           for (const reason of candidate.reasons) reasons.add(reason);
-          addCandidate({ source: candidate.source, diagnostic: candidate.diagnostic });
+          addCandidate(candidate);
         }
       }
     } else {
@@ -378,27 +373,30 @@ export class VsCodeDiagnostics implements IdeDiagnosticsPort {
           document,
           diagnostic,
           stale,
-          budget,
         );
-        if (candidate === undefined) {
-          if (!budget.lastRejectedByAggregate) reasons.add("entries");
-          break;
-        }
         for (const reason of candidate.reasons) reasons.add(reason);
-        addCandidate({ source: candidate.source, diagnostic: candidate.diagnostic });
+        addCandidate(candidate);
       }
       sawProviderResource = true;
       sawInWorkspaceResource = true;
     }
 
-    for (const reason of budget.takeReasons) reasons.add(reason);
     if (overflowed) reasons.add("entries");
     candidates.sort(compareCandidates);
+
+    const budget = new DiagnosticBudget();
+    const accepted: NormalizedCandidate[] = [];
+    for (const candidate of candidates) {
+      this.#assertOpen(signal, snapshot.generation);
+      if (budget.fit(candidate.aggregateValues) === undefined) break;
+      accepted.push(candidate);
+    }
+    for (const reason of budget.takeReasons) reasons.add(reason);
     this.#assertOpen(signal, snapshot.generation);
     this.#assertSnapshotIdentity(snapshot, true);
 
     return {
-      candidates,
+      candidates: accepted,
       reasons,
       overflowed,
       outsideCount,
@@ -431,8 +429,7 @@ export class VsCodeDiagnostics implements IdeDiagnosticsPort {
     document: TextDocument | undefined,
     diagnostic: Diagnostic,
     stale: boolean,
-    budget: DiagnosticBudget,
-  ): (NormalizedCandidate & { readonly reasons: readonly IdeTruncationReason[] }) | undefined {
+  ): NormalizedCandidate & { readonly reasons: readonly IdeTruncationReason[] } {
     if (!isRecord(diagnostic)) throw new InvalidDiagnosticsOutputError();
     const range = normalizeRange(diagnostic.range, document);
     const severity = mapSeverity(diagnostic.severity);
@@ -465,13 +462,10 @@ export class VsCodeDiagnostics implements IdeDiagnosticsPort {
       ...(codeProjection === undefined ? [] : [codeProjection.text]),
       ...(originProjection === undefined ? [] : [originProjection.text]),
     ];
-    const fitted = budget.fit(textValues);
-    if (fitted === undefined) return undefined;
     const reasons = [
       ...message.reasons,
       ...(codeProjection?.reasons ?? []),
       ...(originProjection?.reasons ?? []),
-      ...budget.takeReasons,
     ];
     const diagnosticSource = source;
     const projected = {
@@ -484,6 +478,7 @@ export class VsCodeDiagnostics implements IdeDiagnosticsPort {
     return {
       source: diagnosticSource,
       diagnostic: projected,
+      aggregateValues: textValues,
       reasons: [...new Set(reasons)],
     };
   }
@@ -494,10 +489,9 @@ export class VsCodeDiagnostics implements IdeDiagnosticsPort {
     document: TextDocument | undefined,
     diagnostic: Diagnostic,
     stale: boolean,
-    budget: DiagnosticBudget,
-  ): (NormalizedCandidate & { readonly reasons: readonly IdeTruncationReason[] }) | undefined {
+  ): NormalizedCandidate & { readonly reasons: readonly IdeTruncationReason[] } {
     try {
-      return this.#normalizeDiagnostic(snapshot, uri, document, diagnostic, stale, budget);
+      return this.#normalizeDiagnostic(snapshot, uri, document, diagnostic, stale);
     } catch (error) {
       if (error instanceof InvalidDiagnosticsOutputError) throw error;
       throw new InvalidDiagnosticsOutputError();
@@ -643,22 +637,15 @@ class OutsideWorkspaceError extends Error {}
 class DiagnosticBudget {
   #codePoints = 0;
   #bytes = 0;
-  #lastRejectedByAggregate = false;
   readonly takeReasons = new Set<IdeTruncationReason>();
 
-  get lastRejectedByAggregate(): boolean {
-    return this.#lastRejectedByAggregate;
-  }
-
   fit(values: readonly string[]): readonly string[] | undefined {
-    this.#lastRejectedByAggregate = false;
     const codePoints = values.reduce((sum, value) => sum + countCodePoints(value), 0);
     const bytes = values.reduce((sum, value) => sum + utf8ByteLength(value), 0);
     if (
       this.#codePoints + codePoints > maxIdeDiagnosticAggregateCodePoints ||
       this.#bytes + bytes > maxIdeDiagnosticAggregateBytes
     ) {
-      this.#lastRejectedByAggregate = true;
       if (this.#codePoints + codePoints > maxIdeDiagnosticAggregateCodePoints) {
         this.takeReasons.add("code-points");
       }
@@ -932,7 +919,7 @@ function orderedReasons(reasons: Iterable<IdeTruncationReason>): readonly IdeTru
 }
 
 function candidateKey(candidate: NormalizedCandidate): string {
-  return JSON.stringify(candidate);
+  return JSON.stringify({ source: candidate.source, diagnostic: candidate.diagnostic });
 }
 
 function compareCandidates(left: NormalizedCandidate, right: NormalizedCandidate): number {
