@@ -277,6 +277,30 @@ authorization, a capability claim, or a write/execute request.
   no-editor unavailable outcomes. Each fixture verifies producer limits before retention and the
   corresponding closed truncation or `failed`/`invalid-output` result.
 
+### Explicit editor entry (T1905)
+
+The editor entry setting is `ctrlZebra.editorContext.enabled`, default `false` and scoped to the VS Code
+window. It is a user opt-in, not a capability grant. `ctrlZebra.askAboutSelection` and
+`ctrlZebra.askAboutFile` are explicit commands; command-palette/menu visibility and `editorHasSelection`
+are not security checks. Before every capture the Extension repeats setting, active editor, exact selection,
+selected-root, Trust, URI identity/containment, supported-text, and document-version validation. A command
+from an untrusted workspace, an empty/absent editor, or a selection command with no selection returns the
+fixed unavailable category and performs no fallback read.
+
+The Host sends only the strict `extension/editor-context` projection from [Protocol](protocol.md). A
+Host-generated `contextId` and request correlation prevent replay or cross-view replacement. The Webview
+cannot provide a URI, range, revision, Trust value, setting, or text source; `webview/editor-context-*`
+messages are narrow refresh/remove/use-stale intents. `use-stale` is an explicit display/send decision for
+one context ID, never a freshness override or a capability change.
+
+Capture owns an `AbortController` and closes its delivery gate before cancellation, supersession, setting
+disable, Trust loss, editor/workspace change, Session/New chat, view disposal, or Extension disposal.
+After closure, no text, stale/unavailable result, retry, persistence mutation, approval, model request, or
+Webview message may be emitted. A refresh has one in-flight capture per view; an older result is discarded
+without waiting for it. Pending editor text and source metadata are not persisted, logged, restored, or
+used as hidden instructions. Only the text that a user deliberately leaves in the ordinary Composer draft
+can follow the existing user-message/provider data path.
+
 ## Approval Boundary
 
 Approval is an authorization for one exact, user-visible operation. It is not a capability token,

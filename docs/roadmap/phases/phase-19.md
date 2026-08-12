@@ -42,6 +42,32 @@
 提供从选区或活动文件显式打开/填充提问的命令与菜单；发送前保持用户可见可编辑，不自动运行
 模型或授予权限。测试命令注册、上下文来源、焦点、取消、无选区和不可信工作区。
 
+本任务的公共入口和跨边界名称固定如下，后续实现不得另行命名：
+
+- 设置为 `ctrlZebra.editorContext.enabled`，布尔值、默认 `false`、`window` scope。设置关闭时
+  两个入口保持不可用，待发送编辑器上下文同步清除；设置只允许用户显式打开，不因打开侧栏、焦点、
+  光标移动或模型活动而自动打开。
+- 命令为 `ctrlZebra.askAboutSelection`（`CtrlZebra: Ask about Selection`）和
+  `ctrlZebra.askAboutFile`（`CtrlZebra: Ask about Active File`）。两者均贡献到 Command Palette；
+  也贡献到 `editor/context` 菜单，分别使用 `editorHasSelection` 与 `editorTextFocus`，并以
+  `config.ctrlZebra.editorContext.enabled` 作为 enablement。命令执行时 Host 仍必须重新验证设置、
+  当前活动编辑器、选区、Workspace Trust、选定根和文档版本；when/enablement 仅为显示提示，不能
+  替代 Host 校验。
+- Host 向当前 Agent Webview 发送严格的 `extension/editor-context` 投影。成功状态携带 Host 生成的
+  有界 `contextId`、`scope` 和 `IdeTextContextDto`；`stale` 状态只携带同一来源的 DTO（其中
+  `source.stale` 必须为 `true`）；清除和不可用状态使用闭合 reason。每条消息带有触发请求的
+  `requestId`，旧请求、旧 `contextId`、已取消或已关闭的 view 均被 Webview 忽略。
+- Webview 只发送窄意图 `webview/editor-context-refresh`（带 `scope`）、
+  `webview/editor-context-remove`（带 `contextId`）和 `webview/editor-context-use-stale`（带
+  `contextId`）。Refresh 会取消同一 view 上一个未完成 capture；Remove 先同步清除本地卡片，再
+  尝试发送一次意图；Use stale 只记录当前发送确认，不改变 Host 的 URI、范围、版本、Trust 或文本。
+  取消、dispose、Session/New chat、设置关闭和 Trust 丢失关闭 delivery gate，之后不得发送文本、
+  失败结果、重试或迟到 Webview 消息。
+- 成功投影在 Composer 上方显示固定 `Editor context` 来源、工作区相对路径、语言、精确范围以及
+  `Stale`/`Truncated` 状态；Host 产生的文本作为普通、不可信用户上下文插入 Composer 的可编辑草稿。
+  用户在发送前可以修改或删除草稿，也可以 Remove；未明确 `Use stale context` 前 stale 草稿的
+  Send 必须禁用。该入口只填充草稿和来源卡片，绝不创建 Run、执行模型、调用 Tool 或授予 Approval。
+
 ## 4. 阶段门禁
 
 - 用户可以关闭编辑器上下文，且清楚看到上下文来源。

@@ -105,6 +105,29 @@ Host lifecycle and freshness are explicit:
   execute, MCP, or other side-effecting operation. If VS Code or a provider refuses an operation, the
   Host returns a stable unavailable outcome without a hidden fallback.
 
+### T1905 editor entry lifecycle
+
+The explicit entry path is an Extension-owned controller layered on the T1902 adapter. The public
+configuration key is `ctrlZebra.editorContext.enabled` (boolean, default `false`, `window` scope). The
+public commands are `ctrlZebra.askAboutSelection` and `ctrlZebra.askAboutFile`; both are registered and
+contributed to Command Palette and `editor/context`, but their menu `when` clauses and `enablement` are
+only discoverability hints. The controller rechecks the setting, active editor, exact selection (for the
+selection command), selected root, Trust, supported text identity, and document version immediately before
+capture. A direct `commands.executeCommand` invocation cannot bypass those checks.
+
+Each Agent Webview view owns at most one pending capture. A refresh aborts and closes the previous capture
+gate before starting the next; an editor/selection/document/workspace event marks the pending source stale
+without reading the document in the background. Setting disable, Trust loss, Session/New chat, view
+disposal, or Extension disposal clears the pending projection and closes its delivery gate. The controller
+keeps no editor text, URI, revision, or stale state in Session persistence or Webview restoration.
+
+The Agent view exposes only a narrow validated poster for the additive `extension/editor-context` messages.
+It queues at most the newest command result until the view is resolved, drops queued data on disposal, and
+never exposes `Webview`, `TextEditor`, `Uri`, or `AbortController` objects to Webview/Core. The command
+focuses the Agent view, then posts one projection; it does not call the model or create a Run. Message
+delivery is correlated by `requestId` and Host-generated `contextId`, and a late result cannot overwrite a
+newer view/session generation.
+
 ## Lazy Initialization
 
 - Activation creates only the registrations and lightweight state required to make the extension available.

@@ -95,6 +95,37 @@ decide whether a source is current, in scope, trusted, or authorized.
   Composer focus, selection, disclosure state, and scroll position and remain operable at approximately
   300px width, 200% zoom, reduced motion, and all supported VS Code themes.
 
+### T1905 editor entry projection
+
+The Extension contributes `ctrlZebra.askAboutSelection` and `ctrlZebra.askAboutFile` and the
+`ctrlZebra.editorContext.enabled` setting (default off). The Webview never invokes those commands; it
+receives a validated `extension/editor-context` message after the user explicitly invokes a command or
+Refresh. The message carries only `contextId`, `scope`, and the bounded `IdeTextContextDto` projection.
+Unknown, old, duplicate, cancelled, or mismatched request/context messages are ignored before state
+mutation.
+
+The editor context store owns one pending card and one in-flight refresh request. A ready projection is
+rendered above the Composer as a semantic `Editor context` card with source kind, workspace-relative path,
+optional language/range, and non-color-only `Truncated`/reason status. The bounded text is inserted into the
+ordinary Composer draft with the fixed provenance prefix from [Protocol](protocol.md); it remains visible
+and editable until send. The store does not retain a VS Code object, absolute path, Trust state, source
+revision, or authoritative snapshot in `getState`/`setState` restoration.
+
+`Refresh` posts `webview/editor-context-refresh` for the card's original scope. `Remove` synchronously
+clears the card, generated prefix (only if the draft is still unchanged), and stale decision before trying
+one `webview/editor-context-remove`; it never waits for a Host acknowledgement or steals Composer focus.
+`Use stale context` is available only for the exact stale `contextId`; it records the explicit send decision
+and posts one `webview/editor-context-use-stale`. A stale card blocks Send until that decision or a fresh
+capture. The setting-off/Trust-lost/cleared projection synchronously removes the card and stale decision,
+while preserving unrelated user draft text.
+
+The editor entry path has no Send/Run side effect: it does not call the model, execute a Tool, create an
+Approval, edit a file, or retry a capture automatically. Cancellation and disposal clear pending state and
+accept no late messages. One polite live region announces only replacement, clear, stale, truncation, or
+unavailable outcomes; it never reads source text character-by-character. Refresh/remove/use-stale controls
+have semantic labels, keyboard paths, visible focus, and fixed disabled reasons, and preserve Composer
+focus, selection, disclosure state, and transcript scroll position.
+
 ## Product Language and String Ownership (T1701)
 
 - The Marketplace target language is English (`en`). This is a minimum-localization policy: T1701 does not

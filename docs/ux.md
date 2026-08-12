@@ -264,6 +264,28 @@ IDE 上下文是用户可以看见、关闭和控制的普通上下文，不是�
   和稳定顺序，状态不能只靠颜色表达。在约 300px、200% 缩放、四类 VS Code 主题和长本地化文本
   下仍可完成关闭、刷新、移除和发送。
 
+### T1905 编辑器发起入口
+
+设置 `CtrlZebra › Editor Context: Enabled` 默认关闭。用户打开后，在编辑器右键菜单和 Command
+Palette 可见 `CtrlZebra: Ask about Selection`（有非折叠选区时）与
+`CtrlZebra: Ask about Active File`（有受支持活动文件时）；菜单条件只是提示，Host 必须再次
+验证当前编辑器、选区、工作区范围、Trust、文本类型和版本。
+
+命令只打开或聚焦 Agent 侧栏，并把带固定 `Editor context` 来源标签、工作区相对路径、语言、
+精确范围和截断状态的普通不可信上下文放入 Composer 草稿。草稿在发送前始终可见、可编辑、可
+删除；命令绝不自动发送、运行模型、执行 Tool、写入文件或授予权限。折叠选区保持空文本和精确
+范围；无选区、无活动文件、不可信工作区、关闭设置或取消均显示稳定不可用状态且不回退到活动行
+或整个工作区。
+
+卡片提供 `Refresh`、`Remove` 和 stale 时的 `Use stale context`。Refresh 只重新捕获原 scope，
+Remove 先同步清卡并保留用户修改过的非上下文草稿，Use stale 只对同一 context ID 做一次明确
+发送决定；stale 未刷新或确认前 Send 禁用并显示原因。编辑器、选区、文档、工作区或 Trust 变化、
+Session/New chat、侧栏关闭和 Extension disposal 都使旧卡片失效，迟到结果没有 UI 效果。
+
+入口和卡片使用固定产品文案、语义按钮、可见焦点、键盘路径和一个 polite live region；刷新、移除
+和结果替换不抢 Composer 焦点、光标、选择或滚动。状态不能只靠颜色表达，来源文本按纯文本显示，
+不解析 Markdown、HTML、链接、命令或 Provider 字段。
+
 ## 5. Tool、审批与进度反馈
 
 - Tool 默认摘要使用面向用户的动作和对象描述，不以内部 Tool 名称作为唯一标题。
