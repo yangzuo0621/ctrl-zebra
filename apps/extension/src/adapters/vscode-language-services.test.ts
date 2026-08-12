@@ -97,6 +97,40 @@ describe("VsCodeLanguageServices", () => {
     ).rejects.toEqual(new InvalidLanguageServiceOutputError());
   });
 
+  it("rejects malformed outside location and LocationLink ranges before filtering", async () => {
+    const document = createDocument("answer", "/workspace/src/index.ts");
+    const malformedLocation = createAdapter({
+      documents: [document],
+      executeDefinitionProvider: async () => [
+        location(uri("/other/secret.ts"), 0, 3, 0, 1),
+        location(document.uri, 0, 0, 0, 1),
+      ],
+    });
+    await expect(
+      malformedLocation.findDefinition(
+        { path: "src/index.ts", position: { line: 0, character: 0 } },
+        signal(),
+      ),
+    ).rejects.toEqual(new InvalidLanguageServiceOutputError());
+
+    const malformedLink = createAdapter({
+      documents: [document],
+      executeDefinitionProvider: async () => [
+        {
+          targetUri: uri("/other/secret.ts"),
+          targetRange: rangeValue(0, 3, 0, 1),
+        },
+        location(document.uri, 0, 0, 0, 1),
+      ],
+    });
+    await expect(
+      malformedLink.findDefinition(
+        { path: "src/index.ts", position: { line: 0, character: 0 } },
+        signal(),
+      ),
+    ).rejects.toEqual(new InvalidLanguageServiceOutputError());
+  });
+
   it("rejects malformed ranges and maps missing providers to unavailable", async () => {
     const document = createDocument("answer", "/workspace/src/index.ts");
     const malformed = createAdapter({
@@ -237,6 +271,25 @@ describe("VsCodeLanguageServices", () => {
     );
   });
 
+  it("rejects malformed outside SymbolInformation ranges before filtering", async () => {
+    const document = createDocument("x", "/workspace/src/index.ts");
+    const adapter = createAdapter({
+      documents: [document],
+      executeDocumentSymbolProvider: async () => [
+        {
+          name: "outside",
+          kind: 12,
+          location: { uri: uri("/other/secret.ts"), range: rangeValue(0, 1, 0, 0) },
+        },
+        { name: "valid", kind: 12, range: rangeValue(0, 0, 0, 1) },
+      ],
+    });
+
+    await expect(adapter.listSymbols({ path: "src/index.ts" }, signal())).rejects.toEqual(
+      new InvalidLanguageServiceOutputError(),
+    );
+  });
+
   it("deduplicates repeated symbols while retaining deterministic source order", async () => {
     const document = createDocument("x", "/workspace/src/index.ts");
     const repeated = {
@@ -277,6 +330,81 @@ describe("VsCodeLanguageServices", () => {
     expect(bounded?.kind).toBe("unknown");
     expect(result.truncated).toBe(true);
     expect(result.truncationReasons).toEqual(["code-points", "utf8-bytes", "entries"]);
+  });
+
+  it("bounds deep and massive DocumentSymbol traversal with deterministic entry truncation", async () => {
+    const document = createDocument("x", "/workspace/src/index.ts");
+    const deepRoot: Record<string, unknown> = {
+      name: "depth-0",
+      kind: 12,
+      range: rangeValue(0, 0, 0, 1),
+    };
+    let current = deepRoot;
+    for (let depth = 1; depth < 600; depth += 1) {
+      const child = {
+        name: `depth-${depth}`,
+        kind: 12,
+        range: rangeValue(0, 0, 0, 1),
+      };
+      current.children = [child];
+      current = child;
+    }
+    const massive = Array.from({ length: 16_385 }, (_, index) => ({
+      name: `massive-${index}`,
+      kind: 12,
+      range: rangeValue(0, 0, 0, 1),
+    }));
+    const result = await createAdapter({
+      documents: [document],
+      executeDocumentSymbolProvider: async () => [deepRoot, ...massive],
+    }).listSymbols({ path: "src/index.ts" }, signal());
+
+    expect(result.symbols).toHaveLength(maxIdeSymbolEntries);
+    expect(result.truncated).toBe(true);
+    expect(result.truncationReasons).toContain("entries");
+  });
+
+  it("rejects cyclic DocumentSymbol trees instead of recursing indefinitely", async () => {
+    const document = createDocument("x", "/workspace/src/index.ts");
+    const cyclic: Record<string, unknown> = {
+      name: "cycle",
+      kind: 12,
+      range: rangeValue(0, 0, 0, 1),
+    };
+    cyclic.children = [cyclic];
+    const adapter = createAdapter({
+      documents: [document],
+      executeDocumentSymbolProvider: async () => [cyclic],
+    });
+
+    await expect(adapter.listSymbols({ path: "src/index.ts" }, signal())).rejects.toEqual(
+      new InvalidLanguageServiceOutputError(),
+    );
+  });
+
+  it("stops traversal promptly when cancellation closes the provider gate", async () => {
+    const document = createDocument("x", "/workspace/src/index.ts");
+    const controller = new AbortController();
+    let validations = 0;
+    const adapter = createAdapter({
+      documents: [document],
+      canonicalize: async (target, signal) => {
+        validations += 1;
+        if (validations > 4) controller.abort(new Error("cancel traversal"));
+        signal.throwIfAborted();
+        return target;
+      },
+      executeDocumentSymbolProvider: async () =>
+        Array.from({ length: 32 }, (_, index) => ({
+          name: `symbol-${index}`,
+          kind: 12,
+          location: { uri: document.uri, range: rangeValue(0, 0, 0, 1) },
+        })),
+    });
+
+    await expect(adapter.listSymbols({ path: "src/index.ts" }, controller.signal)).rejects.toThrow(
+      "cancel traversal",
+    );
   });
 
   it("keeps stale results visible but suppresses cancelled and disposed late results", async () => {
@@ -345,6 +473,7 @@ describe("VsCodeLanguageServices", () => {
 
 function createAdapter(options: {
   readonly documents: readonly TextDocument[];
+  readonly canonicalize?: (target: Uri, signal: AbortSignal) => Promise<Uri>;
   readonly executeDefinitionProvider?: (
     uri: Uri,
     position: unknown,
@@ -364,7 +493,9 @@ function createAdapter(options: {
   return new VsCodeLanguageServices({
     getSelectedRoot: () => root,
     createScope: () =>
-      new WorkspaceScope(root, async (target) => target, { caseSensitivePaths: true }),
+      new WorkspaceScope(root, options.canonicalize ?? (async (target) => target), {
+        caseSensitivePaths: true,
+      }),
     joinPath: (base, path) => uri(`${base.path}/${path}`),
     getDocument: (target) => documents.get(target.toString()),
     executeDefinitionProvider: options.executeDefinitionProvider ?? (async () => []),

@@ -43,6 +43,11 @@ export {
 
 type LanguageOperation = "definition" | "references";
 
+// Provider trees are untrusted. These bounds cap traversal work separately from
+// the 256-entry output budget while preserving deterministic depth-first order.
+const maxDocumentSymbolTraversalNodes = 4_096;
+const maxDocumentSymbolTraversalDepth = 512;
+
 interface LocationCollection {
   readonly locations: readonly IdeLanguageLocationDto[];
   readonly reasons: ReadonlySet<IdeTruncationReason>;
@@ -80,6 +85,20 @@ interface NormalizedSymbol {
   readonly providerResource: boolean;
   readonly inWorkspaceResource: boolean;
 }
+
+interface SymbolTraversalEnterFrame {
+  readonly phase: "enter";
+  readonly value: unknown;
+  readonly parentName?: string;
+  readonly depth: number;
+}
+
+interface SymbolTraversalExitFrame {
+  readonly phase: "exit";
+  readonly value: object;
+}
+
+type SymbolTraversalFrame = SymbolTraversalEnterFrame | SymbolTraversalExitFrame;
 
 export interface VsCodeLanguageServicesDependencies {
   readonly getSelectedRoot: () => Uri | undefined;
@@ -412,17 +431,38 @@ export class VsCodeLanguageServices implements IdeLanguageServicePort {
     signal: AbortSignal,
   ): Promise<IdeLanguageLocationDto | undefined> {
     if (!isRecord(value)) throw new InvalidLanguageServiceOutputError();
+    const hasTargetUri = Object.hasOwn(value, "targetUri");
+    const hasTargetRange = Object.hasOwn(value, "targetRange");
+    const hasUri = Object.hasOwn(value, "uri");
+    const hasRange = Object.hasOwn(value, "range");
     let uri: unknown;
     let range: unknown;
-    if (Object.hasOwn(value, "targetUri") || Object.hasOwn(value, "targetRange")) {
-      if (operation !== "definition") throw new InvalidLanguageServiceOutputError();
+    let selectionRange: unknown;
+    if (hasTargetUri || hasTargetRange) {
+      if (operation !== "definition" || !hasTargetUri || !hasTargetRange || hasUri || hasRange) {
+        throw new InvalidLanguageServiceOutputError();
+      }
       uri = value.targetUri;
       range = value.targetRange;
+      selectionRange = value.targetSelectionRange;
     } else {
+      if (!hasUri || !hasRange) throw new InvalidLanguageServiceOutputError();
       uri = value.uri;
       range = value.range;
     }
     if (!isUriLike(uri)) throw new InvalidLanguageServiceOutputError();
+
+    assertProviderUriShape(uri);
+    const normalizedRange = normalizeRangeShape(range);
+    const normalizedSelectionRange =
+      selectionRange === undefined ? undefined : normalizeRangeShape(selectionRange);
+    const providerDocument = this.#dependencies.getDocument?.(uri);
+    if (providerDocument !== undefined) {
+      validateRangeDocument(normalizedRange, providerDocument);
+      if (normalizedSelectionRange !== undefined) {
+        validateRangeDocument(normalizedSelectionRange, providerDocument);
+      }
+    }
 
     let canonical: Uri;
     try {
@@ -432,10 +472,20 @@ export class VsCodeLanguageServices implements IdeLanguageServicePort {
       if (error instanceof OutsideWorkspaceError) return undefined;
       throw error;
     }
-    const document = this.#dependencies.getDocument?.(canonical);
-    if (document === undefined) throw new InvalidLanguageServiceOutputError();
-    const normalizedRange = normalizeRange(range, document);
-    const source = this.#sourceForUri(snapshot, canonical, stale, false, new Set(), document);
+    const canonicalDocument = this.#dependencies.getDocument?.(canonical);
+    if (canonicalDocument === undefined) throw new InvalidLanguageServiceOutputError();
+    validateRangeDocument(normalizedRange, canonicalDocument);
+    if (normalizedSelectionRange !== undefined) {
+      validateRangeDocument(normalizedSelectionRange, canonicalDocument);
+    }
+    const source = this.#sourceForUri(
+      snapshot,
+      canonical,
+      stale,
+      false,
+      new Set(),
+      canonicalDocument,
+    );
     return {
       source,
       range: normalizedRange,
@@ -456,16 +506,14 @@ export class VsCodeLanguageServices implements IdeLanguageServicePort {
     readonly sawInWorkspaceResource: boolean;
   }> {
     if (!Array.isArray(value)) throw new InvalidLanguageServiceOutputError();
-    const stack: Array<{
-      readonly value: unknown;
-      readonly parentName?: string;
-      readonly ancestors: readonly object[];
-    }> = [];
-    for (let index = value.length - 1; index >= 0; index -= 1) {
-      stack.push({ value: value[index], ancestors: [] });
+    const stack: SymbolTraversalFrame[] = [];
+    const rootCount = Math.min(value.length, maxDocumentSymbolTraversalNodes);
+    for (let index = rootCount - 1; index >= 0; index -= 1) {
+      stack.push({ phase: "enter", value: value[index], depth: 0 });
     }
     const candidates = new Map<string, SymbolCandidate>();
     const reasons = new Set<IdeTruncationReason>();
+    if (value.length > rootCount) reasons.add("entries");
     let outsideCount = 0;
     let sawProviderResource = value.length > 0;
     let sawInWorkspaceResource = false;
@@ -484,16 +532,28 @@ export class VsCodeLanguageServices implements IdeLanguageServicePort {
       aggregateBytes += utf8ByteLength(text);
     }
 
+    const active = new WeakSet<object>();
+    let traversedNodes = 0;
     while (stack.length > 0) {
       this.#assertOpen(signal, snapshot.generation);
       const entry = stack.pop();
-      if (entry === undefined || !isRecord(entry.value)) {
-        throw new InvalidLanguageServiceOutputError();
+      if (entry === undefined) continue;
+      if (entry.phase === "exit") {
+        active.delete(entry.value);
+        continue;
       }
-      if (entry.ancestors.includes(entry.value)) {
-        throw new InvalidLanguageServiceOutputError();
+      if (entry.depth > maxDocumentSymbolTraversalDepth) {
+        reasons.add("entries");
+        break;
       }
-      const ancestors = [...entry.ancestors, entry.value];
+      if (traversedNodes >= maxDocumentSymbolTraversalNodes) {
+        reasons.add("entries");
+        break;
+      }
+      if (!isRecord(entry.value)) throw new InvalidLanguageServiceOutputError();
+      if (active.has(entry.value)) throw new InvalidLanguageServiceOutputError();
+      active.add(entry.value);
+      traversedNodes += 1;
       const normalized = await this.#normalizeSymbol(
         snapshot,
         entry.value,
@@ -502,6 +562,7 @@ export class VsCodeLanguageServices implements IdeLanguageServicePort {
       );
       if (normalized === undefined) {
         outsideCount += 1;
+        active.delete(entry.value);
         continue;
       }
       sawProviderResource ||= normalized.providerResource;
@@ -510,31 +571,31 @@ export class VsCodeLanguageServices implements IdeLanguageServicePort {
         const candidate = normalized.candidate;
         for (const reason of candidate.reasons) reasons.add(reason);
         const key = symbolKey(candidate.symbol);
-        if (candidates.has(key)) {
-          // Exact provider duplicates do not consume the entry budget.
-        } else if (candidates.size >= maxIdeSymbolEntries) {
-          reasons.add("entries");
-          candidates.set(key, candidate);
-          const worst = [...candidates.entries()].sort((left, right) =>
-            compareSymbolCandidates(right[1], left[1]),
-          )[0];
-          if (worst !== undefined) candidates.delete(worst[0]);
-        } else {
-          candidates.set(key, candidate);
-        }
+        if (!candidates.has(key)) candidates.set(key, candidate);
       }
-      for (let index = normalized.children.length - 1; index >= 0; index -= 1) {
+      stack.push({ phase: "exit", value: entry.value });
+      if (normalized.children.length === 0) continue;
+      if (entry.depth >= maxDocumentSymbolTraversalDepth) {
+        reasons.add("entries");
+        continue;
+      }
+      const remainingNodes = maxDocumentSymbolTraversalNodes - traversedNodes;
+      const childCount = Math.min(normalized.children.length, Math.max(remainingNodes, 0));
+      if (childCount < normalized.children.length) reasons.add("entries");
+      for (let index = childCount - 1; index >= 0; index -= 1) {
         stack.push({
+          phase: "enter",
           value: normalized.children[index],
           parentName: normalized.parentName,
-          ancestors,
+          depth: entry.depth + 1,
         });
       }
     }
 
     const sortedCandidates = [...candidates.values()].sort(compareSymbolCandidates);
+    if (sortedCandidates.length > maxIdeSymbolEntries) reasons.add("entries");
     const symbols: IdeSymbolDto[] = [];
-    for (const candidate of sortedCandidates) {
+    for (const candidate of sortedCandidates.slice(0, maxIdeSymbolEntries)) {
       const candidateCodePoints = candidate.aggregateValues.reduce(
         (total, text) => total + countCodePoints(text),
         0,
@@ -584,6 +645,12 @@ export class VsCodeLanguageServices implements IdeLanguageServicePort {
       if (!isRecord(location) || !isUriLike(location.uri)) {
         throw new InvalidLanguageServiceOutputError();
       }
+      assertProviderUriShape(location.uri);
+      const range = normalizeRangeShape(location.range);
+      const providerDocument = this.#dependencies.getDocument?.(location.uri);
+      if (providerDocument !== undefined) validateRangeDocument(range, providerDocument);
+      const containerName = normalizeOptionalSymbolText(value.containerName);
+      if (containerName === null) throw new InvalidLanguageServiceOutputError();
       let canonical: Uri;
       try {
         canonical = await this.#validateProviderUri(snapshot, location.uri, signal);
@@ -594,9 +661,7 @@ export class VsCodeLanguageServices implements IdeLanguageServicePort {
       }
       const document = this.#dependencies.getDocument?.(canonical);
       if (document === undefined) throw new InvalidLanguageServiceOutputError();
-      const range = normalizeRange(location.range, document);
-      const containerName = normalizeOptionalSymbolText(value.containerName);
-      if (containerName === null) throw new InvalidLanguageServiceOutputError();
+      validateRangeDocument(range, document);
       if (!sameUri(canonical, snapshot.target)) {
         throw new InvalidLanguageServiceOutputError();
       }
@@ -767,6 +832,12 @@ export { VsCodeLanguageServices as VsCodeLanguageService };
 class OutsideWorkspaceError extends Error {}
 
 function normalizeRange(value: unknown, document: TextDocument): IdeRangeDto {
+  const range = normalizeRangeShape(value);
+  validateRangeDocument(range, document);
+  return range;
+}
+
+function normalizeRangeShape(value: unknown): IdeRangeDto {
   if (!isRecord(value) || !isPosition(value.start) || !isPosition(value.end)) {
     throw new InvalidLanguageServiceOutputError();
   }
@@ -774,9 +845,12 @@ function normalizeRange(value: unknown, document: TextDocument): IdeRangeDto {
   if (comparePositions(range.start, range.end) > 0) {
     throw new InvalidLanguageServiceOutputError();
   }
+  return range;
+}
+
+function validateRangeDocument(range: IdeRangeDto, document: TextDocument): void {
   validateDocumentPosition(document, range.start);
   validateDocumentPosition(document, range.end);
-  return range;
 }
 
 function isPosition(value: unknown): value is IdePositionDto {
@@ -1008,6 +1082,25 @@ function isUriLike(value: unknown): value is Uri {
     typeof value.query === "string" &&
     typeof value.fragment === "string"
   );
+}
+
+function assertProviderUriShape(uri: Uri): void {
+  if (
+    uri.scheme.length === 0 ||
+    uri.path.length === 0 ||
+    uri.query.length > 0 ||
+    uri.fragment.length > 0 ||
+    !uri.path.startsWith("/") ||
+    uri.path.includes("\\") ||
+    /(?:^|\/)\.{1,2}(?:\/|$)/u.test(uri.path) ||
+    /%(?:2e|2f|5c)/iu.test(uri.path) ||
+    uri.path
+      .split("/")
+      .slice(1)
+      .some((segment) => segment.length === 0)
+  ) {
+    throw new InvalidLanguageServiceOutputError();
+  }
 }
 
 function toWorkspaceRelativePath(root: Uri, target: Uri): string {
