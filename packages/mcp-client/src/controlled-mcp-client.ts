@@ -25,12 +25,12 @@ import {
   type McpStdioPort,
   type McpToolDiagnostic,
   type McpToolDiscoveryContext,
-  maxMcpListEntries,
-  maxMcpListPages,
   mcpLegacyProtocolVersion,
   mcpProtocolVersion,
 } from "./contracts.js";
 import { createMcpClientError } from "./errors.js";
+import { collectMcpCatalogPages, McpCatalogCollectionError } from "./mcp-catalog-collector.js";
+import { McpCatalogRefresh } from "./mcp-catalog-refresh.js";
 import { McpNegotiationFailure, negotiateMcpEra } from "./mcp-negotiation.js";
 import {
   createMcpPromptCatalog,
@@ -82,23 +82,36 @@ export class ControlledMcpClient {
   private failure: McpClientError | undefined;
   private connectPromise: Promise<McpConnectOutcome> | undefined;
   private consumed = false;
-  private toolContext: McpToolDiscoveryContext | undefined;
-  private toolSnapshot: McpToolSnapshot | undefined;
   private toolDiagnostic: McpToolDiagnostic | undefined;
-  private toolRefreshPromise: Promise<McpToolSnapshotView> | undefined;
-  private toolRefreshRequested = false;
-  private toolController: AbortController | undefined;
   private readonly toolValidator = createExternalJsonSchemaValidator();
-  private resourceContext: McpResourceDiscoveryContext | undefined;
-  private resourceCatalog: McpResourceCatalogView | undefined;
-  private resourceRefreshPromise: Promise<McpResourceCatalogView> | undefined;
-  private resourceRefreshRequested = false;
-  private resourceController: AbortController | undefined;
-  private promptContext: McpPromptDiscoveryContext | undefined;
-  private promptCatalog: McpPromptCatalogView | undefined;
-  private promptRefreshPromise: Promise<McpPromptCatalogView> | undefined;
-  private promptRefreshRequested = false;
-  private promptController: AbortController | undefined;
+  private readonly toolRefresh = new McpCatalogRefresh<McpToolDiscoveryContext, McpToolSnapshot>({
+    sameContext: sameCatalogContext,
+    isActive: () => this.status === "connected",
+    createUnavailableError: () => new McpToolDiscoveryError("disconnected"),
+    load: (context, controller, signal) => this.loadToolCatalog(context, controller, signal),
+    commit: (_replacement, previous) => previous?.revoke(),
+    clearReason: "MCP Tool snapshot connection generation ended.",
+  });
+  private readonly resourceRefresh = new McpCatalogRefresh<
+    McpResourceDiscoveryContext,
+    McpResourceCatalogView
+  >({
+    sameContext: sameCatalogContext,
+    isActive: () => this.status === "connected",
+    createUnavailableError: () => new McpResourceError("resource-unavailable"),
+    load: (context, controller, signal) => this.loadResourceCatalog(context, controller, signal),
+    clearReason: "MCP Resource catalog connection generation ended.",
+  });
+  private readonly promptRefresh = new McpCatalogRefresh<
+    McpPromptDiscoveryContext,
+    McpPromptCatalogView
+  >({
+    sameContext: sameCatalogContext,
+    isActive: () => this.status === "connected",
+    createUnavailableError: () => new McpPromptError("prompt-unavailable"),
+    load: (context, controller, signal) => this.loadPromptCatalog(context, controller, signal),
+    clearReason: "MCP Prompt catalog connection generation ended.",
+  });
   private generation = 0;
   private activeGeneration = 0;
   private negotiatedEra: "modern" | "legacy" | undefined;
@@ -127,7 +140,7 @@ export class ControlledMcpClient {
     this.sdkClient.setNotificationHandler("notifications/tools/list_changed", async () => {
       if (
         this.connectedState?.capabilities.toolsListChanged !== true ||
-        this.toolContext === undefined
+        this.toolRefresh.getState().context === undefined
       ) {
         return;
       }
@@ -140,7 +153,7 @@ export class ControlledMcpClient {
     this.sdkClient.setNotificationHandler("notifications/resources/list_changed", async () => {
       if (
         this.connectedState?.capabilities.resourcesListChanged !== true ||
-        this.resourceContext === undefined
+        this.resourceRefresh.getState().context === undefined
       ) {
         return;
       }
@@ -153,7 +166,7 @@ export class ControlledMcpClient {
     this.sdkClient.setNotificationHandler("notifications/prompts/list_changed", async () => {
       if (
         this.connectedState?.capabilities.promptsListChanged !== true ||
-        this.promptContext === undefined
+        this.promptRefresh.getState().context === undefined
       ) {
         return;
       }
@@ -185,7 +198,7 @@ export class ControlledMcpClient {
   }
 
   getToolSnapshot(): McpToolSnapshotView | undefined {
-    return this.toolSnapshot?.view;
+    return this.toolRefresh.getState().value?.view;
   }
 
   getToolDiagnostic(): McpToolDiagnostic | undefined {
@@ -193,11 +206,11 @@ export class ControlledMcpClient {
   }
 
   getResourceCatalog(): McpResourceCatalogView | undefined {
-    return this.resourceCatalog;
+    return this.resourceRefresh.getState().value;
   }
 
   getPromptCatalog(): McpPromptCatalogView | undefined {
-    return this.promptCatalog;
+    return this.promptRefresh.getState().value;
   }
 
   discoverPrompts(
@@ -210,15 +223,7 @@ export class ControlledMcpClient {
     if (!Number.isSafeInteger(context.generation) || context.generation <= 0) {
       return Promise.reject(new McpPromptError("malformed-message"));
     }
-    if (
-      this.promptContext === undefined ||
-      this.promptContext.generation !== context.generation ||
-      this.promptContext.server.serverId !== context.server.serverId
-    ) {
-      this.clearPromptCatalog();
-      this.promptContext = context;
-      this.promptController = new AbortController();
-    }
+    this.promptRefresh.setContext(context);
     return this.requestPromptRefresh(signal);
   }
 
@@ -227,9 +232,10 @@ export class ControlledMcpClient {
     argumentsValue: Readonly<Record<string, string>>,
     signal?: AbortSignal,
   ): Promise<McpPromptResultView> {
-    const context = this.promptContext;
-    const catalog = this.promptCatalog;
-    const controller = this.promptController;
+    const state = this.promptRefresh.getState();
+    const context = state.context;
+    const catalog = state.value;
+    const controller = state.controller;
     if (
       this.status !== "connected" ||
       context === undefined ||
@@ -249,12 +255,7 @@ export class ControlledMcpClient {
         { signal: combinedSignal },
       );
       combinedSignal.throwIfAborted();
-      if (
-        this.status !== "connected" ||
-        context !== this.promptContext ||
-        catalog !== this.promptCatalog ||
-        controller !== this.promptController
-      ) {
+      if (this.status !== "connected" || !this.isCurrentPromptState(context, catalog, controller)) {
         throw new McpPromptError("prompt-unavailable");
       }
       return normalizeMcpPromptResult(context, promptName, validatedArguments, value);
@@ -281,15 +282,7 @@ export class ControlledMcpClient {
     if (!Number.isSafeInteger(context.generation) || context.generation <= 0) {
       return Promise.reject(new McpResourceError("malformed-message"));
     }
-    if (
-      this.resourceContext === undefined ||
-      this.resourceContext.generation !== context.generation ||
-      this.resourceContext.server.serverId !== context.server.serverId
-    ) {
-      this.clearResourceCatalog();
-      this.resourceContext = context;
-      this.resourceController = new AbortController();
-    }
+    this.resourceRefresh.setContext(context);
     return this.requestResourceRefresh(signal);
   }
 
@@ -297,9 +290,10 @@ export class ControlledMcpClient {
     selection: McpResourceSelection,
     signal?: AbortSignal,
   ): Promise<McpResourceSnapshotView> {
-    const context = this.resourceContext;
-    const catalog = this.resourceCatalog;
-    const controller = this.resourceController;
+    const state = this.resourceRefresh.getState();
+    const context = state.context;
+    const catalog = state.value;
+    const controller = state.controller;
     if (
       this.status !== "connected" ||
       context === undefined ||
@@ -321,9 +315,7 @@ export class ControlledMcpClient {
       combinedSignal.throwIfAborted();
       if (
         this.status !== "connected" ||
-        context !== this.resourceContext ||
-        catalog !== this.resourceCatalog ||
-        controller !== this.resourceController
+        !this.isCurrentResourceState(context, catalog, controller)
       ) {
         throw new McpResourceError("resource-unavailable");
       }
@@ -351,22 +343,11 @@ export class ControlledMcpClient {
     if (!Number.isSafeInteger(context.generation) || context.generation <= 0) {
       return Promise.reject(new McpToolDiscoveryError("malformed-message"));
     }
-    if (
-      this.toolContext === undefined ||
-      this.toolContext.generation !== context.generation ||
-      this.toolContext.server.serverId !== context.server.serverId
-    ) {
-      this.clearToolSnapshot();
-      this.toolContext = context;
-      this.toolController = new AbortController();
-    }
+    this.toolRefresh.setContext(context);
     return this.requestToolRefresh(signal);
   }
 
   refreshTools(signal?: AbortSignal): Promise<McpToolSnapshotView> {
-    if (this.status !== "connected" || this.toolContext === undefined) {
-      return Promise.reject(new McpToolDiscoveryError("disconnected"));
-    }
     return this.requestToolRefresh(signal);
   }
 
@@ -397,7 +378,7 @@ export class ControlledMcpClient {
   }
 
   async disconnect(): Promise<McpDisconnectOutcome> {
-    this.clearToolSnapshot();
+    this.clearToolCatalog();
     this.clearResourceCatalog();
     this.clearPromptCatalog();
     if (this.status === "disconnected" && !this.consumed) {
@@ -538,7 +519,7 @@ export class ControlledMcpClient {
       return;
     }
 
-    this.clearToolSnapshot();
+    this.clearToolCatalog();
     this.clearResourceCatalog();
     this.clearPromptCatalog();
     this.setFailure(code);
@@ -558,27 +539,14 @@ export class ControlledMcpClient {
   }
 
   private requestToolRefresh(signal?: AbortSignal): Promise<McpToolSnapshotView> {
-    this.toolRefreshRequested = true;
-    if (this.toolRefreshPromise !== undefined) {
-      return this.toolRefreshPromise;
-    }
-    const refresh = this.runToolRefreshes(signal).finally(() => {
-      if (this.toolRefreshPromise === refresh) {
-        this.toolRefreshPromise = undefined;
-      }
-    });
-    this.toolRefreshPromise = refresh;
-    return refresh;
+    return this.runToolRefresh(signal);
   }
 
-  private async runToolRefreshes(signal?: AbortSignal): Promise<McpToolSnapshotView> {
-    let latest = this.toolSnapshot?.view;
+  private async runToolRefresh(signal?: AbortSignal): Promise<McpToolSnapshotView> {
     try {
-      do {
-        this.toolRefreshRequested = false;
-        latest = await this.refreshToolsOnce(signal);
-      } while (this.toolRefreshRequested);
+      const latest = await this.toolRefresh.request(signal);
       this.toolDiagnostic = undefined;
+      return latest.view;
     } catch (error) {
       if (error instanceof McpToolDiscoveryError) {
         this.toolDiagnostic = isToolDiagnosticCode(error.code)
@@ -593,30 +561,18 @@ export class ControlledMcpClient {
       }
       throw error;
     }
-    if (latest === undefined) {
-      throw new McpToolDiscoveryError("internal");
-    }
-    return latest;
   }
 
-  private async refreshToolsOnce(signal?: AbortSignal): Promise<McpToolSnapshotView> {
-    const context = this.toolContext;
-    const controller = this.toolController;
-    if (context === undefined || controller === undefined || this.status !== "connected") {
-      throw new McpToolDiscoveryError("disconnected");
-    }
-    const refreshSignal =
-      signal === undefined ? controller.signal : AbortSignal.any([controller.signal, signal]);
-    refreshSignal.throwIfAborted();
-
+  private async loadToolCatalog(
+    context: McpToolDiscoveryContext,
+    controller: AbortController,
+    refreshSignal: AbortSignal,
+  ): Promise<McpToolSnapshot> {
     const values =
       this.connectedState?.capabilities.tools === true
         ? await this.collectToolDescriptors(refreshSignal)
         : [];
     refreshSignal.throwIfAborted();
-    if (context !== this.toolContext || this.status !== "connected") {
-      throw new McpToolDiscoveryError("disconnected");
-    }
 
     try {
       const replacement = createMcpToolSnapshot(
@@ -628,9 +584,7 @@ export class ControlledMcpClient {
         (name, argumentsValue, runSignal) =>
           this.callTool(context, controller, name, argumentsValue, runSignal),
       );
-      this.toolSnapshot?.revoke();
-      this.toolSnapshot = replacement;
-      return replacement.view;
+      return replacement;
     } catch (error) {
       if (error instanceof McpToolSnapshotError) {
         throw new McpToolDiscoveryError(
@@ -644,35 +598,22 @@ export class ControlledMcpClient {
   }
 
   private async collectToolDescriptors(signal: AbortSignal): Promise<unknown[]> {
-    const tools: unknown[] = [];
-    const cursors = new Set<string>();
-    let cursor: string | undefined;
-    for (let pageNumber = 1; pageNumber <= maxMcpListPages; pageNumber += 1) {
-      signal.throwIfAborted();
-      const page: unknown = await this.sdkClient.request(
-        { method: "tools/list", params: cursor === undefined ? {} : { cursor } },
-        { signal },
-      );
-      const pageRecord = readPage(page);
-      const pageTools = pageRecord.tools;
-      if (!Array.isArray(pageTools)) {
-        throw new McpToolDiscoveryError("malformed-message");
+    try {
+      return await collectMcpCatalogPages({
+        field: "tools",
+        signal,
+        request: (cursor) =>
+          this.sdkClient.request(
+            { method: "tools/list", params: cursor === undefined ? {} : { cursor } },
+            { signal },
+          ),
+      });
+    } catch (error) {
+      if (error instanceof McpCatalogCollectionError) {
+        throw new McpToolDiscoveryError(error.code);
       }
-      if (tools.length + pageTools.length > maxMcpListEntries) {
-        throw new McpToolDiscoveryError("limit-exceeded");
-      }
-      tools.push(...pageTools);
-      const nextCursor = pageRecord.nextCursor;
-      if (nextCursor === undefined) {
-        return tools;
-      }
-      if (typeof nextCursor !== "string" || nextCursor === "" || cursors.has(nextCursor)) {
-        throw new McpToolDiscoveryError("malformed-message");
-      }
-      cursors.add(nextCursor);
-      cursor = nextCursor;
+      throw error;
     }
-    throw new McpToolDiscoveryError("limit-exceeded");
   }
 
   private async callTool(
@@ -682,10 +623,11 @@ export class ControlledMcpClient {
     argumentsValue: Readonly<Record<string, import("@ctrl-zebra/core").JsonValue>>,
     runSignal: AbortSignal,
   ): Promise<unknown> {
+    const state = this.toolRefresh.getState();
     if (
       this.status !== "connected" ||
-      this.toolContext !== context ||
-      this.toolController !== controller ||
+      state.context !== context ||
+      state.controller !== controller ||
       controller.signal.aborted
     ) {
       throw new ToolUnavailableError();
@@ -697,8 +639,8 @@ export class ControlledMcpClient {
       signal.throwIfAborted();
       if (
         this.status !== "connected" ||
-        this.toolContext !== context ||
-        this.toolController !== controller
+        this.toolRefresh.getState().context !== context ||
+        this.toolRefresh.getState().controller !== controller
       ) {
         throw new ToolUnavailableError();
       }
@@ -725,103 +667,50 @@ export class ControlledMcpClient {
   }
 
   private requestPromptRefresh(signal?: AbortSignal): Promise<McpPromptCatalogView> {
-    this.promptRefreshRequested = true;
-    if (this.promptRefreshPromise !== undefined) return this.promptRefreshPromise;
-    const refresh = this.runPromptRefreshes(signal).finally(() => {
-      if (this.promptRefreshPromise === refresh) this.promptRefreshPromise = undefined;
-    });
-    this.promptRefreshPromise = refresh;
-    return refresh;
+    return this.promptRefresh.request(signal);
   }
 
-  private async runPromptRefreshes(signal?: AbortSignal): Promise<McpPromptCatalogView> {
-    let latest = this.promptCatalog;
-    do {
-      this.promptRefreshRequested = false;
-      latest = await this.refreshPromptsOnce(signal);
-    } while (this.promptRefreshRequested);
-    if (latest === undefined) throw new McpPromptError("prompt-unavailable");
-    return latest;
-  }
-
-  private async refreshPromptsOnce(signal?: AbortSignal): Promise<McpPromptCatalogView> {
-    const context = this.promptContext;
-    const controller = this.promptController;
-    if (context === undefined || controller === undefined || this.status !== "connected") {
-      throw new McpPromptError("prompt-unavailable");
-    }
-    const combinedSignal =
-      signal === undefined ? controller.signal : AbortSignal.any([controller.signal, signal]);
-    combinedSignal.throwIfAborted();
+  private async loadPromptCatalog(
+    context: McpPromptDiscoveryContext,
+    _controller: AbortController,
+    combinedSignal: AbortSignal,
+  ): Promise<McpPromptCatalogView> {
     const prompts =
       this.connectedState?.capabilities.prompts === true
         ? await this.collectPromptList(combinedSignal)
         : [];
     combinedSignal.throwIfAborted();
-    if (context !== this.promptContext || this.status !== "connected") {
-      throw new McpPromptError("prompt-unavailable");
-    }
-    const replacement = createMcpPromptCatalog(context, prompts);
-    this.promptCatalog = replacement;
-    return replacement;
+    return createMcpPromptCatalog(context, prompts);
   }
 
   private async collectPromptList(signal: AbortSignal): Promise<unknown[]> {
-    const values: unknown[] = [];
-    const cursors = new Set<string>();
-    let cursor: string | undefined;
-    for (let pageNumber = 1; pageNumber <= maxMcpListPages; pageNumber += 1) {
-      signal.throwIfAborted();
-      const page: unknown = await this.sdkClient.request(
-        { method: "prompts/list", params: cursor === undefined ? {} : { cursor } },
-        { signal },
-      );
-      const record = readPage(page);
-      if (!Array.isArray(record.prompts)) throw new McpPromptError("malformed-message");
-      if (values.length + record.prompts.length > maxMcpListEntries) {
-        throw new McpPromptError("limit-exceeded");
+    try {
+      return await collectMcpCatalogPages({
+        field: "prompts",
+        signal,
+        request: (cursor) =>
+          this.sdkClient.request(
+            { method: "prompts/list", params: cursor === undefined ? {} : { cursor } },
+            { signal },
+          ),
+      });
+    } catch (error) {
+      if (error instanceof McpCatalogCollectionError) {
+        throw new McpPromptError(error.code);
       }
-      values.push(...record.prompts);
-      const nextCursor = record.nextCursor;
-      if (nextCursor === undefined) return values;
-      if (typeof nextCursor !== "string" || nextCursor === "" || cursors.has(nextCursor)) {
-        throw new McpPromptError("malformed-message");
-      }
-      cursors.add(nextCursor);
-      cursor = nextCursor;
+      throw error;
     }
-    throw new McpPromptError("limit-exceeded");
   }
 
   private requestResourceRefresh(signal?: AbortSignal): Promise<McpResourceCatalogView> {
-    this.resourceRefreshRequested = true;
-    if (this.resourceRefreshPromise !== undefined) return this.resourceRefreshPromise;
-    const refresh = this.runResourceRefreshes(signal).finally(() => {
-      if (this.resourceRefreshPromise === refresh) this.resourceRefreshPromise = undefined;
-    });
-    this.resourceRefreshPromise = refresh;
-    return refresh;
+    return this.resourceRefresh.request(signal);
   }
 
-  private async runResourceRefreshes(signal?: AbortSignal): Promise<McpResourceCatalogView> {
-    let latest = this.resourceCatalog;
-    do {
-      this.resourceRefreshRequested = false;
-      latest = await this.refreshResourcesOnce(signal);
-    } while (this.resourceRefreshRequested);
-    if (latest === undefined) throw new McpResourceError("resource-unavailable");
-    return latest;
-  }
-
-  private async refreshResourcesOnce(signal?: AbortSignal): Promise<McpResourceCatalogView> {
-    const context = this.resourceContext;
-    const controller = this.resourceController;
-    if (context === undefined || controller === undefined || this.status !== "connected") {
-      throw new McpResourceError("resource-unavailable");
-    }
-    const combinedSignal =
-      signal === undefined ? controller.signal : AbortSignal.any([controller.signal, signal]);
-    combinedSignal.throwIfAborted();
+  private async loadResourceCatalog(
+    context: McpResourceDiscoveryContext,
+    _controller: AbortController,
+    combinedSignal: AbortSignal,
+  ): Promise<McpResourceCatalogView> {
     const resources =
       this.connectedState?.capabilities.resources === true
         ? await this.collectResourceList("resources/list", "resources", combinedSignal)
@@ -835,12 +724,7 @@ export class ControlledMcpClient {
           )
         : [];
     combinedSignal.throwIfAborted();
-    if (context !== this.resourceContext || this.status !== "connected") {
-      throw new McpResourceError("resource-unavailable");
-    }
-    const replacement = createMcpResourceCatalog(context, resources, templates);
-    this.resourceCatalog = replacement;
-    return replacement;
+    return createMcpResourceCatalog(context, resources, templates);
   }
 
   private async collectResourceList(
@@ -848,57 +732,53 @@ export class ControlledMcpClient {
     field: "resources" | "resourceTemplates",
     signal: AbortSignal,
   ): Promise<unknown[]> {
-    const values: unknown[] = [];
-    const cursors = new Set<string>();
-    let cursor: string | undefined;
-    for (let pageNumber = 1; pageNumber <= maxMcpListPages; pageNumber += 1) {
-      signal.throwIfAborted();
-      const page: unknown = await this.sdkClient.request(
-        { method, params: cursor === undefined ? {} : { cursor } },
-        { signal },
-      );
-      const record = readPage(page);
-      const pageValues = record[field];
-      if (!Array.isArray(pageValues)) throw new McpResourceError("malformed-message");
-      if (values.length + pageValues.length > maxMcpListEntries) {
-        throw new McpResourceError("limit-exceeded");
+    try {
+      return await collectMcpCatalogPages({
+        field,
+        signal,
+        request: (cursor) =>
+          this.sdkClient.request(
+            { method, params: cursor === undefined ? {} : { cursor } },
+            { signal },
+          ),
+      });
+    } catch (error) {
+      if (error instanceof McpCatalogCollectionError) {
+        throw new McpResourceError(error.code);
       }
-      values.push(...pageValues);
-      const nextCursor = record.nextCursor;
-      if (nextCursor === undefined) return values;
-      if (typeof nextCursor !== "string" || nextCursor === "" || cursors.has(nextCursor)) {
-        throw new McpResourceError("malformed-message");
-      }
-      cursors.add(nextCursor);
-      cursor = nextCursor;
+      throw error;
     }
-    throw new McpResourceError("limit-exceeded");
   }
 
-  private clearToolSnapshot(): void {
-    this.toolController?.abort(new Error("MCP Tool snapshot connection generation ended."));
-    this.toolController = undefined;
-    this.toolContext = undefined;
-    this.toolRefreshRequested = false;
-    this.toolSnapshot?.revoke();
-    this.toolSnapshot = undefined;
+  private clearToolCatalog(): void {
+    this.toolRefresh.clear();
     this.toolDiagnostic = undefined;
   }
 
   private clearResourceCatalog(): void {
-    this.resourceController?.abort(new Error("MCP Resource catalog connection generation ended."));
-    this.resourceController = undefined;
-    this.resourceContext = undefined;
-    this.resourceRefreshRequested = false;
-    this.resourceCatalog = undefined;
+    this.resourceRefresh.clear();
   }
 
   private clearPromptCatalog(): void {
-    this.promptController?.abort(new Error("MCP Prompt catalog connection generation ended."));
-    this.promptController = undefined;
-    this.promptContext = undefined;
-    this.promptRefreshRequested = false;
-    this.promptCatalog = undefined;
+    this.promptRefresh.clear();
+  }
+
+  private isCurrentPromptState(
+    context: McpPromptDiscoveryContext | undefined,
+    catalog: McpPromptCatalogView | undefined,
+    controller: AbortController | undefined,
+  ): boolean {
+    const state = this.promptRefresh.getState();
+    return state.context === context && state.value === catalog && state.controller === controller;
+  }
+
+  private isCurrentResourceState(
+    context: McpResourceDiscoveryContext | undefined,
+    catalog: McpResourceCatalogView | undefined,
+    controller: AbortController | undefined,
+  ): boolean {
+    const state = this.resourceRefresh.getState();
+    return state.context === context && state.value === catalog && state.controller === controller;
   }
 }
 
@@ -916,17 +796,19 @@ export class McpToolDiscoveryError extends Error {
   }
 }
 
+function sameCatalogContext<
+  TContext extends {
+    readonly server: { readonly serverId: string };
+    readonly generation: number;
+  },
+>(current: TContext, next: TContext): boolean {
+  return current.generation === next.generation && current.server.serverId === next.server.serverId;
+}
+
 function isToolDiagnosticCode(
   code: McpClientErrorCode,
 ): code is "invalid-schema" | "limit-exceeded" | "malformed-message" {
   return code === "invalid-schema" || code === "limit-exceeded" || code === "malformed-message";
-}
-
-function readPage(value: unknown): Readonly<Record<string, unknown>> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new McpToolDiscoveryError("malformed-message");
-  }
-  return value as Readonly<Record<string, unknown>>;
 }
 
 function projectCapabilities(capabilities: ServerCapabilities | undefined): McpServerCapabilities {
