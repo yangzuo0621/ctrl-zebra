@@ -14,12 +14,17 @@ import {
   sessionManifestFileName,
   sessionManifestSchema,
 } from "@ctrl-zebra/protocol";
-import { type FileSystem, FileSystemError, FileType, Uri } from "vscode";
+import { FileType, Uri } from "vscode";
+import {
+  type VscodeBoundedTextFileSystem,
+  VscodeBoundedTextStorage,
+} from "./vscode-bounded-text-storage.js";
+import { isVscodeFileNotFound } from "./vscode-file-system-error.js";
 
 export const maxManifestBytes = 65_536;
 
 type SessionFileSystem = Pick<
-  FileSystem,
+  VscodeBoundedTextFileSystem,
   "createDirectory" | "delete" | "readDirectory" | "readFile" | "rename" | "writeFile"
 >;
 
@@ -45,98 +50,58 @@ export function createWorkspaceSessionRepositoryProvider(
 }
 
 class VsCodeSessionStorage implements ManifestStorage, EventStorage, SessionCatalog {
-  readonly #root: Uri;
-  readonly #fileSystem: SessionFileSystem;
+  readonly #storage: VscodeBoundedTextStorage;
 
   constructor(root: Uri, fileSystem: SessionFileSystem) {
-    this.#root = root;
-    this.#fileSystem = fileSystem;
-  }
-
-  async initialize(): Promise<void> {
-    await this.#fileSystem.createDirectory(this.#root);
-    await this.#fileSystem.createDirectory(Uri.joinPath(this.#root, persistenceSessionsDirectory));
-    await this.#fileSystem.createDirectory(
-      Uri.joinPath(this.#root, persistenceSessionsDirectory, persistenceFormatDirectory),
-    );
-  }
-
-  async readText(path: PersistencePath, maxBytes = maxManifestBytes): Promise<string | undefined> {
-    const uri = this.#resolve(path);
-    let content: Uint8Array;
-    try {
-      content = await this.#fileSystem.readFile(uri);
-    } catch (error) {
-      if (isFileNotFound(error)) {
-        return undefined;
-      }
-      throw error;
-    }
-    if (content.byteLength > maxBytes) {
-      throw new RangeError(`Persisted file exceeds the ${maxBytes}-byte read limit.`);
-    }
-    return new TextDecoder("utf-8", { fatal: true }).decode(content);
-  }
-
-  async writeText(path: PersistencePath, content: string): Promise<void> {
-    await this.#ensureParent(path);
-    const encoded = new TextEncoder().encode(content);
-    if (encoded.byteLength > maxManifestBytes) {
-      throw new RangeError(`Persisted manifest exceeds the ${maxManifestBytes}-byte limit.`);
-    }
-    await this.#fileSystem.writeFile(this.#resolve(path), encoded);
-  }
-
-  async rename(source: PersistencePath, destination: PersistencePath): Promise<void> {
-    await this.#fileSystem.rename(this.#resolve(source), this.#resolve(destination), {
-      overwrite: true,
+    this.#storage = new VscodeBoundedTextStorage({
+      root,
+      fileSystem,
+      joinPath: Uri.joinPath,
+      isFileNotFound: isVscodeFileNotFound,
     });
   }
 
+  async initialize(): Promise<void> {
+    await this.#storage.initialize([
+      [persistenceSessionsDirectory],
+      [persistenceSessionsDirectory, persistenceFormatDirectory],
+    ]);
+  }
+
+  async readText(path: PersistencePath, maxBytes = maxManifestBytes): Promise<string | undefined> {
+    return await this.#storage.readText(path, maxBytes);
+  }
+
+  async writeText(path: PersistencePath, content: string): Promise<void> {
+    await this.#storage.writeText(path, content, maxManifestBytes, "Persisted manifest");
+  }
+
+  async rename(source: PersistencePath, destination: PersistencePath): Promise<void> {
+    await this.#storage.rename(source, destination, true);
+  }
+
   async deleteFile(path: PersistencePath): Promise<void> {
-    try {
-      await this.#fileSystem.delete(this.#resolve(path), { recursive: false, useTrash: false });
-    } catch (error) {
-      if (!isFileNotFound(error)) {
-        throw error;
-      }
-    }
+    await this.#storage.deleteFile(path);
   }
 
   async appendText(path: PersistencePath, content: string, maxTotalBytes: number): Promise<void> {
-    const existing = (await this.readText(path, maxTotalBytes)) ?? "";
-    const combined = new TextEncoder().encode(`${existing}${content}`);
-    if (combined.byteLength > maxTotalBytes) {
-      throw new RangeError(`Persisted event log exceeds the ${maxTotalBytes}-byte limit.`);
-    }
-    const temporaryPath: PersistencePath = [
-      path[0],
-      ...path.slice(1, -1),
-      `${path[path.length - 1]}.append.tmp`,
-    ];
-    await this.#ensureParent(temporaryPath);
-    await this.#fileSystem.writeFile(this.#resolve(temporaryPath), combined);
-    await this.rename(temporaryPath, path);
+    await this.#storage.appendText(path, content, maxTotalBytes);
   }
 
   async listSessionIds(): Promise<readonly string[]> {
-    const directory = Uri.joinPath(
-      this.#root,
+    const entries = await this.#storage.readDirectory([
       persistenceSessionsDirectory,
       persistenceFormatDirectory,
-    );
-    const entries = await this.#fileSystem.readDirectory(directory);
+    ]);
     const sessionIds: string[] = [];
     for (const [name, type] of entries) {
       if ((type & FileType.Directory) === 0) {
         continue;
       }
-      const content = await this.readText([
-        persistenceSessionsDirectory,
-        persistenceFormatDirectory,
-        name,
-        sessionManifestFileName,
-      ]);
+      const content = await this.#storage.readText(
+        [persistenceSessionsDirectory, persistenceFormatDirectory, name, sessionManifestFileName],
+        maxManifestBytes,
+      );
       if (content === undefined) {
         continue;
       }
@@ -153,23 +118,6 @@ class VsCodeSessionStorage implements ManifestStorage, EventStorage, SessionCata
     }
     return sessionIds;
   }
-
-  async #ensureParent(path: PersistencePath): Promise<void> {
-    let current = this.#root;
-    await this.#fileSystem.createDirectory(current);
-    for (const segment of path.slice(0, -1)) {
-      assertPathSegment(segment);
-      current = Uri.joinPath(current, segment);
-      await this.#fileSystem.createDirectory(current);
-    }
-  }
-
-  #resolve(path: PersistencePath): Uri {
-    for (const segment of path) {
-      assertPathSegment(segment);
-    }
-    return Uri.joinPath(this.#root, ...path);
-  }
 }
 
 async function createRepository(
@@ -183,14 +131,4 @@ async function createRepository(
     new JsonlEventStore(storage),
     storage,
   );
-}
-
-function assertPathSegment(segment: string): void {
-  if (segment.length === 0 || segment === "." || segment === ".." || /[\\/:]/.test(segment)) {
-    throw new TypeError("Persistence paths must contain portable relative path segments.");
-  }
-}
-
-function isFileNotFound(error: unknown): boolean {
-  return error instanceof FileSystemError && error.code === "FileNotFound";
 }
