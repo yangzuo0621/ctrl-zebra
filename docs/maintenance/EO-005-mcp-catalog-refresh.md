@@ -162,5 +162,6 @@
   and context replacement, so stale registry Tools cannot parse input or prepare approval.
 - Design deviation: none.
 - PR/branch: [draft PR #220](https://github.com/yangzuo0621/ctrl-zebra/pull/220), branch
-  `codex/eo-005-mcp-catalog-refresh`, implementation commit `52b8744d571e4069a9c8224a7e3e8db80f82acac`.
+  `codex/eo-005-mcp-catalog-refresh`, implementation commit `52b8744d571e4069a9c8224a7e3e8db80f82acac`,
+  lifecycle-fix revision `a16c2d5`.
 - Completion date: 2026-08-13 implementation verification; finalizer owns closure date.
