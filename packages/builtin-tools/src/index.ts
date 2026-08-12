@@ -1,4 +1,18 @@
 export type {
+  GetDiagnosticsInput,
+  GetDiagnosticsScope,
+  IdeDiagnosticsPort,
+} from "./get-diagnostics.js";
+export {
+  createGetDiagnosticsTool,
+  DiagnosticsUnavailableError,
+  getDiagnosticsInputSchema,
+  getDiagnosticsToolDescription,
+  getDiagnosticsToolName,
+  InvalidDiagnosticsOutputError,
+  parseGetDiagnosticsInput,
+} from "./get-diagnostics.js";
+export type {
   ListFilesInput,
   ListFilesOutput,
   ListFilesRequest,

@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import {
   IdeTextPrefixCollector,
+  ideDiagnosticsResultSchema,
   ideEditorContextResultSchema,
   ideTextContextSchema,
+  maxIdeDiagnosticEntries,
+  maxIdeDiagnosticMessageCodePoints,
   maxIdeTextBytes,
   maxIdeTextCodePoints,
   maxIdeTextLines,
@@ -120,6 +123,73 @@ describe("IDE context protocol", () => {
         ...result.context,
         source: { ...result.context.source, truncated: true, truncationReasons: ["lines"] },
         text: tooManyLines,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("validates bounded structured diagnostic results and rejects reversed ranges", () => {
+    const source = {
+      uri: { scheme: "file", authority: "", path: "src/index.ts" },
+      range: {
+        start: { line: 0, character: 0 },
+        end: { line: 0, character: 1 },
+      },
+      documentVersion: 2,
+      stale: false,
+      truncated: false,
+    } as const;
+    const result = {
+      kind: "diagnostics",
+      source: { ...source, range: undefined },
+      diagnostics: [
+        {
+          source,
+          severity: "error",
+          message: "Unexpected token",
+          code: "E100",
+          origin: "typescript",
+        },
+      ],
+      stale: false,
+      truncated: false,
+    } as const;
+
+    expect(ideDiagnosticsResultSchema.safeParse(result).success).toBe(true);
+    expect(
+      ideDiagnosticsResultSchema.safeParse({
+        ...result,
+        diagnostics: Array.from(
+          { length: maxIdeDiagnosticEntries + 1 },
+          () => result.diagnostics[0],
+        ),
+      }).success,
+    ).toBe(false);
+    expect(
+      ideDiagnosticsResultSchema.safeParse({
+        ...result,
+        diagnostics: [
+          {
+            ...result.diagnostics[0],
+            message: "a".repeat(maxIdeDiagnosticMessageCodePoints + 1),
+          },
+        ],
+      }).success,
+    ).toBe(false);
+    expect(
+      ideDiagnosticsResultSchema.safeParse({
+        ...result,
+        diagnostics: [
+          {
+            ...result.diagnostics[0],
+            source: {
+              ...source,
+              range: {
+                start: { line: 1, character: 0 },
+                end: { line: 0, character: 0 },
+              },
+            },
+          },
+        ],
       }).success,
     ).toBe(false);
   });

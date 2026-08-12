@@ -65,12 +65,12 @@
 **进度摘要**：
 
 - 总任务：148
-- 已完成：126
+- 已完成：127
 - 进行中：0
 - 受阻：0
-- 待开始：22
-- 当前任务：T1903
-- 下一任务：T1904
+- 待开始：21
+- 当前任务：T1904
+- 下一任务：T1905
 - 最后更新：2026-08-12
 
 | 阶段 | 任务 | 状态 | 完成 PR | 完成日期 |
@@ -201,7 +201,7 @@
 | 18 | T1807 | 已完成 | [#199](https://github.com/yangzuo0621/ctrl-zebra/pull/199) | 2026-08-12 |
 | 19 | T1901 | 已完成 | [#201](https://github.com/yangzuo0621/ctrl-zebra/pull/201) | 2026-08-12 |
 | 19 | T1902 | 已完成 | [#203](https://github.com/yangzuo0621/ctrl-zebra/pull/203) | 2026-08-12 |
-| 19 | T1903 | 待开始 | — | — |
+| 19 | T1903 | 已完成 | [#204](https://github.com/yangzuo0621/ctrl-zebra/pull/204) | 2026-08-12 |
 | 19 | T1904 | 待开始 | — | — |
 | 19 | T1905 | 待开始 | — | — |
 | 20 | T2001 | 待开始 | — | — |
@@ -241,6 +241,15 @@
 - 完成证据：[PR #203](https://github.com/yangzuo0621/ctrl-zebra/pull/203)，实现 revision `2bbe094e30cf9aed2fdc14322e1e4601ad75840d`；GitHub Actions run `31548420686` 的 Ubuntu、macOS、Windows 验证均通过（Ubuntu integration tests、coverage gate、build 均通过）；实现 revision 的单元测试、类型检查、格式/lint、构建及 `git diff --check` 均通过。
 - 完成日期：2026-08-12
 - 下一任务：T1903
+
+---
+
+### T1903 完成记录
+
+- 完成摘要：实现结构化 diagnostics Tool，接入 VS Code diagnostics Host adapter；对语言、来源聚合、去重、排序、预算、取消、workspace/trust 与输出边界提供约束和回归覆盖。
+- 完成证据：[PR #204](https://github.com/yangzuo0621/ctrl-zebra/pull/204)，实现 revision `8d1ce7f4356293984774010080a376f30232579f`；聚焦测试、完整单元测试、类型检查、Biome 检查、构建、Ubuntu 集成测试、coverage gate 及 `git diff --check` 均通过；GitHub Actions run `31551947592` 的 Ubuntu、macOS、Windows 验证均通过。
+- 完成日期：2026-08-12
+- 下一任务：T1904
 
 ---
 
