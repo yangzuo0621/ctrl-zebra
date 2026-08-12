@@ -1,4 +1,9 @@
-import type { ExtensionToWebviewMessage, IdeTextContextDto } from "@ctrl-zebra/protocol";
+import type {
+  EditorContextRemoveMessage,
+  EditorContextUseStaleMessage,
+  ExtensionToWebviewMessage,
+  IdeTextContextDto,
+} from "@ctrl-zebra/protocol";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -321,6 +326,132 @@ describe("EditorContextEntryController", () => {
     entry.notifyTransition(["document-changed"]);
     expect(messages).toHaveLength(2);
     actions.dispose();
+  });
+
+  it("accepts only the exact owner tuple for Remove and Use stale", async () => {
+    const messages: ExtensionToWebviewMessage[] = [];
+    const controller = createController(messages);
+    await controller.entry.ask("selection");
+    const ready = messages[0] as Extract<
+      ExtensionToWebviewMessage,
+      { type: "extension/editor-context"; status: "ready" }
+    >;
+
+    const wrongContext = {
+      protocolVersion: 1 as const,
+      type: "webview/editor-context-remove" as const,
+      requestId: "remove-wrong-context",
+      viewGeneration: ready.viewGeneration,
+      sessionGeneration: ready.sessionGeneration,
+      cardGeneration: ready.cardGeneration,
+      contextId: "not-the-owner",
+    } satisfies EditorContextRemoveMessage;
+    controller.actions.remove(wrongContext);
+
+    const wrongGeneration = {
+      ...wrongContext,
+      requestId: "remove-wrong-generation",
+      viewGeneration: ready.viewGeneration + 1,
+    } satisfies EditorContextRemoveMessage;
+    controller.actions.remove(wrongGeneration);
+
+    const wrongStale = {
+      protocolVersion: 1 as const,
+      type: "webview/editor-context-use-stale" as const,
+      requestId: "stale-wrong-context",
+      viewGeneration: ready.viewGeneration,
+      sessionGeneration: ready.sessionGeneration,
+      cardGeneration: ready.cardGeneration,
+      contextId: "not-the-owner",
+    } satisfies EditorContextUseStaleMessage;
+    controller.actions.useStale(wrongStale);
+
+    expect(messages).toHaveLength(1);
+    controller.actions.remove({
+      ...wrongContext,
+      requestId: "remove-owner",
+      contextId: ready.contextId,
+    });
+    controller.entry.notifyTransition(["document-changed"]);
+    expect(messages).toHaveLength(1);
+  });
+
+  it("reports an unavailable capture when the source cannot be read", async () => {
+    const messages: ExtensionToWebviewMessage[] = [];
+    const entry = new EditorContextEntryController({
+      readContext: async () => {
+        throw new Error("readContext should not run for an unavailable source");
+      },
+      isEnabled: () => true,
+      getAvailability: () => "unsupported-document",
+      createId: (() => {
+        let next = 0;
+        return () => `availability-${++next}`;
+      })(),
+    });
+    const actions = entry.attachView(
+      {
+        postMessage(message) {
+          messages.push(message);
+          return Promise.resolve(true);
+        },
+      },
+      { onDidDispose: () => ({ dispose() {} }) },
+    );
+
+    await entry.ask("selection");
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toMatchObject({
+      status: "unavailable",
+      scope: "selection",
+      code: "unsupported-document",
+    });
+    actions.dispose();
+  });
+
+  it("treats an explicit AbortError as cancellation without publishing unavailable", async () => {
+    const messages: ExtensionToWebviewMessage[] = [];
+    const entry = new EditorContextEntryController({
+      readContext: async () => {
+        const error = new Error("cancelled");
+        error.name = "AbortError";
+        throw error;
+      },
+      isEnabled: () => true,
+      createId: (() => {
+        let next = 0;
+        return () => `abort-${++next}`;
+      })(),
+    });
+    const actions = entry.attachView(
+      {
+        postMessage(message) {
+          messages.push(message);
+          return Promise.resolve(true);
+        },
+      },
+      { onDidDispose: () => ({ dispose() {} }) },
+    );
+
+    await entry.ask("active-editor");
+    expect(messages).toEqual([]);
+    actions.dispose();
+  });
+
+  it("invalidates once on setting changes and makes disposal idempotent", async () => {
+    const messages: ExtensionToWebviewMessage[] = [];
+    const controller = createController(messages);
+    await controller.entry.ask("active-editor");
+    controller.entry.notifyTransition([]);
+    controller.entry.onSettingChanged(false);
+    controller.entry.onSettingChanged();
+    expect(messages.at(-1)).toMatchObject({ status: "cleared", reason: "disabled" });
+
+    controller.entry.dispose();
+    controller.entry.dispose();
+    await controller.entry.ask("selection");
+    expect(messages).toHaveLength(2);
+    controller.actions.dispose();
   });
 });
 
