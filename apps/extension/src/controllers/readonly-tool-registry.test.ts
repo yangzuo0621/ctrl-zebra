@@ -1,6 +1,7 @@
 import type {
   IdeContextPort,
   IdeDiagnosticsPort,
+  IdeLanguageServicePort,
   ListFilesInput,
   ProposeFileEditWorkspace,
   ReadFileInput,
@@ -126,6 +127,72 @@ describe("createWorkspaceToolRegistryProvider", () => {
     ).resolves.toMatchObject({ output: { kind: "diagnostics", diagnostics: [] } });
   });
 
+  it("composes host language services as three read-only Tools when supplied", async () => {
+    const source = {
+      uri: { scheme: "file", authority: "", path: "src/index.ts" },
+      stale: false,
+      truncated: false,
+    } as const;
+    const range = {
+      start: { line: 0, character: 0 },
+      end: { line: 0, character: 1 },
+    } as const;
+    const languageServices: IdeLanguageServicePort = {
+      findDefinition: async () => ({
+        kind: "language-locations",
+        operation: "definition",
+        source,
+        locations: [{ source, range, kind: "definition" }],
+        stale: false,
+        truncated: false,
+      }),
+      findReferences: async () => ({
+        kind: "language-locations",
+        operation: "references",
+        source,
+        locations: [{ source, range, kind: "reference" }],
+        stale: false,
+        truncated: false,
+      }),
+      listSymbols: async () => ({
+        kind: "symbols",
+        source,
+        symbols: [{ name: "answer", kind: "variable", range }],
+        stale: false,
+        truncated: false,
+      }),
+    };
+    const provider = createWorkspaceToolRegistryProvider(
+      createDependencies([uri("/workspace")], { languageServices }).values,
+    );
+    const registry = await provider.get(new AbortController().signal);
+
+    expect(registry.declarations().map(({ name }) => name)).toEqual([
+      "find_definition",
+      "find_references",
+      "list_files",
+      "list_symbols",
+      "propose_file_edit",
+      "read_file",
+      "run_command",
+      "search_files",
+    ]);
+    const signal = new AbortController().signal;
+    await expect(
+      registry
+        .get("find_definition")
+        ?.execute({ path: "src/index.ts", position: { line: 0, character: 0 } }, { signal }),
+    ).resolves.toMatchObject({ output: { operation: "definition" } });
+    await expect(
+      registry
+        .get("find_references")
+        ?.execute({ path: "src/index.ts", position: { line: 0, character: 0 } }, { signal }),
+    ).resolves.toMatchObject({ output: { operation: "references" } });
+    await expect(
+      registry.get("list_symbols")?.execute({ path: "src/index.ts" }, { signal }),
+    ).resolves.toMatchObject({ output: { symbols: [{ name: "answer" }] } });
+  });
+
   it("composes the concrete VS Code editor adapter into the production-shaped registry", async () => {
     const root = uri("/workspace");
     const document = {
@@ -236,6 +303,7 @@ function createDependencies(
     readonly trusted?: boolean;
     readonly editorContext?: IdeContextPort;
     readonly diagnostics?: IdeDiagnosticsPort;
+    readonly languageServices?: IdeLanguageServicePort;
   } = {},
 ) {
   let trusted = overrides.trusted ?? true;
@@ -293,6 +361,7 @@ function createDependencies(
       },
       editorContext: overrides.editorContext,
       diagnostics: overrides.diagnostics,
+      languageServices: overrides.languageServices,
     },
     joinPath,
     registerWorkspaceChange,

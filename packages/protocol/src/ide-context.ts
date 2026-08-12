@@ -20,10 +20,54 @@ export const maxIdeDiagnosticMessageCodePoints = 4_096;
 export const maxIdeDiagnosticMessageBytes = 16_384;
 export const maxIdeDiagnosticLabelCodePoints = 1_024;
 export const maxIdeDiagnosticLabelBytes = 4_096;
+export const maxIdeLanguageLocationEntries = maxIdeDiagnosticEntries;
+export const maxIdeSymbolEntries = maxIdeDiagnosticEntries;
+export const maxIdeLanguageAggregateCodePoints = maxIdeDiagnosticAggregateCodePoints;
+export const maxIdeLanguageAggregateBytes = maxIdeDiagnosticAggregateBytes;
 
 export const ideDiagnosticSeverities = ["error", "warning", "information", "hint"] as const;
 
 export type IdeDiagnosticSeverity = (typeof ideDiagnosticSeverities)[number];
+
+export const ideLanguageLocationKinds = ["definition", "reference"] as const;
+
+export type IdeLanguageLocationKind = (typeof ideLanguageLocationKinds)[number];
+
+export const ideLanguageOperations = ["definition", "references"] as const;
+
+export type IdeLanguageOperation = (typeof ideLanguageOperations)[number];
+
+export const ideSymbolKinds = [
+  "file",
+  "module",
+  "namespace",
+  "package",
+  "class",
+  "method",
+  "property",
+  "field",
+  "constructor",
+  "enum",
+  "interface",
+  "function",
+  "variable",
+  "constant",
+  "string",
+  "number",
+  "boolean",
+  "array",
+  "object",
+  "key",
+  "null",
+  "enum-member",
+  "struct",
+  "event",
+  "operator",
+  "type-parameter",
+  "unknown",
+] as const;
+
+export type IdeSymbolKind = (typeof ideSymbolKinds)[number];
 
 export const ideTruncationReasons = [
   "code-points",
@@ -202,6 +246,118 @@ export const ideDiagnosticsResultSchema = z
     }
   });
 
+const ideLanguageLocationKindSchema = z.enum(ideLanguageLocationKinds);
+const ideLanguageOperationSchema = z.enum(ideLanguageOperations);
+const ideSymbolKindSchema = z.enum(ideSymbolKinds);
+const ideSymbolLabelSchema = boundedTextSchema(
+  maxIdeDiagnosticLabelCodePoints,
+  maxIdeDiagnosticLabelBytes,
+);
+
+export const ideLanguageLocationSchema = z.strictObject({
+  source: ideSourceSchema,
+  range: ideRangeSchema,
+  kind: ideLanguageLocationKindSchema,
+});
+
+export const ideLanguageLocationsResultSchema = z
+  .strictObject({
+    kind: z.literal("language-locations"),
+    operation: ideLanguageOperationSchema,
+    source: ideSourceSchema,
+    locations: z.array(ideLanguageLocationSchema).max(maxIdeLanguageLocationEntries),
+    stale: z.boolean(),
+    truncated: z.boolean(),
+    truncationReasons: z
+      .array(ideTruncationReasonSchema)
+      .min(1)
+      .max(ideTruncationReasons.length)
+      .optional(),
+  })
+  .superRefine((result, context) => {
+    validateTruncationMetadata(result, context, "language location");
+
+    let codePoints = 0;
+    let bytes = 0;
+    for (const source of [result.source, ...result.locations.map((location) => location.source)]) {
+      for (const text of sourceStrings(source)) {
+        codePoints += [...text].length;
+        bytes += utf8ByteLength(text);
+      }
+    }
+    if (codePoints > maxIdeLanguageAggregateCodePoints) {
+      context.addIssue({
+        code: "custom",
+        message: `Language location output must not exceed ${maxIdeLanguageAggregateCodePoints} Unicode code points.`,
+      });
+    }
+    if (bytes > maxIdeLanguageAggregateBytes) {
+      context.addIssue({
+        code: "custom",
+        message: `Language location output must not exceed ${maxIdeLanguageAggregateBytes} UTF-8 bytes.`,
+      });
+    }
+  });
+
+export const ideSymbolSchema = z.strictObject({
+  name: ideSymbolLabelSchema,
+  kind: ideSymbolKindSchema,
+  range: ideRangeSchema,
+  containerName: ideSymbolLabelSchema.optional(),
+  detail: ideSymbolLabelSchema.optional(),
+  selectionRange: ideRangeSchema.optional(),
+});
+
+export const ideSymbolsResultSchema = z
+  .strictObject({
+    kind: z.literal("symbols"),
+    source: ideSourceSchema,
+    symbols: z.array(ideSymbolSchema).max(maxIdeSymbolEntries),
+    stale: z.boolean(),
+    truncated: z.boolean(),
+    truncationReasons: z
+      .array(ideTruncationReasonSchema)
+      .min(1)
+      .max(ideTruncationReasons.length)
+      .optional(),
+  })
+  .superRefine((result, context) => {
+    validateTruncationMetadata(result, context, "symbol");
+
+    let codePoints = 0;
+    let bytes = 0;
+    for (const text of sourceStrings(result.source)) {
+      codePoints += [...text].length;
+      bytes += utf8ByteLength(text);
+    }
+    for (const symbol of result.symbols) {
+      for (const text of [symbol.name, symbol.containerName, symbol.detail]) {
+        if (text === undefined) continue;
+        codePoints += [...text].length;
+        bytes += utf8ByteLength(text);
+      }
+    }
+    if (codePoints > maxIdeLanguageAggregateCodePoints) {
+      context.addIssue({
+        code: "custom",
+        message: `Symbol output must not exceed ${maxIdeLanguageAggregateCodePoints} Unicode code points.`,
+      });
+    }
+    if (bytes > maxIdeLanguageAggregateBytes) {
+      context.addIssue({
+        code: "custom",
+        message: `Symbol output must not exceed ${maxIdeLanguageAggregateBytes} UTF-8 bytes.`,
+      });
+    }
+  });
+
+export const ideReadOnlyToolResultSchema = z.union([
+  ideEditorContextResultSchema,
+  ideDiagnosticsResultSchema,
+  ideLanguageLocationsResultSchema,
+  ideSymbolsResultSchema,
+]);
+
 export type IdeUriDto = z.infer<typeof ideUriSchema>;
 export type IdePositionDto = z.infer<typeof idePositionSchema>;
 export type IdeRangeDto = z.infer<typeof ideRangeSchema>;
@@ -210,6 +366,11 @@ export type IdeTextContextDto = z.infer<typeof ideTextContextSchema>;
 export type IdeEditorContextResultDto = z.infer<typeof ideEditorContextResultSchema>;
 export type IdeDiagnosticDto = z.infer<typeof ideDiagnosticSchema>;
 export type IdeDiagnosticsResultDto = z.infer<typeof ideDiagnosticsResultSchema>;
+export type IdeLanguageLocationDto = z.infer<typeof ideLanguageLocationSchema>;
+export type IdeLanguageLocationsResultDto = z.infer<typeof ideLanguageLocationsResultSchema>;
+export type IdeSymbolDto = z.infer<typeof ideSymbolSchema>;
+export type IdeSymbolsResultDto = z.infer<typeof ideSymbolsResultSchema>;
+export type IdeReadOnlyToolResultDto = z.infer<typeof ideReadOnlyToolResultSchema>;
 
 export interface IdeTextPrefix {
   readonly text: string;
@@ -354,6 +515,35 @@ function sourceStrings(source: IdeSourceDto): readonly string[] {
     source.uri.path,
     ...(source.languageId === undefined ? [] : [source.languageId]),
   ];
+}
+
+function validateTruncationMetadata(
+  result: {
+    readonly truncated: boolean;
+    readonly truncationReasons?: readonly IdeTruncationReason[];
+  },
+  context: z.RefinementCtx,
+  label: string,
+): void {
+  const reasons = result.truncationReasons;
+  if (result.truncated && reasons === undefined) {
+    context.addIssue({
+      code: "custom",
+      message: `A truncated ${label} result must include reasons.`,
+    });
+  }
+  if (!result.truncated && reasons !== undefined) {
+    context.addIssue({
+      code: "custom",
+      message: `An untruncated ${label} result must omit truncation reasons.`,
+    });
+  }
+  if (reasons !== undefined && new Set(reasons).size !== reasons.length) {
+    context.addIssue({
+      code: "custom",
+      message: `${label} truncation reasons must be unique.`,
+    });
+  }
 }
 
 function readCodePoint(
