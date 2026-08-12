@@ -10,12 +10,18 @@ import {
   createWorkspaceCheckpointStoreProvider,
   WorkspaceCheckpointStorageUnavailableError,
 } from "../../adapters/vscode-checkpoint-storage.js";
+import { isVscodeFileNotFound } from "../../adapters/vscode-file-system-error.js";
 import {
   createWorkspaceSessionRepositoryProvider,
   WorkspaceSessionStorageUnavailableError,
 } from "../../adapters/vscode-session-storage.js";
 
 export async function verifySessionStorage(): Promise<void> {
+  assert.equal(isVscodeFileNotFound(vscode.FileSystemError.FileNotFound()), true);
+  assert.equal(
+    isVscodeFileNotFound(Object.assign(new Error("not found"), { code: "FileNotFound" })),
+    false,
+  );
   const unavailable = createWorkspaceSessionRepositoryProvider(undefined, vscode.workspace.fs);
   await assert.rejects(unavailable(), WorkspaceSessionStorageUnavailableError);
   const hashText = (text: string) => createHash("sha256").update(text, "utf8").digest("hex");
