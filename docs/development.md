@@ -66,16 +66,64 @@ owned by Biome, EditorConfig, and Git attributes.
 - Keep public APIs minimal; implementation details remain private until a cross-module use case
   requires an export.
 
+## Reuse Before Build
+
+- Before adding a file, module, interface, helper, error, constant, test fake, or general-purpose
+  mechanism, search the repository by concept, behavior, owning type, error, invariant, and relevant
+  dependency combination—not only by the proposed symbol name.
+- Search public package entry points, the owning and adjacent modules, tests and test support, and
+  applicable architecture or domain documents. Record search terms, locations, relevant candidates,
+  the decision, and why a candidate was not reused.
+- Reuse an existing interface when it already owns the behavior. If callers repeatedly assemble the
+  same limits, ordering, validation, cancellation, stale fencing, or error rules, deepen that module
+  rather than copying helpers.
+- The first local implementation may remain local. A second implementation requires an explicit
+  assessment of direct reuse or module deepening. A third equivalent implementation is blocked
+  unless the task demonstrates distinct ownership or semantics that cannot share one implementation.
+  Different caller-facing errors alone normally call for error mapping, not duplicated algorithms.
+- Prefer a deep module with one clear interface and local ownership. Do not create a repository-wide
+  `utils`, `common`, or equivalent collection that hides dependency direction or ownership.
+- Replacement work removes superseded implementation and implementation-specific tests once the new
+  interface has equivalent behavioral coverage. Do not leave both paths active or layer a pass-through
+  abstraction over the duplicate implementation.
+- Before completion, repeat the search against actual added symbols and behavior. Record remaining
+  similarities, removed implementations, and any follow-up disposition in the Similarity Audit.
+- Automated duplication reports are evidence, not an automatic abstraction decision. Exclude generated
+  data and required compatibility fixtures, and review security, lifecycle, and test-support duplicates
+  independently.
+
 ## Dependencies
 
-- Before adding a production dependency, confirm that the standard library and existing dependencies
-  cannot reasonably satisfy the need, and state the reason for adding it.
+### Build vs Buy
+
+- CtrlZebra owns product policy, authorization, lifecycle, state transitions, security boundaries,
+  budgets, cancellation semantics, persistence compatibility, and stable error contracts.
+- Complete a Build vs Buy decision before implementing a general-purpose parser, tokenizer,
+  regular-expression engine, diff or patch algorithm, serializer, retry/backoff mechanism, queue,
+  mutex, concurrency primitive, encoding algorithm, protocol primitive, or comparable mechanism.
+- The decision is also required when general-purpose logic is expected to exceed roughly 100 lines,
+  already exists in two or more places, or needs substantial algorithm-specific boundary tests.
+  These thresholds trigger review; they do not require a dependency.
+- Evaluate in order: the standard library or VS Code API, existing dependencies, an official SDK,
+  maintained third-party libraries, then self-implementation.
+- Prefer a maintained implementation when it materially reduces algorithmic, compatibility, or
+  security maintenance without taking ownership of CtrlZebra policy or lifecycle. Do not add a
+  dependency merely to replace small, stable utility logic.
+- Record alternatives, maintenance status, license, runtime and toolchain compatibility, packaging
+  or VSIX impact, cancellation and security behavior, required adapter code, the decision, and its
+  rationale in the task plan. If no trigger applies, record that explicitly.
+- Isolate third-party mechanisms behind CtrlZebra-owned interfaces. Third-party types, failures,
+  defaults, lifecycle decisions, and unbounded values must not enter public contracts or bypass
+  validation, budgets, cancellation, security, or error normalization.
+- Keep the evidence synchronized when implementation findings change the selected mechanism or its
+  impact. A recommendation does not authorize a dependency or work outside the confirmed scope.
+
+### Dependency Management
+
 - Install a dependency in the workspace package that uses it. Keep only repository-wide development
   tools at the root.
 - Do not retain unpinned `latest` declarations. Keep one compatible dependency version across the
   workspace where practical.
-- Do not add a large dependency for small, stable utility logic.
-- Check maintenance status, license, runtime compatibility, and toolchain compatibility.
 - Third-party library and SDK types must not appear in public domain contracts.
 
 ## Async Work and Resource Lifecycles

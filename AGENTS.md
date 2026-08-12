@@ -37,6 +37,7 @@ for cross-cutting work. Do not load completed phase archives by default.
 | Persistence, recovery, or checkpoints | Applicable [`docs/persistence.md`](docs/persistence.md) section; add [`Checkpoint and restore boundary`](docs/security.md#checkpoint-and-restore-boundary) for restore |
 | MCP lifecycle, transport, or SDK isolation | [`Controlled MCP Client Boundary`](docs/architecture.md#controlled-mcp-client-boundary) and applicable MCP domain sections |
 | CI, VSIX packaging, or release | `docs/ci.md`, `docs/packaging.md`, or `docs/release-checklist.md` as applicable |
+| Implementation review | `docs/review-checklist.md` plus the reviewed task's required documents and declared scope |
 
 Resolve conflicts by this ownership and the roadmap fact-ownership table; correct them through
 change control.
@@ -114,11 +115,30 @@ owns wire and Tool DTO contracts.
 2. For roadmap work, locate the current task and read its active phase plus applicable Section 1.1
    documents. For maintenance, confirm Section 1.2 applies and no active task overlaps it.
 3. Confirm prerequisites, planned files, exclusions, public-contract impact, and validation commands.
-4. Use Context7 for current library, framework, SDK, API, CLI, or cloud-service documentation.
-5. Stop and explain ambiguity that would materially change the implementation.
+4. Complete the Reuse Before Build audit, then any applicable Build vs Buy decision below.
+5. Use Context7 for current library, framework, SDK, API, CLI, or cloud-service documentation.
+6. Stop and explain ambiguity that would materially change the implementation.
 
-For roadmap work, post the Current Task and Test Plan from `docs/roadmap/task-template.md`. For
-maintenance, post:
+#### 4.1.1 Reuse and Build vs Buy Decisions
+
+- Before adding an implementation or test fake, follow
+  [`Reuse Before Build`](docs/development.md#reuse-before-build), record existing candidates, and
+  reuse or deepen the owning module. A second implementation requires a deepening assessment; a
+  third equivalent implementation is blocked without distinct ownership or semantics.
+- Prefer one deep module over copied helpers or repository-wide utilities. Replacement removes
+  superseded implementations and tests instead of layering.
+
+- For general-purpose mechanisms, repeated infrastructure, or dependency changes, follow
+  [`Build vs Buy`](docs/development.md#build-vs-buy) and record the decision in the task plan.
+- CtrlZebra owns policy, authorization, lifecycle, state, security, budgets, cancellation,
+  persistence compatibility, and stable errors. Use maintained mechanisms only when they reduce
+  total maintenance, remain behind CtrlZebra-owned interfaces, and preserve those boundaries.
+- Task agents may recommend but not adopt dependencies outside confirmed scope or Section 5
+  authorization. Review agents use `docs/review-checklist.md` and report missing evidence or
+  unjustified repeated infrastructure.
+
+For roadmap work, post the Current Task, Reuse Audit, Build vs Buy, Test Plan, and Constraint Gate
+sections from `docs/roadmap/task-template.md`. For maintenance, post:
 
 ```md
 ### Maintenance Change
@@ -129,6 +149,9 @@ maintenance, post:
 - Planned files:
 - Public-contract impact: None
 - Explicitly excluded:
+- Build vs Buy triggers: None / explain
+- Build vs Buy decision and evidence: Not applicable / explain
+- Reuse Audit: Search terms, locations, candidates, and decision
 - Verification:
 ```
 
