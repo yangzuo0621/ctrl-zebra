@@ -57,8 +57,9 @@
   有界 `contextId`、`scope` 和 `IdeTextContextDto`；`stale` 状态只携带同一来源的 DTO（其中
   `source.stale` 必须为 `true`）；清除和不可用状态使用闭合 reason。每条 Host 事件严格携带
   Host-issued `requestId`/`eventSequence`、`viewGeneration`、`sessionGeneration`，以及适用的
-  `cardGeneration`/`contextId`；旧请求、旧 `captureId`/`contextId`、已取消或已关闭的 view 均被
-  Webview 忽略。
+  `cardGeneration`/`contextId`；`captureId` 只出现在 `ready`/`stale`，`cleared` 刻意省略它并仅以
+  当前 owner 的 `cardGeneration`/`contextId` 关联；旧请求、旧 `captureId`/`contextId`、已取消或已
+  关闭的 view 均被 Webview 忽略。
 - Webview 只发送严格、带完整当前 owner tuple 的窄意图：
   `webview/editor-context-refresh`（`requestId`、`viewGeneration`、`sessionGeneration`、
   `cardGeneration`、`contextId`、`scope`）、`webview/editor-context-remove`（除 `scope` 外同样
@@ -82,7 +83,11 @@
 接受的 New chat 由 Webview 在发送单一意图/动作前同步清除 editor store；Session restore/switch
 由 Host 关闭两个 gate，并在提交新 session generation 前事务性清除 Webview store；disposal 关闭
 两个 gate。这些本地/事务性边界均不发送 editor `cleared`，Remove ack（若存在）可选且忽略。Host
-在一个 owner queue 中先关 capture gate，再投影 transition，并以 eventSequence 保证顺序。
+在一个 owner queue 中先关 capture gate，再将规范化的 `staleReasons`（排序、去重的闭合集）与 Host
+source fingerprint 组成 per-owner stale watermark；watermark 在分配 `eventSequence`/`requestId` 前判重。
+首个 transition 只分配一对 ID 并投影一个 stale，重复/后续 transition 在该 owner 的 stale latch 下
+不再分配或发送；新 ready owner 才重置 watermark。Webview 仍独立按完整同序 event 做 retransmission
+dedup，并以 eventSequence 保证顺序。
 
 Fence/correlation 也必须是公共契约：`viewGeneration` 在每次激活的第一个 view 从 `1` 开始并按
 view 分配；`sessionGeneration` 每个 view 从 `0` 开始，只在 Host 接受 restore/selection commit、
@@ -93,7 +98,8 @@ Session switch 或 New chat 的新 owner 时递增；`cardGeneration` 在 `(view
 新 activation。Host 为每个 outbound event 同步分配独立的 `requestId` 和 `eventSequence`；Webview
 intent 的 `requestId` 是方向专属并按严格完整 payload 去重。事件严格携带
 `protocolVersion,type,requestId,viewGeneration,sessionGeneration,eventSequence,status` 及状态所需的
-`cardGeneration,captureId,contextId,scope,reason,context` 字段（详见 Protocol）。Capture fence 是
+`cardGeneration,captureId,contextId,scope,reason,context` 字段（详见 Protocol；`captureId` 仅适用于
+ready/stale，cleared 不含该字段）。Capture fence 是
 `(viewGeneration,sessionGeneration,captureId)`；Host active delivered-card owner tuple 严格为
 `(viewGeneration,sessionGeneration,cardGeneration,contextId)`，`captureId` 仅作 capture correlation，
 不进入 Webview intent tuple。Webview 对同序事件先做 canonical 完整字段比较：相同为 no-op，冲突丢弃；
@@ -110,6 +116,7 @@ gate、dispose 后事件均在 mutation 前拒绝。
 | command capture completes normally | capture gate open → one `ready` commit → owner gate opens; ready draft remains editable and Send is allowed |
 | cancel/close before capture completion | capture gate closes first; completion is dropped; no `ready`, `stale`, `cleared`, retry, or unavailable result |
 | editor/selection/document change with delivered card | close any capture gate → one current-owner `stale` with same card/context and `source.stale: true`; duplicate transition is a no-op |
+| repeated identical editor/selection/document transition | normalize the same stale-reason set and source fingerprint before allocating IDs; one stale projection/`eventSequence`/`requestId` is emitted, repeats see the pending/committed watermark and emit nothing |
 | setting disable, Trust loss, root/workspace change, unsupported editor with delivered card | close capture gate → one Host-driven current-owner `cleared`; owner gate closes; no later event is accepted |
 | Remove or accepted New chat | Webview synchronously clears editor store, then sends one intent/action; Host closes matching gates and emits no editor `cleared`; no late event recreates a card |
 | Host restore/session switch | Host closes both gates; Webview transactionally clears editor store before committing the new session generation; no editor `cleared` event or late result |
@@ -119,7 +126,7 @@ gate、dispose 后事件均在 mutation 前拒绝。
 | completion vs transition same turn | owner queue order decides: completion first commits ready then transition may stale/clear; transition first suppresses completion and emits no card event without an existing owner |
 | old request/capture/context after newer ready | reject by captureId/cardGeneration/eventSequence; current card and draft are unchanged |
 | cross-view or cross-session event | reject by viewGeneration/sessionGeneration before state mutation |
-| duplicate/conflicting event or intent | compare canonical same-sequence payload before monotonic ordering: exact duplicate is a no-op, conflict is discarded; only greater sequence commits/watermarks, lower is stale no-op |
+| duplicate/conflicting event or intent | Host transition watermark is checked before event-ID allocation; after delivery Webview compares canonical same-sequence payload before monotonic ordering: exact retransmission is a no-op, conflict is discarded; only greater sequence commits/watermarks, lower is stale no-op |
 | event after disposal | reject by closed view gate; no post, live-region announcement, or focus change |
 | `editorTextFocus` menu visible but Host cannot capture | return fixed `unavailable` code (`no-editor`, `unsupported-document`, `outside-workspace`, or `untrusted-workspace`); no fallback read |
 | safe-integer fence overflow | fail closed before increment: no event, wrap, reuse, or silent reset; close affected gate and require a new view generation (view overflow requires a new activation) |
@@ -127,7 +134,8 @@ gate、dispose 后事件均在 mutation 前拒绝。
 The focused tests must also assert command registration/menu enablement hints, setting default/disable
 clearing, active-file versus exact-selection source/range, collapsed selection, ready-send/edit/remove,
 stale blocking and Use-stale, focus preservation, Host-issued generation allocation/increment/reset,
-safe-integer overflow fail-closed/new-view reset, strict DTO extra-field rejection, and Webview acceptance
+safe-integer overflow fail-closed/new-view reset, strict DTO extra-field rejection including `captureId` only
+on ready/stale and its omission on cleared, and Webview acceptance
 of out-of-order, same-sequence compare-before-watermark duplicate/conflict, cross-view/session, post-refresh,
 local/transactional clear without Host editor events, and post-disposal messages.
 

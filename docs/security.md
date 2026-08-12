@@ -291,11 +291,12 @@ The Host sends only the strict `extension/editor-context` projection from [Proto
 projection carries Host-issued `requestId`/`eventSequence`, `viewGeneration`, `sessionGeneration`, and the
 current `cardGeneration`/`contextId` when a card exists. The capture fence is exactly
 `(viewGeneration, sessionGeneration, captureId)`; the delivered-card owner tuple is exactly
-`(viewGeneration, sessionGeneration, cardGeneration, contextId)`, with `captureId` retained only for capture
-correlation. These fences prevent cross-view or cross-Session replacement. The Webview cannot provide a URI,
-range, revision, Trust value, or text source; `webview/editor-context-*` messages are narrow refresh/remove/
-use-stale intents with the exact owner tuple. `use-stale` is an explicit display/send decision for one context
-ID, never a freshness override or a capability change.
+`(viewGeneration, sessionGeneration, cardGeneration, contextId)`. `captureId` is present only on `ready` and
+`stale` projections for capture correlation; `cleared` intentionally omits it and correlates by the owner
+tuple's card/context fields. These fences prevent cross-view or cross-Session replacement. The Webview cannot
+provide a URI, range, revision, Trust value, or text source; `webview/editor-context-*` messages are narrow
+refresh/remove/use-stale intents with the exact owner tuple. `use-stale` is an explicit display/send decision
+for one context ID, never a freshness override or a capability change.
 
 The **capture delivery gate** owns the AbortController and closes before cancellation, supersession,
 setting disable, Trust loss, editor/workspace transition, Session/New chat, view disposal, or Extension
@@ -325,10 +326,19 @@ editor text and source metadata are not persisted, logged, restored, or used as 
 text that the user deliberately leaves in the ordinary Composer draft can follow the existing user-message/
 provider data path.
 
+Before allocating an outbound `eventSequence` or `requestId` for an editor/selection/document transition,
+the Host owner queue normalizes a bounded `{ normalizedStaleReasons, sourceFingerprint }` record for the
+current owner. The first record is reserved and produces one stale projection; a matching pending or committed
+record produces no event and no IDs, and the stale-latched owner suppresses any later transition until a newer
+`ready` owner resets the watermark. This source-transition watermark is independent of Webview retransmission
+de-duplication, which compares the exact same-sequence/requestId/canonical-payload event after delivery.
+
 The T1905 security matrix must exercise both gates and all fences: normal ready delivery; cancellation or
 close before capture completion; Refresh A/B with a late A result; transition with and without a delivered
-card; completion/transition same-turn ordering; setting/Trust/workspace/editor invalidation; local
+card; completion/transition same-turn ordering; one stale for repeated identical editor/selection/document
+transition with no second event ID; setting/Trust/workspace/editor invalidation; local
 Remove/New-chat/disposal clearing with no Host clear event; transactional restore/session-switch clearing;
+strict projection fields (`captureId` only on `ready`/`stale`, rejected on `cleared`);
 old/cross-view/cross-session request, capture, context, and card IDs; same-sequence duplicate/conflict checks
 before monotonic ordering; lower and greater event sequences; safe-integer overflow and required new-view/
 activation reset; and events after disposal. Each case proves no unbounded text allocation, model/Tool/

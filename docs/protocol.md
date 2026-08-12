@@ -542,12 +542,27 @@ initial value; no overflowed value is reused. Overflow, closure, and the require
 the deterministic race/overflow tests.
 
 The capture fence is `(viewGeneration, sessionGeneration, captureId)`. The delivered-card owner tuple is
-exactly `(viewGeneration, sessionGeneration, cardGeneration, contextId)`; `captureId` is retained on the
-card/event for capture correlation but is not part of Webview intent identity. The Host also records the
-latest accepted intent ID and payload hash for that owner. A duplicate intent with the same ID and identical
-fields is a no-op; reuse of an ID with different fields is rejected. Intents for an old view/session/card/
-context, an already closed owner, or a disposed view are ignored before any read, text allocation, or
-message post.
+exactly `(viewGeneration, sessionGeneration, cardGeneration, contextId)`; `captureId` is retained only on
+`ready` and `stale` projections for capture correlation and is not part of Webview intent identity. A
+`cleared` projection intentionally omits `captureId` and correlates by the owner tuple's
+`cardGeneration`/`contextId`. The Host also records the latest accepted intent ID and payload hash for that
+owner. A duplicate intent with the same ID and identical fields is a no-op; reuse of an ID with different
+fields is rejected. Intents for an old view/session/card/context, an already closed owner, or a disposed view
+are ignored before any read, text allocation, or message post.
+
+For each delivered owner, the Host also keeps a one-way `staleTransitionWatermark` that is initially absent.
+It is a bounded normalized record `{ normalizedStaleReasons, sourceFingerprint }`: reasons are the sorted,
+duplicate-free closed stale-reason values (`editor-changed`, `selection-changed`, `document-changed`), and
+`sourceFingerprint` is a deterministic fingerprint of the Host-owned bounded source identity, document
+version, language, and exact range/selection (never a URI or text in the record). The owner queue computes
+this record for every spontaneous editor/selection/document transition before allocating an outbound
+`eventSequence` or `requestId`. The first transition reserves the record, allocates one pair of IDs, and
+commits one `stale` projection; a repeat that matches the pending or committed watermark is suppressed with
+no event and no new IDs. Because an owner is stale-latched, a different later transition is also suppressed
+for that owner; only a newer `ready` owner resets the watermark. This Host-side transition watermark is
+distinct from Webview transport de-duplication: after a projection exists, the Webview compares an exact
+same-sequence/requestId/canonical-payload retransmission and treats it as a no-op, independently of the
+Host's source-transition check.
 
 The Extension-to-Webview union is `extension/editor-context`:
 
@@ -573,7 +588,8 @@ The Extension-to-Webview union is `extension/editor-context`:
   "unsupported-document" | "outside-workspace" | "unavailable" }
 ```
 
-`ready` and `stale` carry the bounded `IdeTextContextDto`; `stale` requires
+`captureId` is required only on `ready` and `stale`; `cleared` intentionally omits it and correlates only by
+the current view/session/card/context owner tuple. `ready` and `stale` carry the bounded `IdeTextContextDto`; `stale` requires
 `context.source.stale === true`, and it keeps the same `cardGeneration`, `captureId`, and `contextId` as
 the delivered card. `cleared` identifies the card being removed and never carries text. `unavailable` is a
 fixed display outcome for a command with no delivered card (or for a rejected capture); it never includes a
@@ -616,7 +632,9 @@ owner queue. The deterministic order is:
    exactly one `ready` event, and make that card the owner at the enqueue commit point. A failed `postMessage`
    closes the owner gate without retry.
 4. After a card owner exists, an editor/selection/document transition emits at most one `stale` event for
-   the current owner; a setting disable, Trust loss, selected-root/workspace change, or unsupported current
+   the current owner. The Host normalizes its stale reasons and source fingerprint and checks the per-owner
+   watermark before allocating `eventSequence`/`requestId`; repeated or later transitions are suppressed
+   without another event. A setting disable, Trust loss, selected-root/workspace change, or unsupported current
    editor emits one Host-driven `cleared` event and closes the owner gate. The Host closes any in-flight
    capture before evaluating this rule. Accepted Remove and New chat close the gates and rely on the Webview's
    synchronous local clear; Host-driven Session switch/restore closes both gates and relies on its transactional

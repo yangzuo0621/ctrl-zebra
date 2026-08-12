@@ -123,8 +123,9 @@ cleanup. A completion whose gate, source tuple, or document revision is no longe
 cannot post a `ready` or `unavailable` capture result, owner transition, or card.
 
 The capture fence is `(viewGeneration, sessionGeneration, captureId)`. The delivered-card owner tuple is
-exactly `(viewGeneration, sessionGeneration, cardGeneration, contextId)`; `captureId` remains correlation
-metadata and is not part of a Webview intent tuple.
+exactly `(viewGeneration, sessionGeneration, cardGeneration, contextId)`; `captureId` appears only on
+`ready`/`stale` projections for capture correlation and is not part of a Webview intent tuple. `cleared`
+intentionally omits `captureId` and correlates by the current owner tuple's card/context fields.
 
 The **delivered-card/event projection owner gate** opens only at the ordered `ready` enqueue commit and owns
 the immutable `(viewGeneration, sessionGeneration, cardGeneration, contextId)` tuple. It remains the sole
@@ -159,6 +160,14 @@ idempotent no-op; a conflicting same-sequence event is discarded. Only an event 
 commit and advance the watermark; a lower sequence is a stale no-op. This ordering applies before any UI
 mutation and is covered by the deterministic race tests.
 
+For each delivered owner the Host keeps a one-way `staleTransitionWatermark` containing bounded normalized
+stale reasons and a deterministic source fingerprint (Host-owned source identity, document version, language,
+and exact range/selection). The owner queue checks this record before allocating an event sequence or request
+ID. The first transition reserves it and emits one stale projection; matching pending/committed transitions,
+and any later transition while the owner is stale-latched, emit nothing and allocate no IDs. A newer ready
+owner resets the watermark. This Host transition check is separate from Webview exact same-sequence,
+requestId, and canonical-payload retransmission de-duplication.
+
 The Agent view exposes only the strict `extension/editor-context` projection. It queues at most the newest
 event for a resolved owner, drops queued data on disposal, and never exposes `Webview`, `TextEditor`, `Uri`,
 or `AbortController` objects to Webview/Core. A command focuses the Agent view, then posts one projection;
@@ -168,7 +177,8 @@ blocks Send until refresh or explicit `Use stale context`.
 Required adapter/controller tests cover normal ready → editable/send, collapsed selection, no editor, an
 `editorTextFocus` menu-visible but unsupported/outside/untrusted document, setting disable, focus and
 selection preservation, cancel/close races, Refresh A→B, transition-before-capture-completion,
-completion-before-transition, stale/clear deduplication, local Remove/New-chat/disposal clearing with no Host
+completion-before-transition, one-stale-per-owner transition watermarking before event ID allocation,
+Webview retransmission deduplication, stale/clear deduplication, local Remove/New-chat/disposal clearing with no Host
 clear event, transactional Host restore/session-switch clearing, generation allocation/reset, safe-integer
 overflow fail-closed/new-view requirements, strict message validation, cross-view/session fences,
 same-sequence duplicate/conflict comparison before monotonic checks, and post-disposal suppression.
