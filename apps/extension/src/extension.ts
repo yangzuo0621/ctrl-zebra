@@ -66,7 +66,10 @@ import { createSelectingChatRunner } from "./controllers/chat-runner.js";
 import { createCheckpointActions } from "./controllers/checkpoint-actions.js";
 import { combineToolRegistries } from "./controllers/combine-tool-registries.js";
 import { CommandApprovalWorkflow } from "./controllers/command-approval-workflow.js";
-import { EditorContextEntryController } from "./controllers/editor-context-entry.js";
+import {
+  createEditorContextSourceFingerprint,
+  EditorContextEntryController,
+} from "./controllers/editor-context-entry.js";
 import { FileEditApprovalWorkflow } from "./controllers/file-edit-approval-workflow.js";
 import { McpConnectionController } from "./controllers/mcp-connection-controller.js";
 import { McpPromptActions } from "./controllers/mcp-prompt-actions.js";
@@ -290,9 +293,7 @@ export function activate(context: ExtensionContext): void {
     if (!workspace.isTrusted) return "untrusted-workspace";
     const editor = window.activeTextEditor;
     if (editor === undefined) return "no-editor";
-    if (scope === "selection" && (editor.selection === undefined || editor.selection.isEmpty)) {
-      return "no-selection";
-    }
+    if (scope === "selection" && editor.selection === undefined) return "no-selection";
     if (editor.document === undefined || editor.document.uri === undefined) {
       return "unsupported-document";
     }
@@ -322,11 +323,21 @@ export function activate(context: ExtensionContext): void {
     getSourceFingerprint: (scope) => {
       const editor = window.activeTextEditor;
       if (editor === undefined || editor.document === undefined) return undefined;
-      const selection =
-        scope === "selection" && editor.selection !== undefined
-          ? `:${editor.selection.start.line}:${editor.selection.start.character}:${editor.selection.end.line}:${editor.selection.end.character}`
-          : "";
-      return `${editor.document.uri.toString()}\u0000${editor.document.version}\u0000${editor.document.languageId}${selection}`;
+      return createEditorContextSourceFingerprint({
+        scheme: editor.document.uri.scheme,
+        authority: editor.document.uri.authority,
+        path: editor.document.uri.path,
+        documentVersion: editor.document.version,
+        languageId: editor.document.languageId,
+        ...(scope === "selection" && editor.selection !== undefined
+          ? {
+              range: {
+                start: editor.selection.start,
+                end: editor.selection.end,
+              },
+            }
+          : {}),
+      });
     },
     createId: randomUUID,
     focusView: () => commands.executeCommand("ctrlZebra.agentView.focus"),

@@ -11,7 +11,6 @@ interface EditorContextCardProps {
 
 export function EditorContextCard({ store }: EditorContextCardProps) {
   const card = useStore(store, (state) => state.card);
-  const announcement = useStore(store, (state) => state.announcement);
   const acceptStale = useStore(store, (state) => state.useStale);
   if (card === undefined) return null;
   const source = card.context.source;
@@ -51,11 +50,6 @@ export function EditorContextCard({ store }: EditorContextCardProps) {
           <dd>{source.truncated ? "yes" : "no"}</dd>
         </div>
       </dl>
-      {announcement.length === 0 ? null : (
-        <p className={styles.status} role="status" aria-live="polite">
-          {announcement}
-        </p>
-      )}
       <div className={styles.actions}>
         <Button variant="secondary" size="sm" onClick={() => store.getState().refresh()}>
           {strings.editorContext.refresh}

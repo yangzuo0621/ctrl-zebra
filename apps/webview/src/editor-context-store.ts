@@ -198,7 +198,10 @@ export function createEditorContextStore({
     },
     canSend() {
       const card = get().card;
-      return card === undefined || card.status !== "stale" || card.staleAccepted;
+      return (
+        !get().capturePending &&
+        (card === undefined || card.status !== "stale" || card.staleAccepted)
+      );
     },
     receive(message) {
       if (disposed || message.type !== "extension/editor-context") return;

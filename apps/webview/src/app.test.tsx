@@ -4,7 +4,7 @@ import {
   protocolVersion,
   type WebviewToExtensionMessage,
 } from "@ctrl-zebra/protocol";
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -71,6 +71,26 @@ class FakeWebviewHost implements WebviewHost {
       type: "webview/restore-checkpoint",
       requestId,
       checkpointId,
+    });
+  }
+
+  refreshEditorContext(
+    requestId: string,
+    viewGeneration: number,
+    sessionGeneration: number,
+    cardGeneration: number,
+    contextId: string,
+    scope: "selection" | "active-editor",
+  ): void {
+    this.sent.push({
+      protocolVersion,
+      type: "webview/editor-context-refresh",
+      requestId,
+      viewGeneration,
+      sessionGeneration,
+      cardGeneration,
+      contextId,
+      scope,
     });
   }
 
@@ -995,4 +1015,48 @@ describe("App streaming chat", () => {
     expect(screen.getByText("const x = 42;")).toBeVisible();
     expect(screen.getByRole("button", { name: "Copy" })).toBeVisible();
   });
+
+  it("blocks a form submit while an editor-context Refresh is pending", async () => {
+    const host = new FakeWebviewHost();
+    const user = userEvent.setup();
+    render(<App host={host} createRequestId={ids(["editor-refresh", "submit"])} />);
+    act(() =>
+      host.emit({
+        protocolVersion,
+        type: "extension/editor-context",
+        requestId: "editor-ready",
+        viewGeneration: 1,
+        sessionGeneration: 0,
+        eventSequence: 1,
+        status: "ready",
+        cardGeneration: 1,
+        captureId: "capture-1",
+        contextId: "context-1",
+        scope: "selection",
+        context: {
+          source: {
+            uri: { scheme: "file", authority: "", path: "src/index.ts" },
+            range: { start: { line: 0, character: 0 }, end: { line: 0, character: 4 } },
+            languageId: "typescript",
+            documentVersion: 1,
+            stale: false,
+            truncated: false,
+          },
+          text: "const",
+        },
+      }),
+    );
+    expect(screen.getByRole("button", { name: "Send" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: strings.editorContext.refresh }));
+    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+    const form = screen.getByRole("textbox", { name: "Message" }).closest("form");
+    expect(form).not.toBeNull();
+    if (form !== null) fireEvent.submit(form);
+    expect(host.sent.some((message) => message.type === "webview/submit")).toBe(false);
+  });
 });
+
+function ids(values: readonly string[]): () => string {
+  let index = 0;
+  return () => values[index++] ?? `id-${index}`;
+}

@@ -2,6 +2,7 @@ import type { ExtensionToWebviewMessage, IdeTextContextDto } from "@ctrl-zebra/p
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  createEditorContextSourceFingerprint,
   EditorContextEntryController,
   type EditorContextMessageChannel,
 } from "./editor-context-entry.js";
@@ -141,6 +142,91 @@ describe("EditorContextEntryController", () => {
     expect(messages.filter((message) => message.type === "extension/editor-context")).toHaveLength(
       1,
     );
+    actions.dispose();
+  });
+
+  it("keeps collapsed selection snapshots and scopes selection transitions to selection owners", async () => {
+    const messages: ExtensionToWebviewMessage[] = [];
+    const controller = createController(messages, {
+      readContext: async (scope) => ({
+        ...context,
+        source: {
+          ...context.source,
+          ...(scope === "selection"
+            ? {
+                range: {
+                  start: { line: 2, character: 4 },
+                  end: { line: 2, character: 4 },
+                },
+              }
+            : {}),
+        },
+        text: scope === "selection" ? "" : context.text,
+      }),
+    });
+    await controller.entry.ask("selection");
+    expect(messages[0]).toMatchObject({
+      status: "ready",
+      scope: "selection",
+      context: { text: "" },
+    });
+    controller.entry.notifyTransition(["selection-changed"]);
+    expect(messages.filter((message) => message.type === "extension/editor-context")).toHaveLength(
+      2,
+    );
+    expect(messages[1]).toMatchObject({ status: "stale", reason: "selection-changed" });
+
+    const activeMessages: ExtensionToWebviewMessage[] = [];
+    const activeController = createController(activeMessages);
+    await activeController.entry.ask("active-editor");
+    activeController.entry.notifyTransition(["selection-changed"]);
+    expect(activeMessages).toHaveLength(1);
+  });
+
+  it("keeps source transition fingerprints opaque and bounded", () => {
+    const fingerprint = createEditorContextSourceFingerprint({
+      scheme: "file",
+      authority: "",
+      path: "/workspace/src/index.ts",
+      documentVersion: 7,
+      languageId: "typescript",
+      range: {
+        start: { line: 1, character: 2 },
+        end: { line: 3, character: 4 },
+      },
+    });
+    expect(fingerprint).toMatch(/^[a-f0-9]{64}$/u);
+    expect(fingerprint).not.toContain("/workspace/src/index.ts");
+    expect(fingerprint).not.toContain("typescript");
+  });
+
+  it("closes the owner when synchronous event delivery throws", async () => {
+    const messages: ExtensionToWebviewMessage[] = [];
+    let posts = 0;
+    const lifetime = { onDidDispose: (_listener: () => void) => ({ dispose() {} }) };
+    const entry = new EditorContextEntryController({
+      readContext: async () => context,
+      isEnabled: () => true,
+      createId: (() => {
+        let next = 0;
+        return () => `id-${++next}`;
+      })(),
+    });
+    const actions = entry.attachView(
+      {
+        postMessage(message) {
+          messages.push(message);
+          posts += 1;
+          if (posts > 1) throw new Error("closed channel");
+          return Promise.resolve(true);
+        },
+      },
+      lifetime,
+    );
+    await entry.ask("active-editor");
+    entry.notifyTransition(["document-changed"]);
+    entry.notifyTransition(["document-changed"]);
+    expect(messages).toHaveLength(2);
     actions.dispose();
   });
 });

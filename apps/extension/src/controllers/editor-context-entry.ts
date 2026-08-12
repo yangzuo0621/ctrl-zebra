@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import type {
   EditorContextMessage,
   EditorContextRefreshMessage,
@@ -25,6 +27,44 @@ export type EditorContextClearReason =
   | "trust-lost"
   | "workspace-changed"
   | "editor-unavailable";
+
+export interface EditorContextSourceFingerprintInput {
+  readonly scheme: string;
+  readonly authority: string;
+  readonly path: string;
+  readonly documentVersion: number;
+  readonly languageId: string;
+  readonly range?: {
+    readonly start: { readonly line: number; readonly character: number };
+    readonly end: { readonly line: number; readonly character: number };
+  };
+}
+
+/**
+ * Returns a bounded opaque source identity for transition fencing. The raw URI
+ * identity is consumed only by the hash operation and never retained or sent.
+ */
+export function createEditorContextSourceFingerprint(
+  input: EditorContextSourceFingerprintInput,
+): string {
+  const range =
+    input.range === undefined
+      ? ""
+      : `${input.range.start.line}:${input.range.start.character}:${input.range.end.line}:${input.range.end.character}`;
+  return createHash("sha256")
+    .update(
+      [
+        input.scheme,
+        input.authority,
+        input.path,
+        input.documentVersion,
+        input.languageId,
+        range,
+      ].join("\u0000"),
+      "utf8",
+    )
+    .digest("hex");
+}
 
 export interface EditorContextMessageChannel {
   postMessage(message: ExtensionToWebviewMessage): PromiseLike<boolean>;
@@ -175,6 +215,12 @@ export class EditorContextEntryController {
       if (owner === undefined) continue;
       const normalizedReasons = normalizeReasons(reasons);
       if (normalizedReasons.length === 0) continue;
+      if (
+        owner.scope === "active-editor" &&
+        normalizedReasons.every((reason) => reason === "selection-changed")
+      ) {
+        continue;
+      }
       const fingerprint =
         sourceFingerprint ?? this.#dependencies.getSourceFingerprint?.(owner.scope) ?? "";
       const watermark = `${normalizedReasons.join(",")}\u0000${fingerprint}`;
@@ -381,6 +427,7 @@ export class EditorContextEntryController {
         () => this.#closeOwnerForDeliveryFailure(view, message),
       );
     } catch {
+      this.#closeOwnerForDeliveryFailure(view, message);
       return undefined;
     }
     return message;

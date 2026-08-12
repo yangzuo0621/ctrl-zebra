@@ -103,6 +103,20 @@ describe("editor context Webview store", () => {
     });
     expect(store.getState().card?.contextId).toBe("context-2");
   });
+
+  it("blocks Send while Refresh is pending even when the previous card is ready", () => {
+    const host = createHost();
+    const store = createEditorContextStore({ host, createRequestId: ids(["refresh-1"]) });
+    const ready = event({ status: "ready", eventSequence: 1, context }) as Extract<
+      EditorContextMessage,
+      { status: "ready" }
+    >;
+    store.getState().receive(ready);
+    expect(store.getState().canSend()).toBe(true);
+    expect(store.getState().refresh()).toBe(true);
+    expect(store.getState().capturePending).toBe(true);
+    expect(store.getState().canSend()).toBe(false);
+  });
 });
 
 function event(overrides: {

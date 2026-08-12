@@ -102,6 +102,7 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
   const draft = useStore(editorContextStore, (state) => state.draft);
   const editorContextCard = useStore(editorContextStore, (state) => state.card);
   const editorContextAnnouncement = useStore(editorContextStore, (state) => state.announcement);
+  const editorContextCapturePending = useStore(editorContextStore, (state) => state.capturePending);
   const editorContextCanSend = useStore(editorContextStore, (state) => state.canSend());
 
   useEffect(() => {
@@ -173,7 +174,7 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (store.getState().submit(draft)) {
+    if (!editorContextCapturePending && editorContextCanSend && store.getState().submit(draft)) {
       editorContextStore.getState().setDraft("");
       setUserScrolledUp(false);
     }
@@ -448,7 +449,8 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
                     restoring ||
                     sessionSwitchPending ||
                     draft.trim().length === 0 ||
-                    !editorContextCanSend
+                    !editorContextCanSend ||
+                    editorContextCapturePending
                   }
                 >
                   {strings.app.send}
@@ -469,12 +471,7 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
         <p className={styles.status} role="status" aria-label={strings.app.runStatusLabel}>
           {strings.app.status[status]}
         </p>
-        <p
-          className={styles.srOnly}
-          role="status"
-          aria-live="polite"
-          aria-label={strings.editorContext.statusLabel}
-        >
+        <p className={styles.srOnly} aria-live="polite" aria-atomic="true">
           {editorContextCard?.status === "stale" && !editorContextCard.staleAccepted
             ? strings.editorContext.sendBlocked
             : editorContextAnnouncement}
