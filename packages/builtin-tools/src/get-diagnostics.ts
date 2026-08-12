@@ -45,6 +45,14 @@ export class DiagnosticsUnavailableError extends Error {
   }
 }
 
+/** The host supplied a diagnostics value that cannot be projected safely. */
+export class InvalidDiagnosticsOutputError extends Error {
+  constructor() {
+    super("Diagnostics returned invalid output.");
+    this.name = "InvalidDiagnosticsOutputError";
+  }
+}
+
 export function createGetDiagnosticsTool(
   port: IdeDiagnosticsPort,
 ): AgentTool<GetDiagnosticsInput, IdeDiagnosticsResultDto> {
@@ -64,6 +72,9 @@ export function createGetDiagnosticsTool(
         signal.throwIfAborted();
         if (error instanceof DiagnosticsUnavailableError) {
           throw new ToolExecutionError("failed", error.message);
+        }
+        if (error instanceof InvalidDiagnosticsOutputError) {
+          throw new ToolExecutionError("invalid-output", error.message);
         }
         throw error;
       }

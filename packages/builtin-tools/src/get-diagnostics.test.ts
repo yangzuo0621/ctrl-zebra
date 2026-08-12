@@ -6,6 +6,7 @@ import {
   DiagnosticsUnavailableError,
   getDiagnosticsToolName,
   type IdeDiagnosticsPort,
+  InvalidDiagnosticsOutputError,
   parseGetDiagnosticsInput,
 } from "./index.js";
 
@@ -100,6 +101,16 @@ describe(getDiagnosticsToolName, () => {
         { scope: "workspace" },
         { signal: new AbortController().signal },
       ),
+    ).rejects.toEqual(
+      new ToolExecutionError("invalid-output", "Diagnostics returned invalid output."),
+    );
+
+    await expect(
+      createGetDiagnosticsTool({
+        getDiagnostics: vi.fn(async () => {
+          throw new InvalidDiagnosticsOutputError();
+        }),
+      }).execute({ scope: "workspace" }, { signal: new AbortController().signal }),
     ).rejects.toEqual(
       new ToolExecutionError("invalid-output", "Diagnostics returned invalid output."),
     );

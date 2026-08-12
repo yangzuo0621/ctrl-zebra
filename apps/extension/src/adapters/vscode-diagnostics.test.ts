@@ -57,6 +57,7 @@ describe("VsCodeDiagnostics", () => {
   it("filters outside workspace resources and marks a mixed response truncated", async () => {
     const inside = uri("/workspace/src/index.ts");
     const outside = uri("/other/secret.ts");
+    const document = createDocument("text", inside.path);
     const provider = vi.fn(
       () =>
         [
@@ -64,7 +65,7 @@ describe("VsCodeDiagnostics", () => {
           [inside, [diagnostic(0, 0, 0, 1, 1, "warning")]],
         ] as const,
     );
-    const result = await createAdapter(undefined, provider).getDiagnostics(
+    const result = await createAdapter(undefined, provider, { document }).getDiagnostics(
       { scope: "workspace" },
       signal(),
     );
@@ -97,17 +98,31 @@ describe("VsCodeDiagnostics", () => {
   it("bounds messages and entry count without constructing an unbounded DTO", async () => {
     const large = "x".repeat(maxIdeDiagnosticMessageCodePoints + 1);
     const document = createDocument("x", "/workspace/src/index.ts");
-    const provider = vi.fn(() =>
-      Array.from({ length: maxIdeDiagnosticEntries + 1 }, () => diagnostic(0, 0, 0, 1, 2, "small")),
+    const exact = vi.fn(() =>
+      Array.from({ length: maxIdeDiagnosticEntries }, (_, index) =>
+        diagnostic(0, 0, 0, 1, 2, `small-${index}`),
+      ),
     );
-    const result = await createAdapter(createEditor(document), provider).getDiagnostics(
+    const exactResult = await createAdapter(createEditor(document), exact).getDiagnostics(
       { scope: "active-file" },
       signal(),
     );
 
-    expect(result.diagnostics).toHaveLength(maxIdeDiagnosticEntries);
-    expect(result.truncated).toBe(true);
-    expect(result.truncationReasons).toContain("entries");
+    expect(exactResult.diagnostics).toHaveLength(maxIdeDiagnosticEntries);
+    expect(exactResult.truncated).toBe(false);
+
+    const overflow = vi.fn(() =>
+      Array.from({ length: maxIdeDiagnosticEntries + 1 }, (_, index) =>
+        diagnostic(0, 0, 0, 1, 2, `small-${index}`),
+      ),
+    );
+    const overflowResult = await createAdapter(createEditor(document), overflow).getDiagnostics(
+      { scope: "active-file" },
+      signal(),
+    );
+    expect(overflowResult.diagnostics).toHaveLength(maxIdeDiagnosticEntries);
+    expect(overflowResult.truncated).toBe(true);
+    expect(overflowResult.truncationReasons).toContain("entries");
 
     const largeResult = await createAdapter(createEditor(document), () => [
       diagnostic(0, 0, 0, 1, 2, large),
@@ -121,6 +136,54 @@ describe("VsCodeDiagnostics", () => {
     expect(aggregateResult.truncated).toBe(true);
     expect(aggregateResult.truncationReasons).toContain("code-points");
     expect(aggregateResult.truncationReasons).not.toContain("entries");
+  });
+
+  it("sorts diagnostics deterministically and removes exact duplicates before the entry prefix", async () => {
+    const document = createDocument("text", "/workspace/src/index.ts");
+    const first = diagnostic(0, 0, 0, 1, 2, "alpha");
+    const second = diagnostic(0, 0, 0, 1, 2, "zulu");
+    const result = await createAdapter(
+      createEditor(document),
+      () => [second, first, first] as const,
+    ).getDiagnostics({ scope: "active-file" }, signal());
+
+    expect(result.diagnostics.map(({ message }) => message)).toEqual(["alpha", "zulu"]);
+    expect(result.truncated).toBe(false);
+  });
+
+  it("rejects ranges from a closed file when the host cannot verify document bounds", async () => {
+    await expect(
+      createAdapter(undefined, () => [diagnostic(0, 0, 0, 1, 2, "closed")]).getDiagnostics(
+        { scope: "workspace", path: "src/index.ts" },
+        signal(),
+      ),
+    ).rejects.toThrow("Diagnostics returned invalid output.");
+  });
+
+  it("accepts only the exact DiagnosticCode object shape and never projects its target URI", async () => {
+    const document = createDocument("text", "/workspace/src/index.ts");
+    const target = uri("/workspace/docs/rule");
+    const valid = {
+      ...diagnostic(0, 0, 0, 1, 2, "valid"),
+      code: { target, value: "E1" },
+    } as unknown as Diagnostic;
+    const result = await createAdapter(createEditor(document), () => [valid]).getDiagnostics(
+      { scope: "active-file" },
+      signal(),
+    );
+    expect(result.diagnostics[0]?.code).toBe("E1");
+    expect(JSON.stringify(result)).not.toContain(target.path);
+
+    const malformed = {
+      ...valid,
+      code: { target, value: "E1", extra: true },
+    } as unknown as Diagnostic;
+    await expect(
+      createAdapter(createEditor(document), () => [malformed]).getDiagnostics(
+        { scope: "active-file" },
+        signal(),
+      ),
+    ).rejects.toThrow("Diagnostics returned invalid output.");
   });
 
   it("marks a document version change stale while rejecting cancellation and disposal races", async () => {
@@ -172,6 +235,34 @@ describe("VsCodeDiagnostics", () => {
     disposeRelease?.();
     await expect(late).rejects.toEqual(new DiagnosticsUnavailableError());
   });
+
+  it("rejects a result when disposal races asynchronous URI canonicalization", async () => {
+    const inside = uri("/workspace/src/index.ts");
+    let release: (() => void) | undefined;
+    let validations = 0;
+    const validate = vi.fn(async (target: Uri) => {
+      validations += 1;
+      if (validations === 2) {
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+      }
+      return target;
+    });
+    const adapter = createAdapter(
+      undefined,
+      () => [[inside, [diagnostic(0, 0, 0, 1, 2, "late")]]],
+      {
+        document: createDocument("text", inside.path),
+        validate,
+      },
+    );
+    const pending = adapter.getDiagnostics({ scope: "workspace" }, signal());
+    await vi.waitFor(() => expect(release).toBeDefined());
+    adapter.dispose();
+    release?.();
+    await expect(pending).rejects.toEqual(new DiagnosticsUnavailableError());
+  });
 });
 
 function createAdapter(
@@ -182,7 +273,10 @@ function createAdapter(
     | readonly Diagnostic[]
     | readonly (readonly [Uri, readonly Diagnostic[]])[]
     | Promise<readonly Diagnostic[] | readonly (readonly [Uri, readonly Diagnostic[]])[]>,
-  overrides: { readonly document?: TextDocument } = {},
+  overrides: {
+    readonly document?: TextDocument;
+    readonly validate?: (target: Uri, signal: AbortSignal) => Promise<Uri>;
+  } = {},
 ): VsCodeDiagnostics {
   const root = uri("/workspace");
   const document = overrides.document ?? editor?.document;
@@ -190,7 +284,9 @@ function createAdapter(
     getActiveEditor: () => editor,
     getSelectedRoot: () => root,
     createScope: () =>
-      new WorkspaceScope(root, async (target) => target, { caseSensitivePaths: true }),
+      new WorkspaceScope(root, overrides.validate ?? (async (target) => target), {
+        caseSensitivePaths: true,
+      }),
     joinPath: (base, path) => uri(`${base.path}/${path}`),
     getDiagnostics: provider,
     getDocument: () => document,

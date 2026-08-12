@@ -9,6 +9,7 @@ export {
   getDiagnosticsInputSchema,
   getDiagnosticsToolDescription,
   getDiagnosticsToolName,
+  InvalidDiagnosticsOutputError,
   parseGetDiagnosticsInput,
 } from "./get-diagnostics.js";
 export type {

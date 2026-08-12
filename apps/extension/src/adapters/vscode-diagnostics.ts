@@ -1,5 +1,8 @@
 import type { GetDiagnosticsInput, IdeDiagnosticsPort } from "@ctrl-zebra/builtin-tools";
-import { DiagnosticsUnavailableError } from "@ctrl-zebra/builtin-tools";
+import {
+  DiagnosticsUnavailableError,
+  InvalidDiagnosticsOutputError,
+} from "@ctrl-zebra/builtin-tools";
 import {
   type IdeDiagnosticDto,
   type IdeDiagnosticsResultDto,
@@ -30,7 +33,10 @@ import type { Diagnostic, TextDocument, TextEditor, Uri } from "vscode";
 import type { WorkspaceScope } from "./workspace-scope.js";
 import { WorkspaceScopeError } from "./workspace-scope.js";
 
-export { DiagnosticsUnavailableError } from "@ctrl-zebra/builtin-tools";
+export {
+  DiagnosticsUnavailableError,
+  InvalidDiagnosticsOutputError,
+} from "@ctrl-zebra/builtin-tools";
 
 type DiagnosticProviderValue =
   | readonly Diagnostic[]
@@ -50,6 +56,7 @@ export interface VsCodeDiagnosticsDependencies {
 }
 
 interface QuerySnapshot {
+  readonly generation: number;
   readonly input: GetDiagnosticsInput;
   readonly root: Uri;
   readonly canonicalRoot: Uri;
@@ -76,16 +83,10 @@ interface NormalizedCandidate {
 interface CollectedDiagnostics {
   readonly candidates: readonly NormalizedCandidate[];
   readonly reasons: ReadonlySet<IdeTruncationReason>;
+  readonly overflowed: boolean;
   readonly outsideCount: number;
   readonly sawProviderResource: boolean;
   readonly sawInWorkspaceResource: boolean;
-}
-
-class InvalidDiagnosticsOutputError extends Error {
-  constructor() {
-    super("Diagnostics returned invalid output.");
-    this.name = "InvalidDiagnosticsOutputError";
-  }
 }
 
 /**
@@ -96,6 +97,7 @@ class InvalidDiagnosticsOutputError extends Error {
 export class VsCodeDiagnostics implements IdeDiagnosticsPort {
   readonly #dependencies: VsCodeDiagnosticsDependencies;
   #disposed = false;
+  #generation = 0;
 
   constructor(dependencies: VsCodeDiagnosticsDependencies) {
     this.#dependencies = dependencies;
@@ -105,14 +107,16 @@ export class VsCodeDiagnostics implements IdeDiagnosticsPort {
     input: GetDiagnosticsInput,
     signal: AbortSignal,
   ): Promise<IdeDiagnosticsResultDto> {
-    this.#assertOpen(signal);
-    const snapshot = await this.#capture(input, signal);
+    const generation = this.#generation;
+    this.#assertOpen(signal, generation);
+    const snapshot = await this.#capture(input, signal, generation);
     const value = await this.#readProvider(snapshot, signal);
     signal.throwIfAborted();
-    this.#assertOpen(signal);
+    this.#assertOpen(signal, snapshot.generation);
 
     const stale = this.#readStale(snapshot);
     const collected = await this.#collect(snapshot, value, stale, signal);
+    this.#assertOpen(signal, snapshot.generation);
     if (
       snapshot.input.scope === "workspace" &&
       snapshot.input.path === undefined &&
@@ -137,15 +141,23 @@ export class VsCodeDiagnostics implements IdeDiagnosticsPort {
       ...(truncated ? { truncationReasons: orderedReasons(reasons) } : {}),
     });
     if (!result.success) throw new InvalidDiagnosticsOutputError();
+    this.#assertOpen(signal, snapshot.generation);
+    this.#assertSnapshotIdentity(snapshot, true);
     return result.data;
   }
 
   dispose(): void {
+    if (this.#disposed) return;
     this.#disposed = true;
+    this.#generation += 1;
   }
 
-  async #capture(input: GetDiagnosticsInput, signal: AbortSignal): Promise<QuerySnapshot> {
-    signal.throwIfAborted();
+  async #capture(
+    input: GetDiagnosticsInput,
+    signal: AbortSignal,
+    generation: number,
+  ): Promise<QuerySnapshot> {
+    this.#assertOpen(signal, generation);
     const enabled = this.#dependencies.isEnabled?.() ?? true;
     const trusted = this.#dependencies.isTrusted?.();
     if (!enabled) throw new DiagnosticsUnavailableError();
@@ -167,7 +179,7 @@ export class VsCodeDiagnostics implements IdeDiagnosticsPort {
       if (error instanceof DiagnosticsUnavailableError) throw error;
       throw new DiagnosticsUnavailableError();
     }
-    signal.throwIfAborted();
+    this.#assertOpen(signal, generation);
 
     let editor: TextEditor | undefined;
     let document: TextDocument | undefined;
@@ -182,7 +194,7 @@ export class VsCodeDiagnostics implements IdeDiagnosticsPort {
       if (editor === undefined || document === undefined || documentUri === undefined) {
         throw new DiagnosticsUnavailableError();
       }
-      target = await this.#validateTarget(scope, documentUri, signal);
+      target = await this.#validateTarget(scope, documentUri, signal, generation);
       targetDocument = document;
       targetVersion = readDocumentVersion(document);
       if (targetVersion === undefined) throw new DiagnosticsUnavailableError();
@@ -193,7 +205,7 @@ export class VsCodeDiagnostics implements IdeDiagnosticsPort {
       } catch {
         throw new DiagnosticsUnavailableError();
       }
-      target = await this.#validateTarget(scope, joined, signal);
+      target = await this.#validateTarget(scope, joined, signal, generation);
       targetDocument = this.#dependencies.getDocument?.(target);
       targetVersion =
         targetDocument === undefined ? undefined : readDocumentVersion(targetDocument);
@@ -202,8 +214,9 @@ export class VsCodeDiagnostics implements IdeDiagnosticsPort {
       }
     }
 
-    this.#assertOpen(signal);
+    this.#assertOpen(signal, generation);
     this.#assertSnapshotIdentity({
+      generation,
       input,
       root,
       canonicalRoot,
@@ -216,6 +229,7 @@ export class VsCodeDiagnostics implements IdeDiagnosticsPort {
       trusted,
     });
     return {
+      generation,
       input,
       root,
       canonicalRoot,
@@ -233,9 +247,12 @@ export class VsCodeDiagnostics implements IdeDiagnosticsPort {
     scope: Pick<WorkspaceScope, "validate">,
     target: Uri,
     signal: AbortSignal,
+    generation: number,
   ): Promise<Uri> {
     try {
-      return await scope.validate(target, signal);
+      const canonical = await scope.validate(target, signal);
+      this.#assertOpen(signal, generation);
+      return canonical;
     } catch (error) {
       signal.throwIfAborted();
       if (error instanceof WorkspaceScopeError) throw new DiagnosticsUnavailableError();
@@ -247,7 +264,7 @@ export class VsCodeDiagnostics implements IdeDiagnosticsPort {
     snapshot: QuerySnapshot,
     signal: AbortSignal,
   ): Promise<DiagnosticProviderValue> {
-    this.#assertOpen(signal);
+    this.#assertOpen(signal, snapshot.generation);
     try {
       const value = await this.#dependencies.getDiagnostics(
         snapshot.input.scope === "workspace" && snapshot.input.path === undefined
@@ -255,7 +272,7 @@ export class VsCodeDiagnostics implements IdeDiagnosticsPort {
           : snapshot.target,
       );
       signal.throwIfAborted();
-      this.#assertOpen(signal);
+      this.#assertOpen(signal, snapshot.generation);
       this.#assertSnapshotIdentity(snapshot, true);
       return value;
     } catch (error) {
@@ -276,25 +293,50 @@ export class VsCodeDiagnostics implements IdeDiagnosticsPort {
     stale: boolean,
     signal: AbortSignal,
   ): Promise<CollectedDiagnostics> {
-    signal.throwIfAborted();
+    this.#assertOpen(signal, snapshot.generation);
     const candidates: NormalizedCandidate[] = [];
     const reasons = new Set<IdeTruncationReason>();
     let outsideCount = 0;
     let sawProviderResource = false;
     let sawInWorkspaceResource = false;
+    let overflowed = false;
     const budget = new DiagnosticBudget();
+
+    const addCandidate = (candidate: NormalizedCandidate): void => {
+      const key = candidateKey(candidate);
+      if (candidates.some((existing) => candidateKey(existing) === key)) return;
+      if (candidates.length < maxIdeDiagnosticEntries) {
+        candidates.push(candidate);
+        return;
+      }
+      overflowed = true;
+      let worstIndex = 0;
+      for (let index = 1; index < candidates.length; index += 1) {
+        const worst = candidates[worstIndex];
+        const current = candidates[index];
+        if (worst !== undefined && current !== undefined && compareCandidates(worst, current) < 0) {
+          worstIndex = index;
+        }
+      }
+      const worst = candidates[worstIndex];
+      if (worst !== undefined && compareCandidates(candidate, worst) < 0) {
+        candidates[worstIndex] = candidate;
+      }
+    };
 
     if (snapshot.input.scope === "workspace" && snapshot.input.path === undefined) {
       if (!Array.isArray(value)) throw new InvalidDiagnosticsOutputError();
       for (const entry of value) {
-        signal.throwIfAborted();
+        this.#assertOpen(signal, snapshot.generation);
         if (!isDiagnosticTuple(entry)) throw new InvalidDiagnosticsOutputError();
         sawProviderResource = true;
         let canonical: Uri;
         try {
           canonical = await this.#validateProviderUri(snapshot, entry[0], signal);
+          this.#assertOpen(signal, snapshot.generation);
         } catch (error) {
           signal.throwIfAborted();
+          if (error instanceof DiagnosticsUnavailableError) throw error;
           if (error instanceof OutsideWorkspaceError) {
             outsideCount += 1;
             continue;
@@ -304,7 +346,7 @@ export class VsCodeDiagnostics implements IdeDiagnosticsPort {
         sawInWorkspaceResource = true;
         const document = this.#dependencies.getDocument?.(canonical);
         for (const diagnostic of entry[1]) {
-          signal.throwIfAborted();
+          this.#assertOpen(signal, snapshot.generation);
           const candidate = this.#normalizeDiagnosticSafe(
             snapshot,
             canonical,
@@ -318,13 +360,8 @@ export class VsCodeDiagnostics implements IdeDiagnosticsPort {
             break;
           }
           for (const reason of candidate.reasons) reasons.add(reason);
-          candidates.push({ source: candidate.source, diagnostic: candidate.diagnostic });
-          if (candidates.length >= maxIdeDiagnosticEntries) {
-            reasons.add("entries");
-            break;
-          }
+          addCandidate({ source: candidate.source, diagnostic: candidate.diagnostic });
         }
-        if (candidates.length >= maxIdeDiagnosticEntries) break;
       }
     } else {
       if (!Array.isArray(value) || (value.length > 0 && isDiagnosticTuple(value[0]))) {
@@ -334,7 +371,7 @@ export class VsCodeDiagnostics implements IdeDiagnosticsPort {
       if (canonical === undefined) throw new InvalidDiagnosticsOutputError();
       const document = snapshot.targetDocument;
       for (const diagnostic of value) {
-        signal.throwIfAborted();
+        this.#assertOpen(signal, snapshot.generation);
         const candidate = this.#normalizeDiagnosticSafe(
           snapshot,
           canonical,
@@ -348,21 +385,22 @@ export class VsCodeDiagnostics implements IdeDiagnosticsPort {
           break;
         }
         for (const reason of candidate.reasons) reasons.add(reason);
-        candidates.push({ source: candidate.source, diagnostic: candidate.diagnostic });
-        if (candidates.length >= maxIdeDiagnosticEntries) {
-          reasons.add("entries");
-          break;
-        }
+        addCandidate({ source: candidate.source, diagnostic: candidate.diagnostic });
       }
       sawProviderResource = true;
       sawInWorkspaceResource = true;
     }
 
     for (const reason of budget.takeReasons) reasons.add(reason);
+    if (overflowed) reasons.add("entries");
+    candidates.sort(compareCandidates);
+    this.#assertOpen(signal, snapshot.generation);
+    this.#assertSnapshotIdentity(snapshot, true);
 
     return {
       candidates,
       reasons,
+      overflowed,
       outsideCount,
       sawProviderResource,
       sawInWorkspaceResource,
@@ -373,9 +411,12 @@ export class VsCodeDiagnostics implements IdeDiagnosticsPort {
     try {
       if (!isUriLike(uri)) throw new InvalidDiagnosticsOutputError();
       const scope = this.#dependencies.createScope(snapshot.root);
-      return await scope.validate(uri, signal);
+      const canonical = await scope.validate(uri, signal);
+      this.#assertOpen(signal, snapshot.generation);
+      return canonical;
     } catch (error) {
       signal.throwIfAborted();
+      if (error instanceof DiagnosticsUnavailableError) throw error;
       if (error instanceof WorkspaceScopeError && error.code === "outside-workspace") {
         throw new OutsideWorkspaceError();
       }
@@ -558,6 +599,9 @@ export class VsCodeDiagnostics implements IdeDiagnosticsPort {
   }
 
   #assertSnapshotIdentity(snapshot: QuerySnapshot, allowDocumentChange = false): void {
+    if (snapshot.generation !== this.#generation || this.#disposed) {
+      throw new DiagnosticsUnavailableError();
+    }
     const root = this.#dependencies.getSelectedRoot();
     if (root === undefined || !sameUri(root, snapshot.root)) {
       throw new DiagnosticsUnavailableError();
@@ -582,9 +626,13 @@ export class VsCodeDiagnostics implements IdeDiagnosticsPort {
     }
   }
 
-  #assertOpen(signal: AbortSignal): void {
+  #assertOpen(signal: AbortSignal, generation = this.#generation): void {
     signal.throwIfAborted();
-    if (this.#disposed || this.#dependencies.isEnabled?.() === false) {
+    if (
+      this.#disposed ||
+      generation !== this.#generation ||
+      this.#dependencies.isEnabled?.() === false
+    ) {
       throw new DiagnosticsUnavailableError();
     }
   }
@@ -627,15 +675,14 @@ function normalizeRange(value: unknown, document: TextDocument | undefined): Ide
   if (!isRecord(value) || !isPosition(value.start) || !isPosition(value.end)) {
     throw new InvalidDiagnosticsOutputError();
   }
+  if (document === undefined) throw new InvalidDiagnosticsOutputError();
   const range = {
     start: value.start,
     end: value.end,
   } as IdeRangeDto;
   if (comparePositions(range.start, range.end) > 0) throw new InvalidDiagnosticsOutputError();
-  if (document !== undefined) {
-    validateDocumentPosition(document, range.start);
-    validateDocumentPosition(document, range.end);
-  }
+  validateDocumentPosition(document, range.start);
+  validateDocumentPosition(document, range.end);
   return range;
 }
 
@@ -691,11 +738,22 @@ function normalizeDiagnosticCode(value: unknown): string | undefined {
     if (!Number.isFinite(value)) throw new InvalidDiagnosticsOutputError();
     return String(value);
   }
-  if (isRecord(value) && (typeof value.value === "string" || typeof value.value === "number")) {
+  if (isRecord(value)) {
+    const keys = Reflect.ownKeys(value);
+    if (
+      keys.length !== 2 ||
+      !Object.hasOwn(value, "target") ||
+      !Object.hasOwn(value, "value") ||
+      !isUriLike(value.target)
+    ) {
+      throw new InvalidDiagnosticsOutputError();
+    }
     if (typeof value.value === "number" && !Number.isFinite(value.value)) {
       throw new InvalidDiagnosticsOutputError();
     }
-    return String(value.value);
+    if (typeof value.value === "string" || typeof value.value === "number") {
+      return String(value.value);
+    }
   }
   throw new InvalidDiagnosticsOutputError();
 }
@@ -871,4 +929,76 @@ function utf8BytesForCodePoint(codePoint: number): number {
 function orderedReasons(reasons: Iterable<IdeTruncationReason>): readonly IdeTruncationReason[] {
   const set = new Set(reasons);
   return ideTruncationReasons.filter((reason) => set.has(reason));
+}
+
+function candidateKey(candidate: NormalizedCandidate): string {
+  return JSON.stringify(candidate);
+}
+
+function compareCandidates(left: NormalizedCandidate, right: NormalizedCandidate): number {
+  const leftSource = left.source;
+  const rightSource = right.source;
+  return (
+    compareStrings(leftSource.uri.scheme, rightSource.uri.scheme) ||
+    compareStrings(leftSource.uri.authority, rightSource.uri.authority) ||
+    compareStrings(leftSource.uri.path, rightSource.uri.path) ||
+    compareOptionalRanges(leftSource.range, rightSource.range) ||
+    compareNumbers(
+      severityOrder(left.diagnostic.severity),
+      severityOrder(right.diagnostic.severity),
+    ) ||
+    compareStrings(left.diagnostic.message, right.diagnostic.message) ||
+    compareOptionalStrings(left.diagnostic.code, right.diagnostic.code) ||
+    compareOptionalStrings(left.diagnostic.origin, right.diagnostic.origin) ||
+    compareOptionalStrings(leftSource.languageId, rightSource.languageId) ||
+    compareOptionalNumbers(leftSource.documentVersion, rightSource.documentVersion) ||
+    compareNumbers(Number(leftSource.stale), Number(rightSource.stale)) ||
+    compareNumbers(Number(leftSource.truncated), Number(rightSource.truncated)) ||
+    compareStrings(candidateKey(left), candidateKey(right))
+  );
+}
+
+function compareOptionalRanges(
+  left: IdeRangeDto | undefined,
+  right: IdeRangeDto | undefined,
+): number {
+  if (left === undefined && right === undefined) return 0;
+  if (left === undefined) return -1;
+  if (right === undefined) return 1;
+  return comparePositions(left.start, right.start) || comparePositions(left.end, right.end);
+}
+
+function severityOrder(value: IdeDiagnosticDto["severity"]): number {
+  return value === "error" ? 0 : value === "warning" ? 1 : value === "information" ? 2 : 3;
+}
+
+function compareNumbers(left: number, right: number): number {
+  return left - right;
+}
+
+function compareOptionalNumbers(left: number | undefined, right: number | undefined): number {
+  if (left === undefined && right === undefined) return 0;
+  if (left === undefined) return -1;
+  if (right === undefined) return 1;
+  return compareNumbers(left, right);
+}
+
+function compareOptionalStrings(left: string | undefined, right: string | undefined): number {
+  if (left === undefined && right === undefined) return 0;
+  if (left === undefined) return -1;
+  if (right === undefined) return 1;
+  return compareStrings(left, right);
+}
+
+function compareStrings(left: string, right: string): number {
+  if (left === right) return 0;
+  const leftPoints = Array.from(left, (value) => value.codePointAt(0) ?? 0);
+  const rightPoints = Array.from(right, (value) => value.codePointAt(0) ?? 0);
+  const length = Math.min(leftPoints.length, rightPoints.length);
+  for (let index = 0; index < length; index += 1) {
+    const leftPoint = leftPoints[index] ?? 0;
+    const rightPoint = rightPoints[index] ?? 0;
+    if (leftPoint !== rightPoint) return leftPoint - rightPoint;
+  }
+  return leftPoints.length - rightPoints.length;
 }
