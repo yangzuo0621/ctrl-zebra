@@ -33,10 +33,12 @@
   runtime, and failure-mapping cost without removing the policy seam. The projector is synchronous,
   has no I/O or lifecycle, and keeps its error private; each caller retains its existing adapter error
   mapping and DTO/diagnostic composition.
-- Reuse Audit: On exact `origin/main` `0ce670c48beb623128f9a9a5231a60c0e2aa26be`, searched
+- Reuse Audit: On the initial exact `origin/main` `0ce670c48beb623128f9a9a5231a60c0e2aa26be`, searched
   `sameUri`, `toWorkspaceRelativePath`, `pathSegments`, `isInsideSurrogate`, `readCodePoint`,
   `countCodePoints`, `utf8ByteLength`, `comparePositions`, `compareStrings`, `orderedReasons`,
-  and bounded-text helpers under `apps/extension/src/adapters` and tests. The three adapter-local
+  and bounded-text helpers under `apps/extension/src/adapters` and tests. After the requested rebase,
+  the same search was revalidated against latest `origin/main` `ec33eeb01aea5c2ceb8e6917ef5887147a25ed26`;
+  EO-002 changes do not add another owner for this IDE projection seam. The three adapter-local
   implementations were the only equivalent runtime owners. Existing Protocol limits and DTO types,
   VS Code `Uri`/`TextDocument` APIs, and the prior adapter tests were reused; no package-level utility
   or new dependency was available. Decision: deepen the Extension adapter seam, keep error mapping
@@ -87,8 +89,9 @@
   - `git diff --check` passed before commit/review; no configuration, command, public-contract,
     persistence, dependency, or package-boundary files changed.
 - PR/branch: [draft PR #217](https://github.com/yangzuo0621/ctrl-zebra/pull/217),
-  `codex/eo-003-ide-source-projection`, based on exact `origin/main` commit
-  `0ce670c48beb623128f9a9a5231a60c0e2aa26be`.
+  `codex/eo-003-ide-source-projection`, rebased onto latest exact `origin/main` commit
+  `ec33eeb01aea5c2ceb8e6917ef5887147a25ed26` (original branch base was
+  `0ce670c48beb623128f9a9a5231a60c0e2aa26be`).
 - Review handoff: Task-reviewer must independently verify projector equivalence, deletion of the
   three superseded algorithms, caller-specific error/DTO behavior, public-contract stability, and
   the evidence above.
