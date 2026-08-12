@@ -1086,6 +1086,8 @@ function isUriLike(value: unknown): value is Uri {
 
 function assertProviderUriShape(uri: Uri): void {
   if (
+    !isBoundedWellFormedUnicode(uri.scheme, maxIdeUriSchemeCodePoints, maxIdeUriSchemeBytes) ||
+    !isBoundedWellFormedUnicode(uri.path, maxIdeUriPathCodePoints, maxIdeUriPathBytes) ||
     uri.scheme.length === 0 ||
     uri.path.length === 0 ||
     uri.query.length > 0 ||
@@ -1101,6 +1103,32 @@ function assertProviderUriShape(uri: Uri): void {
   ) {
     throw new InvalidLanguageServiceOutputError();
   }
+}
+
+function isBoundedWellFormedUnicode(
+  value: string,
+  maxCodePoints: number,
+  maxBytes: number,
+): boolean {
+  let codePoints = 0;
+  let bytes = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    const codeUnit = value.charCodeAt(index);
+    let codePoint: number;
+    if (codeUnit >= 0xd800 && codeUnit <= 0xdbff) {
+      const next = value.charCodeAt(index + 1);
+      if (!(next >= 0xdc00 && next <= 0xdfff)) return false;
+      codePoint = ((codeUnit - 0xd800) << 10) + (next - 0xdc00) + 0x10000;
+      index += 1;
+    } else {
+      if (codeUnit >= 0xdc00 && codeUnit <= 0xdfff) return false;
+      codePoint = codeUnit;
+    }
+    codePoints += 1;
+    bytes += utf8BytesForCodePoint(codePoint);
+    if (codePoints > maxCodePoints || bytes > maxBytes) return false;
+  }
+  return true;
 }
 
 function toWorkspaceRelativePath(root: Uri, target: Uri): string {

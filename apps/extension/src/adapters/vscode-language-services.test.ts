@@ -1,5 +1,9 @@
 import { LanguageServiceUnavailableError } from "@ctrl-zebra/builtin-tools";
-import { maxIdeDiagnosticLabelCodePoints, maxIdeSymbolEntries } from "@ctrl-zebra/protocol";
+import {
+  maxIdeDiagnosticLabelCodePoints,
+  maxIdeSymbolEntries,
+  maxIdeUriPathCodePoints,
+} from "@ctrl-zebra/protocol";
 import { describe, expect, it, vi } from "vitest";
 import type { TextDocument, Uri } from "vscode";
 
@@ -290,6 +294,112 @@ describe("VsCodeLanguageServices", () => {
     );
   });
 
+  it("rejects oversized provider URI components before canonicalization or lookup", async () => {
+    const document = createDocument("x", "/workspace/src/index.ts");
+    const oversizedScheme = uri("/outside/secret.ts", "😀".repeat(33));
+    const oversizedPath = uri(`/outside/${"😀".repeat(maxIdeUriPathCodePoints + 1)}`);
+    const definitionCanonicalize = vi.fn(async (target: Uri) => target);
+    const definitionGetDocument = vi.fn((target: Uri) =>
+      target.toString() === document.uri.toString() ? document : undefined,
+    );
+    const definitionAdapter = createAdapter({
+      documents: [document],
+      canonicalize: definitionCanonicalize,
+      getDocument: definitionGetDocument,
+      executeDefinitionProvider: async () => [location(oversizedScheme, 0, 0, 0, 1)],
+    });
+    await expect(
+      definitionAdapter.findDefinition(
+        { path: "src/index.ts", position: { line: 0, character: 0 } },
+        signal(),
+      ),
+    ).rejects.toEqual(new InvalidLanguageServiceOutputError());
+    expect(definitionCanonicalize).toHaveBeenCalledTimes(4);
+    expect(definitionCanonicalize.mock.calls.some(([target]) => target === oversizedScheme)).toBe(
+      false,
+    );
+    expect(definitionGetDocument.mock.calls.some(([target]) => target === oversizedScheme)).toBe(
+      false,
+    );
+
+    const linkCanonicalize = vi.fn(async (target: Uri) => target);
+    const linkGetDocument = vi.fn((target: Uri) =>
+      target.toString() === document.uri.toString() ? document : undefined,
+    );
+    const linkAdapter = createAdapter({
+      documents: [document],
+      canonicalize: linkCanonicalize,
+      getDocument: linkGetDocument,
+      executeDefinitionProvider: async () => [
+        { targetUri: oversizedPath, targetRange: rangeValue(0, 0, 0, 1) },
+      ],
+    });
+    await expect(
+      linkAdapter.findDefinition(
+        { path: "src/index.ts", position: { line: 0, character: 0 } },
+        signal(),
+      ),
+    ).rejects.toEqual(new InvalidLanguageServiceOutputError());
+    expect(linkCanonicalize).toHaveBeenCalledTimes(4);
+    expect(linkCanonicalize.mock.calls.some(([target]) => target === oversizedPath)).toBe(false);
+    expect(linkGetDocument.mock.calls.some(([target]) => target === oversizedPath)).toBe(false);
+
+    const symbolCanonicalize = vi.fn(async (target: Uri) => target);
+    const symbolGetDocument = vi.fn((target: Uri) =>
+      target.toString() === document.uri.toString() ? document : undefined,
+    );
+    const symbolAdapter = createAdapter({
+      documents: [document],
+      canonicalize: symbolCanonicalize,
+      getDocument: symbolGetDocument,
+      executeDocumentSymbolProvider: async () => [
+        {
+          name: "outside",
+          kind: 12,
+          location: { uri: oversizedScheme, range: rangeValue(0, 0, 0, 1) },
+        },
+      ],
+    });
+    await expect(symbolAdapter.listSymbols({ path: "src/index.ts" }, signal())).rejects.toEqual(
+      new InvalidLanguageServiceOutputError(),
+    );
+    expect(symbolCanonicalize).toHaveBeenCalledTimes(4);
+    expect(symbolCanonicalize.mock.calls.some(([target]) => target === oversizedScheme)).toBe(
+      false,
+    );
+    expect(symbolGetDocument.mock.calls.some(([target]) => target === oversizedScheme)).toBe(false);
+
+    const nestedCanonicalize = vi.fn(async (target: Uri) => target);
+    const nestedGetDocument = vi.fn((target: Uri) =>
+      target.toString() === document.uri.toString() ? document : undefined,
+    );
+    const nestedAdapter = createAdapter({
+      documents: [document],
+      canonicalize: nestedCanonicalize,
+      getDocument: nestedGetDocument,
+      executeDocumentSymbolProvider: async () => [
+        {
+          name: "root",
+          kind: 12,
+          range: rangeValue(0, 0, 0, 1),
+          children: [
+            {
+              name: "outside",
+              kind: 12,
+              location: { uri: oversizedPath, range: rangeValue(0, 0, 0, 1) },
+            },
+          ],
+        },
+      ],
+    });
+    await expect(nestedAdapter.listSymbols({ path: "src/index.ts" }, signal())).rejects.toEqual(
+      new InvalidLanguageServiceOutputError(),
+    );
+    expect(nestedCanonicalize).toHaveBeenCalledTimes(4);
+    expect(nestedCanonicalize.mock.calls.some(([target]) => target === oversizedPath)).toBe(false);
+    expect(nestedGetDocument.mock.calls.some(([target]) => target === oversizedPath)).toBe(false);
+  });
+
   it("deduplicates repeated symbols while retaining deterministic source order", async () => {
     const document = createDocument("x", "/workspace/src/index.ts");
     const repeated = {
@@ -474,6 +584,7 @@ describe("VsCodeLanguageServices", () => {
 function createAdapter(options: {
   readonly documents: readonly TextDocument[];
   readonly canonicalize?: (target: Uri, signal: AbortSignal) => Promise<Uri>;
+  readonly getDocument?: (target: Uri) => TextDocument | undefined;
   readonly executeDefinitionProvider?: (
     uri: Uri,
     position: unknown,
@@ -497,7 +608,7 @@ function createAdapter(options: {
         caseSensitivePaths: true,
       }),
     joinPath: (base, path) => uri(`${base.path}/${path}`),
-    getDocument: (target) => documents.get(target.toString()),
+    getDocument: options.getDocument ?? ((target) => documents.get(target.toString())),
     executeDefinitionProvider: options.executeDefinitionProvider ?? (async () => []),
     executeReferenceProvider: options.executeReferenceProvider ?? (async () => []),
     executeDocumentSymbolProvider: options.executeDocumentSymbolProvider ?? (async () => []),
@@ -543,23 +654,25 @@ function rangeValue(
 }
 
 class TestUri implements Uri {
-  readonly scheme = "file";
   readonly authority = "";
   readonly query = "";
   readonly fragment = "";
 
-  constructor(readonly path: string) {}
+  constructor(
+    readonly path: string,
+    readonly scheme = "file",
+  ) {}
 
   get fsPath(): string {
     return this.path;
   }
 
   with(change: { path?: string }): Uri {
-    return new TestUri(change.path ?? this.path);
+    return new TestUri(change.path ?? this.path, this.scheme);
   }
 
   toString(): string {
-    return `file://${this.path}`;
+    return `${this.scheme}://${this.path}`;
   }
 
   toJSON(): unknown {
@@ -567,8 +680,8 @@ class TestUri implements Uri {
   }
 }
 
-function uri(path: string): Uri {
-  return new TestUri(path);
+function uri(path: string, scheme = "file"): Uri {
+  return new TestUri(path, scheme);
 }
 
 function signal(): AbortSignal {
