@@ -15,7 +15,7 @@ import {
   maxIdeUriSchemeCodePoints,
 } from "@ctrl-zebra/protocol";
 import type { Range, TextDocument, TextEditor, Uri } from "vscode";
-
+import { IdeSourceProjectionError, ideSourceProjector } from "./ide-source-projector.js";
 import type { WorkspaceScope } from "./workspace-scope.js";
 
 export { EditorContextUnavailableError } from "@ctrl-zebra/builtin-tools";
@@ -217,7 +217,10 @@ export class VsCodeEditorContext implements IdeContextPort {
 
         for (let character = startCharacter; character < endCharacter; ) {
           let chunkEnd = Math.min(character + maxTextChunkCodeUnits, endCharacter);
-          if (chunkEnd < endCharacter && isHighSurrogate(line.text.charCodeAt(chunkEnd - 1))) {
+          if (
+            chunkEnd < endCharacter &&
+            ideSourceProjector.isHighSurrogate(line.text.charCodeAt(chunkEnd - 1))
+          ) {
             chunkEnd -= 1;
           }
           if (chunkEnd <= character) throw new EditorContextUnavailableError();
@@ -255,12 +258,12 @@ export class VsCodeEditorContext implements IdeContextPort {
         editor === undefined ||
         editor !== snapshot.editor ||
         editor.document !== snapshot.document ||
-        !sameUri(editor.document.uri, snapshot.uri)
+        !ideSourceProjector.sameUri(editor.document.uri, snapshot.uri)
       ) {
         throw new EditorContextUnavailableError();
       }
       const root = this.#dependencies.getSelectedRoot();
-      if (root === undefined || !sameUri(root, snapshot.root)) {
+      if (root === undefined || !ideSourceProjector.sameUri(root, snapshot.root)) {
         throw new EditorContextUnavailableError();
       }
       if (this.#dependencies.isTrusted?.() !== snapshot.trusted) {
@@ -287,7 +290,7 @@ export class VsCodeEditorContext implements IdeContextPort {
         editor === undefined ||
         editor !== snapshot.editor ||
         editor.document !== snapshot.document ||
-        !sameUri(editor.document.uri, snapshot.uri)
+        !ideSourceProjector.sameUri(editor.document.uri, snapshot.uri)
       ) {
         throw new EditorContextUnavailableError();
       }
@@ -336,7 +339,7 @@ function toPosition(position: {
 function validateDocumentRange(document: TextDocument, selection: SelectionSnapshot): void {
   validateDocumentPosition(document, selection.start);
   validateDocumentPosition(document, selection.end);
-  if (comparePositions(selection.start, selection.end) > 0) {
+  if (ideSourceProjector.comparePositions(selection.start, selection.end) > 0) {
     throw new EditorContextUnavailableError();
   }
 }
@@ -366,38 +369,21 @@ function toRange(
   } as unknown as Range;
 }
 
-function isHighSurrogate(value: number): boolean {
-  return value >= 0xd800 && value <= 0xdbff;
-}
-
 function validateDocumentPosition(document: TextDocument, position: IdePositionDto): void {
-  if (!Number.isSafeInteger(document.lineCount) || document.lineCount <= position.line) {
-    throw new EditorContextUnavailableError();
-  }
   let line: { readonly text: string };
   try {
     line = document.lineAt(position.line);
   } catch {
     throw new EditorContextUnavailableError();
   }
-  if (
-    typeof line.text !== "string" ||
-    position.character > line.text.length ||
-    isInsideSurrogate(line.text, position.character)
-  ) {
-    throw new EditorContextUnavailableError();
+  try {
+    ideSourceProjector.validateDocumentPosition(document.lineCount, line.text, position);
+  } catch (error) {
+    if (error instanceof IdeSourceProjectionError) {
+      throw new EditorContextUnavailableError();
+    }
+    throw error;
   }
-}
-
-function isInsideSurrogate(line: string, character: number): boolean {
-  if (character <= 0 || character >= line.length) return false;
-  const previous = line.charCodeAt(character - 1);
-  const next = line.charCodeAt(character);
-  return previous >= 0xd800 && previous <= 0xdbff && next >= 0xdc00 && next <= 0xdfff;
-}
-
-function comparePositions(left: IdePositionDto, right: IdePositionDto): number {
-  return left.line - right.line || left.character - right.character;
 }
 
 function sameSelection(left: SelectionSnapshot, right: SelectionSnapshot): boolean {
@@ -409,58 +395,26 @@ function sameSelection(left: SelectionSnapshot, right: SelectionSnapshot): boole
   );
 }
 
-function sameUri(left: Uri, right: Uri): boolean {
-  return (
-    left.scheme.toLocaleLowerCase("en-US") === right.scheme.toLocaleLowerCase("en-US") &&
-    left.authority.toLocaleLowerCase("en-US") === right.authority.toLocaleLowerCase("en-US") &&
-    left.path === right.path &&
-    left.query === right.query &&
-    left.fragment === right.fragment
-  );
-}
-
 function toWorkspaceRelativePath(root: Uri, target: Uri): string {
-  const rootSegments = pathSegments(root.path);
-  const targetSegments = pathSegments(target.path);
-  if (
-    targetSegments.length <= rootSegments.length ||
-    !sameIdentityPart(root.scheme, target.scheme) ||
-    !sameIdentityPart(root.authority, target.authority)
-  ) {
-    throw new EditorContextUnavailableError();
-  }
-  for (let index = 0; index < rootSegments.length; index += 1) {
-    if (!sameIdentityPart(rootSegments[index] ?? "", targetSegments[index] ?? "")) {
+  try {
+    return ideSourceProjector.toWorkspaceRelativePath(root, target);
+  } catch (error) {
+    if (error instanceof IdeSourceProjectionError) {
       throw new EditorContextUnavailableError();
     }
+    throw error;
   }
-  const relative = targetSegments.slice(rootSegments.length).join("/");
-  if (relative.length === 0) throw new EditorContextUnavailableError();
-  return relative;
-}
-
-function pathSegments(path: string): readonly string[] {
-  if (!path.startsWith("/") || path.includes("\\")) {
-    throw new EditorContextUnavailableError();
-  }
-  if (path === "/") return [];
-  const segments = path.slice(1).split("/");
-  if (segments.some((segment) => segment.length === 0 || segment === "." || segment === "..")) {
-    throw new EditorContextUnavailableError();
-  }
-  return segments;
-}
-
-function sameIdentityPart(left: string, right: string): boolean {
-  return left.toLocaleLowerCase("en-US") === right.toLocaleLowerCase("en-US");
 }
 
 function boundedRequiredText(value: string, maxCodePoints: number, maxBytes: number): string {
-  const projection = takeBoundedDisplayText(value, maxCodePoints, maxBytes);
-  if (projection.truncated || projection.text.length === 0) {
-    throw new EditorContextUnavailableError();
+  try {
+    return ideSourceProjector.boundedRequired(value, maxCodePoints, maxBytes);
+  } catch (error) {
+    if (error instanceof IdeSourceProjectionError) {
+      throw new EditorContextUnavailableError();
+    }
+    throw error;
   }
-  return projection.text;
 }
 
 function takeBoundedDisplayText(
@@ -468,51 +422,19 @@ function takeBoundedDisplayText(
   maxCodePoints: number,
   maxBytes: number,
 ): BoundedDisplayText {
-  const output: string[] = [];
-  let codePoints = 0;
-  let bytes = 0;
-  const reasons = new Set<IdeTruncationReason>();
-  let retained = true;
-  for (let index = 0; index < value.length; ) {
-    const codeUnit = value.charCodeAt(index);
-    let width = 1;
-    let codePoint = codeUnit;
-    if (codeUnit >= 0xd800 && codeUnit <= 0xdbff) {
-      const next = value.charCodeAt(index + 1);
-      if (!(next >= 0xdc00 && next <= 0xdfff)) throw new EditorContextUnavailableError();
-      width = 2;
-      codePoint = value.codePointAt(index) ?? 0;
-    } else if (codeUnit >= 0xdc00 && codeUnit <= 0xdfff) {
+  try {
+    const projection = ideSourceProjector.takeBoundedText(value, maxCodePoints, maxBytes);
+    return {
+      text: projection.text,
+      truncated: projection.truncated,
+      truncationReasons: projection.reasons,
+    };
+  } catch (error) {
+    if (error instanceof IdeSourceProjectionError) {
       throw new EditorContextUnavailableError();
     }
-    const candidateBytes =
-      codePoint <= 0x7f ? 1 : codePoint <= 0x7ff ? 2 : codePoint <= 0xffff ? 3 : 4;
-    if (retained) {
-      if (codePoints + 1 > maxCodePoints) {
-        reasons.add("code-points");
-      }
-      if (bytes + candidateBytes > maxBytes) {
-        reasons.add("utf8-bytes");
-      }
-      if (reasons.size > 0) {
-        retained = false;
-        index += width;
-        continue;
-      }
-      output.push(value.slice(index, index + width));
-      codePoints += 1;
-      bytes += candidateBytes;
-    }
-    index += width;
+    throw error;
   }
-  const truncationReasons = (["code-points", "utf8-bytes"] as const).filter((reason) =>
-    reasons.has(reason),
-  );
-  return {
-    text: output.join(""),
-    truncated: truncationReasons.length > 0,
-    truncationReasons,
-  };
 }
 
 function mergeTruncationReasons(

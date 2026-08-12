@@ -23,8 +23,6 @@ import {
   maxIdeDiagnosticLabelBytes,
   maxIdeDiagnosticLabelCodePoints,
   maxIdeLanguageLocationEntries,
-  maxIdePositionCharacter,
-  maxIdePositionLine,
   maxIdeSymbolEntries,
   maxIdeUriPathBytes,
   maxIdeUriPathCodePoints,
@@ -32,7 +30,7 @@ import {
   maxIdeUriSchemeCodePoints,
 } from "@ctrl-zebra/protocol";
 import type { TextDocument, Uri } from "vscode";
-
+import { IdeSourceProjectionError, ideSourceProjector } from "./ide-source-projector.js";
 import type { WorkspaceScope } from "./workspace-scope.js";
 import { WorkspaceScopeError } from "./workspace-scope.js";
 
@@ -183,7 +181,7 @@ export class VsCodeLanguageServices implements IdeLanguageServicePort {
       symbols: collected.symbols,
       stale,
       truncated,
-      ...(truncated ? { truncationReasons: [...orderedReasons(reasons)] } : {}),
+      ...(truncated ? { truncationReasons: [...ideSourceProjector.orderedReasons(reasons)] } : {}),
     });
     if (!result.success) throw new InvalidLanguageServiceOutputError();
     this.#assertOpen(signal, snapshot.generation);
@@ -239,7 +237,7 @@ export class VsCodeLanguageServices implements IdeLanguageServicePort {
       locations: collected.locations,
       stale,
       truncated,
-      ...(truncated ? { truncationReasons: [...orderedReasons(reasons)] } : {}),
+      ...(truncated ? { truncationReasons: [...ideSourceProjector.orderedReasons(reasons)] } : {}),
     });
     if (!result.success) throw new InvalidLanguageServiceOutputError();
     this.#assertOpen(signal, snapshot.generation);
@@ -662,7 +660,7 @@ export class VsCodeLanguageServices implements IdeLanguageServicePort {
       const document = this.#dependencies.getDocument?.(canonical);
       if (document === undefined) throw new InvalidLanguageServiceOutputError();
       validateRangeDocument(range, document);
-      if (!sameUri(canonical, snapshot.target)) {
+      if (!ideSourceProjector.sameUri(canonical, snapshot.target)) {
         throw new InvalidLanguageServiceOutputError();
       }
       const symbol: IdeSymbolDto = {
@@ -760,7 +758,7 @@ export class VsCodeLanguageServices implements IdeLanguageServicePort {
   ): IdeSourceDto {
     const relativePath = toWorkspaceRelativePath(snapshot.canonicalRoot, uri);
     const languageId = document === undefined ? undefined : readLanguageId(document);
-    const sameTarget = sameUri(uri, snapshot.target);
+    const sameTarget = ideSourceProjector.sameUri(uri, snapshot.target);
     const version = sameTarget ? snapshot.targetVersion : readDocumentVersion(document);
     return {
       uri: {
@@ -772,7 +770,7 @@ export class VsCodeLanguageServices implements IdeLanguageServicePort {
       ...(version === undefined ? {} : { documentVersion: version }),
       stale,
       truncated,
-      ...(truncated ? { truncationReasons: [...orderedReasons(reasons)] } : {}),
+      ...(truncated ? { truncationReasons: [...ideSourceProjector.orderedReasons(reasons)] } : {}),
     };
   }
 
@@ -788,7 +786,7 @@ export class VsCodeLanguageServices implements IdeLanguageServicePort {
 
   #assertSnapshotIdentity(snapshot: QuerySnapshot, allowDocumentChange = false): void {
     const root = this.#dependencies.getSelectedRoot();
-    if (root === undefined || !sameUri(root, snapshot.root)) {
+    if (root === undefined || !ideSourceProjector.sameUri(root, snapshot.root)) {
       throw new LanguageServiceUnavailableError();
     }
     if (this.#dependencies.isTrusted?.() !== snapshot.trusted) {
@@ -838,11 +836,15 @@ function normalizeRange(value: unknown, document: TextDocument): IdeRangeDto {
 }
 
 function normalizeRangeShape(value: unknown): IdeRangeDto {
-  if (!isRecord(value) || !isPosition(value.start) || !isPosition(value.end)) {
+  if (
+    !isRecord(value) ||
+    !ideSourceProjector.isPosition(value.start) ||
+    !ideSourceProjector.isPosition(value.end)
+  ) {
     throw new InvalidLanguageServiceOutputError();
   }
   const range = { start: value.start, end: value.end } as IdeRangeDto;
-  if (comparePositions(range.start, range.end) > 0) {
+  if (ideSourceProjector.comparePositions(range.start, range.end) > 0) {
     throw new InvalidLanguageServiceOutputError();
   }
   return range;
@@ -853,39 +855,23 @@ function validateRangeDocument(range: IdeRangeDto, document: TextDocument): void
   validateDocumentPosition(document, range.end);
 }
 
-function isPosition(value: unknown): value is IdePositionDto {
-  return (
-    isRecord(value) &&
-    typeof value.line === "number" &&
-    Number.isSafeInteger(value.line) &&
-    value.line >= 0 &&
-    value.line <= maxIdePositionLine &&
-    typeof value.character === "number" &&
-    Number.isSafeInteger(value.character) &&
-    value.character >= 0 &&
-    value.character <= maxIdePositionCharacter
-  );
-}
-
 function validateDocumentPosition(document: TextDocument, position: IdePositionDto): void {
-  if (!Number.isSafeInteger(document.lineCount) || document.lineCount <= position.line) {
-    throw new InvalidLanguageServiceOutputError();
-  }
   let line: { readonly text: string };
   try {
     line = document.lineAt(position.line);
   } catch {
     throw new InvalidLanguageServiceOutputError();
   }
-  if (
-    typeof line.text !== "string" ||
-    position.character > line.text.length ||
-    isInsideSurrogate(line.text, position.character)
-  ) {
-    throw new InvalidLanguageServiceOutputError();
+  try {
+    ideSourceProjector.validateDocumentPosition(document.lineCount, line.text, position);
+  } catch (error) {
+    if (error instanceof IdeSourceProjectionError) {
+      throw new InvalidLanguageServiceOutputError();
+    }
+    throw error;
   }
-  for (let index = 0; index < line.text.length; ) {
-    index += readCodePoint(line.text, index).width;
+  if (!ideSourceProjector.isWellFormedUnicode(line.text)) {
+    throw new InvalidLanguageServiceOutputError();
   }
 }
 
@@ -973,78 +959,44 @@ function normalizeOptionalSymbolText(value: unknown): BoundedText | undefined | 
 }
 
 function takeBoundedText(value: string): BoundedText {
-  const output: string[] = [];
-  const reasons = new Set<IdeTruncationReason>();
-  let codePoints = 0;
-  let bytes = 0;
-  let retained = true;
-  for (let index = 0; index < value.length; ) {
-    const point = readCodePoint(value, index);
-    if (retained) {
-      const candidateBytes = utf8BytesForCodePoint(point.value);
-      if (codePoints + 1 > maxIdeDiagnosticLabelCodePoints) reasons.add("code-points");
-      if (bytes + candidateBytes > maxIdeDiagnosticLabelBytes) reasons.add("utf8-bytes");
-      if (reasons.size > 0) {
-        retained = false;
-      } else {
-        output.push(value.slice(index, index + point.width));
-        codePoints += 1;
-        bytes += candidateBytes;
-      }
+  try {
+    return ideSourceProjector.takeBoundedText(
+      value,
+      maxIdeDiagnosticLabelCodePoints,
+      maxIdeDiagnosticLabelBytes,
+    );
+  } catch (error) {
+    if (error instanceof IdeSourceProjectionError) {
+      throw new InvalidLanguageServiceOutputError();
     }
-    index += point.width;
+    throw error;
   }
-  return { text: output.join(""), truncated: reasons.size > 0, reasons: orderedReasons(reasons) };
-}
-
-function readCodePoint(
-  value: string,
-  index: number,
-): { readonly value: number; readonly width: 1 | 2 } {
-  const codeUnit = value.charCodeAt(index);
-  if (codeUnit >= 0xd800 && codeUnit <= 0xdbff) {
-    const next = value.charCodeAt(index + 1);
-    if (!(next >= 0xdc00 && next <= 0xdfff)) throw new InvalidLanguageServiceOutputError();
-    return { value: value.codePointAt(index) ?? 0, width: 2 };
-  }
-  if (codeUnit >= 0xdc00 && codeUnit <= 0xdfff) throw new InvalidLanguageServiceOutputError();
-  return { value: codeUnit, width: 1 };
 }
 
 function boundedRequired(value: string, maxCodePoints: number, maxBytes: number): string {
-  const projection = takeBoundedTextWithLimits(value, maxCodePoints, maxBytes);
-  if (projection.truncated || projection.text.length === 0) {
-    throw new InvalidLanguageServiceOutputError();
+  try {
+    return ideSourceProjector.boundedRequired(value, maxCodePoints, maxBytes);
+  } catch (error) {
+    if (error instanceof IdeSourceProjectionError) {
+      throw new InvalidLanguageServiceOutputError();
+    }
+    throw error;
   }
-  return projection.text;
 }
 
-function takeBoundedTextWithLimits(
+function boundedTextWithLimits(
   value: string,
   maxCodePoints: number,
   maxBytes: number,
 ): BoundedText {
-  const output: string[] = [];
-  const reasons = new Set<IdeTruncationReason>();
-  let codePoints = 0;
-  let bytes = 0;
-  let retained = true;
-  for (let index = 0; index < value.length; ) {
-    const point = readCodePoint(value, index);
-    if (retained) {
-      const candidateBytes = utf8BytesForCodePoint(point.value);
-      if (codePoints + 1 > maxCodePoints) reasons.add("code-points");
-      if (bytes + candidateBytes > maxBytes) reasons.add("utf8-bytes");
-      if (reasons.size > 0) retained = false;
-      else {
-        output.push(value.slice(index, index + point.width));
-        codePoints += 1;
-        bytes += candidateBytes;
-      }
+  try {
+    return ideSourceProjector.takeBoundedText(value, maxCodePoints, maxBytes);
+  } catch (error) {
+    if (error instanceof IdeSourceProjectionError) {
+      throw new InvalidLanguageServiceOutputError();
     }
-    index += point.width;
+    throw error;
   }
-  return { text: output.join(""), truncated: reasons.size > 0, reasons: orderedReasons(reasons) };
 }
 
 function readDocumentVersion(document: TextDocument | undefined): number | undefined {
@@ -1055,7 +1007,7 @@ function readDocumentVersion(document: TextDocument | undefined): number | undef
 
 function readLanguageId(document: TextDocument): string | undefined {
   if (typeof document.languageId !== "string" || document.languageId.length === 0) return undefined;
-  const projection = takeBoundedTextWithLimits(document.languageId, 128, 512);
+  const projection = boundedTextWithLimits(document.languageId, 128, 512);
   if (projection.truncated) throw new InvalidLanguageServiceOutputError();
   return projection.text;
 }
@@ -1086,8 +1038,16 @@ function isUriLike(value: unknown): value is Uri {
 
 function assertProviderUriShape(uri: Uri): void {
   if (
-    !isBoundedWellFormedUnicode(uri.scheme, maxIdeUriSchemeCodePoints, maxIdeUriSchemeBytes) ||
-    !isBoundedWellFormedUnicode(uri.path, maxIdeUriPathCodePoints, maxIdeUriPathBytes) ||
+    !ideSourceProjector.isBoundedWellFormedUnicode(
+      uri.scheme,
+      maxIdeUriSchemeCodePoints,
+      maxIdeUriSchemeBytes,
+    ) ||
+    !ideSourceProjector.isBoundedWellFormedUnicode(
+      uri.path,
+      maxIdeUriPathCodePoints,
+      maxIdeUriPathBytes,
+    ) ||
     uri.scheme.length === 0 ||
     uri.path.length === 0 ||
     uri.query.length > 0 ||
@@ -1105,85 +1065,15 @@ function assertProviderUriShape(uri: Uri): void {
   }
 }
 
-function isBoundedWellFormedUnicode(
-  value: string,
-  maxCodePoints: number,
-  maxBytes: number,
-): boolean {
-  let codePoints = 0;
-  let bytes = 0;
-  for (let index = 0; index < value.length; index += 1) {
-    const codeUnit = value.charCodeAt(index);
-    let codePoint: number;
-    if (codeUnit >= 0xd800 && codeUnit <= 0xdbff) {
-      const next = value.charCodeAt(index + 1);
-      if (!(next >= 0xdc00 && next <= 0xdfff)) return false;
-      codePoint = ((codeUnit - 0xd800) << 10) + (next - 0xdc00) + 0x10000;
-      index += 1;
-    } else {
-      if (codeUnit >= 0xdc00 && codeUnit <= 0xdfff) return false;
-      codePoint = codeUnit;
-    }
-    codePoints += 1;
-    bytes += utf8BytesForCodePoint(codePoint);
-    if (codePoints > maxCodePoints || bytes > maxBytes) return false;
-  }
-  return true;
-}
-
 function toWorkspaceRelativePath(root: Uri, target: Uri): string {
-  const rootSegments = pathSegments(root.path);
-  const targetSegments = pathSegments(target.path);
-  if (
-    targetSegments.length <= rootSegments.length ||
-    !sameIdentityPart(root.scheme, target.scheme) ||
-    !sameIdentityPart(root.authority, target.authority)
-  ) {
-    throw new InvalidLanguageServiceOutputError();
-  }
-  for (let index = 0; index < rootSegments.length; index += 1) {
-    if (!sameIdentityPart(rootSegments[index] ?? "", targetSegments[index] ?? "")) {
+  try {
+    return ideSourceProjector.toWorkspaceRelativePath(root, target);
+  } catch (error) {
+    if (error instanceof IdeSourceProjectionError) {
       throw new InvalidLanguageServiceOutputError();
     }
+    throw error;
   }
-  const relative = targetSegments.slice(rootSegments.length).join("/");
-  if (relative.length === 0) throw new InvalidLanguageServiceOutputError();
-  return relative;
-}
-
-function pathSegments(path: string): readonly string[] {
-  if (!path.startsWith("/") || path.includes("\\")) throw new InvalidLanguageServiceOutputError();
-  if (path === "/") return [];
-  const segments = path.slice(1).split("/");
-  if (segments.some((segment) => segment.length === 0 || segment === "." || segment === "..")) {
-    throw new InvalidLanguageServiceOutputError();
-  }
-  return segments;
-}
-
-function sameIdentityPart(left: string, right: string): boolean {
-  return left.toLocaleLowerCase("en-US") === right.toLocaleLowerCase("en-US");
-}
-
-function sameUri(left: Uri, right: Uri): boolean {
-  return (
-    left.scheme.toLocaleLowerCase("en-US") === right.scheme.toLocaleLowerCase("en-US") &&
-    left.authority.toLocaleLowerCase("en-US") === right.authority.toLocaleLowerCase("en-US") &&
-    left.path === right.path &&
-    left.query === right.query &&
-    left.fragment === right.fragment
-  );
-}
-
-function isInsideSurrogate(line: string, character: number): boolean {
-  if (character <= 0 || character >= line.length) return false;
-  const previous = line.charCodeAt(character - 1);
-  const next = line.charCodeAt(character);
-  return previous >= 0xd800 && previous <= 0xdbff && next >= 0xdc00 && next <= 0xdfff;
-}
-
-function comparePositions(left: IdePositionDto, right: IdePositionDto): number {
-  return left.line - right.line || left.character - right.character;
 }
 
 function locationKey(location: IdeLanguageLocationDto): string {
@@ -1192,13 +1082,13 @@ function locationKey(location: IdeLanguageLocationDto): string {
 
 function compareLocations(left: IdeLanguageLocationDto, right: IdeLanguageLocationDto): number {
   return (
-    compareStrings(left.source.uri.scheme, right.source.uri.scheme) ||
-    compareStrings(left.source.uri.authority, right.source.uri.authority) ||
-    compareStrings(left.source.uri.path, right.source.uri.path) ||
-    comparePositions(left.range.start, right.range.start) ||
-    comparePositions(left.range.end, right.range.end) ||
-    compareStrings(left.kind, right.kind) ||
-    compareStrings(locationKey(left), locationKey(right))
+    ideSourceProjector.compareStrings(left.source.uri.scheme, right.source.uri.scheme) ||
+    ideSourceProjector.compareStrings(left.source.uri.authority, right.source.uri.authority) ||
+    ideSourceProjector.compareStrings(left.source.uri.path, right.source.uri.path) ||
+    ideSourceProjector.comparePositions(left.range.start, right.range.start) ||
+    ideSourceProjector.comparePositions(left.range.end, right.range.end) ||
+    ideSourceProjector.compareStrings(left.kind, right.kind) ||
+    ideSourceProjector.compareStrings(locationKey(left), locationKey(right))
   );
 }
 
@@ -1208,79 +1098,41 @@ function symbolKey(symbol: IdeSymbolDto): string {
 
 function compareSymbolCandidates(left: SymbolCandidate, right: SymbolCandidate): number {
   return (
-    comparePositions(left.symbol.range.start, right.symbol.range.start) ||
-    compareStrings(left.symbol.name, right.symbol.name) ||
-    compareStrings(left.symbol.kind, right.symbol.kind) ||
-    compareOptionalStrings(left.symbol.containerName, right.symbol.containerName) ||
-    compareOptionalStrings(left.symbol.detail, right.symbol.detail) ||
-    compareOptionalRanges(left.symbol.selectionRange, right.symbol.selectionRange) ||
-    comparePositions(left.symbol.range.end, right.symbol.range.end) ||
-    compareStrings(symbolKey(left.symbol), symbolKey(right.symbol))
+    ideSourceProjector.comparePositions(left.symbol.range.start, right.symbol.range.start) ||
+    ideSourceProjector.compareStrings(left.symbol.name, right.symbol.name) ||
+    ideSourceProjector.compareStrings(left.symbol.kind, right.symbol.kind) ||
+    ideSourceProjector.compareOptionalStrings(
+      left.symbol.containerName,
+      right.symbol.containerName,
+    ) ||
+    ideSourceProjector.compareOptionalStrings(left.symbol.detail, right.symbol.detail) ||
+    ideSourceProjector.compareOptionalRanges(
+      left.symbol.selectionRange,
+      right.symbol.selectionRange,
+    ) ||
+    ideSourceProjector.comparePositions(left.symbol.range.end, right.symbol.range.end) ||
+    ideSourceProjector.compareStrings(symbolKey(left.symbol), symbolKey(right.symbol))
   );
 }
 
-function compareOptionalRanges(
-  left: IdeRangeDto | undefined,
-  right: IdeRangeDto | undefined,
-): number {
-  if (left === undefined && right === undefined) return 0;
-  if (left === undefined) return -1;
-  if (right === undefined) return 1;
-  return comparePositions(left.start, right.start) || comparePositions(left.end, right.end);
-}
-
-function compareOptionalStrings(left: string | undefined, right: string | undefined): number {
-  if (left === undefined && right === undefined) return 0;
-  if (left === undefined) return -1;
-  if (right === undefined) return 1;
-  return compareStrings(left, right);
-}
-
 function countCodePoints(value: string): number {
-  let count = 0;
-  for (let index = 0; index < value.length; ) {
-    index += readCodePoint(value, index).width;
-    count += 1;
+  try {
+    return ideSourceProjector.countCodePoints(value);
+  } catch (error) {
+    if (error instanceof IdeSourceProjectionError) {
+      throw new InvalidLanguageServiceOutputError();
+    }
+    throw error;
   }
-  return count;
 }
 
 function utf8ByteLength(value: string): number {
-  let bytes = 0;
-  for (let index = 0; index < value.length; ) {
-    const point = readCodePoint(value, index);
-    index += point.width;
-    bytes += utf8BytesForCodePoint(point.value);
+  try {
+    return ideSourceProjector.utf8ByteLength(value);
+  } catch (error) {
+    if (error instanceof IdeSourceProjectionError) {
+      throw new InvalidLanguageServiceOutputError();
+    }
+    throw error;
   }
-  return bytes;
-}
-
-function utf8BytesForCodePoint(codePoint: number): number {
-  return codePoint <= 0x7f ? 1 : codePoint <= 0x7ff ? 2 : codePoint <= 0xffff ? 3 : 4;
-}
-
-function compareStrings(left: string, right: string): number {
-  if (left === right) return 0;
-  const leftPoints = Array.from(left, (value) => value.codePointAt(0) ?? 0);
-  const rightPoints = Array.from(right, (value) => value.codePointAt(0) ?? 0);
-  const length = Math.min(leftPoints.length, rightPoints.length);
-  for (let index = 0; index < length; index += 1) {
-    const leftPoint = leftPoints[index] ?? 0;
-    const rightPoint = rightPoints[index] ?? 0;
-    if (leftPoint !== rightPoint) return leftPoint - rightPoint;
-  }
-  return leftPoints.length - rightPoints.length;
-}
-
-function orderedReasons(reasons: Iterable<IdeTruncationReason>): readonly IdeTruncationReason[] {
-  const set = new Set(reasons);
-  const order: readonly IdeTruncationReason[] = [
-    "code-points",
-    "utf8-bytes",
-    "lines",
-    "entries",
-    "tokens",
-    "out-of-workspace",
-  ];
-  return order.filter((reason) => set.has(reason));
 }
