@@ -62,6 +62,12 @@
   language-service normalization, candidate/symbol sort-key composition, editor selection/chunking,
   aggregate budgets, and conversion of `IdeSourceProjectionError` to each adapter's existing stable
   error. Thin wrappers are error-boundary mappings, not alternate projection algorithms.
+- Remaining adjacent similarities: `apps/extension/src/adapters/workspace-scope.ts` still owns
+  `sameIdentityPart`/path-segment containment because it has different semantics (configurable
+  case-sensitive canonical workspace containment, root equality, and stable `WorkspaceScopeError`
+  codes). `vscode-language-services.ts` also retains provider URI-shape checks for encoded path
+  hazards and bounded scheme/path input before provider normalization. Neither is an alternate
+  source-to-relative-path or text projection owner, and neither was changed by this maintenance.
 - Test disposition: `ide-source-projector.test.ts` locks URI identity/containment, ASCII/astral and
   multi-byte UTF-8 widths, no-split truncation and reason order, malformed Unicode, position/range
   boundaries, and deterministic scalar ordering. Existing adapter suites remain in place for their
