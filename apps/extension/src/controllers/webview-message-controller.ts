@@ -8,6 +8,7 @@ import {
 } from "@ctrl-zebra/protocol";
 import type { ChatRunner } from "./chat-runner.js";
 import type { CheckpointActions } from "./checkpoint-actions.js";
+import type { EditorContextWebviewActions } from "./editor-context-entry.js";
 import { type McpPromptActions, McpPromptPreviewCancelledError } from "./mcp-prompt-actions.js";
 import { type McpResourceActions, McpResourceReadCancelledError } from "./mcp-resource-actions.js";
 import type { McpWebviewActions } from "./mcp-webview-actions.js";
@@ -57,6 +58,7 @@ interface BindWebviewMessageControllerOptions {
   readonly mcpActions?: McpWebviewActions;
   readonly providerOnboarding?: ProviderOnboardingController;
   readonly openExternalLink?: (href: string) => void;
+  readonly editorContextActions?: EditorContextWebviewActions;
 }
 
 export function bindWebviewMessageController({
@@ -73,6 +75,7 @@ export function bindWebviewMessageController({
   mcpActions,
   providerOnboarding,
   openExternalLink,
+  editorContextActions,
 }: BindWebviewMessageControllerOptions): void {
   let disposed = false;
   const post = (message: ExtensionToWebviewMessage) => {
@@ -142,6 +145,7 @@ export function bindWebviewMessageController({
         return;
       case "webview/new-chat":
         if (runMessages.canStart() && !sessionMessages.isRestoring()) {
+          editorContextActions?.clearForNewChat();
           resourceActions?.clearInput();
           promptActions?.clearInput();
         }
@@ -281,6 +285,7 @@ export function bindWebviewMessageController({
         return;
       case "webview/restore-session":
         if (runMessages.canStart() && !sessionMessages.isRestoring()) {
+          editorContextActions?.clearForSessionSwitch();
           resourceActions?.clearInput();
           promptActions?.clearInput();
           sessionMessages.restore(data.requestId, data.sessionId);
@@ -301,6 +306,15 @@ export function bindWebviewMessageController({
       case "webview/cancel":
         runMessages.cancel(data.requestId);
         return;
+      case "webview/editor-context-refresh":
+        editorContextActions?.refresh(data);
+        return;
+      case "webview/editor-context-remove":
+        editorContextActions?.remove(data);
+        return;
+      case "webview/editor-context-use-stale":
+        editorContextActions?.useStale(data);
+        return;
     }
   });
   let disposalSubscription: DisposableResource | undefined;
@@ -311,6 +325,7 @@ export function bindWebviewMessageController({
     resourceActions?.dispose();
     promptActions?.dispose();
     mcpActions?.dispose();
+    editorContextActions?.dispose();
     providerOnboarding?.dispose();
     messageSubscription.dispose();
     disposalSubscription?.dispose();

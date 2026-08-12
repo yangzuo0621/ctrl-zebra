@@ -7,6 +7,8 @@ import { createApprovalStore } from "./approval-store.js";
 import { createChatStore, type DisplayMessage } from "./chat-store.js";
 import { CheckpointPanel } from "./checkpoint-panel.js";
 import { createCheckpointStore } from "./checkpoint-store.js";
+import { EditorContextCard } from "./editor-context-card.js";
+import { createEditorContextStore } from "./editor-context-store.js";
 import { MarkdownMessage } from "./markdown-message.js";
 import { McpPanel } from "./mcp-panel.js";
 import { createMcpStore } from "./mcp-store.js";
@@ -46,7 +48,20 @@ function messageContent(message: DisplayMessage, status: string): string {
 
 export function App({ host: providedHost, createRequestId }: AppProps) {
   const [host] = useState(() => providedHost ?? getWebviewHost());
-  const [store] = useState(() => createChatStore({ host, createRequestId }));
+  const [editorContextStore] = useState(() =>
+    createEditorContextStore({
+      host,
+      createRequestId: createRequestId ?? (() => crypto.randomUUID()),
+    }),
+  );
+  const [store] = useState(() =>
+    createChatStore({
+      host,
+      createRequestId,
+      beforeNewChat: () => editorContextStore.getState().clearLocal(),
+      beforeRestoreSession: () => editorContextStore.getState().clearForSessionSwitch(),
+    }),
+  );
   const [approvalStore] = useState(() => createApprovalStore(host));
   const [checkpointStore] = useState(() =>
     createCheckpointStore(host, createRequestId ?? (() => crypto.randomUUID())),
@@ -57,7 +72,6 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
   const [onboardingStore] = useState(() =>
     createOnboardingStore(host, createRequestId ?? (() => crypto.randomUUID())),
   );
-  const [draft, setDraft] = useState("");
   const [showSessionsDrawer, setShowSessionsDrawer] = useState(false);
   const [isComposing, setIsComposing] = useState(false);
   const [userScrolledUp, setUserScrolledUp] = useState(false);
@@ -85,6 +99,11 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
   const providerPendingAction = useStore(onboardingStore, (state) => state.pendingAction);
   const providerActionOutcome = useStore(onboardingStore, (state) => state.actionOutcome);
   const providerAnnouncement = useStore(onboardingStore, (state) => state.announcement);
+  const draft = useStore(editorContextStore, (state) => state.draft);
+  const editorContextCard = useStore(editorContextStore, (state) => state.card);
+  const editorContextAnnouncement = useStore(editorContextStore, (state) => state.announcement);
+  const editorContextCapturePending = useStore(editorContextStore, (state) => state.capturePending);
+  const editorContextCanSend = useStore(editorContextStore, (state) => state.canSend());
 
   useEffect(() => {
     const unsubscribe = host.subscribe((message) => {
@@ -93,15 +112,26 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
       checkpointStore.getState().receive(message);
       mcpStore.getState().receive(message);
       onboardingStore.getState().receive(message);
+      editorContextStore.getState().receive(message);
     });
     host.ping?.(createRequestId?.() ?? crypto.randomUUID());
     onboardingStore.getState().refresh();
     return () => {
       unsubscribe();
       store.getState().dispose();
+      editorContextStore.getState().dispose();
       onboardingStore.getState().dispose();
     };
-  }, [approvalStore, checkpointStore, createRequestId, host, mcpStore, onboardingStore, store]);
+  }, [
+    approvalStore,
+    checkpointStore,
+    createRequestId,
+    editorContextStore,
+    host,
+    mcpStore,
+    onboardingStore,
+    store,
+  ]);
 
   // Scroll to bottom when new messages arrive unless user scrolled up
   // biome-ignore lint/correctness/useExhaustiveDependencies: scroll on message updates
@@ -136,7 +166,6 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
 
   const handleNewChat = () => {
     if (store.getState().newChat()) {
-      setDraft("");
       setUserScrolledUp(false);
       mcpStore.getState().clearDraft();
       inputRef.current?.focus();
@@ -145,8 +174,8 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (store.getState().submit(draft)) {
-      setDraft("");
+    if (!editorContextCapturePending && editorContextCanSend && store.getState().submit(draft)) {
+      editorContextStore.getState().setDraft("");
       setUserScrolledUp(false);
     }
   };
@@ -154,9 +183,9 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Enter" && !event.shiftKey && !isComposing) {
       event.preventDefault();
-      if (draft.trim().length > 0 && activeRequestId === undefined) {
+      if (draft.trim().length > 0 && activeRequestId === undefined && editorContextCanSend) {
         if (store.getState().submit(draft)) {
-          setDraft("");
+          editorContextStore.getState().setDraft("");
           setUserScrolledUp(false);
         }
       }
@@ -289,7 +318,7 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
                 actionOutcome={providerActionOutcome}
                 announcement={providerAnnouncement}
                 onAction={(action) => onboardingStore.getState().runAction(action)}
-                onSelectPrompt={(prompt) => setDraft(prompt)}
+                onSelectPrompt={(prompt) => editorContextStore.getState().setDraft(prompt)}
               />
               <p className={styles.emptyText}>{strings.app.noMessages}</p>
             </li>
@@ -389,6 +418,8 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
 
         <TokenUsageSummary usage={usage} status={status} />
 
+        <EditorContextCard store={editorContextStore} />
+
         <form className={styles.composer} onSubmit={handleSubmit}>
           <div className={styles.composerBox}>
             <label className={styles.srOnly} htmlFor="chat-message">
@@ -400,7 +431,7 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
               id="chat-message"
               placeholder={strings.app.messagePlaceholder}
               value={draft}
-              onChange={(event) => setDraft(event.target.value)}
+              onChange={(event) => editorContextStore.getState().setDraft(event.target.value)}
               onKeyDown={handleKeyDown}
               onCompositionStart={() => setIsComposing(true)}
               onCompositionEnd={() => setIsComposing(false)}
@@ -417,7 +448,9 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
                     activeRequestId !== undefined ||
                     restoring ||
                     sessionSwitchPending ||
-                    draft.trim().length === 0
+                    draft.trim().length === 0 ||
+                    !editorContextCanSend ||
+                    editorContextCapturePending
                   }
                 >
                   {strings.app.send}
@@ -437,6 +470,11 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
 
         <p className={styles.status} role="status" aria-label={strings.app.runStatusLabel}>
           {strings.app.status[status]}
+        </p>
+        <p className={styles.srOnly} aria-live="polite" aria-atomic="true">
+          {editorContextCard?.status === "stale" && !editorContextCard.staleAccepted
+            ? strings.editorContext.sendBlocked
+            : editorContextAnnouncement}
         </p>
       </footer>
     </div>

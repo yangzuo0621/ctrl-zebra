@@ -1,0 +1,50 @@
+.card {
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 6px;
+  padding: 0.65rem;
+  display: grid;
+  gap: 0.45rem;
+  background: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+}
+
+.heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-weight: 600;
+}
+
+.details {
+  display: grid;
+  gap: 0.2rem;
+  margin: 0;
+  font-size: 0.85em;
+}
+
+.details div {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0.45rem;
+}
+
+.details dt {
+  color: var(--vscode-descriptionForeground);
+}
+
+.details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.status {
+  color: var(--vscode-descriptionForeground);
+  margin: 0;
+  font-size: 0.85em;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}

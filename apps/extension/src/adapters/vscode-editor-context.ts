@@ -31,6 +31,7 @@ export interface VsCodeEditorContextDependencies {
 }
 
 interface CaptureSnapshot {
+  readonly scope: ReadEditorContextInput["scope"];
   readonly editor: TextEditor;
   readonly document: TextDocument;
   readonly root: Uri;
@@ -170,6 +171,7 @@ export class VsCodeEditorContext implements IdeContextPort {
       }
 
       return {
+        scope: input.scope,
         editor,
         document,
         root,
@@ -269,7 +271,8 @@ export class VsCodeEditorContext implements IdeContextPort {
       }
       return (
         editor.document.version !== snapshot.version ||
-        !sameSelection(readSelection(editor), snapshot.selection)
+        (snapshot.scope === "selection" &&
+          !sameSelection(readSelection(editor), snapshot.selection))
       );
     } catch (error) {
       if (error instanceof EditorContextUnavailableError) throw error;

@@ -147,6 +147,36 @@ describe("VsCodeEditorContext", () => {
     ).rejects.toEqual(new EditorContextUnavailableError());
   });
 
+  it("keeps an active-editor capture current when only the selection moves", async () => {
+    const document = createDocument("const answer = 42;", "/workspace/src/index.ts");
+    const editor = createEditor(document, position(0, 0), position(0, 6));
+    let release: (() => void) | undefined;
+    const adapter = createAdapter(editor, {
+      validate: async (uri, signal) => {
+        if (uri.path.endsWith("index.ts")) {
+          await new Promise<void>((resolve) => {
+            release = resolve;
+          });
+        }
+        signal.throwIfAborted();
+        return uri;
+      },
+    });
+    const pending = adapter.readEditorContext({ scope: "active-editor" }, signal());
+    await vi.waitFor(() => expect(release).toBeDefined());
+    editor.selection = selection(
+      position(0, 7),
+      position(0, 7),
+    ) as unknown as TextEditor["selection"];
+    release?.();
+    await expect(pending).resolves.toEqual(
+      expect.objectContaining({
+        source: expect.objectContaining({ stale: false }),
+        text: "const answer = 42;",
+      }),
+    );
+  });
+
   it("marks a changed selection stale but suppresses a switched-editor result", async () => {
     const document = createDocument("text", "/workspace/src/index.ts");
     const editor = createEditor(document, position(0, 0), position(0, 1));

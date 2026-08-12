@@ -66,6 +66,10 @@ import { createSelectingChatRunner } from "./controllers/chat-runner.js";
 import { createCheckpointActions } from "./controllers/checkpoint-actions.js";
 import { combineToolRegistries } from "./controllers/combine-tool-registries.js";
 import { CommandApprovalWorkflow } from "./controllers/command-approval-workflow.js";
+import {
+  createEditorContextSourceFingerprint,
+  EditorContextEntryController,
+} from "./controllers/editor-context-entry.js";
 import { FileEditApprovalWorkflow } from "./controllers/file-edit-approval-workflow.js";
 import { McpConnectionController } from "./controllers/mcp-connection-controller.js";
 import { McpPromptActions } from "./controllers/mcp-prompt-actions.js";
@@ -124,6 +128,8 @@ export function activate(context: ExtensionContext): void {
     selectWorkspaceRoot(workspace.workspaceFolders?.map((folder) => folder.uri) ?? []);
   const createCurrentScope = () => new WorkspaceScope(getSelectedRoot(), canonicalize);
   const workspaceTrust = createWorkspaceTrustPolicy(() => workspace.isTrusted);
+  const isEditorContextEnabled = () =>
+    workspace.getConfiguration("ctrlZebra.editorContext").get<boolean>("enabled", false) === true;
   const mcpStartupApproval = new McpStartupApproval({
     now: () => new Date(),
     showWarningMessage: (message, options, item) =>
@@ -268,12 +274,101 @@ export function activate(context: ExtensionContext): void {
     getActiveEditor: () => window.activeTextEditor,
     getSelectedRoot: () => getSelectedRoot(),
     createScope: (root) => new WorkspaceScope(root, canonicalize),
-    // T1905 owns the user-facing setting and editor entry point. Until then,
-    // production composition is explicitly disabled rather than implicitly
-    // capturing editor content from focus or model activity.
-    isEnabled: () => false,
+    isEnabled: isEditorContextEnabled,
     isTrusted: () => workspace.isTrusted,
   });
+  const getEditorContextAvailability = async (
+    scope: "selection" | "active-editor",
+  ): Promise<
+    | "disabled"
+    | "no-editor"
+    | "no-selection"
+    | "untrusted-workspace"
+    | "unsupported-document"
+    | "outside-workspace"
+    | "unavailable"
+    | undefined
+  > => {
+    if (!isEditorContextEnabled()) return "disabled";
+    if (!workspace.isTrusted) return "untrusted-workspace";
+    const editor = window.activeTextEditor;
+    if (editor === undefined) return "no-editor";
+    if (scope === "selection" && editor.selection === undefined) return "no-selection";
+    if (editor.document === undefined || editor.document.uri === undefined) {
+      return "unsupported-document";
+    }
+    if (editor.document.uri.scheme !== "file") return "unsupported-document";
+    const root = getSelectedRoot();
+    if (root === undefined) return "outside-workspace";
+    try {
+      await new WorkspaceScope(root, canonicalize).validate(
+        editor.document.uri,
+        new AbortController().signal,
+      );
+    } catch (error) {
+      if (error instanceof WorkspaceScopeError && error.code === "outside-workspace") {
+        return "outside-workspace";
+      }
+      if (error instanceof WorkspaceScopeError && error.code === "invalid-uri") {
+        return "unsupported-document";
+      }
+      return "unavailable";
+    }
+    return undefined;
+  };
+  const editorContextEntry = new EditorContextEntryController({
+    readContext: (scope, signal) => editorContext.readEditorContext({ scope }, signal),
+    isEnabled: isEditorContextEnabled,
+    getAvailability: getEditorContextAvailability,
+    getSourceFingerprint: (scope) => {
+      const editor = window.activeTextEditor;
+      if (editor === undefined || editor.document === undefined) return undefined;
+      return createEditorContextSourceFingerprint({
+        scheme: editor.document.uri.scheme,
+        authority: editor.document.uri.authority,
+        path: editor.document.uri.path,
+        documentVersion: editor.document.version,
+        languageId: editor.document.languageId,
+        ...(scope === "selection" && editor.selection !== undefined
+          ? {
+              range: {
+                start: editor.selection.start,
+                end: editor.selection.end,
+              },
+            }
+          : {}),
+      });
+    },
+    createId: randomUUID,
+    focusView: () => commands.executeCommand("ctrlZebra.agentView.focus"),
+  });
+  let editorTransitionToken = 0;
+  const notifyEditorTransition = (
+    reason: "editor-changed" | "selection-changed" | "document-changed",
+    scope: "selection" | "active-editor",
+  ) => {
+    editorTransitionToken += 1;
+    const token = editorTransitionToken;
+    void getEditorContextAvailability(scope).then(
+      (availability) => {
+        if (token !== editorTransitionToken) return;
+        if (availability === "untrusted-workspace") {
+          editorContextEntry.invalidate("trust-lost");
+        } else if (
+          availability === "unsupported-document" ||
+          availability === "outside-workspace" ||
+          availability === "no-editor"
+        ) {
+          editorContextEntry.invalidate("editor-unavailable");
+        } else {
+          editorContextEntry.notifyTransition([reason]);
+        }
+      },
+      () => {
+        if (token === editorTransitionToken) editorContextEntry.invalidate("editor-unavailable");
+      },
+    );
+  };
   const diagnostics = new VsCodeDiagnostics({
     getActiveEditor: () => window.activeTextEditor,
     getSelectedRoot: () => getSelectedRoot(),
@@ -538,9 +633,40 @@ export function activate(context: ExtensionContext): void {
       if (event.affectsConfiguration(`${mcpServerSettingSection}.${mcpServerSettingName}`)) {
         mcpConnection.markConfigurationStale();
       }
+      if (event.affectsConfiguration("ctrlZebra.editorContext.enabled")) {
+        editorContextEntry.onSettingChanged(isEditorContextEnabled());
+      }
     }),
-    workspace.onDidChangeWorkspaceFolders(() => mcpConnection.markConfigurationStale()),
+    workspace.onDidChangeWorkspaceFolders(() => {
+      mcpConnection.markConfigurationStale();
+      editorContextEntry.invalidate("workspace-changed");
+    }),
     workspace.onDidGrantWorkspaceTrust(() => mcpConnection.handleWorkspaceTrustChange()),
+    window.onDidChangeActiveTextEditor((editor) => {
+      if (editor === undefined) {
+        editorTransitionToken += 1;
+        editorContextEntry.invalidate("editor-unavailable");
+        return;
+      }
+      notifyEditorTransition("editor-changed", "active-editor");
+    }),
+    window.onDidChangeTextEditorSelection(() =>
+      notifyEditorTransition("selection-changed", "selection"),
+    ),
+    workspace.onDidChangeTextDocument(() =>
+      notifyEditorTransition("document-changed", "active-editor"),
+    ),
+    {
+      dispose() {
+        editorContextEntry.dispose();
+      },
+    },
+    commands.registerCommand("ctrlZebra.askAboutSelection", async () => {
+      await editorContextEntry.ask("selection");
+    }),
+    commands.registerCommand("ctrlZebra.askAboutFile", async () => {
+      await editorContextEntry.ask("active-editor");
+    }),
     registerMcpServerCommands({
       controller: mcpConnection,
       registerCommand: (commandId, handler) => commands.registerCommand(commandId, handler),
@@ -640,6 +766,7 @@ export function activate(context: ExtensionContext): void {
           },
         }),
       createProviderOnboarding,
+      editorContext: editorContextEntry,
       openExternalLink: (href) => {
         if (!isApprovedExternalLink(href)) {
           return;

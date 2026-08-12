@@ -36,6 +36,28 @@ export interface WebviewHost {
   selectProviderModel?(requestId: string): void;
   openProviderSettings?(requestId: string): void;
   openExternal?(requestId: string, href: string): void;
+  refreshEditorContext?(
+    requestId: string,
+    viewGeneration: number,
+    sessionGeneration: number,
+    cardGeneration: number,
+    contextId: string,
+    scope: "selection" | "active-editor",
+  ): void;
+  removeEditorContext?(
+    requestId: string,
+    viewGeneration: number,
+    sessionGeneration: number,
+    cardGeneration: number,
+    contextId: string,
+  ): void;
+  useStaleEditorContext?(
+    requestId: string,
+    viewGeneration: number,
+    sessionGeneration: number,
+    cardGeneration: number,
+    contextId: string,
+  ): void;
   readMcpResource?(
     requestId: string,
     serverId: string,
@@ -205,6 +227,47 @@ const webviewHost: WebviewHost = {
       type: "webview/open-external-link",
       requestId,
       href,
+    });
+  },
+  refreshEditorContext(
+    requestId,
+    viewGeneration,
+    sessionGeneration,
+    cardGeneration,
+    contextId,
+    scope,
+  ) {
+    getVsCodeApi().postMessage({
+      protocolVersion,
+      type: "webview/editor-context-refresh",
+      requestId,
+      viewGeneration,
+      sessionGeneration,
+      cardGeneration,
+      contextId,
+      scope,
+    });
+  },
+  removeEditorContext(requestId, viewGeneration, sessionGeneration, cardGeneration, contextId) {
+    getVsCodeApi().postMessage({
+      protocolVersion,
+      type: "webview/editor-context-remove",
+      requestId,
+      viewGeneration,
+      sessionGeneration,
+      cardGeneration,
+      contextId,
+    });
+  },
+  useStaleEditorContext(requestId, viewGeneration, sessionGeneration, cardGeneration, contextId) {
+    getVsCodeApi().postMessage({
+      protocolVersion,
+      type: "webview/editor-context-use-stale",
+      requestId,
+      viewGeneration,
+      sessionGeneration,
+      cardGeneration,
+      contextId,
     });
   },
   readMcpResource(requestId, serverId, generation, selection) {
