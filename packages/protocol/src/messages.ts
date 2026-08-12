@@ -6,6 +6,7 @@ import {
 } from "./approval.js";
 import { assistantMessageSchema, userMessageSchema } from "./chat-message.js";
 import { checkpointIdSchema, checkpointSummarySchema } from "./checkpoint.js";
+import { ideTextContextSchema } from "./ide-context.js";
 import {
   mcpCatalogSequenceSchema,
   mcpConnectionProjectionSchema,
@@ -46,6 +47,29 @@ import { tokenUsageSchema } from "./usage.js";
 export const protocolVersion = 1 as const;
 
 const requestIdSchema = z.string().min(1).max(128);
+const generationSchema = z.number().int().nonnegative().safe();
+export const editorContextScopeSchema = z.enum(["selection", "active-editor"]);
+const editorContextOpaqueIdSchema = z.string().min(1).max(128);
+export const editorContextTransitionReasonSchema = z.enum([
+  "editor-changed",
+  "selection-changed",
+  "document-changed",
+]);
+export const editorContextClearReasonSchema = z.enum([
+  "disabled",
+  "trust-lost",
+  "workspace-changed",
+  "editor-unavailable",
+]);
+export const editorContextUnavailableCodeSchema = z.enum([
+  "disabled",
+  "no-editor",
+  "no-selection",
+  "untrusted-workspace",
+  "unsupported-document",
+  "outside-workspace",
+  "unavailable",
+]);
 const messageTypeSchema = z.string().regex(/^[^/]+\/[^/]+$/);
 const submittedContentSchema = z
   .string()
@@ -179,6 +203,79 @@ export const cancelMessageSchema = z.strictObject({
   ...protocolEnvelopeSchema.shape,
   type: z.literal("webview/cancel"),
 });
+
+export const editorContextRefreshMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("webview/editor-context-refresh"),
+  viewGeneration: generationSchema,
+  sessionGeneration: generationSchema,
+  cardGeneration: generationSchema,
+  contextId: editorContextOpaqueIdSchema,
+  scope: editorContextScopeSchema,
+});
+
+export const editorContextRemoveMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("webview/editor-context-remove"),
+  viewGeneration: generationSchema,
+  sessionGeneration: generationSchema,
+  cardGeneration: generationSchema,
+  contextId: editorContextOpaqueIdSchema,
+});
+
+export const editorContextUseStaleMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("webview/editor-context-use-stale"),
+  viewGeneration: generationSchema,
+  sessionGeneration: generationSchema,
+  cardGeneration: generationSchema,
+  contextId: editorContextOpaqueIdSchema,
+});
+
+const editorContextBaseMessageShape = {
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("extension/editor-context"),
+  viewGeneration: generationSchema,
+  sessionGeneration: generationSchema,
+  eventSequence: generationSchema,
+};
+
+export const editorContextMessageSchema = z.discriminatedUnion("status", [
+  z.strictObject({
+    ...editorContextBaseMessageShape,
+    status: z.literal("ready"),
+    cardGeneration: generationSchema,
+    captureId: editorContextOpaqueIdSchema,
+    contextId: editorContextOpaqueIdSchema,
+    scope: editorContextScopeSchema,
+    context: ideTextContextSchema,
+  }),
+  z.strictObject({
+    ...editorContextBaseMessageShape,
+    status: z.literal("stale"),
+    cardGeneration: generationSchema,
+    captureId: editorContextOpaqueIdSchema,
+    contextId: editorContextOpaqueIdSchema,
+    scope: editorContextScopeSchema,
+    reason: editorContextTransitionReasonSchema,
+    context: ideTextContextSchema.refine((value) => value.source.stale, {
+      message: "A stale editor context projection must mark its source stale.",
+    }),
+  }),
+  z.strictObject({
+    ...editorContextBaseMessageShape,
+    status: z.literal("cleared"),
+    cardGeneration: generationSchema,
+    contextId: editorContextOpaqueIdSchema,
+    reason: editorContextClearReasonSchema,
+  }),
+  z.strictObject({
+    ...editorContextBaseMessageShape,
+    status: z.literal("unavailable"),
+    scope: editorContextScopeSchema.optional(),
+    code: editorContextUnavailableCodeSchema,
+  }),
+]);
 
 export const mcpConnectMessageSchema = z.strictObject({
   ...protocolEnvelopeSchema.shape,
@@ -594,6 +691,9 @@ export const webviewToExtensionMessageSchema = z.discriminatedUnion("type", [
   submitMessageSchema,
   newChatMessageSchema,
   cancelMessageSchema,
+  editorContextRefreshMessageSchema,
+  editorContextRemoveMessageSchema,
+  editorContextUseStaleMessageSchema,
   providerStatusRequestMessageSchema,
   providerSaveKeyMessageSchema,
   providerSelectModelMessageSchema,
@@ -639,6 +739,7 @@ export const extensionToWebviewMessageSchema = z.union([
   checkpointListMessageSchema,
   checkpointRestoredMessageSchema,
   checkpointErrorMessageSchema,
+  editorContextMessageSchema,
   mcpConnectionMessageSchema,
   mcpToolsMessageSchema,
   mcpToolCatalogMessageSchema,
@@ -665,6 +766,14 @@ export type ProviderActionMessage = z.infer<typeof providerActionMessageSchema>;
 export type SubmitMessage = z.infer<typeof submitMessageSchema>;
 export type NewChatMessage = z.infer<typeof newChatMessageSchema>;
 export type CancelMessage = z.infer<typeof cancelMessageSchema>;
+export type EditorContextRefreshMessage = z.infer<typeof editorContextRefreshMessageSchema>;
+export type EditorContextRemoveMessage = z.infer<typeof editorContextRemoveMessageSchema>;
+export type EditorContextUseStaleMessage = z.infer<typeof editorContextUseStaleMessageSchema>;
+export type EditorContextMessage = z.infer<typeof editorContextMessageSchema>;
+export type EditorContextScope = z.infer<typeof editorContextScopeSchema>;
+export type EditorContextTransitionReason = z.infer<typeof editorContextTransitionReasonSchema>;
+export type EditorContextClearReason = z.infer<typeof editorContextClearReasonSchema>;
+export type EditorContextUnavailableCode = z.infer<typeof editorContextUnavailableCodeSchema>;
 export type McpConnectMessage = z.infer<typeof mcpConnectMessageSchema>;
 export type McpDisconnectMessage = z.infer<typeof mcpDisconnectMessageSchema>;
 export type McpOpenSettingsMessage = z.infer<typeof mcpOpenSettingsMessageSchema>;

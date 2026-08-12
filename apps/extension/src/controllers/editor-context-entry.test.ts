@@ -1,0 +1,175 @@
+import type { ExtensionToWebviewMessage, IdeTextContextDto } from "@ctrl-zebra/protocol";
+import { describe, expect, it, vi } from "vitest";
+
+import {
+  EditorContextEntryController,
+  type EditorContextMessageChannel,
+} from "./editor-context-entry.js";
+
+const context: IdeTextContextDto = {
+  source: {
+    uri: { scheme: "file", authority: "", path: "src/index.ts" },
+    languageId: "typescript",
+    documentVersion: 1,
+    stale: false,
+    truncated: false,
+  },
+  text: "const answer = 42;",
+};
+
+describe("EditorContextEntryController", () => {
+  it("delivers one ready card and keeps the capture editable at the Host boundary", async () => {
+    const messages: ExtensionToWebviewMessage[] = [];
+    const controller = createController(messages);
+    await controller.entry.ask("active-editor");
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toMatchObject({
+      type: "extension/editor-context",
+      status: "ready",
+      viewGeneration: 1,
+      sessionGeneration: 0,
+      eventSequence: 1,
+      cardGeneration: 1,
+      scope: "active-editor",
+      context,
+    });
+    expect(
+      (
+        messages[0] as Extract<
+          ExtensionToWebviewMessage,
+          { type: "extension/editor-context"; status: "ready" }
+        >
+      ).captureId,
+    ).toBeDefined();
+  });
+
+  it("drops a cancelled capture and emits no unavailable or late event", async () => {
+    const messages: ExtensionToWebviewMessage[] = [];
+    let release: (() => void) | undefined;
+    const controller = createController(messages, {
+      readContext: async (_scope, signal) => {
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        signal.throwIfAborted();
+        return context;
+      },
+    });
+    const capture = controller.entry.ask("selection");
+    await vi.waitFor(() => expect(release).toBeDefined());
+    controller.actions.clearForNewChat();
+    release?.();
+    await capture;
+    expect(messages).toEqual([]);
+  });
+
+  it("emits one stale transition per owner and then one Host clear", async () => {
+    const messages: ExtensionToWebviewMessage[] = [];
+    const controller = createController(messages);
+    await controller.entry.ask("selection");
+    controller.entry.notifyTransition(["document-changed", "selection-changed"], "source-a");
+    controller.entry.notifyTransition(["selection-changed", "document-changed"], "source-a");
+    expect(messages.filter((message) => message.type === "extension/editor-context")).toHaveLength(
+      2,
+    );
+    expect(messages[1]).toMatchObject({ status: "stale", reason: "selection-changed" });
+    expect(
+      (
+        messages[1] as Extract<
+          ExtensionToWebviewMessage,
+          { type: "extension/editor-context"; status: "stale" }
+        >
+      ).context.source.stale,
+    ).toBe(true);
+
+    controller.entry.invalidate("disabled");
+    expect(messages).toHaveLength(3);
+    expect(messages[2]).toMatchObject({ status: "cleared", reason: "disabled" });
+    expect("captureId" in messages[2]).toBe(false);
+  });
+
+  it("closes capture A before Refresh B and only lets B commit", async () => {
+    const messages: ExtensionToWebviewMessage[] = [];
+    const releases: Array<() => void> = [];
+    let readCount = 0;
+    const controller = createController(messages, {
+      readContext: async (_scope, signal) => {
+        const index = readCount++;
+        await new Promise<void>((resolve) => (releases[index] = resolve));
+        signal.throwIfAborted();
+        return context;
+      },
+    });
+    const first = controller.entry.ask("active-editor");
+    await vi.waitFor(() => expect(releases).toHaveLength(1));
+    const second = controller.entry.ask("active-editor");
+    await vi.waitFor(() => expect(releases).toHaveLength(2));
+    releases[0]?.();
+    releases[1]?.();
+    await Promise.all([first, second]);
+    expect(
+      messages.filter(
+        (message) => message.type === "extension/editor-context" && message.status === "ready",
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("closes the owner when ready delivery is rejected", async () => {
+    const messages: ExtensionToWebviewMessage[] = [];
+    const lifetime = { onDidDispose: (_listener: () => void) => ({ dispose() {} }) };
+    const entry = new EditorContextEntryController({
+      readContext: async () => context,
+      isEnabled: () => true,
+      createId: (() => {
+        let next = 0;
+        return () => `id-${++next}`;
+      })(),
+    });
+    const actions = entry.attachView(
+      {
+        postMessage(message) {
+          messages.push(message);
+          return Promise.resolve(false);
+        },
+      },
+      lifetime,
+    );
+    await entry.ask("active-editor");
+    await Promise.resolve();
+    entry.notifyTransition(["document-changed"]);
+    expect(messages.filter((message) => message.type === "extension/editor-context")).toHaveLength(
+      1,
+    );
+    actions.dispose();
+  });
+});
+
+function createController(
+  messages: ExtensionToWebviewMessage[],
+  overrides: {
+    readonly readContext?: (
+      scope: "selection" | "active-editor",
+      signal: AbortSignal,
+    ) => Promise<IdeTextContextDto>;
+  } = {},
+) {
+  const lifetime = { onDidDispose: (_listener: () => void) => ({ dispose() {} }) };
+  const channel: EditorContextMessageChannel = {
+    postMessage(message) {
+      messages.push(message);
+      return Promise.resolve(true);
+    },
+  };
+  const entry = new EditorContextEntryController({
+    readContext: overrides.readContext ?? (async () => context),
+    isEnabled: () => true,
+    getSourceFingerprint: () => "source",
+    createId: (() => {
+      let next = 0;
+      return () => `id-${++next}`;
+    })(),
+  });
+  const actions = entry.attachView(channel, lifetime);
+  return { entry, actions };
+}

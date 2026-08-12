@@ -113,6 +113,18 @@
         "category": "CtrlZebra"
       },
       {
+        "command": "ctrlZebra.askAboutSelection",
+        "title": "Ask about Selection",
+        "category": "CtrlZebra",
+        "enablement": "config.ctrlZebra.editorContext.enabled"
+      },
+      {
+        "command": "ctrlZebra.askAboutFile",
+        "title": "Ask about Active File",
+        "category": "CtrlZebra",
+        "enablement": "config.ctrlZebra.editorContext.enabled"
+      },
+      {
         "command": "ctrlZebra.connectMcpServer",
         "title": "Connect MCP Server",
         "category": "CtrlZebra"
@@ -126,6 +138,12 @@
     "configuration": {
       "title": "CtrlZebra",
       "properties": {
+        "ctrlZebra.editorContext.enabled": {
+          "type": "boolean",
+          "default": false,
+          "scope": "window",
+          "description": "Enable explicit editor context commands and visible, editable editor context drafts."
+        },
         "ctrlZebra.provider.id": {
           "type": "string",
           "enum": [
@@ -263,6 +281,22 @@
           "markdownDescription": "One optional local stdio MCP Server. CtrlZebra starts it only after an explicit Connect command, trusted-workspace check, and exact startup approval. Do not place credentials in this setting."
         }
       }
+    },
+    "menus": {
+      "editor/context": [
+        {
+          "command": "ctrlZebra.askAboutSelection",
+          "when": "editorHasSelection && config.ctrlZebra.editorContext.enabled",
+          "enablement": "config.ctrlZebra.editorContext.enabled",
+          "group": "navigation@90"
+        },
+        {
+          "command": "ctrlZebra.askAboutFile",
+          "when": "editorTextFocus && config.ctrlZebra.editorContext.enabled",
+          "enablement": "config.ctrlZebra.editorContext.enabled",
+          "group": "navigation@91"
+        }
+      ]
     },
     "viewsContainers": {
       "activitybar": [

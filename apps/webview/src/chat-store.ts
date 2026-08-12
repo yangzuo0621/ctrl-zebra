@@ -94,6 +94,8 @@ export interface ChatStoreOptions {
   readonly host: WebviewHost;
   readonly createRequestId?: () => string;
   readonly scheduleFlush?: ScheduleFlush;
+  readonly beforeNewChat?: () => void;
+  readonly beforeRestoreSession?: () => void;
 }
 
 interface LiveReasoningBlock {
@@ -136,6 +138,8 @@ export function createChatStore({
   host,
   createRequestId = () => crypto.randomUUID(),
   scheduleFlush = defaultScheduleFlush,
+  beforeNewChat,
+  beforeRestoreSession,
 }: ChatStoreOptions): StoreApi<ChatState> {
   let pendingTextDelta = "";
   let cancelScheduledFlush: (() => void) | undefined;
@@ -452,6 +456,8 @@ export function createChatStore({
           return false;
         }
 
+        beforeNewChat?.();
+
         cancelFlush();
         pendingTextDelta = "";
         listRequestId = undefined;
@@ -509,6 +515,7 @@ export function createChatStore({
         ) {
           return false;
         }
+        beforeRestoreSession?.();
         stagedReasoningRestore = undefined;
         listRequestId = undefined;
         restoreRequestId = createRequestId();

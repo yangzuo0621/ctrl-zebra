@@ -11,6 +11,7 @@ import {
 
 import type { ChatRunner } from "./controllers/chat-runner.js";
 import type { CheckpointActions } from "./controllers/checkpoint-actions.js";
+import type { EditorContextEntryController } from "./controllers/editor-context-entry.js";
 import type { McpPromptActions } from "./controllers/mcp-prompt-actions.js";
 import type { McpResourceActions } from "./controllers/mcp-resource-actions.js";
 import type { McpWebviewActions } from "./controllers/mcp-webview-actions.js";
@@ -105,6 +106,10 @@ class AgentViewProvider implements WebviewViewProvider {
       mcpActions: this.options.createMcpActions?.(),
       providerOnboarding: this.options.createProviderOnboarding?.(),
       openExternalLink: this.options.openExternalLink,
+      editorContextActions: this.options.editorContext?.attachView(
+        webviewView.webview,
+        webviewView,
+      ),
     });
     this.options.reportDisplay?.();
   }
@@ -124,6 +129,7 @@ interface AgentViewProviderOptions {
   readonly createMcpActions?: () => McpWebviewActions;
   readonly createProviderOnboarding?: () => ProviderOnboardingController;
   readonly openExternalLink?: (href: string) => void;
+  readonly editorContext?: EditorContextEntryController;
 }
 
 interface RegisterAgentViewOptions extends AgentViewProviderOptions {
