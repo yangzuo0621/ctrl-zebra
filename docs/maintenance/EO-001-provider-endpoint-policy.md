@@ -27,9 +27,15 @@
   dependency or algorithm beyond the small product policy is required.
 - Build vs Buy decision and evidence: Build by deepening an Extension-private module. The policy is
   CtrlZebra product security semantics (transport, explicit loopback, and credential requirement),
-  not a general URL utility. The standard `URL` implementation remains the parser. No maintained
-  dependency would remove meaningful algorithmic or security maintenance; adding one would add
-  runtime/package surface without owning these rules.
+  not a general URL utility. The standard WHATWG `URL` implementation is the first candidate and
+  already ships with the Extension's Node/VS Code runtime; it supplies parsing/normalization but not
+  CtrlZebra's transport or credential policy. Existing dependencies and Provider SDKs expose no
+  owner for this host boundary, and a maintained URL-policy package would still require the same
+  product adapter and would not remove policy/security maintenance. No new dependency means no
+  license, update, VSIX packaging, startup, or runtime-compatibility burden. The synchronous policy
+  performs no I/O and has no cancellation lifecycle; callers retain their existing cancellation and
+  error behavior. Self-implementation is limited to the small policy and explicit boundary tests,
+  with no third-party types or failures crossing the private seam.
 - Reuse Audit: Search terms included `loopback`, `localhost`, `127.0.0.1`, `::1`, `requiresApiKey`,
   `new URL`, endpoint validation, and Provider endpoint policy across `apps/extension/src`, tests,
   `docs/architecture.md`, and `docs/security.md`. The two candidates were the endpoint reader in
