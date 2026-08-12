@@ -76,8 +76,8 @@ To ask about the current editor explicitly, enable **CtrlZebra › Editor Contex
 then use **CtrlZebra: Ask about Selection** or **CtrlZebra: Ask about Active File** from the Command
 Palette or editor context menu. CtrlZebra fills a visible, editable Composer draft with the bounded,
 workspace-relative source context; after you review or edit a ready draft, select **Send** to create the
-normal Run. It never sends the request or runs a model automatically. Refresh or remove the context before
-sending, and explicitly choose **Use stale context** if the source changed.
+normal Run. It never sends the request or runs a model automatically. If the source becomes stale, select
+**Refresh** or explicitly **Use stale context**; select **Remove** whenever you do not want the context included.
 
 Do not paste API keys into chat, workspace files, settings, logs, or command arguments.
 

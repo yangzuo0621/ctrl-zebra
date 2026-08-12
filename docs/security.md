@@ -289,37 +289,49 @@ fixed unavailable category and performs no fallback read.
 
 The Host sends only the strict `extension/editor-context` projection from [Protocol](protocol.md). Every
 projection carries Host-issued `requestId`/`eventSequence`, `viewGeneration`, `sessionGeneration`, and the
-current `cardGeneration`/`contextId` when a card exists. The active owner tuple fences replay and prevents
-cross-view or cross-Session replacement. The Webview cannot provide a URI, range, revision, Trust value, or
-text source; `webview/editor-context-*` messages are narrow refresh/remove/use-stale intents with the exact
-owner tuple. `use-stale` is an explicit display/send decision for one context ID, never a freshness override
-or a capability change.
+current `cardGeneration`/`contextId` when a card exists. The capture fence is exactly
+`(viewGeneration, sessionGeneration, captureId)`; the delivered-card owner tuple is exactly
+`(viewGeneration, sessionGeneration, cardGeneration, contextId)`, with `captureId` retained only for capture
+correlation. These fences prevent cross-view or cross-Session replacement. The Webview cannot provide a URI,
+range, revision, Trust value, or text source; `webview/editor-context-*` messages are narrow refresh/remove/
+use-stale intents with the exact owner tuple. `use-stale` is an explicit display/send decision for one context
+ID, never a freshness override or a capability change.
 
 The **capture delivery gate** owns the AbortController and closes before cancellation, supersession,
 setting disable, Trust loss, editor/workspace transition, Session/New chat, view disposal, or Extension
-disposal. A closed gate suppresses every later capture completion, including `ready`, `stale`, and
-`unavailable`; no text, retry, persistence mutation, approval, model request, or Webview message can be
-emitted from that capture. The **delivered-card/event projection owner gate** is separate and opens only at
+disposal. A closed capture gate suppresses every later capture completion, including `ready` and
+`unavailable`; it produces no owner transition, text, retry, persistence mutation, approval, model request,
+or Webview message from that capture. The **delivered-card/event projection owner gate** is separate and opens only at
 the `ready` enqueue commit for an exact `(viewGeneration, sessionGeneration, cardGeneration, contextId)`.
 After all affected capture gates close, it may emit one bounded `stale` for an editor/selection/document
-change, or one `cleared` for setting disable, Trust loss, selected-root/workspace change, unsupported
-editor, Session change, Remove, or disposal. A transition with no delivered card emits no stale/clear event;
-an owner gate closes permanently on clear and cannot produce a late capture result.
+change, or one Host-driven `cleared` for setting disable, Trust loss, selected-root/workspace change, or
+unsupported editor. Remove and accepted New chat clear the Webview editor store synchronously before the
+single intent/action; Session restore/switch is transactional, with the Host closing both gates and the
+Webview clearing its store before committing the new session generation. Disposal closes both gates. These
+local/transactional boundaries emit no editor `cleared` event; a Remove acknowledgement, if sent, is optional
+and ignored by the Webview. A transition with no delivered card emits no stale/clear event; an owner gate
+closes permanently on clear and cannot produce a late capture result.
 
 The Host serializes gate closure before transition projection and increments `eventSequence` for each
-outbound event. The Webview accepts only a newer sequence with the active view/session and exact owner tuple;
-duplicates with identical payload are no-ops, conflicts, lower sequences, old requests/captures, cross-view
-or cross-Session events, and post-disposal events are rejected before state mutation. A refresh closes the
-old capture first and leaves its delivered card unchanged until the new ready commit, so an old completion
-can never overwrite the current card. Pending editor text and source metadata are not persisted, logged,
-restored, or used as hidden instructions. Only text that the user deliberately leaves in the ordinary
-Composer draft can follow the existing user-message/provider data path.
+outbound event. Every `viewGeneration`, `sessionGeneration`, `cardGeneration`, and `eventSequence` value is a
+non-negative safe integer; the owner checks for `Number.MAX_SAFE_INTEGER` before incrementing. Overflow fails
+closed with no event, wrap, reuse, or silent reset, and requires a new view generation (view overflow requires
+a new Extension activation). The Webview first compares an exact canonical same-sequence event record: an
+identical duplicate is a no-op, while a conflicting duplicate is discarded. Only then does it accept a greater
+sequence and advance the watermark; a lower sequence is a stale no-op. Active view/session and exact owner
+tuple checks still precede mutation. A refresh closes the old capture first and leaves its delivered card
+unchanged until the new ready commit, so an old completion can never overwrite the current card. Pending
+editor text and source metadata are not persisted, logged, restored, or used as hidden instructions. Only
+text that the user deliberately leaves in the ordinary Composer draft can follow the existing user-message/
+provider data path.
 
 The T1905 security matrix must exercise both gates and all fences: normal ready delivery; cancellation or
 close before capture completion; Refresh A/B with a late A result; transition with and without a delivered
-card; completion/transition same-turn ordering; setting/Trust/workspace/editor/Session invalidation;
-old/cross-view/cross-session request, capture, context, and card IDs; lower, duplicate, and conflicting
-event sequences; and events after disposal. Each case proves no unbounded text allocation, model/Tool/
+card; completion/transition same-turn ordering; setting/Trust/workspace/editor invalidation; local
+Remove/New-chat/disposal clearing with no Host clear event; transactional restore/session-switch clearing;
+old/cross-view/cross-session request, capture, context, and card IDs; same-sequence duplicate/conflict checks
+before monotonic ordering; lower and greater event sequences; safe-integer overflow and required new-view/
+activation reset; and events after disposal. Each case proves no unbounded text allocation, model/Tool/
 Approval action, persistence mutation, retry, or late Webview message after the relevant gate closes.
 
 ## Approval Boundary

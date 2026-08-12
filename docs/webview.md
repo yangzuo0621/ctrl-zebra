@@ -106,13 +106,21 @@ Unknown, old, duplicate, cancelled, or mismatched request/context messages are i
 mutation.
 
 The Webview mirrors the Host's two gates. Its **capture delivery state** tracks only the newest refresh
-intent and is cleared synchronously when the user cancels, removes, starts New chat, switches Session, or
-the view is disposed; a late `ready` or `unavailable` event cannot recreate a card. Its **delivered-card
-owner state** tracks the exact `(viewGeneration, sessionGeneration, cardGeneration, contextId)` tuple. It
-accepts bounded `stale`/`cleared` events only for that tuple and only after a newer `eventSequence`; clear
-closes the owner state. A same-sequence identical event is a no-op, while a conflicting duplicate, lower
-sequence, old request/capture, cross-view/session event, or event after disposal is rejected. Host event
-ordering is authoritative; the Webview never infers freshness from arrival timing.
+intent and is cleared synchronously when the user cancels, removes, starts New chat, or the view is disposed;
+a late `ready` or `unavailable` event cannot recreate a card. A Host-driven Session restore/switch clears
+the store transactionally before committing its new session generation. Capture delivery is fenced by the
+exact `(viewGeneration, sessionGeneration, captureId)`; its **delivered-card owner state** tracks the exact
+`(viewGeneration, sessionGeneration, cardGeneration, contextId)` tuple, with `captureId` used only for capture
+correlation. It
+accepts bounded `stale`/Host-driven `cleared` events only for that tuple and only after all affected capture
+gates have closed; a Host-driven clear closes the owner state. Remove and accepted New chat clear the editor
+store locally before their one intent/action, so the Host emits no editor `cleared` event. Host-driven Session
+restore/switch clears the store transactionally before committing the new session generation, and disposal
+closes the gates without an editor event. A same-sequence event is compared against the retained canonical
+record first: an exact duplicate is a no-op, a conflicting duplicate is discarded, then only a greater
+`eventSequence` may commit and advance the watermark; a lower sequence is a stale no-op. Old request/capture,
+cross-view/session, or post-disposal events are rejected. Host event ordering is authoritative; the Webview
+never infers freshness from arrival timing.
 
 A ready projection is rendered above the Composer as a semantic `Editor context` card with source kind,
 workspace-relative path, optional language/range, and non-color-only `Truncated`/reason status. The bounded
@@ -124,11 +132,14 @@ not retain a VS Code object, absolute path, Trust state, source revision, or aut
 `Refresh` posts the exact owner tuple in `webview/editor-context-refresh`; the Host closes the old capture
 first and leaves the old delivered card unchanged until a newer ready commit. `Remove` synchronously clears
 the card, generated prefix (only if the draft is still unchanged), and stale decision before trying one
-`webview/editor-context-remove`; it never waits for a Host acknowledgement or steals Composer focus.
+`webview/editor-context-remove`; it never waits for a Host acknowledgement or steals Composer focus. The Host
+may send an acknowledgement, but it is optional and ignored. Accepted New chat performs the same local clear
+before posting its action; restore/session switch clears the store transactionally before the new session
+generation is committed. None of these boundaries expects an editor `cleared` event. The setting-off/
+Trust-lost/Host-cleared projection synchronously removes the card and stale decision, while preserving
+unrelated user draft text.
 `Use stale context` is available only for the exact stale tuple; it records the explicit send decision and
 posts one `webview/editor-context-use-stale`. A stale card blocks Send until that decision or a fresh capture.
-The setting-off/Trust-lost/cleared projection synchronously removes the card and stale decision, while
-preserving unrelated user draft text.
 
 The editor entry path has no Send/Run side effect: it does not call the model, execute a Tool, create an
 Approval, edit a file, or retry a capture automatically. Cancellation and disposal clear pending state and

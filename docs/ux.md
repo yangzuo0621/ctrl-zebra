@@ -281,8 +281,10 @@ Palette 可见 `CtrlZebra: Ask about Selection`（`editorHasSelection`，有非�
 卡片提供 `Refresh`、`Remove` 和 stale 时的 `Use stale context`。ready 卡片在用户审阅或编辑后可
 直接 Send；Refresh 只重新捕获原 scope，
 Remove 先同步清卡并保留用户修改过的非上下文草稿，Use stale 只对同一 context ID 做一次明确
-发送决定；stale 未刷新或确认前 Send 禁用并显示原因。编辑器、选区、文档、工作区或 Trust 变化、
-Session/New chat、侧栏关闭和 Extension disposal 都使旧卡片失效，迟到结果没有 UI 效果。
+发送决定；stale 未刷新或确认前 Send 禁用并显示原因。编辑器、选区或文档变化显示 stale；设置关闭、
+Trust/工作区变化或不支持编辑器由 Host 当前 owner 投影一次 cleared。Remove 和 New chat 先由
+Webview 同步清卡，Session restore/switch 在新 Session 提交前事务性清卡，侧栏关闭/disposal 关闭
+边界；这些本地/事务性边界不等待或要求 Host editor cleared，迟到结果没有 UI 效果。
 
 入口和卡片使用固定产品文案、语义按钮、可见焦点、键盘路径和一个 polite live region；刷新、移除
 和结果替换不抢 Composer 焦点、光标、选择或滚动。状态不能只靠颜色表达，来源文本按纯文本显示，

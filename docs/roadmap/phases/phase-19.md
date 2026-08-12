@@ -77,9 +77,28 @@
 `AbortController`，取消/Refresh/关闭/设置/Trust/工作区/编辑器或 Session 变化先关闭它，之后不
 产生任何 capture completion；delivered-card/event projection owner gate 只在 ready enqueue commit
 后以 `(viewGeneration, sessionGeneration, cardGeneration, contextId)` 建立。只有当前 owner gate
-存在时，capture gate 关闭后才允许一次有界 stale（编辑器/选区/文档变化）或 cleared（设置/Trust/
-工作区/不支持编辑器/Session/Remove/dispose）事件；没有已交付 card 时不得发送迟到 stale/cleared。
-Host 在一个 owner queue 中先关 capture gate，再投影 transition，并以 eventSequence 保证顺序。
+存在时，capture gate 关闭后才允许一次有界 stale（编辑器/选区/文档变化）或 Host 驱动的 cleared
+（设置/Trust/工作区/不支持编辑器）事件；没有已交付 card 时不得发送迟到 stale/cleared。Remove 和
+接受的 New chat 由 Webview 在发送单一意图/动作前同步清除 editor store；Session restore/switch
+由 Host 关闭两个 gate，并在提交新 session generation 前事务性清除 Webview store；disposal 关闭
+两个 gate。这些本地/事务性边界均不发送 editor `cleared`，Remove ack（若存在）可选且忽略。Host
+在一个 owner queue 中先关 capture gate，再投影 transition，并以 eventSequence 保证顺序。
+
+Fence/correlation 也必须是公共契约：`viewGeneration` 在每次激活的第一个 view 从 `1` 开始并按
+view 分配；`sessionGeneration` 每个 view 从 `0` 开始，只在 Host 接受 restore/selection commit、
+Session switch 或 New chat 的新 owner 时递增；`cardGeneration` 在 `(viewGeneration, sessionGeneration)`
+内从 `0` 开始，在每个新 card/owner invalidation 时递增；`eventSequence` 在 view 内从 `1` 开始，
+每个 Host editor event 递增。四者都是非负 safe integer，递增前检查 `Number.MAX_SAFE_INTEGER`；
+溢出 fail-closed，不回绕、不复用、不静默 reset，session/card/event 溢出要求新 view，view 溢出要求
+新 activation。Host 为每个 outbound event 同步分配独立的 `requestId` 和 `eventSequence`；Webview
+intent 的 `requestId` 是方向专属并按严格完整 payload 去重。事件严格携带
+`protocolVersion,type,requestId,viewGeneration,sessionGeneration,eventSequence,status` 及状态所需的
+`cardGeneration,captureId,contextId,scope,reason,context` 字段（详见 Protocol）。Capture fence 是
+`(viewGeneration,sessionGeneration,captureId)`；Host active delivered-card owner tuple 严格为
+`(viewGeneration,sessionGeneration,cardGeneration,contextId)`，`captureId` 仅作 capture correlation，
+不进入 Webview intent tuple。Webview 对同序事件先做 canonical 完整字段比较：相同为 no-op，冲突丢弃；
+随后仅更大 sequence 提交并推进 watermark，更小为 stale no-op。旧 tuple、跨 view/session、已关闭
+gate、dispose 后事件均在 mutation 前拒绝。
 
 ### T1905 fencing and race matrix
 
@@ -91,21 +110,26 @@ Host 在一个 owner queue 中先关 capture gate，再投影 transition，并�
 | command capture completes normally | capture gate open → one `ready` commit → owner gate opens; ready draft remains editable and Send is allowed |
 | cancel/close before capture completion | capture gate closes first; completion is dropped; no `ready`, `stale`, `cleared`, retry, or unavailable result |
 | editor/selection/document change with delivered card | close any capture gate → one current-owner `stale` with same card/context and `source.stale: true`; duplicate transition is a no-op |
-| setting disable, Trust loss, root/workspace change, unsupported editor, Session/New chat, Remove, dispose | close capture gate → one current-owner `cleared`; owner gate closes; no later event is accepted |
+| setting disable, Trust loss, root/workspace change, unsupported editor with delivered card | close capture gate → one Host-driven current-owner `cleared`; owner gate closes; no later event is accepted |
+| Remove or accepted New chat | Webview synchronously clears editor store, then sends one intent/action; Host closes matching gates and emits no editor `cleared`; no late event recreates a card |
+| Host restore/session switch | Host closes both gates; Webview transactionally clears editor store before committing the new session generation; no editor `cleared` event or late result |
+| view disposal | Webview is gone; Host closes both gates and emits no editor event; no post or live-region update |
 | transition while capture is in flight and no delivered card | capture is cancelled; no stale/cleared event is emitted |
 | Refresh A then Refresh B | A gate closes before B opens; late A result is dropped; only B can commit ready; prior delivered card remains until B ready |
 | completion vs transition same turn | owner queue order decides: completion first commits ready then transition may stale/clear; transition first suppresses completion and emits no card event without an existing owner |
 | old request/capture/context after newer ready | reject by captureId/cardGeneration/eventSequence; current card and draft are unchanged |
 | cross-view or cross-session event | reject by viewGeneration/sessionGeneration before state mutation |
-| duplicate/conflicting event or intent | identical same-sequence payload is idempotent; same ID/sequence with different fields is rejected |
+| duplicate/conflicting event or intent | compare canonical same-sequence payload before monotonic ordering: exact duplicate is a no-op, conflict is discarded; only greater sequence commits/watermarks, lower is stale no-op |
 | event after disposal | reject by closed view gate; no post, live-region announcement, or focus change |
 | `editorTextFocus` menu visible but Host cannot capture | return fixed `unavailable` code (`no-editor`, `unsupported-document`, `outside-workspace`, or `untrusted-workspace`); no fallback read |
+| safe-integer fence overflow | fail closed before increment: no event, wrap, reuse, or silent reset; close affected gate and require a new view generation (view overflow requires a new activation) |
 
 The focused tests must also assert command registration/menu enablement hints, setting default/disable
 clearing, active-file versus exact-selection source/range, collapsed selection, ready-send/edit/remove,
 stale blocking and Use-stale, focus preservation, Host-issued generation allocation/increment/reset,
-strict DTO extra-field rejection, and Webview acceptance of out-of-order, duplicate, conflicting,
-cross-view/session, post-refresh, and post-disposal messages.
+safe-integer overflow fail-closed/new-view reset, strict DTO extra-field rejection, and Webview acceptance
+of out-of-order, same-sequence compare-before-watermark duplicate/conflict, cross-view/session, post-refresh,
+local/transactional clear without Host editor events, and post-disposal messages.
 
 ## 4. 阶段门禁
 

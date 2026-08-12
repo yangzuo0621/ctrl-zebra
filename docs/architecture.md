@@ -120,26 +120,44 @@ gate** owns one bounded read, an AbortController, and a Host-issued `captureId`;
 gate before opening the next. Cancellation, supersession, editor/selection/document/workspace transition,
 setting disable, Trust loss, Session/New chat, view disposal, or Extension disposal closes this gate before
 cleanup. A completion whose gate, source tuple, or document revision is no longer current is dropped and
-cannot post `ready`, `stale`, or `unavailable`.
+cannot post a `ready` or `unavailable` capture result, owner transition, or card.
+
+The capture fence is `(viewGeneration, sessionGeneration, captureId)`. The delivered-card owner tuple is
+exactly `(viewGeneration, sessionGeneration, cardGeneration, contextId)`; `captureId` remains correlation
+metadata and is not part of a Webview intent tuple.
 
 The **delivered-card/event projection owner gate** opens only at the ordered `ready` enqueue commit and owns
 the immutable `(viewGeneration, sessionGeneration, cardGeneration, contextId)` tuple. It remains the sole
 owner of that card until replacement or invalidation. After all affected capture gates close, an editor,
 selection, or document transition may pass one bounded `stale` event through this gate; setting disable,
-Trust loss, selected-root/workspace change, unsupported current editor, Session change, Remove, or disposal
-passes one `cleared` event and closes it. If no card has been committed, transitions emit no stale/clear
-projection and a cancelled capture emits no result. A card gate never reopens a capture gate or authorizes a
-model/Tool action.
+Trust loss, selected-root/workspace change, or unsupported current editor passes one Host-driven `cleared`
+event and closes it. Remove and accepted New chat are Webview-local transitions: the Webview clears the
+editor card, stale decision, and capture-local state synchronously before posting the single intent or new-chat
+action. Session switch/restore is Host-driven but transactional: the Host closes both gates and the Webview
+clears its editor store before the new session generation is committed; the Host emits no editor `cleared`
+event for that boundary. Disposal likewise closes both gates and emits no editor event. If no card has been
+committed, transitions emit no stale/clear projection and a cancelled capture emits no result. A card gate
+never reopens a capture gate or authorizes a model/Tool action.
 
 The controller serializes capture completion, Webview intents, and spontaneous transitions in one owner
 queue. `viewGeneration` is allocated monotonically for each Webview resolution (counter starts at `1` per
-Extension activation); `sessionGeneration` starts at `0` per view and increments for each Session/New chat
-owner change; `cardGeneration` increments on card allocation/invalidation; and `eventSequence` increments
-for every Host-to-Webview editor event. Counters reset only with their owning view/session generation and
-are never reused within an Extension activation. Outbound `requestId` values are Host-issued event IDs;
-inbound Webview request IDs are intent IDs and are deduplicated by exact payload. The active owner tuple and
-generation fences reject old capture results, old requests, cross-view/session events, same-sequence
-conflicts, and post-disposal messages before any state mutation.
+Extension activation); `sessionGeneration` starts at `0` per view and increments for each Host-accepted
+Session owner replacement (restore/selection commit, Session switch, or New chat); `cardGeneration`
+increments on card allocation/invalidation; and `eventSequence` increments for every Host-to-Webview editor
+event. Every counter is a non-negative safe integer. Before incrementing, the owner checks the next value
+against `Number.MAX_SAFE_INTEGER`; overflow fails closed with no event, wrap, reuse, or silent reset, closes
+the affected gate, and rejects further editor entry. Session/card/event overflow requires a new Webview
+generation; view overflow requires a new Extension activation. Counters otherwise reset only with their
+owning view/session generation and are never reused within an Extension activation. Outbound `requestId`
+values are Host-issued event IDs; inbound Webview request IDs are intent IDs and are deduplicated by exact
+payload. The active owner tuple and generation fences reject old capture results, old requests, cross-view/
+session events, same-sequence conflicts, and post-disposal messages before any state mutation.
+
+When the Webview receives a Host event, it compares the canonical validated payload with the retained record
+for the exact same `eventSequence` before applying monotonic ordering. An identical same-sequence event is an
+idempotent no-op; a conflicting same-sequence event is discarded. Only an event with a greater sequence can
+commit and advance the watermark; a lower sequence is a stale no-op. This ordering applies before any UI
+mutation and is covered by the deterministic race tests.
 
 The Agent view exposes only the strict `extension/editor-context` projection. It queues at most the newest
 event for a resolved owner, drops queued data on disposal, and never exposes `Webview`, `TextEditor`, `Uri`,
@@ -150,8 +168,10 @@ blocks Send until refresh or explicit `Use stale context`.
 Required adapter/controller tests cover normal ready → editable/send, collapsed selection, no editor, an
 `editorTextFocus` menu-visible but unsupported/outside/untrusted document, setting disable, focus and
 selection preservation, cancel/close races, Refresh A→B, transition-before-capture-completion,
-completion-before-transition, stale/clear deduplication, generation allocation/reset, strict message
-validation, cross-view/session fences, conflicting duplicate sequences, and post-disposal suppression.
+completion-before-transition, stale/clear deduplication, local Remove/New-chat/disposal clearing with no Host
+clear event, transactional Host restore/session-switch clearing, generation allocation/reset, safe-integer
+overflow fail-closed/new-view requirements, strict message validation, cross-view/session fences,
+same-sequence duplicate/conflict comparison before monotonic checks, and post-disposal suppression.
 
 ## Lazy Initialization
 
