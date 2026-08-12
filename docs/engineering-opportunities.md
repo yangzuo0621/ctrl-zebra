@@ -219,3 +219,4 @@ EO-001 可以独立进行。EO-009 和 EO-011 不应阻塞 Phase 20–22。
 | 日期 | 机会 | 处置 | 正式记录 | 说明 |
 |---|---|---|---|---|
 | 2026-08-12 | EO-001–EO-011 | 初始登记 | — | 来自 Phase 19 后的重复实现与 Build vs Buy 审查 |
+| 2026-08-12 | EO-001 | 已晋升为独立 maintenance | [EO-001 maintenance](maintenance/EO-001-provider-endpoint-policy.md) / [PR #215](https://github.com/yangzuo0621/ctrl-zebra/pull/215) | 在最新 `origin/main` 上重新验证两处重复 endpoint/loopback 判定后建立 Extension-private policy seam |
