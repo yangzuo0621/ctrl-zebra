@@ -1,5 +1,15 @@
 # 阶段 19：IDE 上下文与诊断闭环
 
+> **归档状态：阶段性归档校验通过**
+>
+> - 归档日期：2026-08-12
+> - 完成任务：T1901–T1905；任务已通过 [PR #201](https://github.com/yangzuo0621/ctrl-zebra/pull/201)（squash merge `d15efff1fd6f09d07abad9fd7f427b2d052a2b19`）、[PR #203](https://github.com/yangzuo0621/ctrl-zebra/pull/203)（`45d1a33506e87941d4fcf34c0ed78469fa09d1ac`）、[PR #204](https://github.com/yangzuo0621/ctrl-zebra/pull/204)（`0f00eecbc44fc42cc24dc3637c0afe55aaf17988`）、[PR #205](https://github.com/yangzuo0621/ctrl-zebra/pull/205)（`db1f36f27767b8b2f7c8fa12b2dba656253ab226`）和 [PR #207](https://github.com/yangzuo0621/ctrl-zebra/pull/207)（`43f1a6243e10dcfb2a7ba2439cb520551c27ce45`）合并到 `main`。
+> - 阶段完成基线：`43f1a6243e10dcfb2a7ba2439cb520551c27ce45`（归档校验开始时 `main` 与 `origin/main` 一致且工作区 clean）。
+> - 阶段门禁：用户可关闭编辑器上下文并看到固定来源；所有 URI 经过 Host-owned 规范化和工作区范围校验；诊断与语言服务保持只读、有界、可取消；工作区外、二进制、超限、陈旧和迟到结果均确定性处理。T1905 的双 gate、generation fence、overflow fail-closed、严格 DTO、重复/乱序/跨 view/session 拒绝和设置关闭/Trust/Session/dispose 清理由实现与聚焦测试覆盖。
+> - 跨边界一致性：`docs/architecture.md`、`docs/security.md`、`docs/protocol.md`、`docs/persistence.md`、`docs/ux.md`、`docs/webview.md`、`docs/configuration.md`、`PRIVACY.md`、README、Protocol Schema、Extension adapter、Builtin Tool registry 与 Webview editor store 对 IDE context 的用户控制、普通不可信上下文、只读/取消/Trust/URI/预算边界和持久化排除保持一致。
+> - 验证证据：`pnpm install --frozen-lockfile`、`pnpm check`（371 files）、`pnpm typecheck`、`pnpm test:unit`（142 files/1699 tests）、`pnpm test:coverage`（Statements 82.38%、Branches 76.34%、Functions 80.20%、Lines 83.62%）、`pnpm build`、`pnpm test:integration`、`pnpm package:vsix` 和针对该 commit 的 `pnpm smoke:vsix` 均通过。VSIX 为 12 个 allowlisted entries（833866 compressed bytes、3814924 uncompressed bytes）；README/license parity、fixture/credential/network/secret 排除、无 fixture 入包和 tracked secret-pattern audit 均通过 packaging verifier 与独立 archive inspection。
+> - 后续门禁：Phase 19 归档合入前不得启动 T2001；本次授权止于归档门禁，T2001 仍为 `待开始` 且未启动。
+
 ## 1. 阶段目标
 
 让 CtrlZebra 在用户控制下感知当前编辑位置，并通过 VS Code 已有诊断和语言服务形成只读反馈
