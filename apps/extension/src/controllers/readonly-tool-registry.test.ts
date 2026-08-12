@@ -16,6 +16,7 @@ import type {
   JoinWorkspacePath,
   ReadWorkspaceFilePrefix,
 } from "../adapters/workspace-file-reader.js";
+import { createTestUri as uri } from "../test/support/test-uri.js";
 
 import {
   createWorkspaceToolRegistryProvider,
@@ -320,7 +321,7 @@ function createDependencies(
     return { dispose: disposeTrustChange };
   });
   const joinPath = vi.fn<JoinWorkspacePath>((root, path) =>
-    uri(`${root.path}/${path}`, root.scheme, root.authority),
+    uri({ path: `${root.path}/${path}`, scheme: root.scheme, authority: root.authority }),
   );
 
   return {
@@ -372,20 +373,5 @@ function createDependencies(
     setTrusted(value: boolean) {
       trusted = value;
     },
-  };
-}
-
-function uri(path: string, scheme = "file", authority = ""): Uri {
-  return {
-    scheme,
-    authority,
-    path,
-    query: "",
-    fragment: "",
-    fsPath: path,
-    with: (change) =>
-      uri(change.path ?? path, change.scheme ?? scheme, change.authority ?? authority),
-    toString: () => `${scheme}://${authority}${path}`,
-    toJSON: () => ({ scheme, authority, path }),
   };
 }

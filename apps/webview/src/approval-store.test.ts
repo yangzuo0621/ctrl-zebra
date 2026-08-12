@@ -1,21 +1,22 @@
-import type { ApprovalDecisionIntent, ExtensionToWebviewMessage } from "@ctrl-zebra/protocol";
+import type { ExtensionToWebviewMessage } from "@ctrl-zebra/protocol";
 import { describe, expect, it } from "vitest";
 
 import { createApprovalStore } from "./approval-store.js";
-import type { WebviewHost } from "./vscode-api.js";
+import { createWebviewHostFixture } from "./test/support/webview-host.js";
 
 describe("approval store", () => {
   it("routes one decision for the current pending Approval and blocks duplicates", () => {
-    const host = new FakeWebviewHost();
+    const host = createWebviewHostFixture();
     const store = createApprovalStore(host);
     store.getState().receive(approvalState("pending"));
 
     expect(store.getState().decide("approved")).toBe(true);
     expect(store.getState().decide("denied")).toBe(false);
 
-    expect(host.actions).toEqual([
+    expect(host.sent).toEqual([
       {
-        type: "decision",
+        protocolVersion: 1,
+        type: "webview/approval-decision",
         requestId: "request-1",
         approvalId: "approval-1",
         decision: "approved",
@@ -24,35 +25,16 @@ describe("approval store", () => {
   });
 
   it("does not send Diff or decision actions for a terminal Approval", () => {
-    const host = new FakeWebviewHost();
+    const host = createWebviewHostFixture();
     const store = createApprovalStore(host);
     store.getState().receive(approvalState("expired"));
 
     store.getState().showDiff();
 
     expect(store.getState().decide("approved")).toBe(false);
-    expect(host.actions).toEqual([]);
+    expect(host.sent).toEqual([]);
   });
 });
-
-class FakeWebviewHost implements WebviewHost {
-  readonly actions: unknown[] = [];
-  submit(): void {}
-  cancel(): void {}
-  listSessions(): void {}
-  restoreSession(): void {}
-  listCheckpoints(): void {}
-  restoreCheckpoint(): void {}
-  subscribe(): () => void {
-    return () => {};
-  }
-  showApprovalDiff(requestId: string, approvalId: string): void {
-    this.actions.push({ type: "show-diff", requestId, approvalId });
-  }
-  decideApproval(requestId: string, approvalId: string, decision: ApprovalDecisionIntent): void {
-    this.actions.push({ type: "decision", requestId, approvalId, decision });
-  }
-}
 
 function approvalState(status: "pending" | "expired"): ExtensionToWebviewMessage {
   return {

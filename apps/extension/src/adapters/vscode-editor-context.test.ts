@@ -3,6 +3,7 @@ import { maxIdeTextCodePoints, maxIdeTextLines } from "@ctrl-zebra/protocol";
 import { describe, expect, it, vi } from "vitest";
 import type { TextDocument, TextEditor, TextLine, Uri } from "vscode";
 
+import { createTestUri as uri } from "../test/support/test-uri.js";
 import { VsCodeEditorContext } from "./vscode-editor-context.js";
 import { WorkspaceScope } from "./workspace-scope.js";
 
@@ -367,33 +368,4 @@ function position(line: number, character: number) {
 
 function signal(): AbortSignal {
   return new AbortController().signal;
-}
-
-class TestUri implements Uri {
-  readonly scheme = "file";
-  readonly authority = "";
-  readonly query = "";
-  readonly fragment = "";
-
-  constructor(readonly path: string) {}
-
-  get fsPath(): string {
-    return this.path;
-  }
-
-  with(change: { path?: string }): Uri {
-    return new TestUri(change.path ?? this.path);
-  }
-
-  toString(): string {
-    return `file://${this.path}`;
-  }
-
-  toJSON(): unknown {
-    return { scheme: this.scheme, authority: this.authority, path: this.path };
-  }
-}
-
-function uri(path: string): Uri {
-  return new TestUri(path);
 }

@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Uri } from "vscode";
+
+import { createTestUri as uri } from "../test/support/test-uri.js";
 import { WorkspaceFileLister, type WorkspaceFindFiles } from "./workspace-file-lister.js";
 import { WorkspaceScopeError } from "./workspace-scope.js";
 
@@ -75,44 +77,3 @@ describe("WorkspaceFileLister", () => {
     expect(findFiles).not.toHaveBeenCalled();
   });
 });
-
-class TestUri implements Uri {
-  readonly scheme = "file";
-  readonly authority = "";
-  readonly query = "";
-  readonly fragment = "";
-
-  constructor(readonly path: string) {}
-
-  get fsPath(): string {
-    return this.path;
-  }
-
-  with(change: {
-    scheme?: string;
-    authority?: string;
-    path?: string;
-    query?: string;
-    fragment?: string;
-  }): Uri {
-    return new TestUri(change.path ?? this.path);
-  }
-
-  toString(): string {
-    return `file://${this.path}`;
-  }
-
-  toJSON() {
-    return {
-      scheme: this.scheme,
-      authority: this.authority,
-      path: this.path,
-      query: this.query,
-      fragment: this.fragment,
-    };
-  }
-}
-
-function uri(path: string): Uri {
-  return new TestUri(path);
-}

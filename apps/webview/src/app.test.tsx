@@ -1,110 +1,11 @@
-import {
-  type ApprovalDecisionIntent,
-  type ExtensionToWebviewMessage,
-  protocolVersion,
-  type WebviewToExtensionMessage,
-} from "@ctrl-zebra/protocol";
+import { protocolVersion } from "@ctrl-zebra/protocol";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./app.js";
 import { strings } from "./strings.js";
-import type { WebviewHost } from "./vscode-api.js";
-
-class FakeWebviewHost implements WebviewHost {
-  readonly sent: WebviewToExtensionMessage[] = [];
-  readonly listeners = new Set<(message: ExtensionToWebviewMessage) => void>();
-
-  submit(requestId: string, content: string, sessionId?: string): void {
-    this.sent.push({
-      protocolVersion,
-      type: "webview/submit",
-      requestId,
-      content,
-      ...(sessionId === undefined ? {} : { sessionId }),
-    });
-  }
-
-  newChat(requestId: string): void {
-    this.sent.push({ protocolVersion, type: "webview/new-chat", requestId });
-  }
-
-  cancel(requestId: string): void {
-    this.sent.push({ protocolVersion, type: "webview/cancel", requestId });
-  }
-
-  showApprovalDiff(requestId: string, approvalId: string): void {
-    this.sent.push({
-      protocolVersion,
-      type: "webview/show-approval-diff",
-      requestId,
-      approvalId,
-    });
-  }
-
-  decideApproval(requestId: string, approvalId: string, decision: ApprovalDecisionIntent): void {
-    this.sent.push({
-      protocolVersion,
-      type: "webview/approval-decision",
-      requestId,
-      approvalId,
-      decision,
-    });
-  }
-
-  listSessions(requestId: string): void {
-    this.sent.push({ protocolVersion, type: "webview/list-sessions", requestId });
-  }
-
-  restoreSession(requestId: string, sessionId: string): void {
-    this.sent.push({ protocolVersion, type: "webview/restore-session", requestId, sessionId });
-  }
-
-  listCheckpoints(requestId: string): void {
-    this.sent.push({ protocolVersion, type: "webview/list-checkpoints", requestId });
-  }
-
-  restoreCheckpoint(requestId: string, checkpointId: string): void {
-    this.sent.push({
-      protocolVersion,
-      type: "webview/restore-checkpoint",
-      requestId,
-      checkpointId,
-    });
-  }
-
-  refreshEditorContext(
-    requestId: string,
-    viewGeneration: number,
-    sessionGeneration: number,
-    cardGeneration: number,
-    contextId: string,
-    scope: "selection" | "active-editor",
-  ): void {
-    this.sent.push({
-      protocolVersion,
-      type: "webview/editor-context-refresh",
-      requestId,
-      viewGeneration,
-      sessionGeneration,
-      cardGeneration,
-      contextId,
-      scope,
-    });
-  }
-
-  subscribe(listener: (message: ExtensionToWebviewMessage) => void): () => void {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
-  }
-
-  emit(message: ExtensionToWebviewMessage): void {
-    for (const listener of this.listeners) {
-      listener(message);
-    }
-  }
-}
+import { createWebviewHostFixture } from "./test/support/webview-host.js";
 
 describe("App streaming chat", () => {
   let animationFrames: Array<FrameRequestCallback | undefined>;
@@ -121,7 +22,7 @@ describe("App streaming chat", () => {
   });
 
   it("lists Agent changes and requests a selected Checkpoint restore", async () => {
-    const host = new FakeWebviewHost();
+    const host = createWebviewHostFixture();
     const ids = ["checkpoint-list-1", "checkpoint-restore-1"];
     const user = userEvent.setup();
     render(<App host={host} createRequestId={() => ids.shift() ?? "unexpected"} />);
@@ -177,7 +78,7 @@ describe("App streaming chat", () => {
   });
 
   it("lists saved sessions and restores their messages", async () => {
-    const host = new FakeWebviewHost();
+    const host = createWebviewHostFixture();
     const ids = ["list-1", "restore-1"];
     const user = userEvent.setup();
     render(<App host={host} createRequestId={() => ids.shift() ?? "unexpected"} />);
@@ -250,7 +151,7 @@ describe("App streaming chat", () => {
   });
 
   it("shows the confirmed current Session and carries it into the next submit", async () => {
-    const host = new FakeWebviewHost();
+    const host = createWebviewHostFixture();
     const ids = ["request-1", "request-2"];
     const user = userEvent.setup();
     render(<App host={host} createRequestId={() => ids.shift() ?? "unexpected"} />);
@@ -295,7 +196,7 @@ describe("App streaming chat", () => {
   });
 
   it("starts a focused New chat and omits the previous Session ID", async () => {
-    const host = new FakeWebviewHost();
+    const host = createWebviewHostFixture();
     const ids = ["request-1", "new-chat-1", "request-2"];
     const user = userEvent.setup();
     render(<App host={host} createRequestId={() => ids.shift() ?? "unexpected"} />);
@@ -348,7 +249,7 @@ describe("App streaming chat", () => {
   });
 
   it("shows an interrupted recovery without starting a run", async () => {
-    const host = new FakeWebviewHost();
+    const host = createWebviewHostFixture();
     const ids = ["list-interrupted", "restore-interrupted"];
     const user = userEvent.setup();
     render(<App host={host} createRequestId={() => ids.shift() ?? "unexpected"} />);
@@ -390,7 +291,7 @@ describe("App streaming chat", () => {
   });
 
   it("submits user content and renders a correlated pending response", async () => {
-    const host = new FakeWebviewHost();
+    const host = createWebviewHostFixture();
     const user = userEvent.setup();
     render(<App host={host} createRequestId={() => "request-1"} />);
 
@@ -414,7 +315,7 @@ describe("App streaming chat", () => {
   });
 
   it("batches ordered deltas and flushes the final response on completion", async () => {
-    const host = new FakeWebviewHost();
+    const host = createWebviewHostFixture();
     const user = userEvent.setup();
     render(<App host={host} createRequestId={() => "request-1"} />);
     await user.type(screen.getByRole("textbox", { name: "Message" }), "Say hello.");
@@ -468,7 +369,7 @@ describe("App streaming chat", () => {
   });
 
   it("shows a partial answer and an explicit prompt when the response is truncated", async () => {
-    const host = new FakeWebviewHost();
+    const host = createWebviewHostFixture();
     const user = userEvent.setup();
     render(<App host={host} createRequestId={() => "request-truncated"} />);
     await user.type(screen.getByRole("textbox", { name: "Message" }), "Keep answering.");
@@ -513,7 +414,7 @@ describe("App streaming chat", () => {
     ["tool", "Review the tool results and try again."],
     ["internal", "Try again or reload the window if it continues."],
   ] as const)("renders the %s run error prompt as an alert", async (code, message) => {
-    const host = new FakeWebviewHost();
+    const host = createWebviewHostFixture();
     const user = userEvent.setup();
     render(<App host={host} createRequestId={() => "request-error"} />);
     await user.type(screen.getByRole("textbox", { name: "Message" }), "Hello.");
@@ -542,7 +443,7 @@ describe("App streaming chat", () => {
   });
 
   it("clears a previous run error when a new run begins", async () => {
-    const host = new FakeWebviewHost();
+    const host = createWebviewHostFixture();
     const ids = ["request-1", "request-2"];
     const user = userEvent.setup();
     render(<App host={host} createRequestId={() => ids.shift() ?? "unexpected"} />);
@@ -573,7 +474,7 @@ describe("App streaming chat", () => {
   });
 
   it("sends cancellation and ignores every later delta", async () => {
-    const host = new FakeWebviewHost();
+    const host = createWebviewHostFixture();
     const user = userEvent.setup();
     render(<App host={host} createRequestId={() => "request-1"} />);
     await user.type(screen.getByRole("textbox", { name: "Message" }), "Keep going.");
@@ -626,7 +527,7 @@ describe("App streaming chat", () => {
   });
 
   it("updates one Tool Call card through pending, running, and success", async () => {
-    const host = new FakeWebviewHost();
+    const host = createWebviewHostFixture();
     const user = userEvent.setup();
     render(<App host={host} createRequestId={() => "request-tool"} />);
     await user.type(screen.getByRole("textbox", { name: "Message" }), "Read the file.");
@@ -702,7 +603,7 @@ describe("App streaming chat", () => {
   });
 
   it("renders a pending Approval and sends only its identifier and user intent", async () => {
-    const host = new FakeWebviewHost();
+    const host = createWebviewHostFixture();
     const user = userEvent.setup();
     render(<App host={host} />);
 
@@ -750,7 +651,7 @@ describe("App streaming chat", () => {
   });
 
   it("terminates the active command through the correlated Run cancellation", async () => {
-    const host = new FakeWebviewHost();
+    const host = createWebviewHostFixture();
     const user = userEvent.setup();
     render(<App host={host} createRequestId={() => "request-command"} />);
     await user.type(screen.getByRole("textbox", { name: "Message" }), "Run the check.");
@@ -808,7 +709,7 @@ describe("App streaming chat", () => {
   });
 
   it("renders reasoning beside answer and Tool state without reopening a collapsed block", async () => {
-    const host = new FakeWebviewHost();
+    const host = createWebviewHostFixture();
     const user = userEvent.setup();
     render(<App host={host} createRequestId={() => "request-reasoning"} />);
     await user.type(screen.getByRole("textbox", { name: "Message" }), "Inspect this.");
@@ -879,7 +780,7 @@ describe("App streaming chat", () => {
   });
 
   it("does not render reasoning UI when the Provider sends no retained summary", async () => {
-    const host = new FakeWebviewHost();
+    const host = createWebviewHostFixture();
     const user = userEvent.setup();
     render(<App host={host} createRequestId={() => "request-no-reasoning"} />);
     await user.type(screen.getByRole("textbox", { name: "Message" }), "Answer normally.");
@@ -902,7 +803,7 @@ describe("App streaming chat", () => {
   });
 
   it("restores a completed reasoning summary collapsed without a live announcement", async () => {
-    const host = new FakeWebviewHost();
+    const host = createWebviewHostFixture();
     const ids = ["list-reasoning", "restore-reasoning"];
     const user = userEvent.setup();
     render(<App host={host} createRequestId={() => ids.shift() ?? "unexpected"} />);
@@ -973,7 +874,7 @@ describe("App streaming chat", () => {
   });
 
   it("populates composer draft when selecting an onboarding sample prompt (T1104)", async () => {
-    const host = new FakeWebviewHost();
+    const host = createWebviewHostFixture();
     const user = userEvent.setup();
     render(<App host={host} />);
 
@@ -986,7 +887,7 @@ describe("App streaming chat", () => {
   });
 
   it("submits message on Enter key without Shift and renders code blocks safely (T1105)", async () => {
-    const host = new FakeWebviewHost();
+    const host = createWebviewHostFixture();
     const user = userEvent.setup();
     render(<App host={host} createRequestId={() => "request-enter"} />);
 
@@ -1017,7 +918,7 @@ describe("App streaming chat", () => {
   });
 
   it("blocks a form submit while an editor-context Refresh is pending", async () => {
-    const host = new FakeWebviewHost();
+    const host = createWebviewHostFixture();
     const user = userEvent.setup();
     render(<App host={host} createRequestId={ids(["editor-refresh", "submit"])} />);
     act(() =>

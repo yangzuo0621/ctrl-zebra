@@ -7,6 +7,7 @@ import {
 import { describe, expect, it, vi } from "vitest";
 import type { TextDocument, Uri } from "vscode";
 
+import { createTestUri as uri } from "../test/support/test-uri.js";
 import {
   InvalidLanguageServiceOutputError,
   VsCodeLanguageServices,
@@ -651,37 +652,6 @@ function rangeValue(
     start: { line: startLine, character: startCharacter },
     end: { line: endLine, character: endCharacter },
   };
-}
-
-class TestUri implements Uri {
-  readonly authority = "";
-  readonly query = "";
-  readonly fragment = "";
-
-  constructor(
-    readonly path: string,
-    readonly scheme = "file",
-  ) {}
-
-  get fsPath(): string {
-    return this.path;
-  }
-
-  with(change: { path?: string }): Uri {
-    return new TestUri(change.path ?? this.path, this.scheme);
-  }
-
-  toString(): string {
-    return `${this.scheme}://${this.path}`;
-  }
-
-  toJSON(): unknown {
-    return { scheme: this.scheme, authority: this.authority, path: this.path };
-  }
-}
-
-function uri(path: string, scheme = "file"): Uri {
-  return new TestUri(path, scheme);
 }
 
 function signal(): AbortSignal {

@@ -9,6 +9,7 @@ import {
 import { describe, expect, it, vi } from "vitest";
 import type { Diagnostic, TextDocument, TextEditor, Uri } from "vscode";
 
+import { createTestUri as uri } from "../test/support/test-uri.js";
 import { VsCodeDiagnostics } from "./vscode-diagnostics.js";
 import { WorkspaceScope } from "./workspace-scope.js";
 
@@ -456,35 +457,6 @@ function diagnostic(
     ...(code === undefined ? {} : { code }),
     ...(source === undefined ? {} : { source }),
   } as unknown as Diagnostic;
-}
-
-class TestUri implements Uri {
-  readonly scheme = "file";
-  readonly authority = "";
-  readonly query = "";
-  readonly fragment = "";
-
-  constructor(readonly path: string) {}
-
-  get fsPath(): string {
-    return this.path;
-  }
-
-  with(change: { path?: string }): Uri {
-    return new TestUri(change.path ?? this.path);
-  }
-
-  toString(): string {
-    return `file://${this.path}`;
-  }
-
-  toJSON(): unknown {
-    return { scheme: this.scheme, authority: this.authority, path: this.path };
-  }
-}
-
-function uri(path: string): Uri {
-  return new TestUri(path);
 }
 
 function signal(): AbortSignal {
