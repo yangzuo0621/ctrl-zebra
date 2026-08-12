@@ -1,3 +1,9 @@
+import {
+  ProviderEndpointPolicyError,
+  type ProviderEndpointPolicyResult,
+  providerEndpointPolicy,
+} from "./provider-endpoint-policy.js";
+
 export const providerIds = ["openai", "gemini", "openai-compatible"] as const;
 export type ProviderId = (typeof providerIds)[number];
 
@@ -101,7 +107,7 @@ export function readProviderConfiguration(reader: ConfigurationReader): Provider
       modelId,
       endpoint: endpoint.value,
       capabilities: readCompatibleCapabilities(reader.get(providerSettingNames.capabilities)),
-      requiresApiKey: !endpoint.isLoopback,
+      requiresApiKey: endpoint.requiresApiKey,
     };
   }
 
@@ -160,7 +166,7 @@ export function readProviderOnboardingConfiguration(
     const endpoint = readOptionalEndpoint(reader.get(providerSettingNames.endpoint));
     if (provider === "openai-compatible") {
       endpointValid = endpoint !== undefined;
-      apiKeyRequired = endpoint === undefined || !endpoint.isLoopback;
+      apiKeyRequired = endpoint === undefined || endpoint.requiresApiKey;
     }
   } catch {
     endpointValid = false;
@@ -214,42 +220,15 @@ function isValidSelectionModelId(value: string): boolean {
   );
 }
 
-interface ValidatedEndpoint {
-  readonly value: string;
-  readonly isLoopback: boolean;
-}
-
-function readOptionalEndpoint(value: unknown): ValidatedEndpoint | undefined {
-  if (value === undefined || value === "") {
-    return undefined;
-  }
-
-  if (typeof value !== "string" || value.trim() !== value) {
-    throw invalidEndpointError();
-  }
-
-  let endpoint: URL;
+function readOptionalEndpoint(value: unknown): ProviderEndpointPolicyResult | undefined {
   try {
-    endpoint = new URL(value);
-  } catch {
-    throw invalidEndpointError();
+    return providerEndpointPolicy.evaluate(value);
+  } catch (error) {
+    if (error instanceof ProviderEndpointPolicyError) {
+      throw invalidEndpointError();
+    }
+    throw error;
   }
-
-  if (
-    endpoint.username !== "" ||
-    endpoint.password !== "" ||
-    endpoint.search !== "" ||
-    endpoint.hash !== ""
-  ) {
-    throw invalidEndpointError();
-  }
-
-  const isLoopback = isExplicitLoopbackHostname(endpoint.hostname);
-  if (endpoint.protocol !== "https:" && !(endpoint.protocol === "http:" && isLoopback)) {
-    throw invalidEndpointError();
-  }
-
-  return { value: endpoint.toString(), isLoopback };
 }
 
 function invalidEndpointError(): ProviderConfigurationError {
@@ -257,20 +236,6 @@ function invalidEndpointError(): ProviderConfigurationError {
     "invalid-endpoint",
     providerSettingNames.endpoint,
     "Use an HTTPS endpoint, or HTTP only with an explicit local loopback address.",
-  );
-}
-
-function isExplicitLoopbackHostname(hostname: string): boolean {
-  const normalizedHostname = hostname.toLowerCase().replace(/^\[|\]$/g, "");
-  if (normalizedHostname === "localhost" || normalizedHostname === "::1") {
-    return true;
-  }
-
-  const octets = normalizedHostname.split(".");
-  return (
-    octets.length === 4 &&
-    octets.every((octet) => /^\d{1,3}$/.test(octet) && Number(octet) <= 255) &&
-    Number(octets[0]) === 127
   );
 }
 

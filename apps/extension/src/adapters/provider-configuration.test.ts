@@ -115,18 +115,13 @@ describe("Provider configuration", () => {
     });
   });
 
-  it.each([
-    ["https://models.example.test/v1", true],
-    ["http://localhost:11434/v1", false],
-    ["http://127.24.0.1:11434/v1", false],
-    ["http://[::1]:11434/v1", false],
-  ] as const)("accepts an OpenAI-Compatible endpoint %s", (endpoint, requiresApiKey) => {
+  it("uses the endpoint policy decision for a compatible configuration", () => {
     expect(
       readProviderConfiguration(
         configuration({
           id: "openai-compatible",
           model: "compatible-test-model",
-          endpoint,
+          endpoint: "https://models.example.test/v1",
           capabilities: ["text-streaming"],
         }),
       ),
@@ -134,9 +129,9 @@ describe("Provider configuration", () => {
       version: 1,
       provider: "openai-compatible",
       modelId: "compatible-test-model",
-      endpoint,
+      endpoint: "https://models.example.test/v1",
       capabilities: ["text-streaming"],
-      requiresApiKey,
+      requiresApiKey: true,
     });
   });
 
@@ -157,26 +152,6 @@ describe("Provider configuration", () => {
     ["missing model", { id: "openai" }, "missing-model"],
     ["invalid model", { id: "gemini", model: " gemini-test" }, "invalid-model"],
     ["missing compatible endpoint", { id: "openai-compatible", model: "test" }, "missing-endpoint"],
-    [
-      "remote HTTP endpoint",
-      { id: "openai-compatible", model: "test", endpoint: "http://models.example.test/v1" },
-      "invalid-endpoint",
-    ],
-    [
-      "loopback lookalike",
-      { id: "openai-compatible", model: "test", endpoint: "http://localhost.example.test/v1" },
-      "invalid-endpoint",
-    ],
-    [
-      "credential-bearing endpoint",
-      { id: "openai-compatible", model: "test", endpoint: "https://user@models.example/v1" },
-      "invalid-endpoint",
-    ],
-    [
-      "endpoint with query",
-      { id: "openai-compatible", model: "test", endpoint: "https://models.example/v1?key=x" },
-      "invalid-endpoint",
-    ],
     [
       "unknown capability",
       {
