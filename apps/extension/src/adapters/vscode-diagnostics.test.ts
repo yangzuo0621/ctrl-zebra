@@ -1,8 +1,10 @@
 import { DiagnosticsUnavailableError } from "@ctrl-zebra/builtin-tools";
 import {
+  maxIdeDiagnosticAggregateBytes,
   maxIdeDiagnosticAggregateCodePoints,
   maxIdeDiagnosticEntries,
   maxIdeDiagnosticMessageCodePoints,
+  maxIdeLanguageIdBytes,
 } from "@ctrl-zebra/protocol";
 import { describe, expect, it, vi } from "vitest";
 import type { Diagnostic, TextDocument, TextEditor, Uri } from "vscode";
@@ -195,12 +197,86 @@ describe("VsCodeDiagnostics", () => {
     );
   });
 
+  it("counts the top-level source at the aggregate boundary", async () => {
+    const count = 32;
+    const sourceCodePoints = ["file", "", "src/index.ts", "typescript"].reduce(
+      (total, value) => total + [...value].length,
+      0,
+    );
+    const finalMessageCodePoints =
+      maxIdeDiagnosticAggregateCodePoints -
+      sourceCodePoints * (count + 1) -
+      (count - 1) * maxIdeDiagnosticMessageCodePoints;
+    const document = createDocument(
+      Array.from({ length: count }, () => "x").join("\n"),
+      "/workspace/src/index.ts",
+    );
+    const exact = Array.from({ length: count }, (_, index) =>
+      diagnostic(
+        index,
+        0,
+        index,
+        1,
+        2,
+        index === count - 1
+          ? "😀".repeat(finalMessageCodePoints)
+          : "😀".repeat(maxIdeDiagnosticMessageCodePoints),
+      ),
+    );
+    const exactResult = await createAdapter(createEditor(document), () => exact).getDiagnostics(
+      { scope: "active-file" },
+      signal(),
+    );
+    expect(exactResult.diagnostics).toHaveLength(count);
+    expect(exactResult.truncated).toBe(false);
+
+    const sourceBytes = ["file", "", "src/index.ts", "typescript"].reduce(
+      (total, value) => total + new TextEncoder().encode(value).length,
+      0,
+    );
+    const exactBytes =
+      sourceBytes * (count + 1) +
+      ((count - 1) * maxIdeDiagnosticMessageCodePoints + finalMessageCodePoints) * 4;
+    const oneOverAstrals = Math.floor((maxIdeDiagnosticAggregateBytes - exactBytes) / 4) + 1;
+    const oneOver = exact.map((value, index) =>
+      index === count - 1
+        ? { ...value, message: `${value.message}${"😀".repeat(oneOverAstrals)}` }
+        : value,
+    );
+    const oneOverResult = await createAdapter(createEditor(document), () => oneOver).getDiagnostics(
+      { scope: "active-file" },
+      signal(),
+    );
+    expect(oneOverResult.diagnostics).toHaveLength(count - 1);
+    expect(oneOverResult.truncated).toBe(true);
+    expect(oneOverResult.truncationReasons).toEqual(
+      expect.arrayContaining(["code-points", "utf8-bytes"]),
+    );
+    expect(maxIdeDiagnosticAggregateBytes).toBe(maxIdeDiagnosticAggregateCodePoints * 4);
+  });
+
   it("rejects ranges from a closed file when the host cannot verify document bounds", async () => {
     await expect(
       createAdapter(undefined, () => [diagnostic(0, 0, 0, 1, 2, "closed")]).getDiagnostics(
         { scope: "workspace", path: "src/index.ts" },
         signal(),
       ),
+    ).rejects.toThrow("Diagnostics returned invalid output.");
+  });
+
+  it("rejects an oversized astral language id instead of silently prefixing it", async () => {
+    const atByteLimit = "😀".repeat(maxIdeLanguageIdBytes / 4);
+    const exactDocument = createDocument("x", "/workspace/src/index.ts", atByteLimit);
+    const exact = await createAdapter(createEditor(exactDocument), () => [
+      diagnostic(0, 0, 0, 1, 2, "exact"),
+    ]).getDiagnostics({ scope: "active-file" }, signal());
+    expect(exact.diagnostics[0]?.source.languageId).toBe(atByteLimit);
+
+    const oversizedDocument = createDocument("x", "/workspace/src/index.ts", `${atByteLimit}😀`);
+    await expect(
+      createAdapter(createEditor(oversizedDocument), () => [
+        diagnostic(0, 0, 0, 1, 2, "over"),
+      ]).getDiagnostics({ scope: "active-file" }, signal()),
     ).rejects.toThrow("Diagnostics returned invalid output.");
   });
 
@@ -339,7 +415,7 @@ function createAdapter(
   });
 }
 
-function createDocument(text: string, path: string): TextDocument {
+function createDocument(text: string, path: string, languageId = "typescript"): TextDocument {
   let version = 1;
   const lines = text.split(/\r\n|\n/u);
   return {
@@ -350,7 +426,7 @@ function createDocument(text: string, path: string): TextDocument {
     set version(value: number) {
       version = value;
     },
-    languageId: "typescript",
+    languageId,
     lineCount: lines.length,
     lineAt: (line: number) => ({ text: lines[line] ?? "" }),
   } as unknown as TextDocument;

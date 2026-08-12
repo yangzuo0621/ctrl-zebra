@@ -386,10 +386,17 @@ export class VsCodeDiagnostics implements IdeDiagnosticsPort {
 
     const budget = new DiagnosticBudget();
     const accepted: NormalizedCandidate[] = [];
-    for (const candidate of candidates) {
-      this.#assertOpen(signal, snapshot.generation);
-      if (budget.fit(candidate.aggregateValues) === undefined) break;
-      accepted.push(candidate);
+    const firstSource = candidates[0]?.source;
+    const topLevelSourceValues =
+      firstSource === undefined
+        ? sourceAggregateValues(this.#resultSource(snapshot, candidates, stale, false, new Set()))
+        : sourceAggregateValues(firstSource);
+    if (budget.fit(topLevelSourceValues) !== undefined) {
+      for (const candidate of candidates) {
+        this.#assertOpen(signal, snapshot.generation);
+        if (budget.fit(candidate.aggregateValues) === undefined) break;
+        accepted.push(candidate);
+      }
     }
     for (const reason of budget.takeReasons) reasons.add(reason);
     this.#assertOpen(signal, snapshot.generation);
@@ -809,8 +816,14 @@ function readDocumentVersion(document: TextDocument): number | undefined {
 
 function readLanguageId(document: TextDocument): string | undefined {
   return typeof document.languageId === "string" && document.languageId.length > 0
-    ? takeBoundedText(document.languageId, maxIdeLanguageIdCodePoints, maxIdeLanguageIdBytes).text
+    ? readBoundedLanguageId(document.languageId)
     : undefined;
+}
+
+function readBoundedLanguageId(value: string): string {
+  const projection = takeBoundedText(value, maxIdeLanguageIdCodePoints, maxIdeLanguageIdBytes);
+  if (projection.truncated) throw new InvalidDiagnosticsOutputError();
+  return projection.text;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -920,6 +933,15 @@ function orderedReasons(reasons: Iterable<IdeTruncationReason>): readonly IdeTru
 
 function candidateKey(candidate: NormalizedCandidate): string {
   return JSON.stringify({ source: candidate.source, diagnostic: candidate.diagnostic });
+}
+
+function sourceAggregateValues(source: IdeSourceDto): readonly string[] {
+  return [
+    source.uri.scheme,
+    source.uri.authority,
+    source.uri.path,
+    ...(source.languageId === undefined ? [] : [source.languageId]),
+  ];
 }
 
 function compareCandidates(left: NormalizedCandidate, right: NormalizedCandidate): number {
