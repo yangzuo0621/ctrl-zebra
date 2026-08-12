@@ -96,10 +96,11 @@
     harness logged the non-fatal `Canceled Failed to load custom agents` warning.
   - `git diff --check` passed before commit/review; no configuration, command, public-contract,
     persistence, dependency, or package-boundary files changed.
-- PR/branch: [draft PR #217](https://github.com/yangzuo0621/ctrl-zebra/pull/217),
+- PR/branch: [PR #217](https://github.com/yangzuo0621/ctrl-zebra/pull/217),
   `codex/eo-003-ide-source-projection`, rebased onto latest exact `origin/main` commit
   `ec33eeb01aea5c2ceb8e6917ef5887147a25ed26` (original branch base was
   `0ce670c48beb623128f9a9a5231a60c0e2aa26be`).
-- Review handoff: Task-reviewer must independently verify projector equivalence, deletion of the
+- Review and closure: Task-reviewer independently approved projector equivalence, deletion of the
   three superseded algorithms, caller-specific error/DTO behavior, public-contract stability, and
-  the evidence above.
+  the evidence above. Required repository CI checks passed on Ubuntu, macOS, and Windows; no
+  blocking findings remain.

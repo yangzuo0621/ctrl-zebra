@@ -218,7 +218,7 @@ EO-001 可以独立进行。EO-009 和 EO-011 不应阻塞 Phase 20–22。
 
 | 日期 | 机会 | 处置 | 正式记录 | 说明 |
 |---|---|---|---|---|
-| 2026-08-12 | EO-003 IDE source projection | 晋升为独立 maintenance；实现中 | [EO-003 maintenance record](maintenance/EO-003-ide-source-projection.md)；[draft PR #217](https://github.com/yangzuo0621/ctrl-zebra/pull/217) | 已重新验证三处 Extension adapter 的重复 URI、路径、Unicode、range 和排序逻辑；先锁定 projector 契约，再迁移调用方。 |
+| 2026-08-12 | EO-003 IDE source projection | 独立 maintenance 已完成 | [EO-003 maintenance record](maintenance/EO-003-ide-source-projection.md)；[PR #217](https://github.com/yangzuo0621/ctrl-zebra/pull/217) | Projector 契约、三处 adapter 迁移及全套验证已完成；Task-reviewer 已批准，PR 通过 CI 后按 reviewed squash flow 合入。 |
 | 2026-08-12 | EO-001–EO-011 | 初始登记 | — | 来自 Phase 19 后的重复实现与 Build vs Buy 审查 |
 | 2026-08-12 | EO-001 | 已晋升为独立 maintenance | [EO-001 maintenance](maintenance/EO-001-provider-endpoint-policy.md) / [PR #215](https://github.com/yangzuo0621/ctrl-zebra/pull/215) | 在最新 `origin/main` 上重新验证两处重复 endpoint/loopback 判定后建立 Extension-private policy seam |
 | 2026-08-12 | EO-002 | 已晋升为独立 maintenance | [EO-002 maintenance](maintenance/EO-002-extension-test-support.md) | 在最新 `origin/main` 上重新验证六份 Extension `TestUri` 与两份 Webview host fake 后建立两个 application-private test-support seam |
