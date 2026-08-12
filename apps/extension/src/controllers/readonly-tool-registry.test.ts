@@ -1,5 +1,6 @@
 import type {
   IdeContextPort,
+  IdeDiagnosticsPort,
   ListFilesInput,
   ProposeFileEditWorkspace,
   ReadFileInput,
@@ -96,6 +97,33 @@ describe("createWorkspaceToolRegistryProvider", () => {
         .get("read_editor_context")
         ?.execute({ scope: "active-editor" }, { signal: new AbortController().signal }),
     ).resolves.toMatchObject({ output: { kind: "editor-context", context: { text: "text" } } });
+  });
+
+  it("composes host diagnostics as a read-only Tool when supplied", async () => {
+    const diagnostics: IdeDiagnosticsPort = {
+      getDiagnostics: async () => ({
+        kind: "diagnostics",
+        source: {
+          uri: { scheme: "file", authority: "", path: "src/index.ts" },
+          stale: false,
+          truncated: false,
+        },
+        diagnostics: [],
+        stale: false,
+        truncated: false,
+      }),
+    };
+    const provider = createWorkspaceToolRegistryProvider(
+      createDependencies([uri("/workspace")], { diagnostics }).values,
+    );
+
+    const registry = await provider.get(new AbortController().signal);
+    expect(registry.declarations().map(({ name }) => name)).toContain("get_diagnostics");
+    await expect(
+      registry
+        .get("get_diagnostics")
+        ?.execute({ scope: "workspace" }, { signal: new AbortController().signal }),
+    ).resolves.toMatchObject({ output: { kind: "diagnostics", diagnostics: [] } });
   });
 
   it("composes the concrete VS Code editor adapter into the production-shaped registry", async () => {
@@ -207,6 +235,7 @@ function createDependencies(
     readonly readPrefix?: ReadWorkspaceFilePrefix;
     readonly trusted?: boolean;
     readonly editorContext?: IdeContextPort;
+    readonly diagnostics?: IdeDiagnosticsPort;
   } = {},
 ) {
   let trusted = overrides.trusted ?? true;
@@ -263,6 +292,7 @@ function createDependencies(
         },
       },
       editorContext: overrides.editorContext,
+      diagnostics: overrides.diagnostics,
     },
     joinPath,
     registerWorkspaceChange,

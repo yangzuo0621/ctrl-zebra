@@ -13,6 +13,17 @@ export const maxIdeTextLines = 2_000;
 export const maxIdeTextBytes = 262_144;
 export const maxIdePositionLine = maxIdeTextLines - 1;
 export const maxIdePositionCharacter = 131_072;
+export const maxIdeDiagnosticEntries = 256;
+export const maxIdeDiagnosticAggregateCodePoints = 131_072;
+export const maxIdeDiagnosticAggregateBytes = 524_288;
+export const maxIdeDiagnosticMessageCodePoints = 4_096;
+export const maxIdeDiagnosticMessageBytes = 16_384;
+export const maxIdeDiagnosticLabelCodePoints = 1_024;
+export const maxIdeDiagnosticLabelBytes = 4_096;
+
+export const ideDiagnosticSeverities = ["error", "warning", "information", "hint"] as const;
+
+export type IdeDiagnosticSeverity = (typeof ideDiagnosticSeverities)[number];
 
 export const ideTruncationReasons = [
   "code-points",
@@ -53,10 +64,16 @@ export const idePositionSchema = z.strictObject({
   character: z.number().int().min(0).max(maxIdePositionCharacter),
 });
 
-export const ideRangeSchema = z.strictObject({
-  start: idePositionSchema,
-  end: idePositionSchema,
-});
+export const ideRangeSchema = z
+  .strictObject({
+    start: idePositionSchema,
+    end: idePositionSchema,
+  })
+  .superRefine((range, context) => {
+    if (compareIdePositions(range.start, range.end) > 0) {
+      context.addIssue({ code: "custom", message: "IDE ranges must not be reversed." });
+    }
+  });
 
 export const ideSourceSchema = z
   .strictObject({
@@ -101,12 +118,98 @@ export const ideEditorContextResultSchema = z.strictObject({
   context: ideTextContextSchema,
 });
 
+const ideDiagnosticSeveritySchema = z.enum(ideDiagnosticSeverities);
+const ideDiagnosticMessageSchema = boundedTextSchema(
+  maxIdeDiagnosticMessageCodePoints,
+  maxIdeDiagnosticMessageBytes,
+);
+const ideDiagnosticLabelSchema = boundedTextSchema(
+  maxIdeDiagnosticLabelCodePoints,
+  maxIdeDiagnosticLabelBytes,
+);
+
+export const ideDiagnosticSchema = z.strictObject({
+  source: ideSourceSchema,
+  severity: ideDiagnosticSeveritySchema,
+  message: ideDiagnosticMessageSchema,
+  code: ideDiagnosticLabelSchema.optional(),
+  origin: ideDiagnosticLabelSchema.optional(),
+});
+
+export const ideDiagnosticsResultSchema = z
+  .strictObject({
+    kind: z.literal("diagnostics"),
+    source: ideSourceSchema,
+    diagnostics: z.array(ideDiagnosticSchema).max(maxIdeDiagnosticEntries),
+    stale: z.boolean(),
+    truncated: z.boolean(),
+    truncationReasons: z
+      .array(ideTruncationReasonSchema)
+      .min(1)
+      .max(ideTruncationReasons.length)
+      .optional(),
+  })
+  .superRefine((result, context) => {
+    const reasons = result.truncationReasons;
+    if (result.truncated && reasons === undefined) {
+      context.addIssue({
+        code: "custom",
+        message: "A truncated diagnostic result must include reasons.",
+      });
+    }
+    if (!result.truncated && reasons !== undefined) {
+      context.addIssue({
+        code: "custom",
+        message: "An untruncated diagnostic result must omit truncation reasons.",
+      });
+    }
+    if (reasons !== undefined && new Set(reasons).size !== reasons.length) {
+      context.addIssue({
+        code: "custom",
+        message: "Diagnostic truncation reasons must be unique.",
+      });
+    }
+
+    let codePoints = 0;
+    let bytes = 0;
+    for (const value of [
+      result.source,
+      ...result.diagnostics.map((diagnostic) => diagnostic.source),
+    ]) {
+      for (const text of sourceStrings(value)) {
+        codePoints += [...text].length;
+        bytes += utf8ByteLength(text);
+      }
+    }
+    for (const diagnostic of result.diagnostics) {
+      for (const text of [diagnostic.message, diagnostic.code, diagnostic.origin]) {
+        if (text === undefined) continue;
+        codePoints += [...text].length;
+        bytes += utf8ByteLength(text);
+      }
+    }
+    if (codePoints > maxIdeDiagnosticAggregateCodePoints) {
+      context.addIssue({
+        code: "custom",
+        message: `Diagnostic output must not exceed ${maxIdeDiagnosticAggregateCodePoints} Unicode code points.`,
+      });
+    }
+    if (bytes > maxIdeDiagnosticAggregateBytes) {
+      context.addIssue({
+        code: "custom",
+        message: `Diagnostic output must not exceed ${maxIdeDiagnosticAggregateBytes} UTF-8 bytes.`,
+      });
+    }
+  });
+
 export type IdeUriDto = z.infer<typeof ideUriSchema>;
 export type IdePositionDto = z.infer<typeof idePositionSchema>;
 export type IdeRangeDto = z.infer<typeof ideRangeSchema>;
 export type IdeSourceDto = z.infer<typeof ideSourceSchema>;
 export type IdeTextContextDto = z.infer<typeof ideTextContextSchema>;
 export type IdeEditorContextResultDto = z.infer<typeof ideEditorContextResultSchema>;
+export type IdeDiagnosticDto = z.infer<typeof ideDiagnosticSchema>;
+export type IdeDiagnosticsResultDto = z.infer<typeof ideDiagnosticsResultSchema>;
 
 export interface IdeTextPrefix {
   readonly text: string;
@@ -235,6 +338,22 @@ function boundedTextSchema(maxCodePoints: number, maxBytes: number) {
       (value) => utf8ByteLength(value) <= maxBytes,
       `Text must not exceed ${maxBytes} UTF-8 bytes.`,
     );
+}
+
+function compareIdePositions(
+  left: Pick<IdePositionDto, "line" | "character">,
+  right: Pick<IdePositionDto, "line" | "character">,
+): number {
+  return left.line - right.line || left.character - right.character;
+}
+
+function sourceStrings(source: IdeSourceDto): readonly string[] {
+  return [
+    source.uri.scheme,
+    source.uri.authority,
+    source.uri.path,
+    ...(source.languageId === undefined ? [] : [source.languageId]),
+  ];
 }
 
 function readCodePoint(

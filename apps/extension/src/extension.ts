@@ -14,6 +14,7 @@ import {
   ConfigurationTarget,
   commands,
   type ExtensionContext,
+  languages,
   ProgressLocation,
   Uri,
   env as vscodeEnv,
@@ -47,6 +48,7 @@ import {
 import { SpawnCommandRunner } from "./adapters/spawn-command-runner.js";
 import { createStructuredLogger } from "./adapters/structured-logger.js";
 import { createWorkspaceCheckpointStoreProvider } from "./adapters/vscode-checkpoint-storage.js";
+import { VsCodeDiagnostics } from "./adapters/vscode-diagnostics.js";
 import { VsCodeEditorContext } from "./adapters/vscode-editor-context.js";
 import { VsCodeProposeFileEditWorkspace } from "./adapters/vscode-propose-file-edit-workspace.js";
 import { createWorkspaceSessionRepositoryProvider } from "./adapters/vscode-session-storage.js";
@@ -152,6 +154,7 @@ export function activate(context: ExtensionContext): void {
       "propose_file_edit",
       "read_file",
       "read_editor_context",
+      "get_diagnostics",
       "run_command",
       "search_files",
     ],
@@ -266,6 +269,18 @@ export function activate(context: ExtensionContext): void {
     isEnabled: () => false,
     isTrusted: () => workspace.isTrusted,
   });
+  const diagnostics = new VsCodeDiagnostics({
+    getActiveEditor: () => window.activeTextEditor,
+    getSelectedRoot: () => getSelectedRoot(),
+    createScope: (root) => new WorkspaceScope(root, canonicalize),
+    joinPath: joinWorkspacePath,
+    getDiagnostics: (uri) =>
+      uri === undefined ? languages.getDiagnostics() : languages.getDiagnostics(uri),
+    getDocument: (uri) =>
+      workspace.textDocuments.find((document) => document.uri.toString() === uri.toString()),
+    isTrusted: () => workspace.isTrusted,
+    isEnabled: () => true,
+  });
   const workspaceTools = createWorkspaceToolRegistryProvider({
     getWorkspaceRoots: () => workspace.workspaceFolders?.map((folder) => folder.uri) ?? [],
     canonicalize,
@@ -279,6 +294,7 @@ export function activate(context: ExtensionContext): void {
     commandExecutor,
     workspaceTrust,
     editorContext,
+    diagnostics,
   });
   const selectSessionRepository = createWorkspaceSessionRepositoryProvider(
     context.storageUri,
@@ -470,6 +486,7 @@ export function activate(context: ExtensionContext): void {
     },
     workspaceTools,
     editorContext,
+    diagnostics,
     diffPresenter,
     approvalWorkflow,
     {

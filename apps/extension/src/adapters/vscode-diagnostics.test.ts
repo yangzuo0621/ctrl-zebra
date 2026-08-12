@@ -1,0 +1,276 @@
+import { DiagnosticsUnavailableError } from "@ctrl-zebra/builtin-tools";
+import { maxIdeDiagnosticEntries, maxIdeDiagnosticMessageCodePoints } from "@ctrl-zebra/protocol";
+import { describe, expect, it, vi } from "vitest";
+import type { Diagnostic, TextDocument, TextEditor, Uri } from "vscode";
+
+import { VsCodeDiagnostics } from "./vscode-diagnostics.js";
+import { WorkspaceScope } from "./workspace-scope.js";
+
+describe("VsCodeDiagnostics", () => {
+  it("projects active-file diagnostics with bounded source provenance", async () => {
+    const document = createDocument("const answer = 42;", "/workspace/src/index.ts");
+    const editor = createEditor(document);
+    const provider = vi.fn(() => [diagnostic(0, 6, 0, 12, 0, "unused", "E1", "typescript")]);
+    const adapter = createAdapter(editor, provider);
+
+    await expect(adapter.getDiagnostics({ scope: "active-file" }, signal())).resolves.toMatchObject(
+      {
+        kind: "diagnostics",
+        stale: false,
+        truncated: false,
+        diagnostics: [
+          {
+            source: {
+              uri: { scheme: "file", authority: "", path: "src/index.ts" },
+              range: {
+                start: { line: 0, character: 6 },
+                end: { line: 0, character: 12 },
+              },
+            },
+            severity: "error",
+            message: "unused",
+            code: "E1",
+            origin: "typescript",
+          },
+        ],
+      },
+    );
+    expect(provider).toHaveBeenCalledWith(document.uri);
+  });
+
+  it("returns an empty workspace result and supports one workspace-relative path", async () => {
+    const document = createDocument("text", "/workspace/src/index.ts");
+    const provider = vi.fn((uri?: Uri) => (uri === undefined ? [] : []));
+    const adapter = createAdapter(undefined, provider, { document });
+
+    await expect(adapter.getDiagnostics({ scope: "workspace" }, signal())).resolves.toMatchObject({
+      kind: "diagnostics",
+      diagnostics: [],
+      truncated: false,
+    });
+    await expect(
+      adapter.getDiagnostics({ scope: "workspace", path: "src/index.ts" }, signal()),
+    ).resolves.toMatchObject({ diagnostics: [], source: { uri: { path: "src/index.ts" } } });
+    expect(provider).toHaveBeenLastCalledWith(document.uri);
+  });
+
+  it("filters outside workspace resources and marks a mixed response truncated", async () => {
+    const inside = uri("/workspace/src/index.ts");
+    const outside = uri("/other/secret.ts");
+    const provider = vi.fn(
+      () =>
+        [
+          [outside, [diagnostic(0, 0, 0, 1, 1, "secret")]],
+          [inside, [diagnostic(0, 0, 0, 1, 1, "warning")]],
+        ] as const,
+    );
+    const result = await createAdapter(undefined, provider).getDiagnostics(
+      { scope: "workspace" },
+      signal(),
+    );
+
+    expect(result).toMatchObject({
+      diagnostics: [{ source: { uri: { path: "src/index.ts" } }, severity: "warning" }],
+      truncated: true,
+      truncationReasons: ["out-of-workspace"],
+    });
+  });
+
+  it("rejects all-outside and malformed untrusted provider diagnostics", async () => {
+    const outside = uri("/other/secret.ts");
+    await expect(
+      createAdapter(
+        undefined,
+        () => [[outside, [diagnostic(0, 0, 0, 1, 0, "secret")]]] as const,
+      ).getDiagnostics({ scope: "workspace" }, signal()),
+    ).rejects.toThrow("Diagnostics returned invalid output.");
+
+    const document = createDocument("text", "/workspace/src/index.ts");
+    await expect(
+      createAdapter(
+        createEditor(document),
+        () => [diagnostic(0, 0, 0, 1, 8, "bad severity")] as const,
+      ).getDiagnostics({ scope: "active-file" }, signal()),
+    ).rejects.toThrow("Diagnostics returned invalid output.");
+  });
+
+  it("bounds messages and entry count without constructing an unbounded DTO", async () => {
+    const large = "x".repeat(maxIdeDiagnosticMessageCodePoints + 1);
+    const document = createDocument("x", "/workspace/src/index.ts");
+    const provider = vi.fn(() =>
+      Array.from({ length: maxIdeDiagnosticEntries + 1 }, () => diagnostic(0, 0, 0, 1, 2, "small")),
+    );
+    const result = await createAdapter(createEditor(document), provider).getDiagnostics(
+      { scope: "active-file" },
+      signal(),
+    );
+
+    expect(result.diagnostics).toHaveLength(maxIdeDiagnosticEntries);
+    expect(result.truncated).toBe(true);
+    expect(result.truncationReasons).toContain("entries");
+
+    const largeResult = await createAdapter(createEditor(document), () => [
+      diagnostic(0, 0, 0, 1, 2, large),
+    ]).getDiagnostics({ scope: "active-file" }, signal());
+    expect(largeResult.diagnostics[0]?.message).toHaveLength(maxIdeDiagnosticMessageCodePoints);
+    expect(largeResult.truncationReasons).toContain("code-points");
+
+    const aggregateResult = await createAdapter(createEditor(document), () =>
+      Array.from({ length: 40 }, () => diagnostic(0, 0, 0, 1, 2, large)),
+    ).getDiagnostics({ scope: "active-file" }, signal());
+    expect(aggregateResult.truncated).toBe(true);
+    expect(aggregateResult.truncationReasons).toContain("code-points");
+    expect(aggregateResult.truncationReasons).not.toContain("entries");
+  });
+
+  it("marks a document version change stale while rejecting cancellation and disposal races", async () => {
+    const document = createDocument("text", "/workspace/src/index.ts");
+    const editor = createEditor(document);
+    let release: (() => void) | undefined;
+    const provider = vi.fn(
+      () =>
+        new Promise<readonly Diagnostic[]>((resolve) => {
+          release = () => resolve([diagnostic(0, 0, 0, 1, 3, "hint")]);
+        }),
+    );
+    const adapter = createAdapter(editor, provider);
+    const pending = adapter.getDiagnostics({ scope: "active-file" }, signal());
+    await vi.waitFor(() => expect(release).toBeDefined());
+    Object.defineProperty(document, "version", { value: 2, configurable: true });
+    release?.();
+    await expect(pending).resolves.toMatchObject({ stale: true });
+
+    let cancelRelease: (() => void) | undefined;
+    const cancelProvider = vi.fn(
+      () =>
+        new Promise<readonly Diagnostic[]>((resolve) => {
+          cancelRelease = () => resolve([]);
+        }),
+    );
+    const controller = new AbortController();
+    const cancellation = new Error("cancel diagnostics");
+    const cancelled = createAdapter(editor, cancelProvider).getDiagnostics(
+      { scope: "active-file" },
+      controller.signal,
+    );
+    await vi.waitFor(() => expect(cancelRelease).toBeDefined());
+    controller.abort(cancellation);
+    cancelRelease?.();
+    await expect(cancelled).rejects.toBe(cancellation);
+
+    let disposeRelease: (() => void) | undefined;
+    const disposeProvider = vi.fn(
+      () =>
+        new Promise<readonly Diagnostic[]>((resolve) => {
+          disposeRelease = () => resolve([]);
+        }),
+    );
+    const disposed = createAdapter(editor, disposeProvider);
+    const late = disposed.getDiagnostics({ scope: "active-file" }, signal());
+    await vi.waitFor(() => expect(disposeRelease).toBeDefined());
+    disposed.dispose();
+    disposeRelease?.();
+    await expect(late).rejects.toEqual(new DiagnosticsUnavailableError());
+  });
+});
+
+function createAdapter(
+  editor: TextEditor | undefined,
+  provider: (
+    uri?: Uri,
+  ) =>
+    | readonly Diagnostic[]
+    | readonly (readonly [Uri, readonly Diagnostic[]])[]
+    | Promise<readonly Diagnostic[] | readonly (readonly [Uri, readonly Diagnostic[]])[]>,
+  overrides: { readonly document?: TextDocument } = {},
+): VsCodeDiagnostics {
+  const root = uri("/workspace");
+  const document = overrides.document ?? editor?.document;
+  return new VsCodeDiagnostics({
+    getActiveEditor: () => editor,
+    getSelectedRoot: () => root,
+    createScope: () =>
+      new WorkspaceScope(root, async (target) => target, { caseSensitivePaths: true }),
+    joinPath: (base, path) => uri(`${base.path}/${path}`),
+    getDiagnostics: provider,
+    getDocument: () => document,
+    isEnabled: () => true,
+    isTrusted: () => true,
+  });
+}
+
+function createDocument(text: string, path: string): TextDocument {
+  let version = 1;
+  const lines = text.split(/\r\n|\n/u);
+  return {
+    uri: uri(path),
+    get version() {
+      return version;
+    },
+    set version(value: number) {
+      version = value;
+    },
+    languageId: "typescript",
+    lineCount: lines.length,
+    lineAt: (line: number) => ({ text: lines[line] ?? "" }),
+  } as unknown as TextDocument;
+}
+
+function createEditor(document: TextDocument): TextEditor {
+  return { document } as unknown as TextEditor;
+}
+
+function diagnostic(
+  startLine: number,
+  startCharacter: number,
+  endLine: number,
+  endCharacter: number,
+  severity: number,
+  message: string,
+  code?: string,
+  source?: string,
+): Diagnostic {
+  return {
+    range: {
+      start: { line: startLine, character: startCharacter },
+      end: { line: endLine, character: endCharacter },
+    },
+    severity,
+    message,
+    ...(code === undefined ? {} : { code }),
+    ...(source === undefined ? {} : { source }),
+  } as unknown as Diagnostic;
+}
+
+class TestUri implements Uri {
+  readonly scheme = "file";
+  readonly authority = "";
+  readonly query = "";
+  readonly fragment = "";
+
+  constructor(readonly path: string) {}
+
+  get fsPath(): string {
+    return this.path;
+  }
+
+  with(change: { path?: string }): Uri {
+    return new TestUri(change.path ?? this.path);
+  }
+
+  toString(): string {
+    return `file://${this.path}`;
+  }
+
+  toJSON(): unknown {
+    return { scheme: this.scheme, authority: this.authority, path: this.path };
+  }
+}
+
+function uri(path: string): Uri {
+  return new TestUri(path);
+}
+
+function signal(): AbortSignal {
+  return new AbortController().signal;
+}

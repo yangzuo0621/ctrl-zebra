@@ -64,6 +64,9 @@ export {
   parseCheckpoint,
 } from "./checkpoint.js";
 export type {
+  IdeDiagnosticDto,
+  IdeDiagnosticSeverity,
+  IdeDiagnosticsResultDto,
   IdeEditorContextResultDto,
   IdePositionDto,
   IdeRangeDto,
@@ -75,6 +78,9 @@ export type {
 } from "./ide-context.js";
 export {
   IdeTextPrefixCollector,
+  ideDiagnosticSchema,
+  ideDiagnosticSeverities,
+  ideDiagnosticsResultSchema,
   ideEditorContextResultSchema,
   idePositionSchema,
   ideRangeSchema,
@@ -82,6 +88,13 @@ export {
   ideTextContextSchema,
   ideTruncationReasons,
   ideUriSchema,
+  maxIdeDiagnosticAggregateBytes,
+  maxIdeDiagnosticAggregateCodePoints,
+  maxIdeDiagnosticEntries,
+  maxIdeDiagnosticLabelBytes,
+  maxIdeDiagnosticLabelCodePoints,
+  maxIdeDiagnosticMessageBytes,
+  maxIdeDiagnosticMessageCodePoints,
   maxIdeLanguageIdBytes,
   maxIdeLanguageIdCodePoints,
   maxIdePositionCharacter,
