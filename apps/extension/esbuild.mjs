@@ -7,7 +7,7 @@ const sharedOptions = {
   logLevel: "info",
   platform: "node",
   sourcemap: true,
-  target: "node22",
+  target: "node24",
 };
 
 await Promise.all([
