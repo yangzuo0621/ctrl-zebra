@@ -8,6 +8,7 @@ export default defineConfig({
     assetsDir: ".",
     emptyOutDir: true,
     outDir: "../extension/dist/webview",
+    target: "es2025",
     rolldownOptions: {
       output: {
         assetFileNames: "main[extname]",

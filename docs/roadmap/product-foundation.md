@@ -72,10 +72,11 @@
 
 | 领域 | 选型 |
 |---|---|
-| 语言 | TypeScript，开启 `strict` |
+| 语言 | TypeScript 7.0.2（精确固定），开启 `strict`；共享编译目标与标准库为 `ES2025` |
+| 桌面宿主 | VS Code `1.125.0` 或更高版本；Extension Host 以 Node.js 24 为基线（已在 `24.15.0` 验证） |
 | 包管理 | pnpm workspace |
-| Extension 构建 | esbuild |
-| Webview | React + Vite |
+| Extension 构建 | esbuild，目标 `node24` |
+| Webview | React + Vite；TypeScript 标准库为 `ES2025` + `DOM` + `DOM.Iterable`，Vite 构建目标为 `es2025` |
 | Webview 状态 | Zustand |
 | 样式 | CSS Modules + VS Code CSS Variables |
 | 运行时校验 | Zod |
