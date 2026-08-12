@@ -107,5 +107,5 @@
   above.
 - Deleted or replaced old implementations: See above.
 - Design deviation: None.
-- PR/branch: `codex/eo-002-extension-test-support` (no commit, push, or PR created by the
-  executor).
+- PR/branch: [draft PR #216](https://github.com/yangzuo0621/ctrl-zebra/pull/216),
+  `codex/eo-002-extension-test-support`.
