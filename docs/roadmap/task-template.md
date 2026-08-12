@@ -20,11 +20,12 @@ Reuse Before Build 与 Build vs Buy 遵循根 [`AGENTS.md`](../../AGENTS.md) 的
 ### Reuse Audit
 
 - 计划新增的行为与符号：
-- 搜索关键词与目录：
-- 找到的现有实现：无 / 列出
+- 初始全仓搜索命令、关键词与 engineering-opportunity 记录：
+- 找到的现有实现（路径、符号、语义 owner）：无 / 列出
 - 决定：直接复用 / 深化现有模块 / 新建实现 / 不适用
 - 未复用理由：
 - 是否形成第二份或第三份实现：否 / 说明所有权或语义差异
+- 执行中将主动调用或深化的已有功能：
 
 ### Build vs Buy
 
@@ -54,7 +55,9 @@ Reuse Before Build 与 Build vs Buy 遵循根 [`AGENTS.md`](../../AGENTS.md) 的
 
 - 实现摘要：
 - 测试结果：
-- Similarity Audit：新增行为复查、剩余相似点与处置
+- Similarity Audit：最终全仓复查命令；每个实际新增/修改符号的定义位置、数量、owner 与处置；
+  reviewer 独立复查差异
+- 实际直接复用或深化的已有功能：
 - 删除或替代的旧实现：无 / 列出
 - 设计偏差：无 / 说明
 - 完成 PR：

@@ -88,6 +88,15 @@ owned by Biome, EditorConfig, and Git attributes.
   abstraction over the duplicate implementation.
 - Before completion, repeat the search against actual added symbols and behavior. Record remaining
   similarities, removed implementations, and any follow-up disposition in the Similarity Audit.
+- The agent implementing the change performs that final search after the implementation has stabilized
+  and inventories every relevant definition with its location, count, semantic owner, and disposition.
+  They also name the existing functions, modules, Schemas, Fakes, or mechanisms reused by the
+  implementation. Search the whole repository and existing engineering-opportunity records; a task-local
+  search or an unsupported "no duplicates" conclusion is not sufficient evidence.
+- Prefer direct calls to an existing owner. When callers need different stable errors, use one narrow
+  caller-local translation boundary instead of recreating one same-shaped wrapper per owned operation.
+  A wrapper is retained only when it performs additional host integration, validation, composition,
+  or policy that cannot be expressed by direct use or the shared translation boundary.
 - Record useful out-of-scope reuse or deepening discoveries in `docs/engineering-opportunities.md`;
   ledger entry does not authorize implementation or change roadmap order.
 - Automated duplication reports are evidence, not an automatic abstraction decision. Exclude generated

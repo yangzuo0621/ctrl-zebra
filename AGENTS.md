@@ -121,12 +121,22 @@ owns wire and Tool DTO contracts.
 
 #### 4.1.1 Reuse and Build vs Buy Decisions
 
-- Before adding an implementation or test fake, follow
-  [`Reuse Before Build`](docs/development.md#reuse-before-build), record existing candidates, and
-  reuse or deepen the owning module. A second implementation requires a deepening assessment; a
-  third equivalent implementation is blocked without distinct ownership or semantics.
+- Any agent that implements or changes code, regardless of agent type or orchestration role, owns
+  reuse as an implementation decision. Before adding an implementation, fake, or wrapper, follow
+  [`Reuse Before Build`](docs/development.md#reuse-before-build): search the whole repository and
+  engineering-opportunity records by symbol, concept, behavior, owner, invariant, error, and dependency;
+  record candidates and actively call or deepen an equivalent owner. A second implementation requires
+  a deepening assessment; a third is blocked without distinct ownership or semantics.
+- Different caller-facing errors justify one narrow error-translation boundary, not one same-shaped
+  forwarding function per owned operation. Retain a wrapper only for distinct host integration,
+  validation, composition, or policy that direct use or a shared caller-local mapper cannot express.
 - Prefer one deep module over copied helpers or repository-wide utilities. Replacement removes
   superseded implementations and tests instead of layering.
+- Before completion, the implementing agent repeats the repository-wide search against actual changed
+  symbols and behavior and reports commands, definition locations/counts, owners, dispositions, and
+  direct reuse. Any reviewing agent independently repeats it. Missing evidence, an unjustified second
+  implementation, any third equivalent implementation, or a semantics-free pass-through layer blocks
+  approval even when tests and CI pass; automated similarity output is evidence, not the decision.
 
 - For general-purpose mechanisms, repeated infrastructure, or dependency changes, follow
   [`Build vs Buy`](docs/development.md#build-vs-buy) and record the decision in the task plan.
@@ -151,7 +161,10 @@ sections from `docs/roadmap/task-template.md`. For maintenance, post:
 - Explicitly excluded:
 - Build vs Buy triggers: None / explain
 - Build vs Buy decision and evidence: Not applicable / explain
-- Reuse Audit: Search terms, locations, candidates, and decision
+- Reuse Audit: Initial repository-wide searches/candidates/owners, active reuse plan, and second/third
+  implementation assessment
+- Final Similarity Audit plan: Actual-symbol inventory, definition counts, remaining similarities,
+  dispositions, and independent reviewer comparison
 - Verification:
 ```
 

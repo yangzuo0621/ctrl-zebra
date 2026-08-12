@@ -22,6 +22,14 @@ Title format:
 <!-- List each command or manual check with its result. Report required checks that were not run. -->
 - <!-- `command` — passed, or a manual check and its result -->
 
+## Reuse and Similarity Audit
+
+- Initial repository-wide search and existing candidates:
+- Existing functions/modules actively reused or deepened:
+- Final search against actual symbols (definition locations and counts):
+- Remaining similarities and disposition:
+- Reviewer independent-search differences: Pending review
+
 ## Notes
 
 <!-- Record design deviations, known limitations, or follow-up work. Use "None" when empty. -->
