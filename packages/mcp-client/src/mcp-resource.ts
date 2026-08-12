@@ -193,7 +193,7 @@ export function resolveMcpResourceSelection(
       (value) =>
         typeof value !== "string" ||
         value.length === 0 ||
-        !isWellFormedUnicode(value) ||
+        !value.isWellFormed() ||
         [...value].length > 4_096,
     ) ||
     argumentValues.reduce((bytes, value) => bytes + utf8Bytes(value), 0) > 65_536
@@ -243,7 +243,7 @@ export function normalizeMcpResourceResult(
     if (item.blob !== undefined || typeof item.text !== "string") {
       throw new McpResourceError("resource-unsupported");
     }
-    if (readUri(item.uri) !== requestedUri || !isWellFormedUnicode(item.text)) {
+    if (readUri(item.uri) !== requestedUri || !item.text.isWellFormed()) {
       throw new McpResourceError("malformed-message");
     }
     const itemMime = normalizeMimeType(item.mimeType);
@@ -278,7 +278,7 @@ function optionalDescriptorFields(record: Readonly<Record<string, unknown>>) {
 
 function normalizeMimeType(value: unknown): string {
   if (value === undefined) return "text/plain";
-  if (typeof value !== "string" || !isWellFormedUnicode(value)) {
+  if (typeof value !== "string" || !value.isWellFormed()) {
     throw new McpResourceError("malformed-message");
   }
   const mimeType = value.split(";", 1)[0]?.trim().toLowerCase();
@@ -317,11 +317,7 @@ function readBoundedText(value: unknown, allowEmpty: boolean): string {
 }
 
 function readText(value: unknown, allowEmpty: boolean): string {
-  if (
-    typeof value !== "string" ||
-    (!allowEmpty && value.length === 0) ||
-    !isWellFormedUnicode(value)
-  ) {
+  if (typeof value !== "string" || (!allowEmpty && value.length === 0) || !value.isWellFormed()) {
     throw new McpResourceError("malformed-message");
   }
   return value;
@@ -377,18 +373,4 @@ function takeTextPrefix(text: string, maxCodePoints: number, maxBytes: number) {
     bytes += characterBytes;
   }
   return { text: result, codePoints, bytes, truncated: false };
-}
-
-function isWellFormedUnicode(value: string): boolean {
-  for (let index = 0; index < value.length; index += 1) {
-    const codeUnit = value.charCodeAt(index);
-    if (codeUnit >= 0xd800 && codeUnit <= 0xdbff) {
-      const next = value.charCodeAt(index + 1);
-      if (!(next >= 0xdc00 && next <= 0xdfff)) return false;
-      index += 1;
-    } else if (codeUnit >= 0xdc00 && codeUnit <= 0xdfff) {
-      return false;
-    }
-  }
-  return true;
 }
