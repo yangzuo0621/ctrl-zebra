@@ -45,7 +45,7 @@
 
 | 机会 | 类型 | 优先级 | 建议窗口或依赖 | 状态 |
 |---|---|---:|---|---|
-| [EO-001 Provider endpoint policy](#eo-001-provider-endpoint-policy) | 深化 | P0 | 首个独立 maintenance 窗口 | `待晋升` |
+| [EO-001 Provider endpoint policy](#eo-001-provider-endpoint-policy) | 深化 | P0 | 首个独立 maintenance 窗口 | `已晋升` |
 | [EO-002 Extension test support](#eo-002-extension-test-support) | 复用 | P1 | EO-003、EO-004 前 | `评估中` |
 | [EO-003 IDE source projection](#eo-003-ide-source-projection) | 深化 | P1 | EO-002 后；新增 IDE 投影前 | `评估中` |
 | [EO-004 Bounded text persistence](#eo-004-bounded-text-persistence) | 深化 | P1 | EO-002 后；Phase 21 数据控制前优先评估 | `评估中` |
@@ -73,6 +73,8 @@ EO-001 可以独立进行。EO-009 和 EO-011 不应阻塞 Phase 20–22。
 ## 4. 重复消除机会
 
 ### EO-001 Provider endpoint policy
+
+- **执行记录**：[EO-001 maintenance record](maintenance/EO-001-provider-endpoint-policy.md)
 
 - **问题证据**：`apps/extension/src/adapters/provider-configuration.ts` 与
   `apps/extension/src/controllers/provider-connection-check-command.ts` 分别维护 loopback 和 endpoint

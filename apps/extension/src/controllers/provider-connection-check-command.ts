@@ -9,6 +9,10 @@ import {
   ProviderConfigurationError,
   type ProviderId,
 } from "../adapters/provider-configuration.js";
+import {
+  ProviderEndpointPolicyError,
+  providerEndpointPolicy,
+} from "../adapters/provider-endpoint-policy.js";
 
 export const checkProviderConnectionCommandId = "ctrlZebra.checkProviderConnection";
 
@@ -279,30 +283,27 @@ function createMetadataTarget(configuration: ProviderConfiguration): MetadataTar
     };
   }
 
-  const base = new URL(configuration.endpoint);
-  if (base.username !== "" || base.password !== "" || base.search !== "" || base.hash !== "") {
+  let endpoint: ReturnType<typeof providerEndpointPolicy.evaluate>;
+  try {
+    endpoint = providerEndpointPolicy.evaluate(configuration.endpoint);
+  } catch (error) {
+    if (error instanceof ProviderEndpointPolicyError) {
+      throw new ProviderConfigurationError(
+        "invalid-endpoint",
+        "endpoint",
+        "The configured Provider endpoint is invalid.",
+      );
+    }
+    throw error;
+  }
+  if (endpoint === undefined || configuration.requiresApiKey !== endpoint.requiresApiKey) {
     throw new ProviderConfigurationError(
       "invalid-endpoint",
       "endpoint",
       "The configured Provider endpoint is invalid.",
     );
   }
-  const isLoopback = isExplicitLoopbackHostname(base.hostname);
-  if (base.protocol !== "https:" && !(base.protocol === "http:" && isLoopback)) {
-    throw new ProviderConfigurationError(
-      "invalid-endpoint",
-      "endpoint",
-      "The configured Provider endpoint is invalid.",
-    );
-  }
-  const requiresApiKey = !isLoopback;
-  if (configuration.requiresApiKey !== requiresApiKey) {
-    throw new ProviderConfigurationError(
-      "invalid-endpoint",
-      "endpoint",
-      "The configured Provider endpoint is invalid.",
-    );
-  }
+  const base = new URL(endpoint.value);
   const basePath = base.pathname.endsWith("/") ? base.pathname : `${base.pathname}/`;
   base.pathname = `${basePath}models/${encodedModelId}`;
   base.search = "";
@@ -311,7 +312,7 @@ function createMetadataTarget(configuration: ProviderConfiguration): MetadataTar
     provider: configuration.provider,
     url: base.toString(),
     auth: "optional-bearer",
-    requiresApiKey,
+    requiresApiKey: endpoint.requiresApiKey,
   };
 }
 
@@ -725,20 +726,6 @@ async function awaitWithAbort<T>(operation: PromiseLike<T>, signal: AbortSignal)
       signal.removeEventListener("abort", abortHandler);
     }
   }
-}
-
-function isExplicitLoopbackHostname(hostname: string): boolean {
-  const normalizedHostname = hostname.toLowerCase().replace(/^\[|\]$/g, "");
-  if (normalizedHostname === "localhost" || normalizedHostname === "::1") {
-    return true;
-  }
-
-  const octets = normalizedHostname.split(".");
-  return (
-    octets.length === 4 &&
-    octets.every((octet) => /^\d{1,3}$/u.test(octet) && Number(octet) <= 255) &&
-    Number(octets[0]) === 127
-  );
 }
 
 function boundedDuration(value: number): number {

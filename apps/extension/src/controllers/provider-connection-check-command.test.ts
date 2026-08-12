@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { ProviderApiKeySecretReader } from "../adapters/api-key-secret-storage.js";
 import type { ProviderConfiguration, ProviderId } from "../adapters/provider-configuration.js";
+import { providerEndpointPolicy } from "../adapters/provider-endpoint-policy.js";
 import {
   checkProviderConnection,
   checkProviderConnectionCommandId,
@@ -153,12 +154,12 @@ describe("Provider connection check", () => {
     expect(JSON.stringify(init)).not.toContain("Authorization");
   });
 
-  it("rejects an untrusted compatible endpoint shape before reading a key", async () => {
+  it("rejects a configuration whose credential requirement disagrees with the endpoint policy", async () => {
     const fetch = createFetch(jsonResponse({ id: "compatible-test" }));
     const secrets = createSecrets({ "openai-compatible": "test-key" });
     const configuration = {
-      ...compatibleConfiguration("http://not-loopback.example.test/v1"),
-      requiresApiKey: true,
+      ...compatibleConfiguration("https://models.example.test/v1"),
+      requiresApiKey: false,
     };
 
     const report = await checkProviderConnection({
@@ -464,13 +465,18 @@ function compatibleConfiguration(
   endpoint = "https://models.example.test/v1",
   modelId = "compatible-test",
 ): ProviderConfiguration {
+  const policy = providerEndpointPolicy.evaluate(endpoint);
+  if (policy === undefined) {
+    throw new Error("Test endpoint must be present.");
+  }
+
   return {
     version: 1,
     provider: "openai-compatible",
     modelId,
     endpoint,
     capabilities: ["text-streaming"],
-    requiresApiKey: !endpoint.startsWith("http://127.") && !endpoint.startsWith("http://localhost"),
+    requiresApiKey: policy.requiresApiKey,
   };
 }
 
