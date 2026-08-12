@@ -65,12 +65,12 @@
 **进度摘要**：
 
 - 总任务：148
-- 已完成：128
-- 进行中：1
+- 已完成：129
+- 进行中：0
 - 受阻：0
 - 待开始：19
-- 当前任务：T1905
-- 下一任务：T2001（须先完成 T1905，并通过 Phase 19 归档门禁）
+- 当前执行：Phase 19 归档门禁（T1905 已完成；归档合入前不得启动 T2001）
+- 下一任务：T2001（仅在 Phase 19 归档合入后；本次用户授权止于归档门禁）
 - 最后更新：2026-08-12
 
 | 阶段 | 任务 | 状态 | 完成 PR | 完成日期 |
@@ -203,7 +203,7 @@
 | 19 | T1902 | 已完成 | [#203](https://github.com/yangzuo0621/ctrl-zebra/pull/203) | 2026-08-12 |
 | 19 | T1903 | 已完成 | [#204](https://github.com/yangzuo0621/ctrl-zebra/pull/204) | 2026-08-12 |
 | 19 | T1904 | 已完成 | [#205](https://github.com/yangzuo0621/ctrl-zebra/pull/205) | 2026-08-12 |
-| 19 | T1905 | 进行中 | — | — |
+| 19 | T1905 | 已完成 | [#207](https://github.com/yangzuo0621/ctrl-zebra/pull/207) | 2026-08-12 |
 | 20 | T2001 | 待开始 | — | — |
 | 20 | T2002 | 待开始 | — | — |
 | 20 | T2003 | 待开始 | — | — |
@@ -257,6 +257,15 @@
 - 完成证据：[PR #205](https://github.com/yangzuo0621/ctrl-zebra/pull/205)，实现 revision `94f75d55c00a3b00ca1b1b7948be5317c4ca857a`；GitHub Actions run `31556983168` 的 Ubuntu、macOS、Windows 验证均通过（实际 required checks）；实现 revision 的聚焦/完整测试、类型检查、Biome 检查、构建及 `git diff --check` 均通过。
 - 完成日期：2026-08-12
 - 下一任务：T1905；Phase 19 归档门禁完成后方可进入 T2001。
+
+---
+
+### T1905 完成记录
+
+- 完成摘要：实现显式 Ask about Selection / Ask about Active File 入口与可选 editor context 流程；完成 Protocol-v1 DTO、Host capture/owner gates、取消与 stale fencing、去重、clear/overflow 边界，以及 Webview 来源草稿、stale/use-stale/remove 控件、会话/新聊天/销毁清理和无障碍播报；仅在 `ctrlZebra.editorContext.enabled` 启用时接入 staged read-editor-context Tool。
+- 完成证据：[PR #207](https://github.com/yangzuo0621/ctrl-zebra/pull/207)，生产实现 revision `9c991c3ac584095c9fadc7e2b702fae98227cb04`；最新验证 revision `79fb42ba6aff6afb530b8f9ef9f63beb398b87d9`（coverage gate 修复）。本地/PR 验证：完整单元测试 1699 个、T1905 聚焦测试、`pnpm check`、类型检查、`pnpm build`、集成测试（exit 0）、VSIX/package smoke、`git diff --check`；GitHub Actions run `31564300781` 的 Ubuntu、macOS、Windows required checks 全部通过，Ubuntu 集成测试与 coverage gate 均通过。
+- 完成日期：2026-08-12
+- 当前执行：Phase 19 归档门禁；归档合入前不得启动 T2001，本次用户授权止于 Phase 19 归档。
 
 ---
 
