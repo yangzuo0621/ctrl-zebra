@@ -3,8 +3,8 @@
 This checklist supports implementation review by the primary agent and review subagents. It verifies
 the rules in [`AGENTS.md`](../AGENTS.md) and the operational criteria in
 [`Development Guidelines`](development.md#reuse-before-build); it does not redefine their authority.
-Reviewers read only the task-relevant documents and changes required by the progressive-loading
-rules.
+Any agent reviewing the implementation reads only the task-relevant documents and changes required by
+the progressive-loading rules.
 
 ## 1. Scope and Evidence
 
@@ -21,6 +21,11 @@ rules.
 - [ ] The search covered public entry points, owning and adjacent modules, tests and test support, and
       applicable architecture or domain documents.
 - [ ] Existing candidates and non-reuse reasons are recorded and consistent with the implementation.
+- [ ] The implementing agent's final inventory covers every actually added or materially changed symbol
+      and behavior, with repository definition locations, counts, semantic owners, and dispositions;
+      the reviewing agent records any difference found by the independent search.
+- [ ] The implementation identifies the existing functions, modules, Schemas, Fakes, or mechanisms it
+      calls directly or deepens; reuse is visible in the code rather than deferred as reviewer cleanup.
 - [ ] A second implementation includes a direct-reuse or module-deepening assessment. A third equivalent
       implementation has demonstrated distinct ownership or semantics; otherwise it blocks approval.
 - [ ] The change does not duplicate security, budget, cancellation, ordering, stale-fencing, serialization,
@@ -29,6 +34,9 @@ rules.
       not a repository-wide utilities collection or a pass-through layer.
 - [ ] Superseded implementations and implementation-specific tests are removed once equivalent behavioral
       coverage exists; the change does not leave both paths active or add a pass-through layer.
+- [ ] Different caller-facing errors use a narrow error-translation boundary rather than repeated
+      operation-specific forwarding wrappers, unless each retained wrapper has documented additional
+      host integration, validation, composition, or policy semantics.
 - [ ] The completion report includes a Similarity Audit based on the actual implementation.
 
 ## 3. Build vs Buy

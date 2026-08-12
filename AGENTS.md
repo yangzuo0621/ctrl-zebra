@@ -121,12 +121,13 @@ owns wire and Tool DTO contracts.
 
 #### 4.1.1 Reuse and Build vs Buy Decisions
 
-- Before adding an implementation or test fake, follow
-  [`Reuse Before Build`](docs/development.md#reuse-before-build), record existing candidates, and
-  reuse or deepen the owning module. A second implementation requires a deepening assessment; a
-  third equivalent implementation is blocked without distinct ownership or semantics.
-- Prefer one deep module over copied helpers or repository-wide utilities. Replacement removes
-  superseded implementations and tests instead of layering.
+- Any agent implementing or changing code, regardless of configured role or orchestration, owns the
+  active reuse decision and must follow [`Reuse Before Build`](docs/development.md#reuse-before-build)
+  before adding an implementation, fake, or wrapper.
+- Any agent reviewing an implementation independently verifies the final reuse and similarity evidence
+  and blocks approval when required evidence is missing or an equivalent implementation is unjustified.
+  The linked development guidance, task template, and review checklist own the search dimensions,
+  wrapper/error-translation rules, inventory fields, and evidence semantics.
 
 - For general-purpose mechanisms, repeated infrastructure, or dependency changes, follow
   [`Build vs Buy`](docs/development.md#build-vs-buy) and record the decision in the task plan.
@@ -151,7 +152,10 @@ sections from `docs/roadmap/task-template.md`. For maintenance, post:
 - Explicitly excluded:
 - Build vs Buy triggers: None / explain
 - Build vs Buy decision and evidence: Not applicable / explain
-- Reuse Audit: Search terms, locations, candidates, and decision
+- Reuse Audit: Initial repository-wide searches/candidates/owners, active reuse plan, and second/third
+  implementation assessment
+- Final Similarity Audit plan: Actual-symbol inventory, definition counts, remaining similarities,
+  dispositions, and independent reviewer comparison
 - Verification:
 ```
 
