@@ -70,8 +70,8 @@
 - 进行中：1
 - 受阻：0
 - 待开始：17
-- 当前执行：T2002（T2001 约束 PR 合入后）
-- 下一任务：T2003
+- 当前执行：T2003（T2002 合入后）
+- 下一任务：T2004
 - 最后更新：2026-08-13
 
 | 阶段 | 任务 | 状态 | 完成 PR | 完成日期 |
@@ -206,7 +206,7 @@
 | 19 | T1904 | 已完成 | [#205](https://github.com/yangzuo0621/ctrl-zebra/pull/205) | 2026-08-12 |
 | 19 | T1905 | 已完成 | [#207](https://github.com/yangzuo0621/ctrl-zebra/pull/207) | 2026-08-12 |
 | 20 | T2001 | 已完成 | [#227](https://github.com/yangzuo0621/ctrl-zebra/pull/227) | 2026-08-13 |
-| 20 | T2002 | 进行中 | — | — |
+| 20 | T2002 | 已完成 | [#229](https://github.com/yangzuo0621/ctrl-zebra/pull/229) | 2026-08-14 |
 | 20 | T2003 | 待开始 | — | — |
 | 20 | T2004 | 待开始 | — | — |
 | 20 | T2005 | 待开始 | — | — |
@@ -228,7 +228,7 @@
 ### 当前任务
 
 - ID：T2002
-- 状态：进行中（同步任务状态台账）
+- 状态：已完成
 - 规格：[阶段 20：T2002 实现受控文件创建](roadmap/phases/phase-20.md#t2002实现受控文件创建)
 - 目标：实现受控的 UTF-8 新文件提议、完整内容 Diff、精确单次审批、写前复核、原子创建和可恢复
   Checkpoint；拒绝越界、已有目标、二进制/超限内容及不可信工作区。
@@ -288,16 +288,18 @@
 
 ### 完成结果
 
-- 实现摘要：已实现并在本分支提交；当前仍处于 PR 审查，故状态台账保持“进行中”。
-- 测试结果：聚焦单元、完整单元、类型检查、Biome、构建及 `git diff --check` 已执行；VS Code 集成命令
-  已启动但被测试环境取消（不宣称通过），待 CI/复核完成。
+- 实现摘要：已实现并经独立 Reviewer 以 revision `48099e8a6bce365b69f22bd9b9a60e1d0c764432` 批准，
+  PR #229 已通过 required CI，具备合入条件。
+- 测试结果：聚焦单元 34、完整单元 166 files/1808 tests、递归 TypeScript、Biome/pnpm check、构建及
+  `git diff --check` 均通过；CI run `31720666201` 的 Ubuntu、macOS、Windows gates 均通过。VS Code
+  集成命令曾被测试环境取消，结果保持不定性，未作为通过证据。
 - Similarity Audit：最终复查命令为 `rg -n "parseFileCreatePlan|proposeFileCreateToolName|FileCreateApprovalWorkflow|FileMutationApprovalWorkflow|validateNewFile|FileCreateApplier|checkpoint(Before|After)StateSchema|presentTextPair" packages apps`。实际符号清单与定义计数：`packages/core/src/file-create.ts:parseFileCreatePlan`（1，core owner，深化 strict parser）；`packages/builtin-tools/src/propose-file-create.ts:createProposeFileCreateTool/proposeFileCreateToolName`（各 1，builtin owner，新建）；`apps/extension/src/controllers/file-mutation-approval-workflow.ts:FileMutationApprovalWorkflow`（1，通用 owner，深化）；`apps/extension/src/controllers/file-create-approval-workflow.ts:FileCreateApprovalWorkflow`（1，create owner，新建）；`apps/extension/src/adapters/workspace-scope.ts:WorkspaceScope.validateNewFile`（1，scope owner，深化）；`apps/extension/src/adapters/file-create-applier.ts:FileCreateApplier`（1，host mutation owner，新建）；`packages/protocol/src/checkpoint.ts:checkpointBeforeStateSchema/checkpointAfterStateSchema`（各 1，protocol owner，新建）；`apps/extension/src/adapters/diff-presenter.ts:DiffPresenter.presentTextPair`（1，Diff owner，深化）。既有 `propose_file_edit`/`WorkspaceEditApplier` 定义各保留 1 份，语义不同且不替代；无第二份/第三份算法、fake、wrapper 或依赖。Reviewer 将独立复查差异与定义计数。
 - 实际直接复用或深化的已有功能：`FileMutationApprovalWorkflow`、`WorkspaceScope`、`CheckpointRestorer`、
   `DiffPresenter`、VS Code WorkspaceEdit/stat、core `utf8ByteLength`。
 - 删除或替代的旧实现：无；legacy Checkpoint schema/restore 兼容路径保留。
 - 设计偏差：无已批准偏差；集成命令在当前环境取消属于验证环境状态，不改变契约。
-- 完成 PR：[#229](https://github.com/yangzuo0621/ctrl-zebra/pull/229)（draft，待复核/合入）。
-- 完成日期：待 PR squash merge 后填写。
+- 完成 PR：[#229](https://github.com/yangzuo0621/ctrl-zebra/pull/229)（待 squash merge）。
+- 完成日期：2026-08-14
 - 下一任务：T2003（仅在 T2002 完成后启动）。
 
 ### T2001 完成记录
