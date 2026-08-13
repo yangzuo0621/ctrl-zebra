@@ -522,17 +522,26 @@ host-owned atomic `WorkspaceEdit`. Any failed preflight produces zero writes. `a
 false, throwing, or lacking a proof of all-or-nothing behavior is a bounded `failed` outcome and is
 never reported as a subset or success. The Checkpoint remains for explicit reconciliation.
 
-Stable operation outcomes are `approved` (one atomic application), `denied` (user rejection or
-terminal approval), `conflict` (stale/replaced/missing/duplicate target, Trust/scope/canonical
-failure, or restore conflict), and `failed` (durability or host application failure). Cancellation
-is neither denial nor failure and emits no ordinary Tool Result. If more than one race is observed,
-the first failure in the above order wins and later details are suppressed.
+Internally, an explicit decision moves an approval request to `approved`, and the one-time
+consumption gate moves it to terminal `consumed`; those are approval-state labels, not a claim that
+the public lifecycle Tool Result has applied a write. The existing `propose_file_edit` continues to
+use its current Core/Extension success payload `{ outcome: "approved" }`. For the additive T2001
+lifecycle Tools, the public success payload is `{ outcome: "applied" }` only after consumption,
+durable Checkpoint creation, and one atomic application. Their stable public errors are `denied`
+(rejection or terminal approval), `conflict` (stale/replaced/missing/duplicate target,
+Trust/scope/canonical failure, or restore conflict), and `failed` (durability or host application
+failure). Cancellation is neither denial nor failure and emits no ordinary Tool Result. If more
+than one race is observed, the first failure in the above order wins and later details are
+suppressed.
 
 Restore is explicit and all-target. A create Checkpoint restores by deleting only the exact target
 whose current text hashes to the recorded after hash; a delete Checkpoint restores by creating the
-target only when it is absent; a rename Checkpoint restores the exact source/target pair only when
-both canonical identities and the source/target state pass. A multi-file Checkpoint is restored by
-one WorkspaceEdit after every target passes the after-hash preflight. No model or Webview input can
+target only when it is absent. A rename Checkpoint records an exact pair: source before is bounded
+text plus `beforeHash` and after is absent; target before is absent and after is text whose
+`afterHash` equals the source `beforeHash`. Restore requires the canonical source to be absent and
+the canonical target to hash to that after hash, then atomically renames target to source and
+verifies source `beforeHash` plus target absence. A multi-file Checkpoint is restored by one
+WorkspaceEdit after every target passes the after-hash preflight. No model or Webview input can
 provide replacement content, add targets, skip a conflict, or force an overwrite. A failed or
 partially confirmed host operation is surfaced for reconciliation rather than guessed.
 

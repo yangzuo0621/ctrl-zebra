@@ -267,6 +267,37 @@
 - 执行中将主动调用或深化的已有功能：`parseTextEdits`/`TextEditPlan`、`FileEditApprovalWorkflow`、
   `WorkspaceEditApplier`、`AtomicCheckpointStore`、`DiffPresenter`、`search_files` truncation。
 
+### Final Similarity Audit
+
+- 复查范围：契约稳定后再次执行全仓搜索（排除 `node_modules`、`dist`、`.artifacts` 和
+  VS Code 测试缓存）：`rg -n --hidden -S
+  "propose_file_create|propose_file_delete|propose_file_rename|propose_workspace_edit|FileMutationPlanDto|FileMutationTargetDto|FileMutationStateDto|FileMutationDiffDto|FileMutationOutcomeDto|mode: \"regex\"|search_files|TextEditPlan|parseTextEdits|FileEditApprovalWorkflow|WorkspaceEditApplier|DiffPresenter|Checkpoint"
+  .`。复查确认本任务提交没有新增 runtime 文件、实现符号或测试 fake。
+- 实际符号/行为 inventory、定义计数、owner 与 delta/disposition：
+
+  | 符号或行为 | 全仓 runtime 定义 | 语义 owner / 现有位置 | T2001 disposition |
+  |---|---:|---|---|
+  | `propose_file_create`, `propose_file_delete`, `propose_file_rename`, `propose_workspace_edit` | 0 | N/A（仅本契约文档） | 仅新增 additive Tool 名称和边界；T2002–T2004 实现，未复制现有 Tool。 |
+  | `FileMutationPlanDto`, `FileMutationTargetDto`, `FileMutationStateDto`, `FileMutationDiffDto`, `FileMutationOutcomeDto` | 0 | N/A（仅 Protocol 文档词汇） | 仅定义 transient/persistence 语义；未新增 Schema/type，后续任务负责实现。 |
+  | `propose_file_edit` / `createProposeFileEditTool` | 1 creator + 1 name constant in `packages/builtin-tools/src/propose-file-edit.ts` | Builtin Tool owner；输入/单文件 plan 语义保持原样 | 直接复用；没有改名、改输入或新增平行实现。 |
+  | `TextEditPlan`, `parseTextEditPlan`, `parseTextEdits` | 1 interface + 1 parser + 1 list parser in `packages/core/src/text-edit.ts` | Core text-edit owner | 后续多文件 Tool 直接复用；本任务未复制排序/重叠算法。 |
+  | `FileEditApprovalWorkflow` | 1 class in `apps/extension/src/controllers/file-edit-approval-workflow.ts` | Extension approval lifecycle owner | 复用其 exact approval/consumption seam；未新增 workflow。 |
+  | `DiffPresenter` | 1 class in `apps/extension/src/adapters/diff-presenter.ts` | Extension temporary Diff owner | 复用并扩展 contract only；未新增 presenter/patch engine。 |
+  | `WorkspaceEditApplier` | 1 class in `apps/extension/src/adapters/workspace-edit-applier.ts` | Extension apply/checkpoint boundary owner | 复用 atomic apply/checkpoint ordering；T2001 未改 runtime。 |
+  | `checkpointSchema` / `AtomicCheckpointStore` | 1 schema in `packages/protocol/src/checkpoint.ts` / 1 store class in `packages/core/src/checkpoint-store.ts` | Protocol schema + Core persistence owners | 定义 additive state-union compatibility；未新增 store/serializer。 |
+  | `createSearchFilesTool` / `search_files` | 1 creator in `packages/builtin-tools/src/search-files.ts` | Builtin search owner | literal default retained; regex is a bounded contract only, with engine deferred to T2005. |
+  | `ToolApprovalOperation`, `ApprovalLifecycle` | 1 interface in `packages/core/src/tool-approval.ts` / 1 class in `apps/extension/src/controllers/approval-lifecycle.ts` | Core operation contract + Extension lifecycle owner | distinguish internal `approved`/`consumed` from public lifecycle `applied`; no second state machine. |
+
+- Similarity delta：新增行为和 DTO 词汇的 runtime 定义数均为零；唯一实际 delta 是十个文档文件
+  中的 additive contract text。没有删除或替代实现、没有重复 serializer/parser/regex/diff/approval
+  算法，也没有新增 dependency、fake、wrapper 或公共 API 源码。
+- 第二/第三实现判定：不存在第二份 T2001 runtime 实现；T2002–T2005 必须在实现前重新搜索并
+  证明直接复用或深化上述 owner。若采用 `re2js`，其 adapter 只能由 T2005 在既有
+  `search_files` owner 后方受控接入，并须删除被替代的 parser/guard；T2001 不授权该依赖。
+- 未复用项及 disposition：旧 `propose_file_edit` 不能承载 create/delete/rename 或文件数组，故
+  保持其单文件公共语义并新增名称；原生 JS `RegExp`、未经筛选的 `re2js` LOOKBEHINDS、原生
+  `re2` addon 和自建 regex VM 均仅留在 EO-008/T2005 评估，不进入本提交。
+
 ### Build vs Buy
 
 - 涉及的通用机制：正则引擎（EO-008）、Diff/patch/序列化和原子 WorkspaceEdit；仅定义契约，不在

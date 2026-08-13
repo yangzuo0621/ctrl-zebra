@@ -381,6 +381,17 @@ before/after state and revisions, normalized edits, and a deterministic presenta
 model-supplied path is the only target selector; Host-owned URI, Trust, revision, hashes, risk,
 approval lifetime, and Checkpoint IDs never enter Tool input.
 
+The approval vocabulary and the public lifecycle result are deliberately separate. Internally,
+the Core/Extension approval state changes from `pending` to an `approved` grant, and one atomic
+consumption changes that grant to terminal `consumed`; `approved` in that state machine or in an
+internal consume response does not mean that a workspace write has succeeded. Existing
+`propose_file_edit` keeps its current public Tool Result and meaning, including its existing
+success payload `{ outcome: "approved" }`; T2001 does not rename or reinterpret that operation.
+Only the new lifecycle Tools use `FileMutationOutcomeDto` in their public success Tool Result,
+with `{ outcome: "applied" }` emitted after the consumed approval, durable Checkpoint, and
+successful Host-owned WorkspaceEdit. The public `denied`, `conflict`, and `failed` mappings below
+are lifecycle Tool Result errors, not approval-state labels.
+
 ### Shared bounds and plan identity
 
 - Paths use the existing forward-slash, workspace-relative rule: no leading slash, backslash,
@@ -420,18 +431,20 @@ The Webview renders only this Host projection and cannot edit it or widen the op
 
 ### Apply, result, and failure precedence
 
-After one explicit approval, the Host revalidates Trust, selected-root containment, canonical
-identity, target existence/type, every before revision, and the exact approval presentation. It
-durably commits one Checkpoint before submitting one Host-owned atomic `WorkspaceEdit`. A preflight
-failure performs zero writes. `applyEdit` false, a thrown host failure, or an inability to establish
-all-or-nothing semantics is `failed`, never a partial success; the committed Checkpoint remains
-available for reconciliation. Cancellation closes the operation gate before any later check and is
-not converted to a Tool Result.
+After one explicit approval, the Host enters the one-time consumption gate and revalidates Trust,
+selected-root containment, canonical identity, target existence/type, every before revision, and
+the exact approval presentation. It durably commits one Checkpoint before submitting one
+Host-owned atomic `WorkspaceEdit`. A preflight failure performs zero writes. `applyEdit` false, a
+thrown host failure, or an inability to establish all-or-nothing semantics is `failed`, never a
+partial success; the committed Checkpoint remains available for reconciliation. Cancellation
+closes the operation gate before any later check and is not converted to a Tool Result.
 
-For a normal Tool Result, the stable outcome mapping is `success` with `{ outcome: "applied" }`, or
-one structured error: `denied` for an explicit rejection or terminal approval state, `conflict` for
-stale/missing/replaced targets, Trust/scope/canonical identity mismatch, target collision, or a
-restore precondition conflict, and `failed` for Checkpoint persistence or Host application failure.
+For a new lifecycle Tool Result, the stable outcome mapping is `success` with
+`{ outcome: "applied" }`, or one structured error: `denied` for an explicit rejection or terminal
+approval state, `conflict` for stale/missing/replaced targets, Trust/scope/canonical identity
+mismatch, target collision, or a restore precondition conflict, and `failed` for Checkpoint
+persistence or Host application failure. The existing `propose_file_edit` mapping remains its
+current Core/Extension contract rather than being silently changed by this additive section.
 Preparation schema/boundary errors remain `invalid-input`; malformed Host projections remain
 `invalid-output`. When multiple failures race, the owner reports the first failure in this order:
 cancel/closed gate, invalid input, approval terminal/expiry, Trust and scope, canonical identity
@@ -446,8 +459,13 @@ beforeHash }` and `after: { kind: "absent" } | { kind: "text", afterHash }`. Leg
 with `beforeContent`, `beforeHash`, and `afterHash` remain readable as `before.kind: "text"`; new
 create/delete/rename records must not encode absence as an empty string. The Checkpoint stores no
 proposed after-content, approval presentation, Diff, or secrets. A create restore deletes only when
-the target still hashes to `afterHash`; a delete restore recreates only when the target is absent;
-rename restore reverses the exact source/target pair only after both identities and hashes pass.
+the target still hashes to `afterHash`; a delete restore recreates only when the target is absent.
+For rename, the ordered pair is exact: the source records `before: text(content, beforeHash)` and
+`after: absent`, while the target records `before: absent` and `after: text(afterHash)` with
+`afterHash == source.beforeHash` because rename does not change bytes. Restore first requires the
+canonical source to be absent and the canonical target to contain text hashing to that `afterHash`,
+then atomically renames target back to source and verifies source hashes to `beforeHash` and target
+is absent. Any identity, state, or hash mismatch conflicts the whole restore without writes.
 
 This is an additive version-1 record extension owned by the Persistence/Protocol schemas. A reader
 that does not understand the state union rejects that record as unsupported/corrupt rather than

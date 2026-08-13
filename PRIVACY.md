@@ -160,7 +160,10 @@ text inside the selected workspace. They require a fresh, exact `write` approval
 the Host may show the complete bounded proposed/create/delete Diff in a temporary VS Code Diff
 editor; it does not send that preview to a remote service merely to render it. The Webview receives
 only the bounded operation summary and cannot supply a path outside the selected root, a hash,
-replacement content, a force flag, or a Checkpoint ID.
+replacement content, a force flag, or a mutation Checkpoint ID. The existing explicit
+`webview/restore-checkpoint` intent may carry a separately validated `checkpointId` to select a
+Host-owned recovery record; that identifier is restore intent, not mutation approval data or
+authority to alter the record.
 
 The Extension stores one immutable Checkpoint before an approved mutation. A Checkpoint may contain
 the bounded pre-operation workspace text required for explicit conflict-safe restoration, including

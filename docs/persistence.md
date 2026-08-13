@@ -306,11 +306,13 @@ after:  { kind: "absent" }
 The top-level record continues to bind one Host-generated `id`, exact `sessionId` and `runId`, a
 creation timestamp, and a non-empty ordered target set (at most 128). An edit target has text before
 and after hashes; a create target has `before.kind: "absent"`; a delete target has
-`after.kind: "absent"`; and a rename record includes the exact ordered source/target pair and the
-source before-content/hash. Proposed after-content, Diff text, approval presentation, raw host URI
-objects, and secrets are never persisted. Before-content remains bounded to 65,536 Unicode scalars,
-2,000 logical lines, and 262,144 UTF-8 bytes per text target, with the existing 4,194,304-byte
-record ceiling and 128-target limit.
+`after.kind: "absent"`. A rename is exactly two ordered target records: the source has
+`before: { kind: "text", content, beforeHash }` and `after: { kind: "absent" }`; the target has
+`before: { kind: "absent" }` and `after: { kind: "text", afterHash }`, where `afterHash` equals
+the source `beforeHash` because the bytes are moved unchanged. Proposed after-content, Diff text,
+approval presentation, raw host URI objects, and secrets are never persisted. Before-content
+remains bounded to 65,536 Unicode scalars, 2,000 logical lines, and 262,144 UTF-8 bytes per text
+target, with the existing 4,194,304-byte record ceiling and 128-target limit.
 
 Creation is durable-before-side-effect: the complete record is schema/integrity checked, written to
 the temporary Checkpoint path, flushed/closed and atomically renamed before the first WorkspaceEdit
@@ -320,12 +322,15 @@ after an apply failure so the Host can reconcile rather than claiming that no re
 
 Recovery is an explicit all-target operation. A create target may be removed only when its canonical
 identity is unchanged and current text hashes to `afterHash`; a delete target may be recreated only
-when it is absent; a rename target may be reversed only when source/target identities and states are
-exactly the recorded pair; and a multi-file edit restores all targets through one WorkspaceEdit only
-after every target passes its after-state check. The Host repeats scope, canonical identity and hash
-checks immediately before submission. Any mismatch, missing/unreadable/binary target, or failed
-verification is one bounded conflict and leaves every target unchanged. Recovery never accepts
-replacement text, extra targets, merge instructions, or a force flag from model/Webview input.
+when it is absent. A rename may be reversed only when the canonical source is absent, the canonical
+target contains text hashing to its recorded `afterHash` (equal to the source `beforeHash`), and the
+ordered source/target identities match exactly; the Host then atomically renames target to source
+and verifies source `beforeHash` plus target absence. A multi-file edit restores all targets through
+one WorkspaceEdit only after every target passes its after-state check. The Host repeats scope,
+canonical identity and hash checks immediately before submission. Any mismatch, missing/unreadable/
+binary target, or failed verification is one bounded conflict and leaves every target unchanged.
+Recovery never accepts replacement text, extra targets, merge instructions, or a force flag from
+model/Webview input.
 
 The extension of the v1 checkpoint record is additive for the current reader: records written before
 T2001 remain readable as `before.kind: "text"`. A reader that cannot validate the state union must
@@ -335,7 +340,7 @@ restore semantics, or record limits requires a new persisted-format decision and
 
 Checkpoints are local recovery data and may contain workspace source text. They follow the existing
 secret exclusion rules and must not enter model context, Webview state, logs, telemetry, or approval
-presentation. T0801 introduces no retention duration, pruning rule, quota eviction, or automatic
+presentation. T2001 introduces no retention duration, pruning rule, quota eviction, or automatic
 deletion policy; such a policy requires separately planned work.
 
 ## Secret exclusion

@@ -437,6 +437,13 @@ owns only the plan/approval lifecycle and stable outcome mapping; it never acces
 The Webview receives the existing approval projection and asks the Host to open the temporary Diff;
 it cannot edit a plan or submit a mutation directly.
 
+The Core/Extension approval lifecycle keeps `approved` (grant) and `consumed` (one-time terminal
+claim) as internal state vocabulary. Existing `propose_file_edit` retains its current public
+success payload `{ outcome: "approved" }`; the additive lifecycle Tools expose `{ outcome: "applied" }`
+only after consumption, durable Checkpoint creation, and successful atomic application. This
+distinction prevents an approval grant or internal consume response from being mistaken for a
+public claim that a lifecycle mutation completed.
+
 The immutable `FileMutationPlan` is a structural value with operation kind, ordered canonical target
 identities, before/after existence and revisions, normalized edits or content, and deterministic
 presentation digest. Paths, revisions, hashes, Trust, selected-root identity, approval lifetime,
