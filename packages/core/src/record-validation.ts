@@ -23,3 +23,7 @@ export function hasOnlyKeys(
 ): boolean {
   return Object.keys(value).every((key) => allowedKeys.has(key));
 }
+
+export function isNonnegativeSafeInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
