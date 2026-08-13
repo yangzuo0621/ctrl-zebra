@@ -172,6 +172,14 @@ ctrl-zebra/
 - `propose_file_edit`
 - `run_command`
 
+Phase 20 的文件生命周期契约保留 `propose_file_edit` 的单文件含义，并新增
+`propose_file_create`、`propose_file_delete`、`propose_file_rename` 和 edit-only 的
+`propose_workspace_edit`。这些名称、输入闭集、边界和失败/恢复语义由
+[Protocol 的 T2001 契约](../protocol.md#file-lifecycle-and-atomic-mutation-contracts-t2001)拥有；
+Extension 仍是唯一可以解析 VS Code URI、校验 Trust、创建 Checkpoint 和提交原子
+`WorkspaceEdit` 的模块。正则搜索通过 `search_files.mode: "regex"` 显式启用受控
+RE2-compatible dialect，默认 literal 行为不变；T2005 才选择和接入引擎。
+
 T1901 还为后续阶段定义只读 IDE Tool 的 Host-independent 输入、输出和边界契约；这些工具只能
 依赖注入的 `IdeContextPort`/语言服务 Port，不得导入 VS Code、读取宿主 URI 或自行决定
 Workspace Trust。T1901 不实现这些工具；T1902–T1904 分别接入其宿主适配器和执行路径。
@@ -186,6 +194,8 @@ Workspace Trust。T1901 不实现这些工具；T1902–T1904 分别接入其宿
 - 依赖装配。
 - 验证并将 Webview 命令分派给拥有相应生命周期的控制器。
 - 实现文件、编辑器、Diff、存储、日志和密钥适配器。
+- 实现文件生命周期的 canonical target/revision adapter、临时 Diff、Checkpoint durability 和
+  one host-owned atomic `WorkspaceEdit`; mutation plans never cross into Webview as host values.
 - 拥有活动编辑器/选区、诊断和语言服务的 VS Code API 调用、URI 规范化、Workspace Trust
   检查、取消和 Disposable；只向 Core/Protocol 发布有界 `Ide*Dto`，不把 VS Code 类型下沉。
 - 管理 Disposable 和扩展生命周期。
@@ -283,6 +293,7 @@ mcp-client → extension
 | Approval 请求、决定、消费和失效 | [`packages/core`](../../packages/core/src/index.ts) 与 [`packages/protocol/src/approval.ts`](../../packages/protocol/src/approval.ts) | [Security：Approval Boundary](../security.md#approval-boundary) |
 | MCP Client、Tool、Resource 与 Prompt 投影 | [`packages/mcp-client`](../../packages/mcp-client/src/index.ts) 与 [`packages/protocol`](../../packages/protocol/src/index.ts) | Architecture、Security、Protocol、Persistence、Webview 和 UX 中各自拥有的 MCP 章节 |
 | IDE 上下文与只读 Tool DTO、来源和生命周期 | （T1902–T1904 的 Extension adapters、`packages/builtin-tools` 与 `packages/protocol` 公共入口） | [Architecture：IDE context and read-only Tool boundary](../architecture.md#ide-context-and-read-only-tool-boundary-t1901)、[Protocol：IDE context and read-only Tool DTOs](../protocol.md#ide-context-and-read-only-tool-dtos-t1901)、[Security](../security.md#ide-context-and-read-only-tool-boundary-t1901)、[Persistence](../persistence.md#ide-context-and-read-only-tool-persistence-t1901)、[UX](../ux.md#ide-context-and-read-only-tool-experience-t1901)、[Webview](../webview.md#ide-context-and-read-only-tool-projection-t1901) |
+| 文件生命周期、原子编辑与恢复计划 | （T2002–T2004 的 `packages/builtin-tools`、Core approval/checkpoint contracts 与 Extension workspace adapters） | [Architecture：File lifecycle and atomic WorkspaceEdit boundary](../architecture.md#file-lifecycle-and-atomic-workspaceedit-boundary-t2001)、[Protocol：File lifecycle and atomic mutation contracts](../protocol.md#file-lifecycle-and-atomic-mutation-contracts-t2001)、[Security：File lifecycle mutation boundary](../security.md#file-lifecycle-mutation-boundary-t2001)、[Persistence：File lifecycle Checkpoint extension](../persistence.md#file-lifecycle-checkpoint-extension-t2001) |
 
 跨模块契约共同遵守以下不变量：
 
