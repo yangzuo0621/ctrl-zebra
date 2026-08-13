@@ -4,6 +4,7 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import styles from "./markdown-message.module.css";
 import { strings } from "./strings.js";
+import { utf8BytesForCodePoint as utf8Width } from "./text-primitives.js";
 
 export const maxMarkdownCodePoints = 262_144;
 export const maxMarkdownUtf8Bytes = 1_048_576;
@@ -529,7 +530,7 @@ function takeMarkdownPrefix(content: string): {
   let end = 0;
 
   for (const codePoint of content) {
-    const bytes = utf8BytesForCodePoint(codePoint);
+    const bytes = utf8Width(codePoint.codePointAt(0) ?? 0);
     if (codePoints >= maxMarkdownCodePoints || utf8Bytes + bytes > maxMarkdownUtf8Bytes) {
       return { text: content.slice(0, end), truncated: true };
     }
@@ -539,14 +540,6 @@ function takeMarkdownPrefix(content: string): {
   }
 
   return { text: content, truncated: false };
-}
-
-function utf8BytesForCodePoint(codePoint: string): number {
-  const value = codePoint.codePointAt(0) ?? 0;
-  if (value <= 0x7f) return 1;
-  if (value <= 0x7ff) return 2;
-  if (value <= 0xffff) return 3;
-  return 4;
 }
 
 function CodeBlock({ blockKey, language, text, copied, copyFailed, onCopy }: CodeBlockProps) {

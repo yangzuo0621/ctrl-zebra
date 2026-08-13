@@ -31,6 +31,7 @@ import {
 } from "@ctrl-zebra/protocol";
 import type { TextDocument, Uri } from "vscode";
 import { IdeSourceProjectionError, ideSourceProjector } from "./ide-source-projector.js";
+import { isRecord } from "./record-validation.js";
 import type { WorkspaceScope } from "./workspace-scope.js";
 import { WorkspaceScopeError } from "./workspace-scope.js";
 
@@ -1019,10 +1020,6 @@ function sourceStrings(source: IdeSourceDto): readonly string[] {
     source.uri.path,
     ...(source.languageId === undefined ? [] : [source.languageId]),
   ];
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isUriLike(value: unknown): value is Uri {

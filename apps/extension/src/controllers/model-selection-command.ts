@@ -14,6 +14,7 @@ import type {
   ProviderId,
   ProviderSelectionConfiguration,
 } from "../adapters/provider-configuration.js";
+import { isRecord } from "../adapters/record-validation.js";
 import type { ProviderOnboardingActionResult } from "./provider-onboarding-controller.js";
 
 export const selectModelCommandId = "ctrlZebra.selectModel";
@@ -424,8 +425,4 @@ class BoundedResponseError extends Error {
     super("The model list response is invalid or exceeds the safety limit.");
     this.name = "BoundedResponseError";
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

@@ -5,6 +5,7 @@ import {
 } from "@ctrl-zebra/protocol";
 
 import type { PersistencePath } from "./manifest-store.js";
+import { utf8ByteLength } from "./text-primitives.js";
 
 export const maxEventRecordBytes = 1_048_576;
 export const maxEventLogBytes = 16_777_216;
@@ -189,16 +190,4 @@ function parseRecord(line: string): PersistedEventRecord | undefined {
 
   const result = persistedEventRecordSchema.safeParse(value);
   return result.success ? result.data : undefined;
-}
-
-function utf8ByteLength(value: string): number {
-  let length = 0;
-  for (const character of value) {
-    const codePoint = character.codePointAt(0);
-    if (codePoint === undefined) {
-      continue;
-    }
-    length += codePoint <= 0x7f ? 1 : codePoint <= 0x7ff ? 2 : codePoint <= 0xffff ? 3 : 4;
-  }
-  return length;
 }

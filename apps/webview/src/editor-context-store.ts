@@ -1,6 +1,7 @@
 import type { ExtensionToWebviewMessage, IdeTextContextDto } from "@ctrl-zebra/protocol";
 import { createStore, type StoreApi } from "zustand/vanilla";
 
+import { canonicalJson } from "./canonical-json.js";
 import { strings } from "./strings.js";
 import type { WebviewHost } from "./vscode-api.js";
 
@@ -339,14 +340,4 @@ export function formatEditorContextDraft(
   const language = source.languageId === undefined ? "" : `\nLanguage: ${source.languageId}`;
   const truncated = source.truncated ? "yes" : "no";
   return `${strings.editorContext.draftPrefix}\nScope: ${scope}\nSource: ${source.uri.path}${range}${language}\nSource truncated: ${truncated}\n`;
-}
-
-function canonicalJson(value: unknown): string {
-  if (value === null || typeof value !== "object") return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
-  const record = value as Readonly<Record<string, unknown>>;
-  return `{${Object.keys(record)
-    .sort()
-    .map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`)
-    .join(",")}}`;
 }

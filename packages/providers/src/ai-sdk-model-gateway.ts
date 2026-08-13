@@ -34,6 +34,8 @@ import {
   TypeValidationError,
 } from "ai";
 
+import { utf8BytesForCodePoint } from "./text-primitives.js";
+
 export const noRedirectFetch: typeof fetch = (input, init) =>
   fetch(input, { ...init, redirect: "error" });
 
@@ -392,7 +394,7 @@ function* splitReasoningDelta(text: string): Iterable<string> {
     }
 
     const codeUnits = codePoint > 0xffff ? 2 : 1;
-    const bytes = utf8LengthOfCodePoint(codePoint);
+    const bytes = utf8BytesForCodePoint(codePoint);
     if (
       codePoints === maxReasoningDeltaCodePoints ||
       utf8Bytes + bytes > maxReasoningDeltaUtf8Bytes
@@ -409,19 +411,6 @@ function* splitReasoningDelta(text: string): Iterable<string> {
   }
 
   yield text.slice(chunkStart);
-}
-
-function utf8LengthOfCodePoint(codePoint: number): number {
-  if (codePoint <= 0x7f) {
-    return 1;
-  }
-  if (codePoint <= 0x7ff) {
-    return 2;
-  }
-  if (codePoint <= 0xffff) {
-    return 3;
-  }
-  return 4;
 }
 
 function parseToolCall(value: unknown) {

@@ -7,6 +7,8 @@ import {
   type UserMessage,
   userMessageSchema,
 } from "@ctrl-zebra/protocol";
+import { hasExactKeys, isPlainRecord } from "../adapters/record-validation.js";
+import { jsonValuesEqual } from "./json-values.js";
 
 const maxHistoryMessages = 10_000;
 const maxMessageCharacters = 1_000_000;
@@ -368,52 +370,11 @@ function requireExactRecord(
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return undefined;
-  }
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null
-    ? (value as Record<string, unknown>)
-    : undefined;
-}
-
-function hasExactKeys(value: Record<string, unknown>, expectedKeys: readonly string[]): boolean {
-  const actual = Object.keys(value).sort();
-  const expected = [...expectedKeys].sort();
-  return actual.length === expected.length && actual.every((key, index) => key === expected[index]);
+  return isPlainRecord(value) ? value : undefined;
 }
 
 function toolCallsEqual(left: ToolCall, right: ToolCall): boolean {
   return (
     left.id === right.id && left.name === right.name && jsonValuesEqual(left.input, right.input)
   );
-}
-
-function jsonValuesEqual(left: unknown, right: unknown): boolean {
-  if (left === right) {
-    return true;
-  }
-  if (typeof left !== typeof right || left === null || right === null) {
-    return false;
-  }
-  if (Array.isArray(left) || Array.isArray(right)) {
-    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) {
-      return false;
-    }
-    return left.every((value, index) => jsonValuesEqual(value, right[index]));
-  }
-  if (typeof left === "object" && typeof right === "object") {
-    const leftObject = left as Record<string, unknown>;
-    const rightObject = right as Record<string, unknown>;
-    const leftKeys = Object.keys(leftObject).sort();
-    const rightKeys = Object.keys(rightObject).sort();
-    if (
-      leftKeys.length !== rightKeys.length ||
-      leftKeys.some((key, index) => key !== rightKeys[index])
-    ) {
-      return false;
-    }
-    return leftKeys.every((key) => jsonValuesEqual(leftObject[key], rightObject[key]));
-  }
-  return false;
 }

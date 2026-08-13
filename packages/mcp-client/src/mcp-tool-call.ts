@@ -15,6 +15,8 @@ import {
   maxMcpToolTextItems,
 } from "./contracts.js";
 import type { CompiledExternalJsonSchema } from "./mcp-tool-schema.js";
+import { hasOnlyKeys, isPlainRecord, isRecord } from "./record-validation.js";
+import { utf8ByteLength } from "./text-primitives.js";
 
 export interface McpToolApprovalPreparation {
   readonly kind: "mcp-tool-call";
@@ -114,7 +116,7 @@ export function normalizeMcpToolResult(
       throw invalidResult();
     }
     textCodePoints += [...block.text].length;
-    textBytes += utf8Bytes(block.text);
+    textBytes += utf8ByteLength(block.text);
     if (textCodePoints > maxMcpToolTextCodePoints || textBytes > maxMcpToolTextBytes) {
       throw invalidResult();
     }
@@ -153,17 +155,11 @@ function readStrictRecord(
   value: unknown,
   allowedKeys: readonly string[],
 ): Readonly<Record<string, unknown>> {
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    Array.isArray(value) ||
-    (Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null)
-  ) {
+  if (!isPlainRecord(value)) {
     throw invalidResult();
   }
   const record = value as Readonly<Record<string, unknown>>;
-  const allowed = new Set(allowedKeys);
-  if (Object.keys(record).some((key) => !allowed.has(key))) {
+  if (!hasOnlyKeys(record, new Set(allowedKeys))) {
     throw invalidResult();
   }
   return record;
@@ -174,7 +170,7 @@ function invalidResult(): ToolExecutionError {
 }
 
 function serializedBytes(value: JsonValue): number {
-  return utf8Bytes(JSON.stringify(value));
+  return utf8ByteLength(JSON.stringify(value));
 }
 
 function isMcpToolArguments(value: JsonValue): value is McpToolArguments {
@@ -182,9 +178,5 @@ function isMcpToolArguments(value: JsonValue): value is McpToolArguments {
 }
 
 function isJsonObject(value: JsonValue): value is Record<string, JsonValue> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function utf8Bytes(value: string): number {
-  return new TextEncoder().encode(value).byteLength;
+  return isRecord(value);
 }

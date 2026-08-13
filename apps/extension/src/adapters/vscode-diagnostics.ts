@@ -27,6 +27,7 @@ import {
 } from "@ctrl-zebra/protocol";
 import type { Diagnostic, TextDocument, TextEditor, Uri } from "vscode";
 import { IdeSourceProjectionError, ideSourceProjector } from "./ide-source-projector.js";
+import { isRecord } from "./record-validation.js";
 import type { WorkspaceScope } from "./workspace-scope.js";
 import { WorkspaceScopeError } from "./workspace-scope.js";
 
@@ -820,10 +821,6 @@ function readBoundedLanguageId(value: string): string {
   const projection = takeBoundedText(value, maxIdeLanguageIdCodePoints, maxIdeLanguageIdBytes);
   if (projection.truncated) throw new InvalidDiagnosticsOutputError();
   return projection.text;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isUriLike(value: unknown): value is Uri {

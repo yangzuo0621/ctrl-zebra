@@ -1,3 +1,5 @@
+import { utf8ByteLength } from "./text-primitives.js";
+
 const maxFieldLength = 128;
 const maxSerializedEntryBytes = 4_096;
 const redactedValue = "[REDACTED]";
@@ -84,9 +86,7 @@ export function formatStructuredLogEntry(input: unknown): string {
   }
 
   const serialized = JSON.stringify(entry);
-  return Buffer.byteLength(serialized, "utf8") <= maxSerializedEntryBytes
-    ? serialized
-    : invalidEntry;
+  return utf8ByteLength(serialized) <= maxSerializedEntryBytes ? serialized : invalidEntry;
 }
 
 const invalidEntry = JSON.stringify({

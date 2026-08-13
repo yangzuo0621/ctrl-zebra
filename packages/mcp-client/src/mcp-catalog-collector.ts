@@ -1,4 +1,5 @@
 import { maxMcpListEntries, maxMcpListPages } from "./contracts.js";
+import { isRecord } from "./record-validation.js";
 
 export type McpCatalogCollectionErrorCode = "malformed-message" | "limit-exceeded";
 
@@ -70,7 +71,7 @@ export async function collectMcpCatalogPages<T = unknown>(
 }
 
 function readRecord(value: unknown): Readonly<Record<string, unknown>> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+  if (!isRecord(value)) {
     throw new McpCatalogCollectionError("malformed-message");
   }
   return value as Readonly<Record<string, unknown>>;

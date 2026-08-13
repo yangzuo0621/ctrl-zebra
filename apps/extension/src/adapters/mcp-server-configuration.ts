@@ -1,3 +1,6 @@
+import { hasExactKeys } from "./record-validation.js";
+import { utf8ByteLength } from "./text-primitives.js";
+
 export const mcpServerSettingSection = "ctrlZebra.mcp";
 export const mcpServerSettingName = "server";
 export const mcpServerConfigurationVersion = 1 as const;
@@ -121,12 +124,12 @@ export function parseMcpServerConfiguration(value: unknown): McpServerConfigurat
     displayName.length === 0 ||
     containsDisplayControl(displayName) ||
     [...displayName].length > maxDisplayNameCodePoints ||
-    utf8Bytes(displayName) > maxDisplayNameBytes ||
+    utf8ByteLength(displayName) > maxDisplayNameBytes ||
     containsCredentialMaterial(displayName) ||
     typeof command !== "string" ||
     command.length === 0 ||
     containsLineBreakOrNull(command) ||
-    utf8Bytes(command) > maxCommandBytes ||
+    utf8ByteLength(command) > maxCommandBytes ||
     containsCredentialMaterial(command) ||
     !Array.isArray(args) ||
     args.length > maxArguments ||
@@ -141,7 +144,7 @@ export function parseMcpServerConfiguration(value: unknown): McpServerConfigurat
       typeof argument !== "string" ||
       !argument.isWellFormed() ||
       argument.includes("\0") ||
-      utf8Bytes(argument) > maxArgumentBytes ||
+      utf8ByteLength(argument) > maxArgumentBytes ||
       containsCredentialMaterial(argument)
     ) {
       throw invalidConfiguration();
@@ -149,7 +152,7 @@ export function parseMcpServerConfiguration(value: unknown): McpServerConfigurat
     validatedArguments.push(argument);
   }
 
-  if (utf8Bytes(JSON.stringify(validatedArguments)) > maxSerializedArgumentsBytes) {
+  if (utf8ByteLength(JSON.stringify(validatedArguments)) > maxSerializedArgumentsBytes) {
     throw invalidConfiguration();
   }
 
@@ -195,14 +198,6 @@ function readStrictObject(value: unknown): Readonly<Record<string, unknown>> | u
   }
 }
 
-function hasExactKeys(
-  source: Readonly<Record<string, unknown>>,
-  expectedKeys: readonly string[],
-): boolean {
-  const keys = Object.keys(source);
-  return keys.length === expectedKeys.length && keys.every((key) => expectedKeys.includes(key));
-}
-
 function isProtocolMode(value: unknown): value is McpProtocolMode {
   return value === "modern-only" || value === "dual";
 }
@@ -227,10 +222,6 @@ function containsCredentialMaterial(value: string): boolean {
   return /(?:^|[^a-z0-9])(?:api[_-]?key|authorization|bearer|cookie|password|proxy[_-]?authorization|secret|token)(?:[^a-z0-9]|$)/iu.test(
     value,
   );
-}
-
-function utf8Bytes(value: string): number {
-  return Buffer.byteLength(value, "utf8");
 }
 
 function invalidConfiguration(): McpServerConfigurationError {

@@ -4,7 +4,6 @@ import {
   approvalRequestSchema,
   type CheckpointRunId,
   hasTokenUsage,
-  type JsonValue,
   jsonValueSchema,
   type McpPromptConfirmation,
   type McpResourceAttachment,
@@ -32,12 +31,14 @@ import {
   type ModelMessageTokenCounter,
   pruneModelHistory,
 } from "./history-pruner.js";
+import { jsonValuesEqual } from "./json-values.js";
 import {
   type FinishReason,
   type ModelGateway,
   ModelGatewayError,
   type ModelMessage,
 } from "./model-gateway.js";
+import { hasExactKeys, isPlainRecord } from "./record-validation.js";
 import { SessionStateMachine, type SessionStatusChangedEvent } from "./session-state-machine.js";
 import { allocateTokenBudget, maxModelContextWindowTokens } from "./token-budget.js";
 import type { ToolApprovalOperation, ToolApprovalWorkflow } from "./tool-approval.js";
@@ -1008,7 +1009,7 @@ function validateModelHistory(history: unknown): readonly ModelMessage[] {
 }
 
 function validateModelHistoryMessage(message: unknown): ModelMessage {
-  if (!isRecord(message)) {
+  if (!isPlainRecord(message)) {
     throw new InvalidModelHistoryError();
   }
 
@@ -1085,57 +1086,6 @@ function validateToolApproval(
 function toolCallsMatch(left: ToolCall, right: ToolCall): boolean {
   return (
     left.id === right.id && left.name === right.name && jsonValuesEqual(left.input, right.input)
-  );
-}
-
-function jsonValuesEqual(left: JsonValue, right: JsonValue): boolean {
-  if (left === right) {
-    return true;
-  }
-  if (typeof left !== typeof right || left === null || right === null) {
-    return false;
-  }
-  if (Array.isArray(left) || Array.isArray(right)) {
-    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) {
-      return false;
-    }
-    return left.every((value, index) => {
-      const other = right[index];
-      return other !== undefined && jsonValuesEqual(value, other);
-    });
-  }
-  if (typeof left === "object" && typeof right === "object") {
-    const leftObject = left as { readonly [key: string]: JsonValue };
-    const rightObject = right as { readonly [key: string]: JsonValue };
-    const leftKeys = Object.keys(leftObject).sort();
-    const rightKeys = Object.keys(rightObject).sort();
-    if (
-      leftKeys.length !== rightKeys.length ||
-      leftKeys.some((key, index) => key !== rightKeys[index])
-    ) {
-      return false;
-    }
-    return leftKeys.every((key) => {
-      return jsonValuesEqual(leftObject[key], rightObject[key]);
-    });
-  }
-  return false;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return false;
-  }
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
-}
-
-function hasExactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
-  const actual = Object.keys(value).sort();
-  const sortedExpected = [...expected].sort();
-  return (
-    actual.length === sortedExpected.length &&
-    actual.every((key, index) => key === sortedExpected[index])
   );
 }
 

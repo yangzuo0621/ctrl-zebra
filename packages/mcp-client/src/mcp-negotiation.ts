@@ -2,6 +2,7 @@ import type { DiscoverResult, JSONRPCMessage } from "@modelcontextprotocol/clien
 
 import { type McpClientErrorCode, type McpProtocolMode, mcpProtocolVersion } from "./contracts.js";
 import { createMcpClientError } from "./errors.js";
+import { hasOnlyKeys, isRecord } from "./record-validation.js";
 import type { SdkStdioTransport } from "./sdk-stdio-transport.js";
 
 const modernMetaKey = "io.modelcontextprotocol/protocolVersion";
@@ -340,14 +341,6 @@ function validateProbeError(value: unknown): ProbeErrorValidation {
 
 function hasMatchingId(message: JSONRPCMessage, id: string): boolean {
   return "id" in message && message.id === id;
-}
-
-function hasOnlyKeys(value: Readonly<Record<string, unknown>>, keys: Set<string>): boolean {
-  return Object.keys(value).every((key) => keys.has(key));
-}
-
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function toNegotiationCode(

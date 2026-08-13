@@ -9,6 +9,8 @@ import {
   maxMcpToolSchemaNodes,
   maxMcpToolSchemaProperties,
 } from "./contracts.js";
+import { isPlainRecord } from "./record-validation.js";
+import { utf8ByteLength } from "./text-primitives.js";
 
 const draft202012 = "https://json-schema.org/draft/2020-12/schema";
 const schemaMapKeywords = new Set(["$defs", "properties"]);
@@ -121,7 +123,7 @@ export function validateMcpToolSchema(value: unknown): Readonly<Record<string, J
     throw new McpToolSchemaError("non-object-root");
   }
   const serialized = JSON.stringify(schema);
-  if (serialized === undefined || utf8Bytes(serialized) > maxMcpToolSchemaBytes) {
+  if (serialized === undefined || utf8ByteLength(serialized) > maxMcpToolSchemaBytes) {
     throw new McpToolSchemaError("limit-exceeded");
   }
   assertReferenceGraph(schema, context.references);
@@ -619,15 +621,11 @@ function boundedAdd(left: number, right: number, maximum: number): number {
 
 function measuredStringBytes(value: string): number {
   const serialized = JSON.stringify(value);
-  return serialized === undefined ? 0 : utf8Bytes(serialized);
+  return serialized === undefined ? 0 : utf8ByteLength(serialized);
 }
 
 function readRecord(value: unknown): Readonly<Record<string, unknown>> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new McpToolSchemaError();
-  }
-  const prototype = Object.getPrototypeOf(value);
-  if (prototype !== Object.prototype && prototype !== null) {
+  if (!isPlainRecord(value)) {
     throw new McpToolSchemaError();
   }
   for (const key of Reflect.ownKeys(value)) {
@@ -667,8 +665,4 @@ function assertWellFormed(value: string): void {
 
 function escapePointer(value: string): string {
   return value.replace(/~/g, "~0").replace(/\//g, "~1");
-}
-
-function utf8Bytes(value: string): number {
-  return new TextEncoder().encode(value).byteLength;
 }

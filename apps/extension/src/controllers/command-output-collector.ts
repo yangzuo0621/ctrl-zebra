@@ -6,6 +6,7 @@ import type {
   CommandOutputSink,
   SpawnCommandRequest,
 } from "../adapters/spawn-command-runner.js";
+import { utf8BytesForCodePoint } from "../adapters/text-primitives.js";
 
 export { maxCommandDisplayOutputBytes };
 export const maxCommandContextOutputBytes = 32_768;
@@ -238,7 +239,7 @@ function takeUtf8Prefix(text: string, maxBytes: number): Utf8Prefix {
   let bytes = 0;
   let consumedCodeUnits = 0;
   for (const character of text) {
-    const characterBytes = utf8CodePointBytes(character.codePointAt(0));
+    const characterBytes = utf8BytesForCodePoint(character.codePointAt(0) ?? 0);
     if (bytes + characterBytes > maxBytes) {
       break;
     }
@@ -251,16 +252,6 @@ function takeUtf8Prefix(text: string, maxBytes: number): Utf8Prefix {
     bytes,
     truncated: consumedCodeUnits < text.length,
   };
-}
-
-function utf8CodePointBytes(codePoint: number | undefined): number {
-  if (codePoint === undefined || codePoint <= 0x7f) {
-    return 1;
-  }
-  if (codePoint <= 0x7ff) {
-    return 2;
-  }
-  return codePoint <= 0xffff ? 3 : 4;
 }
 
 function isByteLimit(value: number): boolean {

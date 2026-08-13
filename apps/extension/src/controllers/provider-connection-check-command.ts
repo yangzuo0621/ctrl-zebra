@@ -13,6 +13,7 @@ import {
   ProviderEndpointPolicyError,
   providerEndpointPolicy,
 } from "../adapters/provider-endpoint-policy.js";
+import { isRecord } from "../adapters/record-validation.js";
 
 export const checkProviderConnectionCommandId = "ctrlZebra.checkProviderConnection";
 
@@ -678,10 +679,6 @@ function formatModelId(value: string): string {
     formatted += codePoint <= 0x1f || codePoint === 0x7f ? "�" : character;
   }
   return formatted;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function createOperationDeadline(

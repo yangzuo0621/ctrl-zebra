@@ -128,6 +128,9 @@ describe("VSIX package policy", () => {
         { commit: "expected", version: "0.0.0" },
       ),
     ).toThrow(/does not match/);
+    expect(() => validateBuildMetadata([], { commit: "expected", version: "0.0.0" })).toThrow(
+      /does not match/,
+    );
   });
 
   it("requires identical non-empty repository and packaged release documents", () => {

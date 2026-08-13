@@ -1,5 +1,7 @@
 import type { Uri } from "vscode";
 
+import { sameIdentityPart } from "./uri-comparison.js";
+
 export type WorkspaceScopeErrorCode =
   | "invalid-uri"
   | "outside-workspace"
@@ -109,10 +111,6 @@ function assertSafeUri(uri: Uri): void {
 function hasAmbiguousEmptySegment(path: string): boolean {
   const withoutLeadingSlash = path.slice(1);
   return withoutLeadingSlash.length > 0 && withoutLeadingSlash.split("/").slice(0, -1).includes("");
-}
-
-function sameIdentityPart(left: string, right: string): boolean {
-  return left.toLocaleLowerCase("en-US") === right.toLocaleLowerCase("en-US");
 }
 
 function getPathSegments(path: string): readonly string[] {

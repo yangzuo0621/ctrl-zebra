@@ -11,6 +11,7 @@ import {
 } from "@ctrl-zebra/core";
 
 import { hasOnlyKeys, isRecord, isSafeForwardSlashPath } from "./boundary-validation.js";
+import { utf8ByteLength } from "./text-primitives.js";
 
 export const proposeFileEditToolName = "propose_file_edit" as const;
 export const proposeFileEditToolDescription =
@@ -189,7 +190,7 @@ function parseProposeFileEditInput(value: unknown): ProposeFileEditInput {
       throw new TypeError("propose_file_edit replacement is too large.");
     }
 
-    replacementBytes += new TextEncoder().encode(edit.newText).byteLength;
+    replacementBytes += utf8ByteLength(edit.newText);
     if (replacementBytes > maxTotalProposedReplacementBytes) {
       throw new TypeError("propose_file_edit replacements are too large.");
     }

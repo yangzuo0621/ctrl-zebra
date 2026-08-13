@@ -16,6 +16,7 @@ import type {
 } from "@ctrl-zebra/protocol";
 import { createStore, type StoreApi } from "zustand/vanilla";
 
+import { canonicalJson } from "./canonical-json.js";
 import { strings } from "./strings.js";
 import type { WebviewHost } from "./vscode-api.js";
 
@@ -618,16 +619,6 @@ function sameToolCatalogPublication(left: ToolCatalogRecord, right: ToolCatalogR
     left.requestId === right.requestId &&
     canonicalJson(left.catalog) === canonicalJson(right.catalog)
   );
-}
-
-function canonicalJson(value: unknown): string {
-  if (value === null || typeof value !== "object") return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map((entry) => canonicalJson(entry)).join(",")}]`;
-  const record = value as Readonly<Record<string, unknown>>;
-  return `{${Object.keys(record)
-    .sort()
-    .map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`)
-    .join(",")}}`;
 }
 
 function connectionAnnouncement(connection: McpConnectionProjectionDto): string {

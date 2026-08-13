@@ -1,7 +1,7 @@
 import { ToolRegistry } from "@ctrl-zebra/core";
 import { protocolVersion } from "@ctrl-zebra/protocol";
 import { afterEach, describe, expect, it, vi } from "vitest";
-
+import { utf8ByteLength } from "../adapters/text-primitives.js";
 import type { McpConnectionSnapshot } from "./mcp-connection-controller.js";
 import { McpWebviewActions, nextMcpCatalogSequence } from "./mcp-webview-actions.js";
 
@@ -374,7 +374,7 @@ describe("MCP Webview actions", () => {
         rejectedToolsTruncated: false,
       },
     };
-    const remaining = 1_048_576 - utf8Bytes(JSON.stringify(baseEnvelope));
+    const remaining = 1_048_576 - utf8ByteLength(JSON.stringify(baseEnvelope));
     const perEntry = Math.floor(remaining / baseRejectedTools.length);
     const remainder = remaining % baseRejectedTools.length;
     const exactRejectedTools = baseRejectedTools.map((entry, index) => ({
@@ -406,7 +406,7 @@ describe("MCP Webview actions", () => {
     });
     actions.bind(post);
     actions.refresh("exact");
-    expect(utf8Bytes(JSON.stringify(post.mock.calls[1]?.[0]))).toBe(1_048_576);
+    expect(utf8ByteLength(JSON.stringify(post.mock.calls[1]?.[0]))).toBe(1_048_576);
     expect(post.mock.calls.map(([message]) => message)).toContainEqual(
       expect.objectContaining({ type: "extension/mcp-tools", requestId: "exact" }),
     );
@@ -634,7 +634,7 @@ describe("MCP Webview actions", () => {
         );
       }),
     ).toBe(true);
-    expect(utf8Bytes(JSON.stringify(message))).toBeLessThanOrEqual(1_048_576);
+    expect(utf8ByteLength(JSON.stringify(message))).toBeLessThanOrEqual(1_048_576);
     actions.dispose();
   });
 
@@ -782,12 +782,3 @@ describe("MCP Webview actions", () => {
     actions.dispose();
   });
 });
-
-function utf8Bytes(value: string): number {
-  let bytes = 0;
-  for (const character of value) {
-    const codePoint = character.codePointAt(0) ?? 0;
-    bytes += codePoint <= 0x7f ? 1 : codePoint <= 0x7ff ? 2 : codePoint <= 0xffff ? 3 : 4;
-  }
-  return bytes;
-}

@@ -32,6 +32,8 @@ import {
   McpToolSchemaError,
   validateMcpToolSchema,
 } from "./mcp-tool-schema.js";
+import { hasOnlyKeys, isPlainRecord } from "./record-validation.js";
+import { utf8ByteLength } from "./text-primitives.js";
 
 const descriptorKeys = new Set([
   "_meta",
@@ -152,7 +154,7 @@ export function createMcpToolSnapshot(
 
   for (const [index, value] of values.entries()) {
     const serialized = serializeBounded(value, maxMcpDescriptorBytes);
-    snapshotBytes += utf8Bytes(serialized) + (index === 0 ? 0 : 1);
+    snapshotBytes += utf8ByteLength(serialized) + (index === 0 ? 0 : 1);
     if (snapshotBytes > maxMcpListSnapshotBytes) {
       throw new McpToolSnapshotError("limit-exceeded");
     }
@@ -174,9 +176,9 @@ export function createMcpToolSnapshot(
       const inputSchema = validateMcpToolSchema(record.inputSchema);
       const outputSchema =
         record.outputSchema === undefined ? undefined : validateMcpToolSchema(record.outputSchema);
-      schemaBytes += utf8Bytes(JSON.stringify(inputSchema));
+      schemaBytes += utf8ByteLength(JSON.stringify(inputSchema));
       if (outputSchema !== undefined) {
-        schemaBytes += utf8Bytes(JSON.stringify(outputSchema));
+        schemaBytes += utf8ByteLength(JSON.stringify(outputSchema));
       }
       if (schemaBytes > maxMcpToolSnapshotSchemaBytes) {
         throw new McpToolSnapshotError("limit-exceeded");
@@ -264,7 +266,7 @@ function boundRejectedTools(rejectedTools: readonly McpRejectedTool[]): {
       break;
     }
     const candidate = [...boundedRejectedTools, rejection];
-    if (utf8Bytes(JSON.stringify(candidate)) > maxMcpRejectedToolProjectionBytes) {
+    if (utf8ByteLength(JSON.stringify(candidate)) > maxMcpRejectedToolProjectionBytes) {
       truncated = true;
       break;
     }
@@ -385,7 +387,7 @@ function compareUnicodeScalars(left: string, right: string): number {
 
 function readDescriptor(value: unknown): Readonly<Record<string, unknown>> {
   const record = readRecord(value);
-  if (Object.keys(record).some((key) => !descriptorKeys.has(key))) {
+  if (!hasOnlyKeys(record, descriptorKeys)) {
     throw new McpToolSnapshotError("malformed-message");
   }
   if (record.execution !== undefined) {
@@ -395,11 +397,7 @@ function readDescriptor(value: unknown): Readonly<Record<string, unknown>> {
 }
 
 function readRecord(value: unknown): Readonly<Record<string, unknown>> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new McpToolSnapshotError("malformed-message");
-  }
-  const prototype = Object.getPrototypeOf(value);
-  if (prototype !== Object.prototype && prototype !== null) {
+  if (!isPlainRecord(value)) {
     throw new McpToolSnapshotError("malformed-message");
   }
   return value as Readonly<Record<string, unknown>>;
@@ -419,12 +417,8 @@ function serializeBounded(value: unknown, maximumBytes: number): string {
   } catch {
     throw new McpToolSnapshotError("malformed-message");
   }
-  if (serialized === undefined || utf8Bytes(serialized) > maximumBytes) {
+  if (serialized === undefined || utf8ByteLength(serialized) > maximumBytes) {
     throw new McpToolSnapshotError("limit-exceeded");
   }
   return serialized;
-}
-
-function utf8Bytes(value: string): number {
-  return new TextEncoder().encode(value).byteLength;
 }

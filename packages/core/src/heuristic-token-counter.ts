@@ -2,6 +2,7 @@ import type { JsonValue } from "@ctrl-zebra/protocol";
 
 import type { ModelMessageTokenCounter } from "./history-pruner.js";
 import type { ModelMessage } from "./model-gateway.js";
+import { utf8BytesForCodePoint } from "./text-primitives.js";
 import { maxModelContextWindowTokens } from "./token-budget.js";
 
 /** The conservative byte-to-token ratio used when no vendor tokenizer is injected. */
@@ -182,8 +183,7 @@ class BoundedUtf8Counter {
     }
     for (const character of value) {
       const codePoint = character.codePointAt(0) ?? 0;
-      const bytes = codePoint <= 0x7f ? 1 : codePoint <= 0x7ff ? 2 : codePoint <= 0xffff ? 3 : 4;
-      this.#add(bytes);
+      this.#add(utf8BytesForCodePoint(codePoint));
       if (this.#truncated) {
         return;
       }
