@@ -56,6 +56,7 @@
 | [EO-009 Markdown renderer](#eo-009-markdown-renderer) | Buy re-evaluation | P3 | 先证明净收益并通过基线变更控制 | `暂缓` |
 | [EO-010 Targeted Zod reuse](#eo-010-targeted-zod-reuse) | 已有依赖复用 | P2 | 随拥有 schema 的任务分 tranche | `已发现` |
 | [EO-011 Provider token counting](#eo-011-provider-token-counting) | Buy / 实验 | P3 | 先有准确度或预算缺陷数据 | `暂缓` |
+| [EO-012 MCP SDK-native negotiation](#eo-012-mcp-sdk-native-negotiation) | Buy / 已有依赖深化 | P0 | MCP 再次演进前优先评估；不阻塞 Phase 20 | `评估中` |
 
 建议的依赖链是：
 
@@ -66,9 +67,13 @@ EO-002 ──→ EO-003
 T2001 decision ──→ EO-008 evidence ──→ T2005 implementation
 
 EO-005 ──→ EO-006
+
+EO-012 evidence ──→ independent maintenance decision
 ```
 
 EO-001 可以独立进行。EO-009 和 EO-011 不应阻塞 Phase 20–22。
+EO-012 可独立于 Phase 20 评估；除非发现当前 negotiation 存在实际缺陷，否则不阻塞 T2001–T2005。
+若验证 SDK-native negotiation 能保持现有安全语义，再晋升为独立 maintenance。
 
 ## 4. 重复消除机会
 
@@ -217,6 +222,52 @@ EO-001 可以独立进行。EO-009 和 EO-011 不应阻塞 Phase 20–22。
 - **必须补齐的证据**：模型覆盖、版本漂移策略、bundle/启动成本、离线行为、准确度 corpus 和
   provider-specific failure mapping。未达到触发条件前不创建依赖 PR。
 
+### EO-012 MCP SDK-native negotiation
+
+- **问题证据**：`packages/mcp-client/src/mcp-negotiation.ts` 当前自行实现 MCP modern-first 协商，
+  包括 `server/discover` probe、JSON-RPC request/reply 分类、超时、modern/legacy 判定、
+  UnsupportedProtocolVersion 处理、DiscoverResult 与 capability 结构校验，以及 probe transport
+  handler 的临时接管。当前 `ControlledMcpClient.connect()` 先调用 package-owned
+  `negotiateMcpEra()`，再通过 `Client.connect(..., { prior })` 把协商结果交给
+  `@modelcontextprotocol/client`。仓库已经固定使用 `@modelcontextprotocol/client@2.0.0`，且
+  `sdk-options.ts` 已配置 SDK 的 `versionNegotiation`，因此应重新评估自研协议协商层是否仍有必要。
+- **候选机制**：优先评估 `@modelcontextprotocol/client` v2 原生 version negotiation / probe
+  classification 能力，让 SDK 拥有 MCP wire-level 协议协商，CtrlZebra 仅保留产品级安全与生命周期
+  策略。不新增第二个 MCP library，不自行维护 SDK 已正式提供的协议状态机。
+- **目标 seam**：`ControlledMcpClient` 继续拥有 Host-owned process / stdio transport 生命周期、
+  startup approval 与 Workspace Trust、generation fencing、cancellation 与 stale completion 拒绝、
+  bounded stderr / cleanup、termination confirmation、CtrlZebra 稳定错误映射与连接状态投影。
+  MCP SDK 应尽可能拥有 `server/discover` wire protocol、protocol-version negotiation、
+  UnsupportedProtocolVersion 处理、modern negotiation DTO / protocol validation，以及 SDK 已正式定义的
+  negotiation failure taxonomy。SDK 原生类型、异常和 negotiation DTO 不得直接泄漏进入 Core、
+  Protocol 或 Webview 公共契约。
+- **Build vs Buy**：优先深化现有 `@modelcontextprotocol/client` 依赖，而不是继续维护
+  CtrlZebra-private protocol negotiation implementation。只有 differential validation 证明 SDK 无法
+  表达 CtrlZebra 已固定的 modern-only / dual downgrade 安全语义，或无法维持 bounded / deterministic
+  failure classification 时，才保留自研 negotiation seam。
+- **必须补齐的证据**：
+  1. 核实当前固定 SDK 版本的 public API，而不是依据 unreleased/internal API。
+  2. 建立现有 `negotiateMcpEra()` 与 SDK-native negotiation 的 differential corpus。
+  3. 覆盖 modern success、unsupported requested version、legacy server、timeout、malformed result、
+     unknown JSON-RPC error、server exit、abort 和 stale generation。
+  4. 明确 SDK 对 modern-only 与 dual compatibility mode 的真实行为。
+  5. 验证 `supportedVersions`、capabilities、DiscoverResult 等结构校验是否由 SDK 完整拥有；不能因减少
+     代码而放宽当前安全边界。
+  6. 核实 transport 是否仍可保持 CtrlZebra-owned process termination、stderr bounds 和 delivery gate。
+  7. 比较 bundle / VSIX、类型复杂度、测试量和最终删除的净代码量。
+- **预期删除目标**：若采用 SDK-native negotiation，应删除 `mcp-negotiation.ts` 中已由 SDK 等价拥有的
+  probe / classifier / protocol DTO validation、只服务于上述实现的 package-private helper、只验证被删除
+  内部算法而非产品行为的 implementation-specific tests，以及 `Client.connect(..., { prior })` 前为了绕过
+  SDK negotiation 而存在的 glue code。不得长期保留“SDK negotiation + 自研 negotiation”双路径或
+  fallback shadow implementation。
+- **验收**：公共 MCP connection / error / capability 契约不变，除非先完成正式变更控制；modern-only
+  不发生未授权 legacy downgrade；dual mode 的 downgrade 条件不比当前实现更宽松；malformed、timeout、
+  abort、stale-generation 和 transport failure 行为具有等价或更严格的测试覆盖；process cleanup 和
+  termination confirmation 仍由 CtrlZebra Host boundary 拥有；differential tests 全部通过后删除被取代
+  实现，不保留双路径；全量 MCP unit、Extension integration、VSIX smoke tests 通过。
+- **规模与风险**：中到大；协议和兼容性敏感，但净删除潜力较高。应先做独立 investigation / proof
+  tranche，再决定是否晋升为 maintenance。
+
 ## 6. 处置记录
 
 晋升或关闭机会时追加一行；不要在上方复制正式任务状态。
@@ -231,3 +282,4 @@ EO-001 可以独立进行。EO-009 和 EO-011 不应阻塞 Phase 20–22。
 | 2026-08-13 | EO-005 | 已晋升为独立 maintenance | [EO-005 maintenance](maintenance/EO-005-mcp-catalog-refresh.md) | 在最新 `origin/main` `9e9e98e` 上重新验证 Tool/Prompt/Resource 的重复分页与刷新生命周期后建立 package-private MCP catalog collector/refresh seam |
 | 2026-08-13 | EO-006 | 独立 maintenance 已完成 | [EO-006 maintenance](maintenance/EO-006-mcp-error-ownership.md)；[PR #221](https://github.com/yangzuo0621/ctrl-zebra/pull/221) | MCP client stable error normalization is package-owned; Extension retains Host/process/configuration fallback mapping; duplicate client-message ownership removed and verified. |
 | 2026-08-13 | EO-007 | 独立 maintenance 已完成 | [EO-007 maintenance](maintenance/EO-007-package-local-text-primitives.md)；[PR #222](https://github.com/yangzuo0621/ctrl-zebra/pull/222) | Package-local text, record, URI, canonical JSON, and equality seams merged by reviewed squash commit `53bc57b`; CI and independent review gates passed; feature branch cleaned up. |
+| 2026-08-13 | EO-012 MCP SDK-native negotiation | 初始登记为评估候选 | — | 现有 MCP SDK v2 依赖已提供 version negotiation 能力；登记 differential validation 与 SDK-native replacement 的 Build vs Buy 评估，不改变当前路线图执行点。 |
