@@ -215,14 +215,15 @@ different lifecycle ownership.
 - **Test results:** The focused differential corpus/regression command passed 3 files and 33 tests;
   the six-case EO-012 corpus includes public `SdkError.isInstance`/`SdkErrorCode` assertions,
   server-exit cleanup, stale-generation cancellation/late delivery, and termination confirmation;
-  `pnpm exec vitest run packages/mcp-client/src` passed 19 files and 159 tests; the repository unit
-  suite passed 162 files and 1,771 tests; `pnpm --filter @ctrl-zebra/mcp-client exec tsc --noEmit`
+  `pnpm exec vitest run packages/mcp-client/src` passed 19 files and 161 tests; the repository unit
+  suite passed 162 files and 1,773 tests; `pnpm --filter @ctrl-zebra/mcp-client exec tsc --noEmit`
   and `pnpm run typecheck` passed; `pnpm run check` passed for 415 files; `pnpm run build` passed;
   and `pnpm run test:integration` exited 0. Integration emitted the existing non-fatal VS Code
-  `Error mutex already exists`, cached-data option, and `Canceled Failed to load custom agents`
-  warnings. The rework's clean-tree `pnpm run package:vsix` result and its exact source revision
-  are recorded below after the reviewer rework commit; the package allowlist and artifact-size
-  comparison remain the same unless that command reports otherwise.
+  `cached-data` option and `Canceled Failed to load custom agents` warnings. `pnpm run package:vsix`
+  passed on the clean packaging source revision `1ce6ad8134cdbc60a2a6022c7b44797c1f10e019`
+  (the final evidence-only docs commit follows) with 12 allowlisted files, 831,672 compressed
+  bytes, and 3,797,841 uncompressed bytes at
+  `.artifacts/ctrl-zebra-0.1.1-1ce6ad8134cd.vsix`.
 - **Similarity Audit:** The final search confirms one package-owned negotiation definition and no
   second production negotiation path; the added test imports only public SDK APIs and existing
   package fixtures. The matrix above records all intentional behavioral differences.
