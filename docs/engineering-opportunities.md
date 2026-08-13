@@ -51,7 +51,7 @@
 | [EO-004 Bounded text persistence](#eo-004-bounded-text-persistence) | 深化 | P1 | EO-002 后；Phase 21 数据控制前优先评估 | `已晋升` |
 | [EO-005 MCP catalog refresh](#eo-005-mcp-catalog-refresh) | 深化 | P1 | MCP 再次演进或独立 maintenance 窗口 | `已晋升` |
 | [EO-006 MCP error ownership](#eo-006-mcp-error-ownership) | 深化 | P2 | EO-005 后；需要契约影响确认 | `已完成` |
-| [EO-007 Package-local text primitives](#eo-007-package-local-text-primitives) | 复用 | P2 | EO-003、EO-004 后；每次只处理一个 package | `已发现` |
+| [EO-007 Package-local text primitives](#eo-007-package-local-text-primitives) | 复用 | P2 | EO-003、EO-004 后；单一 maintenance 内按 package-local tranche 执行 | `已晋升` |
 | [EO-008 Safe regex engine](#eo-008-safe-regex-engine) | Buy | P0 | 纳入 T2001 决策、T2005 实施，不单独插队 | `评估中` |
 | [EO-009 Markdown renderer](#eo-009-markdown-renderer) | Buy re-evaluation | P3 | 先证明净收益并通过基线变更控制 | `暂缓` |
 | [EO-010 Targeted Zod reuse](#eo-010-targeted-zod-reuse) | 已有依赖复用 | P2 | 随拥有 schema 的任务分 tranche | `已发现` |
@@ -149,13 +149,16 @@ EO-001 可以独立进行。EO-009 和 EO-011 不应阻塞 Phase 20–22。
 
 ### EO-007 Package-local text primitives
 
+- **执行记录**：[EO-007 maintenance record](maintenance/EO-007-package-local-text-primitives.md)
+
 - **问题证据**：多个 package 内散布 `utf8ByteLength`、code-point byte count、`isRecord`、URI
   比较和 canonical JSON 等小型实现。
-- **目标 seam**：只在语义拥有者明确的 package 内复用；优先让 EO-003、EO-004 的 deep module
-  吸收相关逻辑，再判断剩余第二份实现是否值得提取。
+- **目标 seam**：在同一个独立 maintenance 中按语义拥有者建立 package-local seam；不建立跨包
+  `text-utils` 或 `common`，也不把等价类别拆成互相延后的 modifications。
 - **Build vs Buy**：标准库或现有 Zod/schema 优先；禁止建立跨仓库 `text-utils` 或 `common`。
-- **验收**：每个获准 tranche 只处理一个 package 和一种语义；列出删除位置；调用者需要不同错误
-  时使用映射；没有证据证明相同语义的实现保持分离并记录原因。
+- **验收**：scope matrix 列出每个 package、symbol/file、disposition、reuse/Build-vs-Buy、
+  tests 和 exclusions；列出删除位置；调用者需要不同错误时使用映射；没有证据证明相同语义
+  的实现保持分离并记录原因。
 - **规模与风险**：每 tranche 小；整体不得作为一次全仓机械重构。
 
 ## 5. Build vs Buy 机会

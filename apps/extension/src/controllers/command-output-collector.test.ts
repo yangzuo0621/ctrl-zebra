@@ -2,6 +2,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 
 import { type SpawnCommandRequest, SpawnCommandRunner } from "../adapters/spawn-command-runner.js";
+import { utf8ByteLength } from "../adapters/text-primitives.js";
 import {
   CommandOutputCollector,
   CommandOutputLogError,
@@ -43,7 +44,7 @@ describe("CommandOutputCollector", () => {
 
     const result = await collector.complete();
 
-    expect(new TextEncoder().encode(result.display.stdout).byteLength).toBe(5);
+    expect(utf8ByteLength(result.display.stdout)).toBe(5);
     expect(result.display).toEqual({ stdout: "a界b", stderr: "", truncated: true });
     expect(result.context).toEqual({ stdout: "a", stderr: "", truncated: true });
     expect(result.exit.code).toBe(7);
@@ -58,8 +59,10 @@ describe("CommandOutputCollector", () => {
     collector.record({ type: "exit", code: 0, signal: null });
 
     const result = await collector.complete();
-    const displayBytes = byteLength(result.display.stdout) + byteLength(result.display.stderr);
-    const contextBytes = byteLength(result.context.stdout) + byteLength(result.context.stderr);
+    const displayBytes =
+      utf8ByteLength(result.display.stdout) + utf8ByteLength(result.display.stderr);
+    const contextBytes =
+      utf8ByteLength(result.context.stdout) + utf8ByteLength(result.context.stderr);
 
     expect(displayBytes).toBe(maxCommandDisplayOutputBytes);
     expect(contextBytes).toBe(maxCommandContextOutputBytes);
@@ -188,8 +191,4 @@ function fixtureRequest(mode: string): SpawnCommandRequest {
     timeoutMs: 5_000,
     environment: {},
   };
-}
-
-function byteLength(value: string): number {
-  return new TextEncoder().encode(value).byteLength;
 }

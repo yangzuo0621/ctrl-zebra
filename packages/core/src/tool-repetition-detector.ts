@@ -1,4 +1,6 @@
-import type { JsonValue, ToolCall, ToolName } from "@ctrl-zebra/protocol";
+import type { ToolCall, ToolName } from "@ctrl-zebra/protocol";
+
+import { canonicalizeJson } from "./canonical-json.js";
 
 export const defaultToolRepetitionThreshold = 3;
 export const maxToolRepetitionThreshold = 10;
@@ -49,23 +51,4 @@ export class ToolRepetitionDetector {
       thresholdReached: this.#consecutiveCount >= this.threshold,
     };
   }
-}
-
-function canonicalizeJson(value: JsonValue): string {
-  if (value === null || typeof value !== "object") {
-    return JSON.stringify(value);
-  }
-
-  if (isJsonArray(value)) {
-    return `[${value.map(canonicalizeJson).join(",")}]`;
-  }
-
-  return `{${Object.keys(value)
-    .sort()
-    .map((key) => `${JSON.stringify(key)}:${canonicalizeJson(value[key] as JsonValue)}`)
-    .join(",")}}`;
-}
-
-function isJsonArray(value: JsonValue): value is readonly JsonValue[] {
-  return Array.isArray(value);
 }

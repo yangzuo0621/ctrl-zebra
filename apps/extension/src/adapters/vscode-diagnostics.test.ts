@@ -10,6 +10,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { Diagnostic, TextDocument, TextEditor, Uri } from "vscode";
 
 import { createTestUri as uri } from "../test/support/test-uri.js";
+import { utf8ByteLength } from "./text-primitives.js";
 import { VsCodeDiagnostics } from "./vscode-diagnostics.js";
 import { WorkspaceScope } from "./workspace-scope.js";
 
@@ -232,7 +233,7 @@ describe("VsCodeDiagnostics", () => {
     expect(exactResult.truncated).toBe(false);
 
     const sourceBytes = ["file", "", "src/index.ts", "typescript"].reduce(
-      (total, value) => total + new TextEncoder().encode(value).length,
+      (total, value) => total + utf8ByteLength(value),
       0,
     );
     const exactBytes =

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { mcpNegotiatedProvenanceSchema } from "./mcp-negotiation.js";
 
 import { mcpGenerationSchema, mcpServerIdentitySchema, mcpServerIdSchema } from "./mcp-resource.js";
+import { utf8ByteLength } from "./text-primitives.js";
 
 export const maxMcpPromptDescriptors = 1_000;
 export const maxMcpPromptArguments = 32;
@@ -100,12 +101,3 @@ export type McpPromptDescriptorDto = z.infer<typeof mcpPromptDescriptorSchema>;
 export type McpPromptCatalogDto = z.infer<typeof mcpPromptCatalogSchema>;
 export type McpPromptPreviewDto = z.infer<typeof mcpPromptPreviewSchema>;
 export type McpPromptConfirmation = z.infer<typeof mcpPromptConfirmationSchema>;
-
-function utf8ByteLength(value: string): number {
-  let bytes = 0;
-  for (const character of value) {
-    const codePoint = character.codePointAt(0) ?? 0;
-    bytes += codePoint <= 0x7f ? 1 : codePoint <= 0x7ff ? 2 : codePoint <= 0xffff ? 3 : 4;
-  }
-  return bytes;
-}

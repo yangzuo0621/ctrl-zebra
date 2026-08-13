@@ -4,6 +4,8 @@ import {
   maxApprovalUriCharacters,
 } from "@ctrl-zebra/protocol";
 
+import { hasExactKeys, isRecord } from "./record-validation.js";
+
 export interface TextPosition {
   readonly line: number;
   readonly character: number;
@@ -42,7 +44,7 @@ export class OverlappingTextEditsError extends Error {
 export function parseTextEditPlan(value: unknown): TextEditPlan {
   if (
     !isRecord(value) ||
-    !hasOnlyKeys(value, ["uri", "originalRevision", "edits"]) ||
+    !hasExactKeys(value, ["uri", "originalRevision", "edits"]) ||
     typeof value.uri !== "string" ||
     value.uri.length === 0 ||
     value.uri.length > maxApprovalUriCharacters ||
@@ -90,10 +92,10 @@ export function parseTextEdits(value: unknown): readonly TextEdit[] {
 function parseTextEdit(value: unknown): TextEdit {
   if (
     !isRecord(value) ||
-    !hasOnlyKeys(value, ["range", "newText"]) ||
+    !hasExactKeys(value, ["range", "newText"]) ||
     typeof value.newText !== "string" ||
     !isRecord(value.range) ||
-    !hasOnlyKeys(value.range, ["start", "end"])
+    !hasExactKeys(value.range, ["start", "end"])
   ) {
     throw new InvalidTextEditPlanError();
   }
@@ -113,7 +115,7 @@ function parseTextEdit(value: unknown): TextEdit {
 function parseTextPosition(value: unknown): TextPosition {
   if (
     !isRecord(value) ||
-    !hasOnlyKeys(value, ["line", "character"]) ||
+    !hasExactKeys(value, ["line", "character"]) ||
     !isNonnegativeSafeInteger(value.line) ||
     !isNonnegativeSafeInteger(value.character)
   ) {
@@ -137,17 +139,6 @@ function comparePositions(left: TextPosition, right: TextPosition): number {
   return left.line - right.line || left.character - right.character;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 function isNonnegativeSafeInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
-}
-
-function hasOnlyKeys(value: Readonly<Record<string, unknown>>, keys: readonly string[]): boolean {
-  return (
-    Object.keys(value).every((key) => keys.includes(key)) &&
-    Object.keys(value).length === keys.length
-  );
 }

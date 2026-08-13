@@ -1,4 +1,5 @@
 import type { ModelMessage } from "./model-gateway.js";
+import { hasExactKeys, isRecord } from "./record-validation.js";
 
 export const conversationSummaryKind = "conversation-summary" as const;
 export const conversationSummaryVersion = 1 as const;
@@ -96,15 +97,6 @@ function isSummaryContentLengthValid(value: string): boolean {
   }
 
   return true;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function hasExactKeys(value: Readonly<Record<string, unknown>>, keys: readonly string[]): boolean {
-  const actual = Object.keys(value);
-  return actual.length === keys.length && actual.every((key) => keys.includes(key));
 }
 
 function isNonnegativeSafeInteger(value: unknown): value is number {

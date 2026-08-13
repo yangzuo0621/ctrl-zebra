@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { utf8ByteLength } from "./text-primitives.js";
+
 export const maxToolResultBytes = 1_048_576;
 export const maxToolErrorMessageCharacters = 1_024;
 
@@ -152,28 +154,4 @@ function isJsonObject(value: object, ancestors: Set<object>): boolean {
   }
 
   return true;
-}
-
-function utf8ByteLength(value: string): number {
-  let length = 0;
-
-  for (const character of value) {
-    const codePoint = character.codePointAt(0);
-
-    if (codePoint === undefined) {
-      continue;
-    }
-
-    if (codePoint <= 0x7f) {
-      length += 1;
-    } else if (codePoint <= 0x7ff) {
-      length += 2;
-    } else if (codePoint <= 0xffff) {
-      length += 3;
-    } else {
-      length += 4;
-    }
-  }
-
-  return length;
 }

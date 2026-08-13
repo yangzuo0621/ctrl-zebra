@@ -13,6 +13,8 @@ import {
   maxMcpResourceUriCodePoints,
 } from "./contracts.js";
 import { createMcpClientError } from "./errors.js";
+import { hasOnlyKeys, isPlainRecord } from "./record-validation.js";
+import { utf8ByteLength } from "./text-primitives.js";
 
 const resourceKeys = new Set([
   "_meta",
@@ -197,7 +199,7 @@ export function resolveMcpResourceSelection(
         !value.isWellFormed() ||
         [...value].length > 4_096,
     ) ||
-    argumentValues.reduce((bytes, value) => bytes + utf8Bytes(value), 0) > 65_536
+    argumentValues.reduce((bytes, value) => bytes + utf8ByteLength(value), 0) > 65_536
   ) {
     throw new McpResourceError("malformed-message");
   }
@@ -310,7 +312,7 @@ function readBoundedText(value: unknown, allowEmpty: boolean): string {
   const text = readText(value, allowEmpty);
   if (
     [...text].length > maxMcpResourceUriCodePoints ||
-    new TextEncoder().encode(text).byteLength > maxMcpResourceUriBytes
+    utf8ByteLength(text) > maxMcpResourceUriBytes
   ) {
     throw new McpResourceError("limit-exceeded");
   }
@@ -326,18 +328,14 @@ function readText(value: unknown, allowEmpty: boolean): string {
 
 function readStrictRecord(value: unknown, keys: ReadonlySet<string>) {
   const record = readRecord(value);
-  if (Object.keys(record).some((key) => !keys.has(key))) {
+  if (!hasOnlyKeys(record, keys)) {
     throw new McpResourceError("malformed-message");
   }
   return record;
 }
 
 function readRecord(value: unknown): Readonly<Record<string, unknown>> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new McpResourceError("malformed-message");
-  }
-  const prototype = Object.getPrototypeOf(value);
-  if (prototype !== Object.prototype && prototype !== null) {
+  if (!isPlainRecord(value)) {
     throw new McpResourceError("malformed-message");
   }
   return value as Readonly<Record<string, unknown>>;
@@ -351,13 +349,9 @@ function addDescriptorBytes(current: number, value: unknown, index: number): num
     throw new McpResourceError("malformed-message");
   }
   if (serialized === undefined) throw new McpResourceError("malformed-message");
-  const bytes = new TextEncoder().encode(serialized).byteLength;
+  const bytes = utf8ByteLength(serialized);
   if (bytes > maxMcpDescriptorBytes) throw new McpResourceError("limit-exceeded");
   return current + bytes + (index === 0 ? 0 : 1);
-}
-
-function utf8Bytes(value: string): number {
-  return new TextEncoder().encode(value).byteLength;
 }
 
 function takeTextPrefix(text: string, maxCodePoints: number, maxBytes: number) {
@@ -365,7 +359,7 @@ function takeTextPrefix(text: string, maxCodePoints: number, maxBytes: number) {
   let codePoints = 0;
   let bytes = 0;
   for (const character of text) {
-    const characterBytes = new TextEncoder().encode(character).byteLength;
+    const characterBytes = utf8ByteLength(character);
     if (codePoints >= maxCodePoints || bytes + characterBytes > maxBytes) {
       return { text: result, codePoints, bytes, truncated: true };
     }

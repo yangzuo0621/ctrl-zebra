@@ -10,7 +10,6 @@ import {
 import {
   assistantMessageSchema,
   hasTokenUsage,
-  type JsonValue,
   maxReasoningBlockCodePoints,
   maxReasoningBlocksPerRun,
   maxReasoningBlockUtf8Bytes,
@@ -28,6 +27,7 @@ import {
   tokenUsageSchema,
   userMessageSchema,
 } from "@ctrl-zebra/protocol";
+import { isRecord } from "../adapters/record-validation.js";
 
 export interface SessionRecoveryActions {
   list(): Promise<readonly SessionSummary[]>;
@@ -116,7 +116,7 @@ export function createSessionRecoveryActions(
           assistant = undefined;
         } else if (persisted.event.type === "agent.text-delta") {
           const data = persisted.event.data;
-          if (!isJsonObject(data) || typeof data.text !== "string") {
+          if (!isRecord(data) || typeof data.text !== "string") {
             throw new SessionRecoveryError("corrupt");
           }
           if (assistant === undefined || assistant.role !== "assistant") {
@@ -394,8 +394,4 @@ function toSessionRecoveryError(error: unknown): SessionRecoveryError {
     return new SessionRecoveryError("corrupt");
   }
   return new SessionRecoveryError("unavailable");
-}
-
-function isJsonObject(value: JsonValue): value is { readonly [key: string]: JsonValue } {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

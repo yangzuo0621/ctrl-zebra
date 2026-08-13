@@ -1,3 +1,5 @@
+import { isRecord } from "./record-validation.mjs";
+
 export const MAX_VSIX_BYTES = 5 * 1024 * 1024;
 export const MAX_UNCOMPRESSED_BYTES = 10 * 1024 * 1024;
 export const MAX_ENTRY_BYTES = 5 * 1024 * 1024;
@@ -156,8 +158,4 @@ function validateArchivePath(fileName) {
   ) {
     throw new Error(`VSIX contains an unsafe path: ${fileName}`);
   }
-}
-
-function isRecord(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

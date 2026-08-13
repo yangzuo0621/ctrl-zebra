@@ -6,6 +6,12 @@ import {
   maxIdePositionCharacter,
   maxIdePositionLine,
 } from "@ctrl-zebra/protocol";
+import { isRecord } from "./record-validation.js";
+import {
+  utf8ByteLength as genericUtf8ByteLength,
+  utf8BytesForCodePoint,
+} from "./text-primitives.js";
+import { sameIdentityPart, sameUri } from "./uri-comparison.js";
 
 export interface IdeSourceUriLike {
   readonly scheme: string;
@@ -118,10 +124,6 @@ function readCodePoint(
   return { value: codeUnit, width: 1 };
 }
 
-function utf8BytesForCodePoint(codePoint: number): number {
-  return codePoint <= 0x7f ? 1 : codePoint <= 0x7ff ? 2 : codePoint <= 0xffff ? 3 : 4;
-}
-
 function countCodePoints(value: string): number {
   let count = 0;
   for (let index = 0; index < value.length; ) {
@@ -132,13 +134,8 @@ function countCodePoints(value: string): number {
 }
 
 function utf8ByteLength(value: string): number {
-  let bytes = 0;
-  for (let index = 0; index < value.length; ) {
-    const point = readCodePoint(value, index);
-    index += point.width;
-    bytes += utf8BytesForCodePoint(point.value);
-  }
-  return bytes;
+  if (!value.isWellFormed()) throw new IdeSourceProjectionError();
+  return genericUtf8ByteLength(value);
 }
 
 function takeBoundedText(
@@ -206,16 +203,6 @@ function isWellFormedUnicode(value: string): boolean {
   return value.isWellFormed();
 }
 
-function sameUri(left: IdeSourceUriLike, right: IdeSourceUriLike): boolean {
-  return (
-    left.scheme.toLocaleLowerCase("en-US") === right.scheme.toLocaleLowerCase("en-US") &&
-    left.authority.toLocaleLowerCase("en-US") === right.authority.toLocaleLowerCase("en-US") &&
-    left.path === right.path &&
-    left.query === right.query &&
-    left.fragment === right.fragment
-  );
-}
-
 function toWorkspaceRelativePath(root: IdeSourceUriLike, target: IdeSourceUriLike): string {
   const rootSegments = pathSegments(root.path);
   const targetSegments = pathSegments(target.path);
@@ -246,17 +233,9 @@ function pathSegments(path: string): readonly string[] {
   return segments;
 }
 
-function sameIdentityPart(left: string, right: string): boolean {
-  return left.toLocaleLowerCase("en-US") === right.toLocaleLowerCase("en-US");
-}
-
 function orderedReasons(reasons: Iterable<IdeTruncationReason>): readonly IdeTruncationReason[] {
   const set = new Set(reasons);
   return ideTruncationReasons.filter((reason) => set.has(reason));
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 export const ideSourceProjector = {

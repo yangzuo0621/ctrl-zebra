@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { utf8ByteLength, utf8BytesForCodePoint } from "./text-primitives.js";
+
 export const maxIdeUriSchemeCodePoints = 32;
 export const maxIdeUriSchemeBytes = 128;
 export const maxIdeUriAuthorityCodePoints = 9;
@@ -579,16 +581,4 @@ function hasAtMostIdeTextLines(value: string): boolean {
     if (lines > maxIdeTextLines) return false;
   }
   return true;
-}
-
-function utf8ByteLength(value: string): number {
-  let bytes = 0;
-  for (const character of value) {
-    bytes += utf8BytesForCodePoint(character.codePointAt(0) ?? 0);
-  }
-  return bytes;
-}
-
-function utf8BytesForCodePoint(codePoint: number): number {
-  return codePoint <= 0x7f ? 1 : codePoint <= 0x7ff ? 2 : codePoint <= 0xffff ? 3 : 4;
 }

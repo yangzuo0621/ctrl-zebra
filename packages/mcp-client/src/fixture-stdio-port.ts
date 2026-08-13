@@ -1,4 +1,5 @@
 import type { McpProcessTermination, McpStdioPort, McpStdioPortHandlers } from "./contracts.js";
+import { isRecord } from "./record-validation.js";
 
 type FixtureMessageHandler = (
   message: Readonly<Record<string, unknown>>,
@@ -117,8 +118,4 @@ export function jsonRpcId(message: Readonly<Record<string, unknown>>): string | 
 
 export function isMethod(method: string): (message: Readonly<Record<string, unknown>>) => boolean {
   return (message) => message.method === method;
-}
-
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

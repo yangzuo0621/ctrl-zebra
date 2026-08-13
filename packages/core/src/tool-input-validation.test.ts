@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { hasOnlyKeys, isPlainRecord } from "./record-validation.js";
 import { InvalidToolInputError, parseToolInput } from "./tool-input-validation.js";
 import { type AgentTool, ToolUnavailableError } from "./tool-registry.js";
 
@@ -19,12 +20,11 @@ function createReadFileTool(): AgentTool<ReadFileInput, string> {
     },
     risk: "read",
     parseInput(value: unknown): ReadFileInput {
-      if (!isPlainObject(value)) {
+      if (!isPlainRecord(value)) {
         throw new TypeError("Expected an object.");
       }
 
-      const keys = Object.keys(value);
-      if (keys.some((key) => key !== "path" && key !== "startLine")) {
+      if (!hasOnlyKeys(value, new Set(["path", "startLine"]))) {
         throw new TypeError("Unexpected field.");
       }
 
@@ -92,12 +92,3 @@ describe("parseToolInput", () => {
     expect(() => parseToolInput(tool, { path: "README.md" })).toThrow(unavailable);
   });
 });
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return false;
-  }
-
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
-}

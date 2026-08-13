@@ -9,6 +9,7 @@ import {
   maxCheckpointRecordBytes,
   type PersistencePath,
 } from "./index.js";
+import { utf8ByteLength } from "./text-primitives.js";
 
 const beforeHash = "a".repeat(64);
 const checkpoint = {
@@ -182,7 +183,7 @@ class FakeCheckpointStorage implements CheckpointStorage {
   }
 
   async writeText(path: PersistencePath, content: string, maxBytes: number): Promise<void> {
-    expect(new TextEncoder().encode(content).byteLength).toBeLessThanOrEqual(maxBytes);
+    expect(utf8ByteLength(content)).toBeLessThanOrEqual(maxBytes);
     const key = path.join("/");
     this.operations.push(`write:${key}`);
     this.files.set(key, content);

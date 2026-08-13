@@ -6,6 +6,7 @@ import {
 } from "@ctrl-zebra/protocol";
 
 import type { PersistencePath } from "./manifest-store.js";
+import { utf8ByteLength } from "./text-primitives.js";
 
 export const maxCheckpointRecordBytes = 4_194_304;
 export const maxCheckpointRecords = 10_000;
@@ -148,13 +149,4 @@ export class AtomicCheckpointStore implements CheckpointStore {
       // Preserve the primary creation failure; the storage owner may clean stale temp files.
     }
   }
-}
-
-function utf8ByteLength(value: string): number {
-  let bytes = 0;
-  for (const character of value) {
-    const codePoint = character.codePointAt(0) ?? 0;
-    bytes += codePoint <= 0x7f ? 1 : codePoint <= 0x7ff ? 2 : codePoint <= 0xffff ? 3 : 4;
-  }
-  return bytes;
 }

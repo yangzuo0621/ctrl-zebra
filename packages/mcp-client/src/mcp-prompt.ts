@@ -13,6 +13,8 @@ import {
   maxMcpPromptTextBytes,
 } from "./contracts.js";
 import { createMcpClientError } from "./errors.js";
+import { hasOnlyKeys, isPlainRecord } from "./record-validation.js";
+import { utf8ByteLength } from "./text-primitives.js";
 
 const promptKeys = new Set(["_meta", "arguments", "description", "icons", "name", "title"]);
 const argumentKeys = new Set(["description", "name", "required", "title"]);
@@ -144,7 +146,8 @@ export function validateMcpPromptArguments(
     ) {
       throw new McpPromptError("malformed-message");
     }
-    bytes += utf8Bytes(JSON.stringify(key)) + utf8Bytes(JSON.stringify(argumentValue)) + 2;
+    bytes +=
+      utf8ByteLength(JSON.stringify(key)) + utf8ByteLength(JSON.stringify(argumentValue)) + 2;
     if (bytes > maxMcpPromptArgumentsBytes) throw new McpPromptError("limit-exceeded");
     result[key] = argumentValue;
   }
@@ -188,7 +191,7 @@ export function normalizeMcpPromptResult(
     }
     const text = readText(content.text, true);
     codePoints += [...text].length;
-    bytes += utf8Bytes(text);
+    bytes += utf8ByteLength(text);
     if (codePoints > maxMcpPromptCodePoints || bytes > maxMcpPromptTextBytes) {
       throw new McpPromptError("limit-exceeded");
     }
@@ -214,18 +217,14 @@ function readText(value: unknown, allowEmpty: boolean): string {
 
 function readStrictRecord(value: unknown, keys: ReadonlySet<string>) {
   const record = readRecord(value);
-  if (Object.keys(record).some((key) => !keys.has(key))) {
+  if (!hasOnlyKeys(record, keys)) {
     throw new McpPromptError("malformed-message");
   }
   return record;
 }
 
 function readRecord(value: unknown): Readonly<Record<string, unknown>> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new McpPromptError("malformed-message");
-  }
-  const prototype = Object.getPrototypeOf(value);
-  if (prototype !== Object.prototype && prototype !== null) {
+  if (!isPlainRecord(value)) {
     throw new McpPromptError("malformed-message");
   }
   return value as Readonly<Record<string, unknown>>;
@@ -239,11 +238,7 @@ function addDescriptorBytes(current: number, value: unknown, index: number): num
     throw new McpPromptError("malformed-message");
   }
   if (serialized === undefined) throw new McpPromptError("malformed-message");
-  const bytes = utf8Bytes(serialized);
+  const bytes = utf8ByteLength(serialized);
   if (bytes > maxMcpDescriptorBytes) throw new McpPromptError("limit-exceeded");
   return current + bytes + (index === 0 ? 0 : 1);
-}
-
-function utf8Bytes(value: string): number {
-  return new TextEncoder().encode(value).byteLength;
 }
