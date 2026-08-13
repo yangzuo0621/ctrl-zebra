@@ -66,12 +66,12 @@
 **进度摘要**：
 
 - 总任务：148
-- 已完成：129
-- 进行中：1
+- 已完成：130
+- 进行中：0
 - 受阻：0
 - 待开始：18
-- 当前执行：T2001（进行中；docs-only 文件生命周期与多文件原子契约约束）
-- 下一任务：T2002（T2001 约束 PR 合入后）
+- 当前执行：T2002（T2001 约束 PR 合入后）
+- 下一任务：T2003
 - 最后更新：2026-08-13
 
 | 阶段 | 任务 | 状态 | 完成 PR | 完成日期 |
@@ -205,7 +205,7 @@
 | 19 | T1903 | 已完成 | [#204](https://github.com/yangzuo0621/ctrl-zebra/pull/204) | 2026-08-12 |
 | 19 | T1904 | 已完成 | [#205](https://github.com/yangzuo0621/ctrl-zebra/pull/205) | 2026-08-12 |
 | 19 | T1905 | 已完成 | [#207](https://github.com/yangzuo0621/ctrl-zebra/pull/207) | 2026-08-12 |
-| 20 | T2001 | 进行中 | — | — |
+| 20 | T2001 | 已完成 | [#227](https://github.com/yangzuo0621/ctrl-zebra/pull/227) | 2026-08-13 |
 | 20 | T2002 | 待开始 | — | — |
 | 20 | T2003 | 待开始 | — | — |
 | 20 | T2004 | 待开始 | — | — |
@@ -228,7 +228,7 @@
 ### 当前任务
 
 - ID：T2001
-- 状态：进行中（docs-only 约束；实现分支 `codex/t2001-file-lifecycle-contract`）
+- 状态：已完成（docs-only 约束；PR #227 已审阅并合并）
 - 目标：确定文件创建、删除、重命名、单文件/多文件编辑的不可变计划、精确一次性审批、Diff、
   Checkpoint、原子提交、失败优先级、恢复/兼容规则，并固定显式 RE2-compatible regex 搜索契约。
 - 前置条件：Phase 19 已归档；Workspace Trust、规范 URI、现有 `propose_file_edit`、Approval、
@@ -344,6 +344,17 @@
   legacy Checkpoint compatibility; explicit regex mode with RE2-compatible syntax and bounded execution.
 - 是否需要独立约束 PR（docs-only / config-only）：是，T2001 itself is the independent docs-only
   constraint PR. Runtime tasks remain blocked until this PR is reviewed and squash-merged.
+
+### T2001 完成记录
+
+- 完成摘要：完成文件创建、删除、重命名、单文件/多文件编辑的不可变计划、精确一次性审批、Diff、
+  Checkpoint、原子提交、失败优先级、恢复/兼容规则及显式 RE2-compatible regex 搜索契约；本任务
+  仅更新规范与约束文档，未引入 runtime 实现、依赖或 Schema 源码。
+- 完成证据：[PR #227](https://github.com/yangzuo0621/ctrl-zebra/pull/227)，审阅通过 revision
+  `bab91b1b07222c1fd83cea9ed40e7e476d4a9ce7`；GitHub Actions Ubuntu、macOS、Windows required
+  checks 均通过；本地 package/smoke 验证、`pnpm check` 与 `git diff --check` 均通过。
+- 完成日期：2026-08-13
+- 下一任务：T2002；T2005 负责 EO-008 `re2js` fit evaluation 与受控 regex engine 选型。
 
 ---
 
