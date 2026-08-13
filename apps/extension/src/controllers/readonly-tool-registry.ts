@@ -4,6 +4,7 @@ import {
   createGetDiagnosticsTool,
   createListFilesTool,
   createListSymbolsTool,
+  createProposeFileCreateTool,
   createProposeFileEditTool,
   createReadEditorContextTool,
   createReadFileTool,
@@ -12,6 +13,7 @@ import {
   type IdeContextPort,
   type IdeDiagnosticsPort,
   type IdeLanguageServicePort,
+  type ProposeFileCreateWorkspace,
   type ProposeFileEditWorkspace,
   type RunCommandExecutor,
 } from "@ctrl-zebra/builtin-tools";
@@ -57,6 +59,10 @@ interface WorkspaceToolRegistryDependencies {
     root: Uri,
     scope: WorkspaceScope,
   ) => ProposeFileEditWorkspace;
+  readonly createProposeFileCreateWorkspace?: (
+    root: Uri,
+    scope: WorkspaceScope,
+  ) => ProposeFileCreateWorkspace;
   readonly commandExecutor: RunCommandExecutor;
   readonly workspaceTrust: WorkspaceTrustPolicy;
   readonly editorContext?: IdeContextPort;
@@ -73,6 +79,7 @@ export function createWorkspaceToolRegistryProvider({
   onDidChangeWorkspaceFolders,
   onDidGrantWorkspaceTrust,
   createProposeFileEditWorkspace,
+  createProposeFileCreateWorkspace,
   commandExecutor,
   workspaceTrust,
   editorContext,
@@ -111,6 +118,11 @@ export function createWorkspaceToolRegistryProvider({
     }
     registry.register(createSearchFilesTool(new WorkspaceSearchFiles(lister, reader)));
     if (workspaceTrust.isTrusted()) {
+      if (createProposeFileCreateWorkspace !== undefined) {
+        registry.register(
+          createProposeFileCreateTool(createProposeFileCreateWorkspace(selectedRoot, scope)),
+        );
+      }
       registry.register(
         createProposeFileEditTool(createProposeFileEditWorkspace(selectedRoot, scope)),
       );

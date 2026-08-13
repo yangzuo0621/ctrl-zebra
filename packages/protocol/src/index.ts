@@ -41,6 +41,8 @@ export {
 } from "./chat-message.js";
 export type {
   Checkpoint,
+  CheckpointAfterState,
+  CheckpointBeforeState,
   CheckpointFile,
   CheckpointHash,
   CheckpointId,
@@ -50,6 +52,8 @@ export type {
   CheckpointTextHasher,
 } from "./checkpoint.js";
 export {
+  checkpointAfterStateSchema,
+  checkpointBeforeStateSchema,
   checkpointFileSchema,
   checkpointHashSchema,
   checkpointIdSchema,

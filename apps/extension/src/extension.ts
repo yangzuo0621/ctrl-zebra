@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { realpath } from "node:fs/promises";
 import { performance } from "node:perf_hooks";
 import { env, memoryUsage, platform } from "node:process";
-
+import type { FileCreatePlan } from "@ctrl-zebra/core";
 import { ControlledMcpClient } from "@ctrl-zebra/mcp-client";
 import { isApprovedExternalLink } from "@ctrl-zebra/protocol";
 import {
@@ -33,7 +33,9 @@ import {
 import { createLocalWorkspaceUriCanonicalizer } from "./adapters/canonicalize-local-workspace-uri.js";
 import { createVsCodeCheckpointRestorer } from "./adapters/create-vscode-checkpoint-restorer.js";
 import { createVsCodeDiffPresenter } from "./adapters/create-vscode-diff-presenter.js";
+import { createVsCodeFileCreateApplier } from "./adapters/create-vscode-file-create-applier.js";
 import { createVsCodeWorkspaceEditApplier } from "./adapters/create-vscode-workspace-edit-applier.js";
+import { FileCreateConflictError } from "./adapters/file-create-applier.js";
 import {
   mcpServerSettingName,
   mcpServerSettingSection,
@@ -51,7 +53,9 @@ import { createStructuredLogger } from "./adapters/structured-logger.js";
 import { createWorkspaceCheckpointStoreProvider } from "./adapters/vscode-checkpoint-storage.js";
 import { VsCodeDiagnostics } from "./adapters/vscode-diagnostics.js";
 import { VsCodeEditorContext } from "./adapters/vscode-editor-context.js";
+import { isVscodeFileNotFound } from "./adapters/vscode-file-system-error.js";
 import { VsCodeLanguageServices } from "./adapters/vscode-language-services.js";
+import { VsCodeProposeFileCreateWorkspace } from "./adapters/vscode-propose-file-create-workspace.js";
 import { VsCodeProposeFileEditWorkspace } from "./adapters/vscode-propose-file-edit-workspace.js";
 import { createWorkspaceSessionRepositoryProvider } from "./adapters/vscode-session-storage.js";
 import { findWorkspaceFiles } from "./adapters/vscode-workspace-find-files.js";
@@ -70,6 +74,7 @@ import {
   createEditorContextSourceFingerprint,
   EditorContextEntryController,
 } from "./controllers/editor-context-entry.js";
+import { FileCreateApprovalWorkflow } from "./controllers/file-create-approval-workflow.js";
 import { FileEditApprovalWorkflow } from "./controllers/file-edit-approval-workflow.js";
 import { McpConnectionController } from "./controllers/mcp-connection-controller.js";
 import { McpPromptActions } from "./controllers/mcp-prompt-actions.js";
@@ -244,6 +249,71 @@ export function activate(context: ExtensionContext): void {
     },
     workspaceTrust,
   });
+  const validateFileCreatePlan = async (
+    plan: FileCreatePlan,
+    signal: AbortSignal,
+  ): Promise<void> => {
+    const root = getSelectedRoot();
+    const scope = new WorkspaceScope(root, canonicalize);
+    const canonical = await scope.validateNewFile(Uri.parse(plan.uri, true), signal);
+    if (canonical.toString() !== plan.uri) {
+      throw new WorkspaceScopeError("canonicalization-failed");
+    }
+    const target = await workspace.fs.stat(canonical).then(
+      () => true,
+      (error) => {
+        if (isVscodeFileNotFound(error)) return false;
+        throw error;
+      },
+    );
+    if (target) {
+      throw new FileCreateConflictError();
+    }
+  };
+  const fileCreateApprovalWorkflow = new FileCreateApprovalWorkflow({
+    createId: randomUUID,
+    now: () => new Date(),
+    hashText,
+    async bindPlan(plan, signal) {
+      const root = getSelectedRoot();
+      const scope = new WorkspaceScope(root, canonicalize);
+      const canonical = await scope.validateNewFile(Uri.parse(plan.uri, true), signal);
+      if (canonical.toString() !== plan.uri) {
+        throw new WorkspaceScopeError("canonicalization-failed");
+      }
+      return root.toString();
+    },
+    validatePlan: validateFileCreatePlan,
+    presentDiff: async (plan, signal) => {
+      await validateFileCreatePlan(plan, signal);
+      await diffPresenter.presentTextPair(plan.path, "", plan.content, signal);
+    },
+    async applyPlan(plan, ownership, signal) {
+      try {
+        const checkpointStore = await selectCheckpointStore();
+        signal.throwIfAborted();
+        await createVsCodeFileCreateApplier(
+          createCurrentScope(),
+          async (checkpoint, checkpointSignal) => {
+            await checkpointStore.create(checkpoint, checkpointSignal);
+          },
+          randomUUID,
+          () => new Date(),
+          () => workspaceTrust.requireTrusted(),
+        ).apply(plan, ownership, signal);
+        return "applied";
+      } catch (error) {
+        if (error instanceof FileCreateConflictError || error instanceof WorkspaceScopeError) {
+          return "conflict";
+        }
+        throw error;
+      }
+    },
+    reportError: (message) => {
+      void window.showErrorMessage(message);
+    },
+    workspaceTrust,
+  });
   const commandExecutor = new WorkspaceCommandExecutor({
     getSelectedRoot,
     createScope: (root) => new WorkspaceScope(root, canonicalize),
@@ -269,6 +339,7 @@ export function activate(context: ExtensionContext): void {
     fileEditApprovalWorkflow,
     commandApprovalWorkflow,
     mcpToolApprovalWorkflow,
+    fileCreateApprovalWorkflow,
   );
   const editorContext = new VsCodeEditorContext({
     getActiveEditor: () => window.activeTextEditor,
@@ -414,6 +485,8 @@ export function activate(context: ExtensionContext): void {
     onDidGrantWorkspaceTrust: (listener) => workspace.onDidGrantWorkspaceTrust(listener),
     createProposeFileEditWorkspace: (root, scope) =>
       new VsCodeProposeFileEditWorkspace(root, scope, joinWorkspacePath),
+    createProposeFileCreateWorkspace: (root, scope) =>
+      new VsCodeProposeFileCreateWorkspace(root, scope, joinWorkspacePath),
     commandExecutor,
     workspaceTrust,
     editorContext,

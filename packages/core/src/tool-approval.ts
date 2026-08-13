@@ -19,6 +19,7 @@ export interface PreparedToolApproval {
 
 export type ApprovedToolConsumption =
   | { readonly outcome: "approved" }
+  | { readonly outcome: "applied" }
   | { readonly outcome: "conflict"; readonly message: string }
   | { readonly outcome: "expired" };
 

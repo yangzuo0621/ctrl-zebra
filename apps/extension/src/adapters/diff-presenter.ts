@@ -79,12 +79,35 @@ export class DiffPresenter implements DiffPresenterDisposable {
     signal.throwIfAborted();
     this.#assertSourceRevision(plan, source);
     const afterText = applyTextEdits(source.text, plan);
+    await this.#presentTextPair(source.label, source.text, afterText, signal);
+  }
+
+  async presentTextPair(
+    label: string,
+    beforeText: string,
+    afterText: string,
+    signal: AbortSignal,
+  ): Promise<void> {
+    if (this.#disposed) {
+      throw new DiffPresenterDisposedError();
+    }
+
+    signal.throwIfAborted();
+    await this.#presentTextPair(label, beforeText, afterText, signal);
+  }
+
+  async #presentTextPair(
+    label: string,
+    beforeText: string,
+    afterText: string,
+    signal: AbortSignal,
+  ): Promise<void> {
     const id = this.#dependencies.nextId();
-    const beforeUri = this.#dependencies.createVirtualUri(id, "before", source.label);
-    const afterUri = this.#dependencies.createVirtualUri(id, "after", source.label);
+    const beforeUri = this.#dependencies.createVirtualUri(id, "before", label);
+    const afterUri = this.#dependencies.createVirtualUri(id, "after", label);
     const beforeKey = beforeUri.toString();
     const afterKey = afterUri.toString();
-    this.#contents.set(beforeKey, source.text);
+    this.#contents.set(beforeKey, beforeText);
     this.#contents.set(afterKey, afterText);
 
     try {
@@ -92,7 +115,7 @@ export class DiffPresenter implements DiffPresenterDisposable {
       await this.#dependencies.showDiff(
         beforeUri,
         afterUri,
-        `CtrlZebra: ${source.label} (Proposed Changes)`,
+        `CtrlZebra: ${label} (Proposed Changes)`,
       );
     } catch (error) {
       this.#contents.delete(beforeKey);

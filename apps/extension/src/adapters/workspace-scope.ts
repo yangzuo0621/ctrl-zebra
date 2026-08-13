@@ -59,6 +59,44 @@ export class WorkspaceScope {
     return canonicalTarget;
   }
 
+  /**
+   * Validates a new-file target by canonicalizing its existing parent. The target itself may not
+   * exist yet, so resolving it with the ordinary realpath-backed path validator would reject every
+   * safe create proposal.
+   */
+  async validateNewFile(target: Uri, signal: AbortSignal): Promise<Uri> {
+    signal.throwIfAborted();
+    assertSafeUri(target);
+    this.#assertContained(this.#selectedRoot, target);
+
+    let canonicalRoot: Uri;
+    let canonicalParent: Uri;
+    try {
+      canonicalRoot = await this.#canonicalize(this.#selectedRoot, signal);
+      signal.throwIfAborted();
+      const separator = target.path.lastIndexOf("/");
+      const parentPath = separator <= 0 ? "/" : target.path.slice(0, separator);
+      canonicalParent = await this.#canonicalize(target.with({ path: parentPath }), signal);
+      signal.throwIfAborted();
+    } catch {
+      signal.throwIfAborted();
+      throw new WorkspaceScopeError("canonicalization-failed");
+    }
+
+    assertSafeUri(canonicalRoot);
+    assertSafeUri(canonicalParent);
+    this.#assertContained(canonicalRoot, canonicalParent);
+
+    const basename = target.path.slice(target.path.lastIndexOf("/") + 1);
+    const parentPath = canonicalParent.path.endsWith("/")
+      ? canonicalParent.path.slice(0, -1)
+      : canonicalParent.path;
+    const canonicalTarget = canonicalParent.with({ path: `${parentPath}/${basename}` });
+    assertSafeUri(canonicalTarget);
+    this.#assertContained(canonicalRoot, canonicalTarget);
+    return canonicalTarget;
+  }
+
   #assertContained(root: Uri, target: Uri): void {
     if (
       !sameIdentityPart(root.scheme, target.scheme) ||

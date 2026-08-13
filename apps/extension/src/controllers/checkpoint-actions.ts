@@ -43,7 +43,31 @@ export function createCheckpointActions(
           sessionId,
           runId,
           createdAt,
-          files: files.map(({ uri, beforeHash, afterHash }) => ({ uri, beforeHash, afterHash })),
+          files: files.map((file) => {
+            if (
+              file.beforeContent !== undefined &&
+              file.beforeHash !== undefined &&
+              file.afterHash !== undefined
+            ) {
+              return { uri: file.uri, beforeHash: file.beforeHash, afterHash: file.afterHash };
+            }
+            const before = file.before;
+            const after = file.after;
+            if (before === undefined || after === undefined) {
+              throw new Error("Invalid Checkpoint state.");
+            }
+            return {
+              uri: file.uri,
+              before:
+                before.kind === "absent"
+                  ? { kind: "absent" as const }
+                  : { kind: "text" as const, beforeHash: before.beforeHash },
+              after:
+                after.kind === "absent"
+                  ? { kind: "absent" as const }
+                  : { kind: "text" as const, afterHash: after.afterHash },
+            };
+          }),
         }));
       } catch {
         signal.throwIfAborted();
