@@ -481,6 +481,61 @@ risk calls to avoid the matrix is forbidden.
   deterministic fake test content. Checkpoints never contain credentials or other forbidden
   persistence data. No retention or automatic deletion policy is introduced by T0801.
 
+### File lifecycle mutation boundary (T2001)
+
+The Phase 20 lifecycle surface is four distinct preparation Tools: `propose_file_create`,
+`propose_file_delete`, `propose_file_rename`, and `propose_workspace_edit`. The existing
+`propose_file_edit` remains the one-file edit Tool. All five are trusted `write` operations and use
+the same selected-root, Trust, approval, Diff, Checkpoint, cancellation, and result boundaries;
+there is no separate low-risk delete/rename category and no write-through read Tool.
+
+The model supplies only bounded workspace-relative paths, text, and edit ranges. It cannot supply a
+host URI, absolute path, selected root, canonical identity, revision/hash, target-exists flag,
+approval or Checkpoint ID, operation risk, expiry, replacement/force switch, or recovery content.
+The Extension revalidates every path lexically and canonically (including symlinks/junctions and
+case/authority rules) at preparation and immediately before approval consumption. A target whose
+canonical identity cannot be established is rejected; lexical containment alone is never enough.
+
+The immutable operation plan has one of `create`, `delete`, `rename`, or `edit`; its target set is
+non-empty, unique, deterministically ordered, and bounded to 128 files. Each target is supported
+UTF-8 text with no NUL/binary classification and at most 65,536 Unicode scalars, 2,000 logical
+lines, and 262,144 UTF-8 bytes. A plan's aggregate proposed text is at most 1,048,576 UTF-8
+bytes. `propose_workspace_edit` is edit-only: it rejects create/delete/rename entries, duplicate
+paths, overlapping ranges, and a mixture whose operation identity cannot be represented as one
+unchanged-target edit plan. Create, delete, and rename each remain a single-target operation so
+their existence transitions and restore semantics are unambiguous.
+
+Approval is created only after the Host has captured the exact before state and computed the after
+hash. The request binds Session, Run, Tool Call, selected workspace, operation kind, ordered
+canonical target identities, source/target pair for rename, before existence and revision/hash,
+after hash, exact edits/content, and the bounded presentation digest. The UI may show complete
+bounded before/after text in the temporary Diff editor (including a full create body or delete
+body); that content is not copied into the Approval DTO, persisted, logged, or sent as model context.
+The Diff must be available and complete within the same limits before the approval buttons become
+active. A changed Diff, hidden target, changed path, or changed operation invalidates the request.
+
+Immediately before consuming an approved request, the Host closes the cancellation gate and checks
+in this order: cancellation/Run ownership; approval state and host-clock expiry; selected-root and
+Trust; canonical target identity and file type; target existence (create absent, delete/rename
+source present and target absent); exact before revision/hash; durable Checkpoint creation; then one
+host-owned atomic `WorkspaceEdit`. Any failed preflight produces zero writes. `applyEdit` returning
+false, throwing, or lacking a proof of all-or-nothing behavior is a bounded `failed` outcome and is
+never reported as a subset or success. The Checkpoint remains for explicit reconciliation.
+
+Stable operation outcomes are `approved` (one atomic application), `denied` (user rejection or
+terminal approval), `conflict` (stale/replaced/missing/duplicate target, Trust/scope/canonical
+failure, or restore conflict), and `failed` (durability or host application failure). Cancellation
+is neither denial nor failure and emits no ordinary Tool Result. If more than one race is observed,
+the first failure in the above order wins and later details are suppressed.
+
+Restore is explicit and all-target. A create Checkpoint restores by deleting only the exact target
+whose current text hashes to the recorded after hash; a delete Checkpoint restores by creating the
+target only when it is absent; a rename Checkpoint restores the exact source/target pair only when
+both canonical identities and the source/target state pass. A multi-file Checkpoint is restored by
+one WorkspaceEdit after every target passes the after-hash preflight. No model or Webview input can
+provide replacement content, add targets, skip a conflict, or force an overwrite. A failed or
+partially confirmed host operation is surfaced for reconciliation rather than guessed.
+
 ## Structured Diagnostic Logging
 
 CtrlZebra diagnostic logs are local, bounded operational records written by the Extension Host to

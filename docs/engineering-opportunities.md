@@ -41,7 +41,7 @@
 
 ## 3. 候选组合与建议窗口
 
-下表的窗口是规划建议，不改变当前执行点；T2001 仍需单独授权。
+下表的窗口是规划建议，不改变当前执行点；T2001 已按单独授权进入 docs-only 约束阶段。
 
 | 机会 | 类型 | 优先级 | 建议窗口或依赖 | 状态 |
 |---|---|---:|---|---|
@@ -177,9 +177,18 @@ EO-012 可独立于 Phase 20 评估；除非发现当前 negotiation 存在实�
 - **初筛资料**：[`re2js` npm metadata](https://www.npmjs.com/package/re2js)、
   [`re2js` repository](https://github.com/le0pard/re2js) 和
   [RE2 syntax](https://github.com/google/re2/wiki/Syntax)。
-- **必须补齐的证据**：精确版本、维护活跃度、许可证、包体和 VSIX 影响、ESM/CJS 兼容、Unicode
-  行为、pattern/input/memory 上限、取消粒度、语法差异和恶意输入 benchmark。Context7 未收录
-  `re2js` 的直接文档，实施时必须以项目仓库、发布包和安全测试重新核实。
+- **T2001 评估（2026-08-13）**：RE2 的 Context7 文档确认其线性时间/非回溯安全模型，并明确
+  拒绝 backreference、look-around、possessive/atomic 等只靠回溯的语法。`re2js` npm metadata
+  当前为 `2.8.5`，MIT、0 个 runtime dependency、内置 TypeScript declarations，并同时发布
+  ESM/CJS 入口；其 README 还暴露 `RE2JS.LOOKBEHINDS` 扩展。因而未经过滤的 `re2js` **不满足**
+  T2001 的严格 RE2-compatible dialect：lookbehind 必须在 CtrlZebra-owned adapter 中拒绝，
+  不能把库的扩展当作产品能力。它仍是 T2005 的条件候选，只有在固定版本、严格语法拒绝、
+  Unicode/空匹配/取消、编译状态和 adversarial benchmark 全部通过后才可 adopt。T2001 不引入
+  依赖，不实现 parser 或 engine。
+- **替代方案与影响**：Node native `re2` 更接近官方实现但带 native addon、跨平台 VSIX 构建与
+  分发负担；原生 JavaScript `RegExp` 不能证明 ReDoS 安全；自研 parser/VM 会接管成熟正则
+  算法与 Unicode 维护，均不在 T2001 范围。T2005 必须在 controlled regex interface 后
+  重新比较这些方案，并以失败即拒绝而不是降级为回溯匹配。
 - **目标 seam**：Builtin Tool 或 Extension host 拥有的 controlled regex interface；第三方 pattern、
   match、failure 类型不得进入 Protocol 或 Core 契约。
 - **验收**：T2001 记录 adopt/reject 及替代方案；若 adopt，T2005 同时删除任何被取代的自制 parser、
@@ -282,4 +291,5 @@ EO-012 可独立于 Phase 20 评估；除非发现当前 negotiation 存在实�
 | 2026-08-13 | EO-005 | 已晋升为独立 maintenance | [EO-005 maintenance](maintenance/EO-005-mcp-catalog-refresh.md) | 在最新 `origin/main` `9e9e98e` 上重新验证 Tool/Prompt/Resource 的重复分页与刷新生命周期后建立 package-private MCP catalog collector/refresh seam |
 | 2026-08-13 | EO-006 | 独立 maintenance 已完成 | [EO-006 maintenance](maintenance/EO-006-mcp-error-ownership.md)；[PR #221](https://github.com/yangzuo0621/ctrl-zebra/pull/221) | MCP client stable error normalization is package-owned; Extension retains Host/process/configuration fallback mapping; duplicate client-message ownership removed and verified. |
 | 2026-08-13 | EO-007 | 独立 maintenance 已完成 | [EO-007 maintenance](maintenance/EO-007-package-local-text-primitives.md)；[PR #222](https://github.com/yangzuo0621/ctrl-zebra/pull/222) | Package-local text, record, URI, canonical JSON, and equality seams merged by reviewed squash commit `53bc57b`; CI and independent review gates passed; feature branch cleaned up. |
+| 2026-08-13 | EO-008 Safe regex engine | T2001 已完成契约评估，T2005 条件候选 | [T2001 Protocol contract](protocol.md#search-regex-mode) | 严格产品 dialect 采用 RE2 syntax/safety semantics；`re2js@2.8.5` 的 LOOKBEHINDS 扩展使其不是无过滤 drop-in，须由 T2005 adapter 拒绝扩展并完成 bounds/cancellation/adversarial evidence；T2001 未加依赖。 |
 | 2026-08-13 | EO-012 MCP SDK-native negotiation | 初始登记为评估候选 | — | 现有 MCP SDK v2 依赖已提供 version negotiation 能力；登记 differential validation 与 SDK-native replacement 的 Build vs Buy 评估，不改变当前路线图执行点。 |

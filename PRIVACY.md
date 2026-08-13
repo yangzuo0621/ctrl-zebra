@@ -152,6 +152,31 @@ not inject credentials. Every MCP Tool call requires a separate exact single-use
 Resource reads and Prompt retrieval are user-selected context operations rather than operating-system
 sandbox controls. Users must review the Server software and any privacy terms before configuring it.
 
+## File lifecycle mutations
+
+The file lifecycle Tools (`propose_file_create`, `propose_file_delete`, `propose_file_rename`, and
+`propose_workspace_edit`, alongside the existing `propose_file_edit`) operate only on bounded UTF-8
+text inside the selected workspace. They require a fresh, exact `write` approval. Before approval,
+the Host may show the complete bounded proposed/create/delete Diff in a temporary VS Code Diff
+editor; it does not send that preview to a remote service merely to render it. The Webview receives
+only the bounded operation summary and cannot supply a path outside the selected root, a hash,
+replacement content, a force flag, or a Checkpoint ID.
+
+The Extension stores one immutable Checkpoint before an approved mutation. A Checkpoint may contain
+the bounded pre-operation workspace text required for explicit conflict-safe restoration, including
+the full text of a deleted file. It never contains proposed after-content, approval UI text, Diff
+previews, raw URI authority, credentials, or command data. Checkpoints and temporary Diff documents
+remain local to VS Code storage/Host memory, are not model context, and are not logged or sent to the
+Webview as unrestricted content. A create/delete/rename restore is explicit and hash/scope checked;
+there is no automatic rollback or retention/pruning policy.
+
+`search_files` remains literal substring search by default. A user/model must explicitly select
+`mode: "regex"` to request the bounded RE2-compatible dialect. Patterns and scanned text stay
+within the existing file/result limits; unsupported syntax, complexity, cancellation, or engine
+failure returns a bounded local outcome rather than running an untrusted backtracking expression.
+The product contract does not promise a particular regex dependency or transmit patterns/files to a
+third-party service.
+
 ## Security and disclosure
 
 Credentials must be entered only through a supported password-masked command. Users should not paste

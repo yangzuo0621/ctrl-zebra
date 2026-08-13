@@ -299,6 +299,31 @@ Webview 同步清卡，Session restore/switch 在新 Session 提交前事务性�
 - 取消、超时、非零退出、审批拒绝和执行错误保持不同结果，不统一显示为失败。
 - 状态更新使用适当的 live region；不得逐 Token 或因每次输出增量重复播报。
 
+### File lifecycle and multi-file approval experience (T2001)
+
+文件副作用使用固定的用户可见动作名：创建、删除、重命名和应用多文件编辑。已有的
+`propose_file_edit` 继续表示单文件修改；多文件操作显示为一个 `propose_workspace_edit`
+Tool 卡，不拆成一串可分别批准的隐含动作。`propose_file_create`、`propose_file_delete`、
+`propose_file_rename` 和 `propose_workspace_edit` 全部显示显式 `write` 风险和一次性审批。
+
+待审批卡片在所属 Tool 卡内回答“要做什么、影响哪些文件、能否恢复”：使用工作区相对路径、
+动作、文件数/文本大小、有效期和稳定的 Diff 状态。绝不显示主机绝对路径、原始 URI authority、
+Secret、原始 Tool JSON、未验证模型字段或把 Hash 当作当前状态。用户可以打开 Host-owned
+Diff 查看完整的有界 before/after 内容：创建是空文件到完整内容，删除是完整内容到空文件，
+重命名显示源/目标，编辑按路径分组显示每个文件的变更。Diff 不提供编辑、覆盖、强制、
+分文件批准或自动恢复按钮。
+
+只有当完整有界 Diff 可准备且其绑定计划仍然新鲜时，Approve 才可用。任何文件 stale、目标
+冲突、Trust 变化、审批过期、取消或 Diff 失败都关闭批准并显示固定的“未应用”状态；不把
+失败伪装为部分成功。多文件前置校验失败时 UI 明确说明“没有文件被修改”；WorkspaceEdit
+应用失败时显示“结果需要检查/恢复”，并保留与该 Run 关联的 Checkpoint 入口。
+
+恢复卡显示操作、目标文件、创建时间和“可安全恢复/存在冲突”状态。恢复前用户必须执行一次
+明确 Restore；UI 不提供替换文本、添加目标或强制覆盖输入。创建恢复删除新文件，删除恢复
+重建原文件，重命名恢复原路径，多文件编辑恢复整个文件集；任何一个目标变化都使整个恢复
+操作冲突且不改动其他目标。取消、Session 切换、New chat 或 disposal 关闭审批和 Diff，不
+产生隐藏 Toast、重试或模型动作。
+
 ## 6. 会话与恢复
 
 - 会话列表优先展示可识别标题、最近活动时间和需要关注的状态。

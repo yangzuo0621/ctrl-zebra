@@ -327,6 +327,38 @@ focus, selection, disclosure state, and transcript scroll position.
   the display. A restored Session commits its bounded Usage projection atomically with the validated
   `extension/session-restored` payload, and New chat clears it with the rest of the projection.
 
+## File lifecycle approval and Diff projection (T2001)
+
+The Webview is a presentation surface for Host-owned file mutation plans. It recognizes the stable
+Tool names `propose_file_create`, `propose_file_delete`, `propose_file_rename`, and
+`propose_workspace_edit`, while preserving the existing single-file `propose_file_edit` semantics.
+It never parses or constructs a plan, chooses a target URI, computes a revision/hash, decides Trust,
+creates a Checkpoint, or calls a VS Code command.
+
+The inline Approval card shows only the validated operation summary: action, workspace-relative
+targets, `write` risk, bounded file/byte counts, expiration, and whether a complete Diff is ready.
+The Webview cannot modify those fields or approve one file from a multi-file plan. `View Diff` sends
+the existing narrow Host intent for the exact approval ID; the Host opens temporary before/after
+Diff documents in deterministic target order. Create/delete/rename use the empty-side or source/
+target projections defined by Protocol. Diff content is escaped plain text in the VS Code Diff
+editor, not Webview HTML, Markdown, a URI action, or persisted state.
+
+Approve/Reject controls are enabled only for the current pending approval and are synchronously
+disabled while a decision is in flight. A stale request, changed operation, expiry, Trust loss,
+Session/Run replacement, cancellation, disposal, malformed response, or Diff failure clears the
+interactive state without retry or optimistic file status. The Webview accepts only the Host's
+bounded `approved`, `denied`, `conflict`, or `failed` projection; cancellation remains a distinct
+terminal Run state and is never rendered as a Tool failure.
+
+Checkpoint summaries show the operation, deterministic relative targets, creation time, and whether
+the Host reports a safe restore or a conflict. Restore is one explicit intent for the whole
+Checkpoint. The Webview has no controls for replacement content, adding/removing targets, force
+overwrite, per-file restore, or automatic retry. A successful create/delete/rename/edit restore
+replaces the whole projection only after the Host confirms atomic completion; a conflict leaves the
+existing transcript and draft intact and announces a concise, non-color-only status. Approval,
+Diff, and restore content are never copied to `getState`/`setState`, Session messages, diagnostics,
+logs, or model context.
+
 ## Build and Resource Boundary
 
 - Vite builds the React application into reproducible static assets under the Extension build output.
