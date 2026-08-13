@@ -139,9 +139,9 @@
   objects and retains only Host/process/configuration fallback messages. No Protocol/Core/Extension
   public contract, SDK, dependency, lifecycle, diagnostics, or persisted behavior changed.
 - Test results:
-  - Focused client/Host ownership tests: 2 files, 28 tests passed after the final negotiation
-    normalization change; the controller-focused suite also passed earlier with 31 tests.
-  - Affected MCP + Extension controller suite: 46 files, 479 tests passed.
+  - Focused client/Host ownership tests: 2 files, 32 tests passed after the final negotiation
+    normalization change (6 client-error tests and 26 controller tests).
+  - Affected MCP + Extension controller suite: 46 files, 480 tests passed.
   - Full unit suite: 147 files, 1,740 tests passed (`pnpm run test:unit`).
   - MCP package typecheck and workspace typecheck passed (`pnpm --filter @ctrl-zebra/mcp-client exec
     tsc --noEmit`, `pnpm run typecheck`).
