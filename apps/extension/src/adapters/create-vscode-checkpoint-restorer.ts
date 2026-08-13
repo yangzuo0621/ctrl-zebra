@@ -1,30 +1,39 @@
 import { createHash } from "node:crypto";
 
 import type { CheckpointStore } from "@ctrl-zebra/core";
-import { type Position, Range, Uri, WorkspaceEdit, workspace } from "vscode";
+import { Position, Range, Uri, WorkspaceEdit, workspace } from "vscode";
 
 import { CheckpointRestorer } from "./checkpoint-restorer.js";
+import { isVscodeFileNotFound } from "./vscode-file-system-error.js";
 import type { WorkspaceScope } from "./workspace-scope.js";
 
 export function createVsCodeCheckpointRestorer(
-  scope: Pick<WorkspaceScope, "validate">,
+  scope: Pick<WorkspaceScope, "validate" | "validateNewFile">,
   checkpointStore: CheckpointStore,
 ): CheckpointRestorer<Uri, WorkspaceEdit> {
   return new CheckpointRestorer({
     loadCheckpoint: (checkpointId, signal) => checkpointStore.read(checkpointId, signal),
     async resolveDocument(serializedUri, signal) {
       signal.throwIfAborted();
-      const canonical = await scope.validate(Uri.parse(serializedUri, true), signal);
+      const requested = Uri.parse(serializedUri, true);
+      const canonical = await validateCheckpointTarget(scope, requested, signal);
       signal.throwIfAborted();
-      const document = await workspace.openTextDocument(canonical);
-      signal.throwIfAborted();
-      return {
-        uri: document.uri,
-        text: document.getText(),
-        end: toTextPosition(document.positionAt(document.getText().length)),
-      };
+      try {
+        const document = await workspace.openTextDocument(canonical);
+        signal.throwIfAborted();
+        return {
+          uri: document.uri,
+          text: document.getText(),
+          end: toTextPosition(document.positionAt(document.getText().length)),
+        };
+      } catch (error) {
+        signal.throwIfAborted();
+        if (isVscodeFileNotFound(error)) return undefined;
+        throw error;
+      }
     },
     createWorkspaceEdit: () => new WorkspaceEdit(),
+    createResource: (serializedUri) => Uri.parse(serializedUri, true),
     replace(edit, uri, range, text) {
       edit.replace(
         uri,
@@ -32,9 +41,36 @@ export function createVsCodeCheckpointRestorer(
         text,
       );
     },
+    createFile(edit, uri) {
+      edit.createFile(uri, { overwrite: false, ignoreIfExists: false });
+    },
+    insert(edit, uri, text) {
+      edit.insert(uri, new Position(0, 0), text);
+    },
+    deleteFile(edit, uri) {
+      edit.deleteFile(uri, { recursive: false, ignoreIfNotExists: false });
+    },
     applyWorkspaceEdit: (edit) => Promise.resolve(workspace.applyEdit(edit)),
     hashText: (text) => createHash("sha256").update(text, "utf8").digest("hex"),
   });
+}
+
+async function validateCheckpointTarget(
+  scope: Pick<WorkspaceScope, "validate" | "validateNewFile">,
+  requested: Uri,
+  signal: AbortSignal,
+): Promise<Uri> {
+  try {
+    await workspace.fs.stat(requested);
+    signal.throwIfAborted();
+    return scope.validate(requested, signal);
+  } catch (error) {
+    signal.throwIfAborted();
+    if (!isVscodeFileNotFound(error)) {
+      throw error;
+    }
+    return scope.validateNewFile(requested, signal);
+  }
 }
 
 function toTextPosition(position: Position) {

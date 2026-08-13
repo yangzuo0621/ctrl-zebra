@@ -104,4 +104,25 @@ describe("checkpoint schema", () => {
       }).success,
     ).toBe(false);
   });
+
+  it("accepts lifecycle absence states without confusing them with empty text", () => {
+    const lifecycle = {
+      ...checkpoint,
+      files: [
+        {
+          uri: "file:///workspace/new.txt",
+          before: { kind: "absent" },
+          after: { kind: "text", afterHash },
+        },
+      ],
+    };
+
+    expect(parseCheckpoint(lifecycle, () => beforeHash)).toEqual(lifecycle);
+    expect(
+      checkpointSchema.safeParse({
+        ...lifecycle,
+        files: [{ ...lifecycle.files[0], before: { kind: "text", content: "", beforeHash } }],
+      }).success,
+    ).toBe(true);
+  });
 });

@@ -825,7 +825,9 @@ export class AgentRuntime {
         return this.#executeToolImplementation(sessionId, runId, toolCall, tool, input, signal);
       }
 
-      return createApprovedToolResult(toolCall);
+      return consumption.outcome === "applied"
+        ? createAppliedToolResult(toolCall)
+        : createApprovedToolResult(toolCall);
     } finally {
       operation.invalidate();
     }
@@ -973,6 +975,16 @@ function createApprovedToolResult(toolCall: ToolCall): ToolResult {
     name: toolCall.name,
     status: "success",
     output: { outcome: "approved" },
+    truncated: false,
+  };
+}
+
+function createAppliedToolResult(toolCall: ToolCall): ToolResult {
+  return {
+    callId: toolCall.id,
+    name: toolCall.name,
+    status: "success",
+    output: { outcome: "applied" },
     truncated: false,
   };
 }

@@ -149,6 +149,8 @@ export {
   projectExternalPromptContext,
   projectExternalResourceContext,
 } from "./external-resource-context.js";
+export type { FileCreatePlan } from "./file-create.js";
+export { InvalidFileCreatePlanError, parseFileCreatePlan } from "./file-create.js";
 export {
   defaultModelMessageTokenCounter,
   HeuristicModelMessageTokenCounter,

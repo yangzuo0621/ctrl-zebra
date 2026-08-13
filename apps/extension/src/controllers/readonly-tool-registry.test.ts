@@ -3,6 +3,7 @@ import type {
   IdeDiagnosticsPort,
   IdeLanguageServicePort,
   ListFilesInput,
+  ProposeFileCreateWorkspace,
   ProposeFileEditWorkspace,
   ReadFileInput,
   SearchFilesInput,
@@ -294,6 +295,14 @@ describe("createWorkspaceToolRegistryProvider", () => {
       "search_files",
     ]);
   });
+
+  it("registers the controlled file-create proposal only when its host adapter is supplied", async () => {
+    const provider = createWorkspaceToolRegistryProvider(
+      createDependencies([uri("/workspace")], { createFile: true }).values,
+    );
+    const registry = await provider.get(new AbortController().signal);
+    expect(registry.declarations().map(({ name }) => name)).toContain("propose_file_create");
+  });
 });
 
 function createDependencies(
@@ -305,6 +314,7 @@ function createDependencies(
     readonly editorContext?: IdeContextPort;
     readonly diagnostics?: IdeDiagnosticsPort;
     readonly languageServices?: IdeLanguageServicePort;
+    readonly createFile?: boolean;
   } = {},
 ) {
   let trusted = overrides.trusted ?? true;
@@ -346,6 +356,19 @@ function createDependencies(
           }),
           isFileRevisionCurrent: async () => true,
         }) satisfies ProposeFileEditWorkspace,
+      ...(overrides.createFile
+        ? {
+            createProposeFileCreateWorkspace: () =>
+              ({
+                captureFileCreateTarget: async () => ({
+                  path: "new.txt",
+                  uri: "file:///workspace/new.txt",
+                  afterHash: "a".repeat(64),
+                }),
+                isFileCreateTargetAbsent: async () => true,
+              }) satisfies ProposeFileCreateWorkspace,
+          }
+        : {}),
       commandExecutor: {
         run: async () => ({
           output: { stdout: "", stderr: "", exitCode: 0, signal: null },

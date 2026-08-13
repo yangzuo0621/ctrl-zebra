@@ -64,6 +64,25 @@ export {
   listSymbolsToolName,
 } from "./list-symbols.js";
 export type {
+  CaptureFileCreateTargetRequest,
+  FileCreateTargetSnapshot,
+  ProposeFileCreateInput,
+  ProposeFileCreateWorkspace,
+} from "./propose-file-create.js";
+export {
+  createProposeFileCreateTool,
+  FileCreateTargetExistsError,
+  InvalidWorkspaceFileCreateTargetError,
+  maxProposedFileCreateBytes,
+  maxProposedFileCreateCharacters,
+  maxProposedFileCreateLines,
+  maxProposedFileCreatePathBytes,
+  proposeFileCreateInputSchema,
+  proposeFileCreateToolDescription,
+  proposeFileCreateToolName,
+  StaleFileCreateTargetError,
+} from "./propose-file-create.js";
+export type {
   CaptureFileEditRevisionRequest,
   FileEditRevisionSnapshot,
   ProposeFileEditInput,

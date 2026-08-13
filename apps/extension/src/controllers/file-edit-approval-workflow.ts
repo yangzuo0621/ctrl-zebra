@@ -1,19 +1,13 @@
-import {
-  approvalRequestSchema,
-  type PreparedToolApproval,
-  parseTextEditPlan,
-  type TextEditPlan,
-  type ToolApprovalOperation,
-  type ToolApprovalWorkflow,
-} from "@ctrl-zebra/core";
-import type { ApprovalDecisionIntent, ApprovalRequest } from "@ctrl-zebra/protocol";
+import { parseTextEditPlan, type TextEditPlan } from "@ctrl-zebra/core";
+import type { ApprovalDecisionIntent } from "@ctrl-zebra/protocol";
 
-import { ApprovalLifecycle, type ApprovalLifecycleRecord } from "./approval-lifecycle.js";
+import {
+  defaultFileMutationApprovalLifetimeMilliseconds,
+  FileMutationApprovalWorkflow,
+} from "./file-mutation-approval-workflow.js";
 import type { WorkspaceTrustPolicy } from "./workspace-trust-policy.js";
 
-type FileEditOwnership = Pick<PreparedToolApproval, "sessionId" | "runId">;
-
-export const defaultApprovalLifetimeMilliseconds = 5 * 60 * 1_000;
+export const defaultApprovalLifetimeMilliseconds = defaultFileMutationApprovalLifetimeMilliseconds;
 
 export interface FileEditApprovalActions {
   showDiff(approvalId: string): void;
@@ -28,7 +22,7 @@ interface FileEditApprovalWorkflowDependencies {
   readonly presentDiff: (plan: TextEditPlan, signal: AbortSignal) => Promise<void>;
   readonly applyPlan: (
     plan: TextEditPlan,
-    ownership: FileEditOwnership,
+    ownership: { readonly sessionId: string; readonly runId: string },
     signal: AbortSignal,
   ) => Promise<"applied" | "conflict">;
   readonly approvalLifetimeMilliseconds?: number;
@@ -36,122 +30,30 @@ interface FileEditApprovalWorkflowDependencies {
   readonly workspaceTrust: WorkspaceTrustPolicy;
 }
 
-interface ApprovalRecord extends ApprovalLifecycleRecord {
-  readonly request: ApprovalRequest;
-  readonly plan: TextEditPlan;
-  readonly ownership: FileEditOwnership;
-}
-
-export class FileEditApprovalWorkflow implements ToolApprovalWorkflow, FileEditApprovalActions {
-  readonly #dependencies: FileEditApprovalWorkflowDependencies;
-  readonly #lifecycle: ApprovalLifecycle<ApprovalRecord>;
-
+export class FileEditApprovalWorkflow
+  extends FileMutationApprovalWorkflow<TextEditPlan>
+  implements FileEditApprovalActions
+{
   constructor(dependencies: FileEditApprovalWorkflowDependencies) {
-    this.#dependencies = dependencies;
-    this.#lifecycle = new ApprovalLifecycle(dependencies.now);
-  }
-
-  async create(
-    prepared: PreparedToolApproval,
-    signal: AbortSignal,
-  ): Promise<ToolApprovalOperation> {
-    this.#dependencies.workspaceTrust.requireTrusted();
-    const plan = parseTextEditPlan(prepared.prepared.output);
-    signal.throwIfAborted();
-    const workspaceRootUri = await this.#dependencies.bindPlan(plan, signal);
-    signal.throwIfAborted();
-    const createdAt = this.#dependencies.now();
-    const expiresAt = new Date(
-      createdAt.getTime() +
-        (this.#dependencies.approvalLifetimeMilliseconds ?? defaultApprovalLifetimeMilliseconds),
-    );
-    const request = approvalRequestSchema.parse({
-      id: this.#dependencies.createId(),
-      scope: {
-        sessionId: prepared.sessionId,
-        runId: prepared.runId,
-        call: prepared.call,
-        risk: prepared.risk,
-        workspaceRootUri,
-        resources: [{ uri: plan.uri, revision: plan.originalRevision }],
-      },
-      presentation: {
-        title: "Apply proposed file edits",
-        summary: `${plan.edits.length} text edit${plan.edits.length === 1 ? "" : "s"} will be applied to ${plan.uri}.`,
-      },
-      createdAt: createdAt.toISOString(),
-      expiresAt: expiresAt.toISOString(),
+    super({
+      createId: dependencies.createId,
+      now: dependencies.now,
+      parsePlan: parseTextEditPlan,
+      bindPlan: dependencies.bindPlan,
+      resources: (plan) => [{ uri: plan.uri, revision: plan.originalRevision }],
+      validatePlan: dependencies.validatePlan,
+      presentDiff: dependencies.presentDiff,
+      applyPlan: dependencies.applyPlan,
+      title: "Apply proposed file edits",
+      summary: (plan) =>
+        `${plan.edits.length} text edit${plan.edits.length === 1 ? "" : "s"} will be applied to ${plan.uri}.`,
+      conflictMessage: "The approved file changed before its edits could be applied.",
+      trustConflictMessage:
+        "Workspace trust changed before the approved file edits could be applied.",
+      approvalLifetimeMilliseconds: dependencies.approvalLifetimeMilliseconds,
+      reportError: dependencies.reportError,
+      workspaceTrust: dependencies.workspaceTrust,
+      result: "approved",
     });
-    const record: ApprovalRecord = {
-      request,
-      plan,
-      ownership: { sessionId: prepared.sessionId, runId: prepared.runId },
-      status: "pending",
-      consuming: false,
-    };
-    this.#lifecycle.register(record);
-
-    return {
-      request,
-      requestDecision: (signal) => this.#lifecycle.requestDecision(record, signal),
-      consume: (signal) => this.#consume(record, signal),
-      invalidate: () => this.#lifecycle.invalidate(record),
-    };
-  }
-
-  showDiff(approvalId: string): void {
-    const record = this.#lifecycle.get(approvalId);
-    if (record === undefined) {
-      return;
-    }
-    if (record.status !== "pending" && record.status !== "approved") {
-      return;
-    }
-
-    const signal = record.signal;
-    if (signal === undefined || signal.aborted) {
-      return;
-    }
-
-    void this.#dependencies
-      .validatePlan(record.plan, signal)
-      .then(() => this.#dependencies.presentDiff(record.plan, signal))
-      .catch(() => this.#dependencies.reportError("The proposed diff could not be opened."));
-  }
-
-  decide(approvalId: string, decision: ApprovalDecisionIntent): void {
-    this.#lifecycle.decide(approvalId, decision);
-  }
-
-  dispose(): void {
-    this.#lifecycle.dispose();
-  }
-
-  async #consume(record: ApprovalRecord, signal: AbortSignal) {
-    if (!this.#lifecycle.validateConsumption(record, signal)) {
-      return { outcome: "expired" as const };
-    }
-    if (!this.#dependencies.workspaceTrust.isTrusted()) {
-      this.#lifecycle.finish(record, "invalidated");
-      return {
-        outcome: "conflict" as const,
-        message: "Workspace trust changed before the approved file edits could be applied.",
-      };
-    }
-
-    this.#lifecycle.markConsuming(record);
-    this.#dependencies.workspaceTrust.requireTrusted();
-    const result = await this.#dependencies.applyPlan(record.plan, record.ownership, signal);
-    signal.throwIfAborted();
-    if (result === "conflict") {
-      this.#lifecycle.finish(record, "invalidated");
-      return {
-        outcome: "conflict" as const,
-        message: "The approved file changed before its edits could be applied.",
-      };
-    }
-
-    this.#lifecycle.finish(record, "consumed");
-    return { outcome: "approved" as const };
   }
 }

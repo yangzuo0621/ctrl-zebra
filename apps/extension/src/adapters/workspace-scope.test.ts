@@ -121,6 +121,30 @@ describe("WorkspaceScope", () => {
     ).rejects.toBe(cancellation);
     expect(canonicalize).not.toHaveBeenCalled();
   });
+
+  it("validates a not-yet-existing file through its canonical parent", async () => {
+    const root = uri({ path: "/workspace/root" });
+    const target = uri({ path: "/workspace/root/new.txt" });
+    const canonicalize = identityCanonicalizer();
+    const scope = new WorkspaceScope(root, canonicalize, { caseSensitivePaths: true });
+
+    await expect(scope.validateNewFile(target, signal)).resolves.toEqual(target);
+    expect(canonicalize).toHaveBeenCalledWith(uri({ path: "/workspace/root" }), signal);
+    expect(canonicalize).toHaveBeenCalledWith(uri({ path: "/workspace/root" }), signal);
+  });
+
+  it("rejects a new-file parent whose canonical identity escapes through a symlink", async () => {
+    const root = uri({ path: "/workspace/root" });
+    const parent = uri({ path: "/workspace/root/link" });
+    const canonicalize = vi.fn<CanonicalizeWorkspaceUri>(async (value) =>
+      value.path === parent.path ? uri({ path: "/outside" }) : value,
+    );
+    const scope = new WorkspaceScope(root, canonicalize);
+
+    await expect(
+      scope.validateNewFile(uri({ path: "/workspace/root/link/new.txt" }), signal),
+    ).rejects.toEqual(new WorkspaceScopeError("outside-workspace"));
+  });
 });
 
 function identityCanonicalizer() {

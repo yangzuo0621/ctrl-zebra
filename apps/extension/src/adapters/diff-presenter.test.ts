@@ -58,6 +58,18 @@ describe("DiffPresenter", () => {
     expect(dependencies.hashText).toHaveBeenCalledWith("one\r\ntwo\nthree");
   });
 
+  it("opens a complete empty-to-content pair for a new file", async () => {
+    const dependencies = createDependencies();
+    const presenter = new DiffPresenter(dependencies.values);
+
+    await presenter.presentTextPair("new.txt", "", "zebra\n", new AbortController().signal);
+
+    const [before, after, title] = requireCall(dependencies.showDiff.mock.calls[0]);
+    expect(dependencies.provider?.provideTextDocumentContent(before)).toBe("");
+    expect(dependencies.provider?.provideTextDocumentContent(after)).toBe("zebra\n");
+    expect(title).toBe("CtrlZebra: new.txt (Proposed Changes)");
+  });
+
   it.each([
     { ...plan, originalRevision: { kind: "document_version", value: 8 } as const },
     {

@@ -15,6 +15,8 @@ interface FileEditApprovalWorkflowOwner extends ApprovalWorkflowOwner {
   showDiff(approvalId: string): void;
 }
 
+type FileCreateApprovalWorkflowOwner = FileEditApprovalWorkflowOwner;
+
 interface OwnedApproval {
   readonly owner: ApprovalWorkflowOwner;
   readonly operation: ToolApprovalOperation;
@@ -28,6 +30,7 @@ export class ToolApprovalWorkflowRouter implements ToolApprovalWorkflow {
     private readonly fileEdits: FileEditApprovalWorkflowOwner,
     private readonly commands: ApprovalWorkflowOwner,
     private readonly mcpTools?: ApprovalWorkflowOwner,
+    private readonly fileCreates?: FileCreateApprovalWorkflowOwner,
   ) {}
 
   async create(
@@ -91,8 +94,11 @@ export class ToolApprovalWorkflowRouter implements ToolApprovalWorkflow {
   }
 
   showDiff(approvalId: string): void {
-    if (this.#owners.get(approvalId)?.owner === this.fileEdits) {
+    const owner = this.#owners.get(approvalId)?.owner;
+    if (owner === this.fileEdits) {
       this.fileEdits.showDiff(approvalId);
+    } else if (owner === this.fileCreates) {
+      this.fileCreates?.showDiff(approvalId);
     }
   }
 
@@ -107,6 +113,7 @@ export class ToolApprovalWorkflowRouter implements ToolApprovalWorkflow {
     }
     this.#owners.clear();
     this.fileEdits.dispose();
+    this.fileCreates?.dispose();
     this.commands.dispose();
     this.mcpTools?.dispose();
   }
@@ -124,7 +131,9 @@ export class ToolApprovalWorkflowRouter implements ToolApprovalWorkflow {
     }
     return prepared.risk === "execute" && prepared.call.name === runCommandToolName
       ? this.commands
-      : this.fileEdits;
+      : prepared.call.name === "propose_file_create" && this.fileCreates !== undefined
+        ? this.fileCreates
+        : this.fileEdits;
   }
 
   #release(approvalId: string, owned: OwnedApproval): void {
