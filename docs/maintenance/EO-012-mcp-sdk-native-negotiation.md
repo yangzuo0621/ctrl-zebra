@@ -219,9 +219,11 @@ different lifecycle ownership.
   suite passed 162 files and 1,773 tests; `pnpm --filter @ctrl-zebra/mcp-client exec tsc --noEmit`
   and `pnpm run typecheck` passed; `pnpm run check` passed for 415 files; `pnpm run build` passed;
   and `pnpm run test:integration` exited 0. Integration emitted the existing non-fatal VS Code
-  `cached-data` option and `Canceled Failed to load custom agents` warnings. A clean-tree
-  `pnpm run package:vsix` will be rerun for this final race assertion; its exact source revision
-  and artifact bytes are recorded in the follow-up evidence-only commit.
+  `cached-data` option and `Canceled Failed to load custom agents` warnings. `pnpm run package:vsix`
+  passed on the clean packaging source revision `87229c77c07239986ff13b08eb388d186730f1e0`
+  (the final evidence-only docs commit follows) with 12 allowlisted files, 831,671 compressed
+  bytes, and 3,797,841 uncompressed bytes at
+  `.artifacts/ctrl-zebra-0.1.1-87229c77c072.vsix`.
 - **Similarity Audit:** The final search confirms one package-owned negotiation definition and no
   second production negotiation path; the added test imports only public SDK APIs and existing
   package fixtures. The matrix above records all intentional behavioral differences.
