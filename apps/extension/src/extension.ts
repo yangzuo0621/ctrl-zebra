@@ -273,6 +273,7 @@ export function activate(context: ExtensionContext): void {
   const fileCreateApprovalWorkflow = new FileCreateApprovalWorkflow({
     createId: randomUUID,
     now: () => new Date(),
+    hashText,
     async bindPlan(plan, signal) {
       const root = getSelectedRoot();
       const scope = new WorkspaceScope(root, canonicalize);

@@ -149,8 +149,16 @@ export {
   projectExternalPromptContext,
   projectExternalResourceContext,
 } from "./external-resource-context.js";
-export type { FileCreatePlan } from "./file-create.js";
-export { InvalidFileCreatePlanError, parseFileCreatePlan } from "./file-create.js";
+export type { FileCreatePlan, FileCreateTextHasher } from "./file-create.js";
+export {
+  InvalidFileCreatePlanError,
+  maxFileCreateContentBytes,
+  maxFileCreateContentCharacters,
+  maxFileCreateContentLines,
+  maxFileCreatePathBytes,
+  maxFileCreatePathCharacters,
+  parseFileCreatePlan,
+} from "./file-create.js";
 export {
   defaultModelMessageTokenCounter,
   HeuristicModelMessageTokenCounter,

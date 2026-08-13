@@ -6,6 +6,7 @@ import type { WorkspaceTrustPolicy } from "./workspace-trust-policy.js";
 interface FileCreateApprovalWorkflowDependencies {
   readonly createId: () => string;
   readonly now: () => Date;
+  readonly hashText: (text: string) => string;
   readonly bindPlan: (plan: FileCreatePlan, signal: AbortSignal) => Promise<string>;
   readonly validatePlan: (plan: FileCreatePlan, signal: AbortSignal) => Promise<void>;
   readonly presentDiff: (plan: FileCreatePlan, signal: AbortSignal) => Promise<void>;
@@ -24,7 +25,7 @@ export class FileCreateApprovalWorkflow extends FileMutationApprovalWorkflow<Fil
     super({
       createId: dependencies.createId,
       now: dependencies.now,
-      parsePlan: parseFileCreatePlan,
+      parsePlan: (value) => parseFileCreatePlan(value, dependencies.hashText),
       bindPlan: dependencies.bindPlan,
       resources: (plan) => [{ uri: plan.uri }],
       validatePlan: dependencies.validatePlan,

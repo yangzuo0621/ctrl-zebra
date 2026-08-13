@@ -2,6 +2,10 @@ import {
   type AgentTool,
   type FileCreatePlan,
   maxApprovalUriCharacters,
+  maxFileCreateContentBytes,
+  maxFileCreateContentCharacters,
+  maxFileCreateContentLines,
+  maxFileCreatePathBytes,
   parseFileCreatePlan,
   type ToolExecutionOutput,
 } from "@ctrl-zebra/core";
@@ -14,10 +18,10 @@ export const proposeFileCreateToolName = "propose_file_create" as const;
 export const proposeFileCreateToolDescription =
   "Propose a bounded UTF-8 text file in the selected workspace; creation applies only after explicit user approval.";
 
-export const maxProposedFileCreateCharacters = 65_536;
-export const maxProposedFileCreateLines = 2_000;
-export const maxProposedFileCreateBytes = 262_144;
-export const maxProposedFileCreatePathBytes = 16_384;
+export const maxProposedFileCreateCharacters = maxFileCreateContentCharacters;
+export const maxProposedFileCreateLines = maxFileCreateContentLines;
+export const maxProposedFileCreateBytes = maxFileCreateContentBytes;
+export const maxProposedFileCreatePathBytes = maxFileCreatePathBytes;
 
 export const proposeFileCreateInputSchema = {
   type: "object",
@@ -53,6 +57,7 @@ export interface FileCreateTargetSnapshot {
 export interface CaptureFileCreateTargetRequest extends ProposeFileCreateInput {}
 
 export interface ProposeFileCreateWorkspace {
+  readonly hashText: (text: string) => string;
   captureFileCreateTarget(
     request: CaptureFileCreateTargetRequest,
     signal: AbortSignal,
@@ -117,13 +122,16 @@ function prepareFileCreateApproval(workspace: ProposeFileCreateWorkspace) {
     }
 
     return {
-      output: parseFileCreatePlan({
-        operation: "create",
-        path: snapshot.path,
-        uri: snapshot.uri,
-        content: input.content,
-        afterHash: snapshot.afterHash,
-      }),
+      output: parseFileCreatePlan(
+        {
+          operation: "create",
+          path: snapshot.path,
+          uri: snapshot.uri,
+          content: input.content,
+          afterHash: snapshot.afterHash,
+        },
+        workspace.hashText,
+      ),
       truncated: false,
     };
   };

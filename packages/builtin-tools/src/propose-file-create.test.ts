@@ -75,6 +75,7 @@ function createWorkspace(options: { readonly absent?: boolean } = {}) {
   const isFileCreateTargetAbsent = vi.fn(async () => options.absent ?? true);
   return {
     values: {
+      hashText: () => snapshot.afterHash,
       captureFileCreateTarget,
       isFileCreateTargetAbsent,
     } satisfies ProposeFileCreateWorkspace,

@@ -4,6 +4,7 @@ import type { CheckpointStore } from "@ctrl-zebra/core";
 import { Position, Range, Uri, WorkspaceEdit, workspace } from "vscode";
 
 import { CheckpointRestorer } from "./checkpoint-restorer.js";
+import { validateCheckpointTarget } from "./checkpoint-target-validation.js";
 import { isVscodeFileNotFound } from "./vscode-file-system-error.js";
 import type { WorkspaceScope } from "./workspace-scope.js";
 
@@ -16,7 +17,13 @@ export function createVsCodeCheckpointRestorer(
     async resolveDocument(serializedUri, signal) {
       signal.throwIfAborted();
       const requested = Uri.parse(serializedUri, true);
-      const canonical = await validateCheckpointTarget(scope, requested, signal);
+      const canonical = await validateCheckpointTarget(
+        scope,
+        requested,
+        signal,
+        (target) => workspace.fs.stat(target),
+        isVscodeFileNotFound,
+      );
       signal.throwIfAborted();
       try {
         const document = await workspace.openTextDocument(canonical);
@@ -53,24 +60,6 @@ export function createVsCodeCheckpointRestorer(
     applyWorkspaceEdit: (edit) => Promise.resolve(workspace.applyEdit(edit)),
     hashText: (text) => createHash("sha256").update(text, "utf8").digest("hex"),
   });
-}
-
-async function validateCheckpointTarget(
-  scope: Pick<WorkspaceScope, "validate" | "validateNewFile">,
-  requested: Uri,
-  signal: AbortSignal,
-): Promise<Uri> {
-  try {
-    await workspace.fs.stat(requested);
-    signal.throwIfAborted();
-    return scope.validate(requested, signal);
-  } catch (error) {
-    signal.throwIfAborted();
-    if (!isVscodeFileNotFound(error)) {
-      throw error;
-    }
-    return scope.validateNewFile(requested, signal);
-  }
 }
 
 function toTextPosition(position: Position) {

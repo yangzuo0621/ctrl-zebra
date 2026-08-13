@@ -360,6 +360,7 @@ function createDependencies(
         ? {
             createProposeFileCreateWorkspace: () =>
               ({
+                hashText: () => "a".repeat(64),
                 captureFileCreateTarget: async () => ({
                   path: "new.txt",
                   uri: "file:///workspace/new.txt",

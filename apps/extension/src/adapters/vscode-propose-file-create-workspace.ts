@@ -26,6 +26,8 @@ export class VsCodeProposeFileCreateWorkspace implements ProposeFileCreateWorksp
     this.#joinPath = joinPath;
   }
 
+  readonly hashText = hashText;
+
   async captureFileCreateTarget(
     request: ProposeFileCreateInput,
     signal: AbortSignal,
@@ -43,7 +45,7 @@ export class VsCodeProposeFileCreateWorkspace implements ProposeFileCreateWorksp
     return {
       path: request.path,
       uri: canonical.toString(),
-      afterHash: hashText(request.content),
+      afterHash: this.hashText(request.content),
     };
   }
 

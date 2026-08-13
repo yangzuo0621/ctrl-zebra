@@ -145,6 +145,16 @@ describe("WorkspaceScope", () => {
       scope.validateNewFile(uri({ path: "/workspace/root/link/new.txt" }), signal),
     ).rejects.toEqual(new WorkspaceScopeError("outside-workspace"));
   });
+
+  it("preserves the selected case-insensitive parent identity for a new file", async () => {
+    const root = uri({ path: "/workspace/Repo" });
+    const target = uri({ path: "/workspace/repo/SRC/new.txt" });
+    const scope = new WorkspaceScope(root, identityCanonicalizer(), {
+      caseSensitivePaths: false,
+    });
+
+    await expect(scope.validateNewFile(target, signal)).resolves.toEqual(target);
+  });
 });
 
 function identityCanonicalizer() {

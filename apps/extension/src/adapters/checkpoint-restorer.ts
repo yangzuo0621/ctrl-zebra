@@ -88,6 +88,7 @@ export class CheckpointRestorer<Resource extends CheckpointRestoreResource, Edit
       this.#applyBeforeState(workspaceEdit, file, document);
     }
 
+    signal.throwIfAborted();
     const applied = await this.#dependencies.applyWorkspaceEdit(workspaceEdit);
     if (!applied) {
       throw new CheckpointRestoreApplyError();
