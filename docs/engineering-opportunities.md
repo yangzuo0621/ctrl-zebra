@@ -51,7 +51,7 @@
 | [EO-004 Bounded text persistence](#eo-004-bounded-text-persistence) | 深化 | P1 | EO-002 后；Phase 21 数据控制前优先评估 | `已晋升` |
 | [EO-005 MCP catalog refresh](#eo-005-mcp-catalog-refresh) | 深化 | P1 | MCP 再次演进或独立 maintenance 窗口 | `已晋升` |
 | [EO-006 MCP error ownership](#eo-006-mcp-error-ownership) | 深化 | P2 | EO-005 后；需要契约影响确认 | `已完成` |
-| [EO-007 Package-local text primitives](#eo-007-package-local-text-primitives) | 复用 | P2 | EO-003、EO-004 后；单一 maintenance 内按 package-local tranche 执行 | `已晋升` |
+| [EO-007 Package-local text primitives](#eo-007-package-local-text-primitives) | 复用 | P2 | EO-003、EO-004 后；单一 maintenance 内按 package-local tranche 执行 | `已完成` |
 | [EO-008 Safe regex engine](#eo-008-safe-regex-engine) | Buy | P0 | 纳入 T2001 决策、T2005 实施，不单独插队 | `评估中` |
 | [EO-009 Markdown renderer](#eo-009-markdown-renderer) | Buy re-evaluation | P3 | 先证明净收益并通过基线变更控制 | `暂缓` |
 | [EO-010 Targeted Zod reuse](#eo-010-targeted-zod-reuse) | 已有依赖复用 | P2 | 随拥有 schema 的任务分 tranche | `已发现` |
@@ -230,3 +230,4 @@ EO-001 可以独立进行。EO-009 和 EO-011 不应阻塞 Phase 20–22。
 | 2026-08-12 | EO-004 | 已晋升为独立 maintenance | [EO-004 maintenance](maintenance/EO-004-bounded-text-persistence.md) | 在最新 `origin/main` `6ef3a3b` 上重新验证 Session/Checkpoint 的重复 bounded text I/O 后建立 Extension-private `VscodeBoundedTextStorage` seam |
 | 2026-08-13 | EO-005 | 已晋升为独立 maintenance | [EO-005 maintenance](maintenance/EO-005-mcp-catalog-refresh.md) | 在最新 `origin/main` `9e9e98e` 上重新验证 Tool/Prompt/Resource 的重复分页与刷新生命周期后建立 package-private MCP catalog collector/refresh seam |
 | 2026-08-13 | EO-006 | 独立 maintenance 已完成 | [EO-006 maintenance](maintenance/EO-006-mcp-error-ownership.md)；[PR #221](https://github.com/yangzuo0621/ctrl-zebra/pull/221) | MCP client stable error normalization is package-owned; Extension retains Host/process/configuration fallback mapping; duplicate client-message ownership removed and verified. |
+| 2026-08-13 | EO-007 | 独立 maintenance 已完成 | [EO-007 maintenance](maintenance/EO-007-package-local-text-primitives.md)；[PR #222](https://github.com/yangzuo0621/ctrl-zebra/pull/222) | Package-local text, record, URI, canonical JSON, and equality seams merged by reviewed squash commit `53bc57b`; CI and independent review gates passed; feature branch cleaned up. |

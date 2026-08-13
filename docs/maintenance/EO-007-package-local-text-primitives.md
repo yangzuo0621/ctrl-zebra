@@ -243,5 +243,6 @@ not silently deferred as equivalent duplicates.
 - Similarity Audit: exact definition counts and remaining wrappers are listed above; the final
   repository-wide searches below are rerun after the last edit and recorded with the commit/PR.
 - Design deviation: None.
-- PR/branch: `codex/eo-007-protocol-text-primitives` (existing draft PR #222; no merge/close by the
-  executor).
+- PR/branch: `codex/eo-007-protocol-text-primitives`; PR #222 was independently reviewed and squash-
+  merged as `53bc57bc73fd58766dc334839937adb5ff947a16` after all required CI checks passed. The
+  feature branch was deleted after merge.
