@@ -30,7 +30,8 @@
   probe corpus through `ControlledMcpClient` and the SDK's public `Client.connect` negotiation modes.
   Cover modern success, defined non-modern error, timeout, unknown JSON-RPC error, malformed result,
   recognized modern error without a mutual modern version, malformed modern-only pin behavior,
-  cancellation, and cleanup. Preserve the current implementation and add no shadow production
+  server exit, stale-generation cancellation/late delivery, and cleanup/termination confirmation.
+  Preserve the current implementation and add no shadow production
   path. Record the decision and the conditions for reopening it.
 - **Planned files:**
   - `packages/mcp-client/src/eo012-sdk-native-differential.test.ts`
@@ -90,6 +91,37 @@
   existing package-owned negotiation seam. This is a policy/lifecycle decision, not a rejection of
   the SDK: the SDK remains the transport, Client, JSON-RPC, and DTO mechanism after the package-owned
   verdict is handed over with `ConnectOptions.prior`.
+- **Maintenance status:** Investigation/proof tranche complete; the selected maintenance outcome is
+  **Reject**, with no production migration or follow-up implementation active. The existing
+  `mcp-negotiation.ts` owner remains the supported path until the reopen gate below is met.
+- **License and maintenance:** The already-pinned `@modelcontextprotocol/client@2.0.0` package is
+  MIT-licensed, maintained in the official TypeScript SDK repository, and introduces no dependency
+  or lockfile change in this maintenance tranche. The package-owned seam remains MIT-licensed
+  CtrlZebra code with the repository's existing owner and review lifecycle.
+- **Runtime and toolchain compatibility:** The installed SDK declares Node `>=20`; the repository
+  baseline uses `pnpm@11.11.0`, TypeScript `7.0.2`, and the existing ESM workspace. The public
+  `Client`, `SdkError`, `SdkErrorCode`, transport, and `ConnectOptions.prior` declarations compile
+  under that baseline. No runtime or toolchain upgrade is proposed.
+- **Packaging and VSIX impact:** Reject leaves package manifests, `pnpm-lock.yaml`, production
+  bundles, and the extension contribution surface unchanged. The package:vsix allowlist remains
+  unchanged; the final clean-tree packaging run is recorded in Completion below. The differential
+  corpus is test-only and is not included in the shipped VSIX.
+- **Cancellation and security behavior:** The SDK comparison observes caller abort rejection,
+  SDK-public typed error codes, transport `closeInput`/`terminate` counts, termination confirmation,
+  and dropped late probe delivery. It does not delegate CtrlZebra's generation fencing, stable
+  error mapping, Host trust/approval gates, byte budgets, or process-tree termination policy to the
+  SDK. No cancellation, security, or lifecycle contract changes.
+- **Project-owned adapter code:** No new adapter is required. The existing `SdkStdioTransport`
+  remains the Host-owned port adapter; `ControlledMcpClient` continues to pass the validated
+  package verdict through the public `{ prior }` input. SDK types and failures stay inside the
+  package boundary and the test uses only public SDK symbols.
+- **Measured package/type/test/net-code comparison:** `git diff --numstat` shows no production
+  source, package manifest, or lockfile delta; the net implementation change is a 0-line
+  production migration and one deterministic differential test file. The focused corpus now has
+  six tests (including server exit, stale-generation cancellation/late delivery, and termination
+  confirmation), while the prior regression/package counts are preserved in Completion. Typecheck
+  and repository checks exercise the same package graph; the VSIX comparison records the unchanged
+  allowlist and artifact byte counts rather than a second SDK negotiation path.
 - **Rationale:** SDK `auto` classifies every unrecognized JSON-RPC probe error as a legacy signal,
   while CtrlZebra permits fallback only for a closed specification-defined set. SDK `auto` treats a
   malformed `DiscoverResult` as legacy, while CtrlZebra must return stable `malformed-message`
@@ -135,8 +167,10 @@ different lifecycle ownership.
 | Malformed `DiscoverResult` shape | Fails `malformed-message`; no initialize | Treats invalid modern result as legacy and initializes | SDK would turn malformed input into an unauthorized downgrade. |
 | Recognized `-32022` with only legacy support | Fails `protocol-incompatible`; modern evidence locks, no initialize | Falls back to legacy and initializes | SDK does not preserve modern-error lock. |
 | Modern-only pin with malformed result | Stable CtrlZebra `malformed-message` | SDK rejects with its own `SdkError`, with no CtrlZebra stable classification | SDK errors cannot replace the public client error mapping. |
-| Cancellation during probe | Cancelled outcome; delivery gate closes; one termination wait; late result ignored | SDK rejects its connect promise; Host still owns custom transport cleanup | Signal handling is not a substitute for CtrlZebra generation/cleanup ownership. |
-| Stale generation / disconnect race | Generation fence prevents late probe, initialize, catalog, or UI effects | No SDK `generation` concept | Must remain package/Host-owned. |
+| Server exit during probe | Fails `server-exited`; one `closeInput` and one confirmed termination | Rejects with public `SdkErrorCode.EraNegotiationFailed`; one `closeInput`, one confirmed termination, and a late response is dropped by the custom transport gate | SDK error classification is observable, but Host cleanup remains the owner. |
+| Cancellation during probe | Cancelled outcome; delivery gate closes; one termination wait; late result ignored | SDK rejects its connect promise with `SdkErrorCode.EraNegotiationFailed`; the caller closes the custom transport, observes one termination, and confirms late delivery is dropped | Signal handling is not a substitute for CtrlZebra generation/cleanup ownership. |
+| Stale generation / disconnect race | Generation fence prevents late probe, initialize, catalog, or UI effects; the fixture emits a late probe response and no later method is sent | No SDK `generation` concept; after caller-owned close, the transport gate drops the same late response and emits no later method | Generation and post-cancel side-effect policy must remain package/Host-owned. |
+| Termination confirmation | Stable disconnect result distinguishes `terminated` from `unconfirmed` | SDK connect can resolve, while the custom transport still exposes `terminateCount=1` and `termination="unconfirmed"` | SDK does not own CtrlZebra's termination-confirmation contract. |
 
 ## Similarity Audit
 
@@ -178,16 +212,17 @@ different lifecycle ownership.
 - **Decision:** Reject SDK-native negotiation for `@modelcontextprotocol/client@2.0.0` with the
   current custom stdio transport. Adopt the SDK's existing Client/transport/DTO mechanism only after
   the package-owned verdict via `{ prior }`.
-- **Test results:** The focused differential/regression command passed 3 files and 31 tests;
+- **Test results:** The focused differential corpus/regression command passed 3 files and 33 tests;
+  the six-case EO-012 corpus includes public `SdkError.isInstance`/`SdkErrorCode` assertions,
+  server-exit cleanup, stale-generation cancellation/late delivery, and termination confirmation;
   `pnpm exec vitest run packages/mcp-client/src` passed 19 files and 159 tests; the repository unit
   suite passed 162 files and 1,771 tests; `pnpm --filter @ctrl-zebra/mcp-client exec tsc --noEmit`
   and `pnpm run typecheck` passed; `pnpm run check` passed for 415 files; `pnpm run build` passed;
   and `pnpm run test:integration` exited 0. Integration emitted the existing non-fatal VS Code
   `Error mutex already exists`, cached-data option, and `Canceled Failed to load custom agents`
-  warnings. `pnpm run package:vsix` passed on the clean committed tree at implementation revision
-  `cc9d0bae3e402e688e91b6bf144aa94fbb8bc8df` with 12 allowlisted files, 831,672 compressed bytes,
-  and 3,797,841 uncompressed bytes at
-  `.artifacts/ctrl-zebra-0.1.1-cc9d0bae3e40.vsix`.
+  warnings. The rework's clean-tree `pnpm run package:vsix` result and its exact source revision
+  are recorded below after the reviewer rework commit; the package allowlist and artifact-size
+  comparison remain the same unless that command reports otherwise.
 - **Similarity Audit:** The final search confirms one package-owned negotiation definition and no
   second production negotiation path; the added test imports only public SDK APIs and existing
   package fixtures. The matrix above records all intentional behavioral differences.

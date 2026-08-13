@@ -1,7 +1,11 @@
-import { Client } from "@modelcontextprotocol/client";
+import { Client, SdkError, SdkErrorCode } from "@modelcontextprotocol/client";
 import { describe, expect, it } from "vitest";
 
-import { mcpLegacyProtocolVersion, mcpProtocolVersion } from "./contracts.js";
+import {
+  type McpProcessTermination,
+  mcpLegacyProtocolVersion,
+  mcpProtocolVersion,
+} from "./contracts.js";
 import { ControlledMcpClient } from "./controlled-mcp-client.js";
 import { FixtureStdioPort, isMethod, jsonRpcId } from "./fixture-stdio-port.js";
 import { SdkStdioTransport } from "./sdk-stdio-transport.js";
@@ -147,23 +151,73 @@ describe("EO-012 SDK-native negotiation differential corpus", () => {
 
     expect(controlled).toMatchObject({ kind: "failed", errorCode: "malformed-message" });
     expect(sdk.kind).toBe("rejected");
-    expect(sdk.errorName).toBe("SdkError");
+    expect(sdk.sdkErrorIsInstance).toBe(true);
+    expect(sdk.sdkErrorCode).toBe(SdkErrorCode.EraNegotiationFailed);
   });
 
-  it("keeps generation and cancellation ownership outside SDK negotiation", async () => {
+  it("compares server exit and SDK cleanup ownership", async () => {
+    const serverExit = (message: Readonly<Record<string, unknown>>, port: FixtureStdioPort) => {
+      if (message.method === "server/discover") port.exit();
+    };
+
+    const controlled = await runControlled(serverExit);
+    const sdk = await runSdkAuto(serverExit);
+
+    expect(controlled).toMatchObject({
+      kind: "failed",
+      errorCode: "server-exited",
+      methods: ["server/discover"],
+      closeInputCount: 1,
+      terminateCount: 1,
+    });
+    expect(sdk).toMatchObject({
+      kind: "rejected",
+      methods: ["server/discover"],
+      sdkErrorIsInstance: true,
+      sdkErrorCode: SdkErrorCode.EraNegotiationFailed,
+      closeInputCount: 1,
+      terminateCount: 1,
+      termination: "terminated",
+      lateDeliveryDropped: true,
+    });
+  });
+
+  it("compares stale-generation cancellation and late delivery", async () => {
     const port = new FixtureStdioPort();
     const controlledClient = new ControlledMcpClient(port, { protocolMode: "dual" });
     const controller = new AbortController();
     const controlled = controlledClient.connect(controller.signal);
-    await port.waitForMessage(isMethod("server/discover"));
+    const probe = await port.waitForMessage(isMethod("server/discover"));
     controller.abort();
 
     await expect(controlled).resolves.toEqual({ kind: "cancelled" });
+    port.emitJson(discoveryResponse(jsonRpcId(probe)));
     expect(port.terminateCount).toBe(1);
+    expect(port.messages.map((message) => String(message.method))).toEqual(["server/discover"]);
 
-    const sdk = await runSdkAuto(() => undefined, true);
-    expect(sdk.kind).toBe("rejected");
-    expect(sdk.methods).toEqual(["server/discover"]);
+    const sdk = await runSdkAbortAfterProbe();
+    expect(sdk).toMatchObject({
+      kind: "rejected",
+      methods: ["server/discover"],
+      sdkErrorIsInstance: true,
+      sdkErrorCode: SdkErrorCode.EraNegotiationFailed,
+      closeInputCount: 1,
+      terminateCount: 1,
+      termination: "terminated",
+      lateDeliveryDropped: true,
+    });
+  });
+
+  it("keeps SDK termination confirmation observable during close", async () => {
+    const sdk = await runSdkAuto(modernSuccess, false, "unconfirmed");
+
+    expect(sdk).toMatchObject({
+      kind: "connected",
+      closeInputCount: 1,
+      terminateCount: 1,
+      termination: "unconfirmed",
+      lateDeliveryDropped: true,
+    });
   });
 });
 
@@ -175,9 +229,14 @@ type Configure = (
 interface RunResult {
   readonly kind: "connected" | "failed" | "cancelled" | "rejected";
   readonly errorCode?: string;
-  readonly errorName?: string;
+  readonly sdkErrorIsInstance?: boolean;
+  readonly sdkErrorCode?: SdkErrorCode;
   readonly methods: readonly string[];
   readonly protocolVersion?: string;
+  readonly closeInputCount?: number;
+  readonly terminateCount?: number;
+  readonly termination?: McpProcessTermination;
+  readonly lateDeliveryDropped?: boolean;
 }
 
 async function runControlled(configure: Configure): Promise<RunResult> {
@@ -193,11 +252,18 @@ async function runControlled(configure: Configure): Promise<RunResult> {
     errorCode: outcome.kind === "failed" ? outcome.error.code : undefined,
     methods: port.messages.map((message) => String(message.method)),
     protocolVersion: outcome.kind === "connected" ? outcome.connection.protocolVersion : undefined,
+    closeInputCount: port.closeInputCount,
+    terminateCount: port.terminateCount,
+    termination: port.termination,
   };
 }
 
-async function runSdkAuto(configure: Configure, abortBeforeResponse = false): Promise<RunResult> {
-  return runSdk(configure, "auto", abortBeforeResponse);
+async function runSdkAuto(
+  configure: Configure = modernSuccess,
+  abortBeforeResponse = false,
+  termination: McpProcessTermination = "terminated",
+): Promise<RunResult> {
+  return runSdk(configure, "auto", abortBeforeResponse, termination);
 }
 
 async function runSdkPinned(configure: Configure): Promise<RunResult> {
@@ -208,8 +274,10 @@ async function runSdk(
   configure: Configure,
   mode: "auto" | { readonly pin: string },
   abortBeforeResponse = false,
+  termination: McpProcessTermination = "terminated",
 ): Promise<RunResult> {
   const port = new FixtureStdioPort(configure);
+  port.termination = termination;
   const transport = new SdkStdioTransport(port, () => {});
   const client = new Client(
     { name: "eo012-fixture", version: "1.0.0" },
@@ -234,21 +302,95 @@ async function runSdk(
     await connection;
     await client.close();
     await transport.waitForCleanup();
-    return {
-      kind: "connected",
-      methods: port.messages.map((message) => String(message.method)),
-      protocolVersion: transport.protocolVersion,
-    };
+    return summarizeSdkRun(port, transport, "connected");
   } catch (error) {
     await client.close().catch(() => undefined);
     await transport.waitForCleanup();
-    return {
-      kind: "rejected",
-      errorName: error instanceof Error ? error.name : typeof error,
-      methods: port.messages.map((message) => String(message.method)),
-    };
+    return summarizeSdkRun(port, transport, "rejected", error);
   }
 }
+
+async function runSdkAbortAfterProbe(): Promise<RunResult> {
+  const port = new FixtureStdioPort();
+  const transport = new SdkStdioTransport(port, () => {});
+  const client = new Client(
+    { name: "eo012-fixture", version: "1.0.0" },
+    {
+      capabilities: {},
+      enforceStrictCapabilities: true,
+      inputRequired: { autoFulfill: false },
+      supportedProtocolVersions: [mcpProtocolVersion, mcpLegacyProtocolVersion],
+      versionNegotiation: { mode: "auto", probe: { timeoutMs: sdkTimeoutMs } },
+    },
+  );
+  const controller = new AbortController();
+  const connection = client.connect(transport, {
+    signal: controller.signal,
+    timeout: sdkTimeoutMs,
+  });
+  const probe = await port.waitForMessage(isMethod("server/discover"));
+  controller.signal.addEventListener(
+    "abort",
+    () => {
+      void transport.close();
+    },
+    { once: true },
+  );
+  controller.abort();
+
+  let error: unknown;
+  try {
+    await connection;
+  } catch (caught) {
+    error = caught;
+  }
+  await client.close().catch(() => undefined);
+  await transport.waitForCleanup();
+  return summarizeSdkRun(port, transport, "rejected", error, jsonRpcId(probe));
+}
+
+function summarizeSdkRun(
+  port: FixtureStdioPort,
+  transport: SdkStdioTransport,
+  kind: "connected" | "rejected",
+  error?: unknown,
+  lateProbeId?: string | number,
+): RunResult {
+  let lateDelivered = false;
+  transport.onmessage = () => {
+    lateDelivered = true;
+  };
+  const probeId = lateProbeId ?? findProbeId(port.messages);
+  if (probeId !== undefined) {
+    port.emitJson(discoveryResponse(probeId));
+  }
+
+  const sdkError = error !== undefined && SdkError.isInstance(error) ? error : undefined;
+  return {
+    kind,
+    sdkErrorIsInstance: error === undefined ? undefined : sdkError !== undefined,
+    sdkErrorCode: sdkError?.code,
+    methods: port.messages.map((message) => String(message.method)),
+    protocolVersion: kind === "connected" ? transport.protocolVersion : undefined,
+    closeInputCount: port.closeInputCount,
+    terminateCount: port.terminateCount,
+    termination: port.termination,
+    lateDeliveryDropped: !lateDelivered,
+  };
+}
+
+function findProbeId(
+  messages: readonly Readonly<Record<string, unknown>>[],
+): string | number | undefined {
+  const probe = messages.find(isMethod("server/discover"));
+  return probe === undefined ? undefined : jsonRpcId(probe);
+}
+
+const modernSuccess: Configure = (message, port) => {
+  if (message.method === "server/discover") {
+    port.emitJson(discoveryResponse(jsonRpcId(message)));
+  }
+};
 
 function discoveryResponse(id: string | number): Readonly<Record<string, unknown>> {
   return {
