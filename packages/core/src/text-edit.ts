@@ -6,7 +6,6 @@ import {
 
 import { hasExactKeys, isNonnegativeSafeInteger, isRecord } from "./record-validation.js";
 
-
 export interface TextPosition {
   readonly line: number;
   readonly character: number;

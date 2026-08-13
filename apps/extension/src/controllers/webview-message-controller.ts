@@ -359,7 +359,7 @@ function postMcpPreviewError(
     requestId,
     status: "error",
     code,
-    message: messages[code] ?? messages["internal"] ?? "An unexpected error occurred.",
+    message: messages[code] ?? messages.internal ?? "An unexpected error occurred.",
   } as ExtensionToWebviewMessage);
 }
 

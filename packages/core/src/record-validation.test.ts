@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { hasExactKeys, hasOnlyKeys, isNonnegativeSafeInteger, isPlainRecord, isRecord } from "./record-validation.js";
-
+import {
+  hasExactKeys,
+  hasOnlyKeys,
+  isNonnegativeSafeInteger,
+  isPlainRecord,
+  isRecord,
+} from "./record-validation.js";
 
 describe("Core record validation", () => {
   it("accepts objects but rejects null and arrays", () => {

@@ -1,7 +1,6 @@
 import type { ModelMessage } from "./model-gateway.js";
 import { hasExactKeys, isNonnegativeSafeInteger, isRecord } from "./record-validation.js";
 
-
 export const conversationSummaryKind = "conversation-summary" as const;
 export const conversationSummaryVersion = 1 as const;
 export const maxConversationSummaryCharacters = 32_768;
