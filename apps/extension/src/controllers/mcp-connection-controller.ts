@@ -1,6 +1,6 @@
 import type {
   ControlledMcpClient,
-  McpClientErrorCode,
+  McpClientError,
   McpConnectedState,
   McpDisconnectOutcome,
   McpPromptCatalogView,
@@ -34,12 +34,15 @@ export type McpHostErrorCode =
   | "approval-expired"
   | "approval-invalidated"
   | "spawn-failed"
-  | McpClientErrorCode;
+  | "server-exited"
+  | "termination-unconfirmed"
+  | "internal";
 
-export interface McpHostError {
-  readonly code: McpHostErrorCode;
-  readonly message: string;
-}
+export type McpHostError =
+  | McpClientError
+  | { readonly code: McpHostErrorCode; readonly message: string };
+
+type McpFailure = McpHostError | McpHostErrorCode;
 
 export interface McpConnectionSnapshot {
   readonly generation: number;
@@ -283,7 +286,7 @@ export class McpConnectionController {
     const outcome = await client.disconnect();
     if (outcome.kind === "failed" && outcome.error.code === "termination-unconfirmed") {
       this.#terminationBlocked = true;
-      const failed = this.#fail("termination-unconfirmed");
+      const failed = this.#fail(this.#mapConnectionFailure(outcome.error));
       this.#dependencies.notifyError(failed.error?.message ?? mcpHostErrorMessages.internal);
       return failed;
     }
@@ -387,8 +390,10 @@ export class McpConnectionController {
         return this.#snapshot;
       }
       if (outcome.kind === "failed") {
-        const code = this.#mapConnectionFailure(outcome.error.code);
-        return this.#failAndNotify(code, operation.configuration);
+        return this.#failAndNotify(
+          this.#mapConnectionFailure(outcome.error),
+          operation.configuration,
+        );
       }
 
       const stateAfterDiscovery = this.getState();
@@ -419,15 +424,15 @@ export class McpConnectionController {
         if (error instanceof McpToolDiscoveryError) {
           this.#toolDiagnostic = diagnosticFromToolError(error);
           await this.#client.disconnect();
-          return this.#failAndNotify(error.code, operation.configuration, true);
+          return this.#failAndNotify(error, operation.configuration, true);
         }
         if (error instanceof McpResourceError) {
           await this.#client.disconnect();
-          return this.#failAndNotify(error.code, operation.configuration);
+          return this.#failAndNotify(error, operation.configuration);
         }
         if (error instanceof McpPromptError) {
           await this.#client.disconnect();
-          return this.#failAndNotify(error.code, operation.configuration);
+          return this.#failAndNotify(error, operation.configuration);
         }
         throw error;
       }
@@ -498,15 +503,18 @@ export class McpConnectionController {
     return this.#failAndNotify(outcome === "expired" ? "approval-expired" : "approval-denied");
   }
 
-  #mapConnectionFailure(code: McpClientErrorCode): McpHostErrorCode {
+  #mapConnectionFailure(error: McpClientError): McpHostError {
     if (this.#port?.hostFailure === "spawn-failed") {
-      return "spawn-failed";
+      return normalizeMcpFailure("spawn-failed");
     }
     if (this.#port?.hostFailure === "termination-unconfirmed") {
       this.#terminationBlocked = true;
-      return "termination-unconfirmed";
+      return normalizeMcpFailure("termination-unconfirmed");
     }
-    return code;
+    if (this.#port?.hostFailure === "server-exited") {
+      return normalizeMcpFailure("server-exited");
+    }
+    return error;
   }
 
   #handleHostFailure(generation: number, failure: McpHostProcessFailure): void {
@@ -540,21 +548,22 @@ export class McpConnectionController {
   }
 
   #failAndNotify(
-    code: McpHostErrorCode,
+    failure: McpFailure,
     configuration?: McpServerConfiguration,
     preserveToolDiagnostic = false,
   ) {
-    const failed = this.#fail(code, configuration, preserveToolDiagnostic);
+    const failed = this.#fail(failure, configuration, preserveToolDiagnostic);
     this.#dependencies.notifyError(failed.error?.message ?? mcpHostErrorMessages.internal);
     return failed;
   }
 
   #fail(
-    code: McpHostErrorCode,
+    failure: McpFailure,
     configuration?: McpServerConfiguration,
     preserveToolDiagnostic = false,
   ): McpConnectionSnapshot {
     if (!preserveToolDiagnostic) this.#toolDiagnostic = undefined;
+    const normalizedFailure = normalizeMcpFailure(failure);
     const server = configuration === undefined ? this.#snapshot.server : identity(configuration);
     this.#snapshot = {
       generation: this.#snapshot.generation,
@@ -565,13 +574,13 @@ export class McpConnectionController {
           : effectiveProtocolMode(configuration),
       server,
       configurationStale: this.#snapshot.configurationStale,
-      error: { code, message: mcpHostErrorMessages[code] },
+      error: normalizedFailure,
     };
     this.#dependencies.log({
       event: "mcp_connection_failed",
       component: "mcp",
       outcome: "failure",
-      errorCode: code,
+      errorCode: normalizedFailure.code,
       serverId: server?.serverId,
       generation: this.#snapshot.generation,
     });
@@ -600,22 +609,16 @@ const mcpHostErrorMessages = {
   "approval-expired": "MCP Server startup approval expired.",
   "approval-invalidated": "MCP Server startup approval became invalid before the process started.",
   "spawn-failed": "The MCP Server process could not be started.",
-  "connect-failed": "Could not connect to the MCP Server.",
-  "protocol-incompatible": "The MCP Server does not support the required protocol version.",
-  "capability-unsupported": "The MCP Server requested an unsupported capability.",
-  "malformed-message": "The MCP Server sent a malformed message.",
-  "invalid-schema": "The MCP Server supplied an invalid or unsupported Tool schema.",
-  "limit-exceeded": "The MCP Server exceeded a resource limit.",
   "server-exited": "The MCP Server exited unexpectedly.",
-  disconnected: "The MCP Server is disconnected.",
-  "tool-unavailable": "The MCP Tool is unavailable for the current connection.",
-  "resource-unavailable": "The MCP Resource is unavailable for the current connection.",
-  "resource-unsupported": "The MCP Resource uses unsupported content.",
-  "prompt-unavailable": "The MCP Prompt is unavailable for the current connection.",
-  "prompt-unsupported": "The MCP Prompt uses unsupported content.",
   "termination-unconfirmed": "The MCP Server process could not be confirmed as terminated.",
   internal: "The MCP connection failed unexpectedly.",
 } as const satisfies Record<McpHostErrorCode, string>;
+
+function normalizeMcpFailure(failure: McpFailure): McpHostError {
+  return typeof failure === "string"
+    ? { code: failure, message: mcpHostErrorMessages[failure] }
+    : failure;
+}
 
 function identity(configuration: McpServerConfiguration) {
   return { serverId: configuration.serverId, displayName: configuration.displayName };

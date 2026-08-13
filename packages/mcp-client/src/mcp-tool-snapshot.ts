@@ -19,6 +19,7 @@ import {
   maxMcpRejectedTools,
   maxMcpToolSnapshotSchemaBytes,
 } from "./contracts.js";
+import { createMcpClientError } from "./errors.js";
 import {
   type McpToolApprovalPreparation,
   normalizeMcpToolResult,
@@ -118,7 +119,7 @@ export class McpToolSnapshotError extends Error {
     readonly rejectedTools: readonly McpRejectedTool[] = [],
     readonly rejectedToolsTruncated = false,
   ) {
-    super("MCP Tool snapshot could not be accepted.");
+    super(createMcpClientError(code).message);
     this.name = "McpToolSnapshotError";
   }
 }

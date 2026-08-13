@@ -12,6 +12,7 @@ import {
   maxMcpPromptMessages,
   maxMcpPromptTextBytes,
 } from "./contracts.js";
+import { createMcpClientError } from "./errors.js";
 
 const promptKeys = new Set(["_meta", "arguments", "description", "icons", "name", "title"]);
 const argumentKeys = new Set(["description", "name", "required", "title"]);
@@ -61,7 +62,7 @@ export class McpPromptError extends Error {
       | "prompt-unavailable"
       | "prompt-unsupported",
   ) {
-    super("MCP Prompt operation could not be accepted.");
+    super(createMcpClientError(code).message);
     this.name = "McpPromptError";
   }
 }
