@@ -340,31 +340,49 @@ function isMcpRefreshNoOp(error: unknown): boolean {
   );
 }
 
+interface McpPreviewErrorConfig {
+  readonly type: ExtensionToWebviewMessage["type"];
+  readonly matchCode: (error: unknown) => string | undefined;
+  readonly messages: Readonly<Record<string, string>>;
+}
+
+function postMcpPreviewError(
+  post: (message: ExtensionToWebviewMessage) => void,
+  requestId: string,
+  error: unknown,
+  { type, matchCode, messages }: McpPreviewErrorConfig,
+): void {
+  const code = matchCode(error) ?? "internal";
+  post({
+    protocolVersion,
+    type,
+    requestId,
+    status: "error",
+    code,
+    message: messages[code] ?? messages.internal ?? "An unexpected error occurred.",
+  } as ExtensionToWebviewMessage);
+}
+
 function postPromptError(
   post: (message: ExtensionToWebviewMessage) => void,
   requestId: string,
   error: unknown,
 ): void {
-  const code =
-    error instanceof McpPromptError &&
-    (error.code === "prompt-unavailable" ||
-      error.code === "prompt-unsupported" ||
-      error.code === "limit-exceeded")
-      ? error.code
-      : "internal";
-  const messages = {
-    "prompt-unavailable": "The MCP Prompt is unavailable for the current connection.",
-    "prompt-unsupported": "The MCP Prompt uses unsupported content.",
-    "limit-exceeded": "The MCP Prompt exceeded a bounded content limit.",
-    internal: "The MCP Prompt operation failed unexpectedly.",
-  } as const;
-  post({
-    protocolVersion,
+  postMcpPreviewError(post, requestId, error, {
     type: "extension/mcp-prompt-preview",
-    requestId,
-    status: "error",
-    code,
-    message: messages[code],
+    matchCode: (e) =>
+      e instanceof McpPromptError &&
+      (e.code === "prompt-unavailable" ||
+        e.code === "prompt-unsupported" ||
+        e.code === "limit-exceeded")
+        ? e.code
+        : undefined,
+    messages: {
+      "prompt-unavailable": "The MCP Prompt is unavailable for the current connection.",
+      "prompt-unsupported": "The MCP Prompt uses unsupported content.",
+      "limit-exceeded": "The MCP Prompt exceeded a bounded content limit.",
+      internal: "The MCP Prompt operation failed unexpectedly.",
+    },
   });
 }
 
@@ -373,25 +391,20 @@ function postResourceError(
   requestId: string,
   error: unknown,
 ): void {
-  const code =
-    error instanceof McpResourceError &&
-    (error.code === "resource-unavailable" ||
-      error.code === "resource-unsupported" ||
-      error.code === "limit-exceeded")
-      ? error.code
-      : "internal";
-  const messages = {
-    "resource-unavailable": "The MCP Resource is unavailable for the current connection.",
-    "resource-unsupported": "The MCP Resource uses unsupported content.",
-    "limit-exceeded": "The MCP Resource exceeded a bounded content limit.",
-    internal: "The MCP Resource operation failed unexpectedly.",
-  } as const;
-  post({
-    protocolVersion,
+  postMcpPreviewError(post, requestId, error, {
     type: "extension/mcp-resource-preview",
-    requestId,
-    status: "error",
-    code,
-    message: messages[code],
+    matchCode: (e) =>
+      e instanceof McpResourceError &&
+      (e.code === "resource-unavailable" ||
+        e.code === "resource-unsupported" ||
+        e.code === "limit-exceeded")
+        ? e.code
+        : undefined,
+    messages: {
+      "resource-unavailable": "The MCP Resource is unavailable for the current connection.",
+      "resource-unsupported": "The MCP Resource uses unsupported content.",
+      "limit-exceeded": "The MCP Resource exceeded a bounded content limit.",
+      internal: "The MCP Resource operation failed unexpectedly.",
+    },
   });
 }

@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { hasExactKeys, hasOnlyKeys, isPlainRecord, isRecord } from "./record-validation.js";
+import {
+  hasExactKeys,
+  hasOnlyKeys,
+  isNonnegativeSafeInteger,
+  isPlainRecord,
+  isRecord,
+} from "./record-validation.js";
 
 describe("Core record validation", () => {
   it("accepts objects but rejects null and arrays", () => {
@@ -29,5 +35,16 @@ describe("Core record validation", () => {
   it("accepts a subset of an allowed key set", () => {
     expect(hasOnlyKeys({ path: "src/index.ts" }, new Set(["path", "startLine"]))).toBe(true);
     expect(hasOnlyKeys({ command: "delete" }, new Set(["path", "startLine"]))).toBe(false);
+  });
+
+  it("accepts non-negative safe integers only", () => {
+    expect(isNonnegativeSafeInteger(0)).toBe(true);
+    expect(isNonnegativeSafeInteger(1)).toBe(true);
+    expect(isNonnegativeSafeInteger(Number.MAX_SAFE_INTEGER)).toBe(true);
+    expect(isNonnegativeSafeInteger(-1)).toBe(false);
+    expect(isNonnegativeSafeInteger(1.5)).toBe(false);
+    expect(isNonnegativeSafeInteger(Number.MAX_SAFE_INTEGER + 1)).toBe(false);
+    expect(isNonnegativeSafeInteger("0")).toBe(false);
+    expect(isNonnegativeSafeInteger(null)).toBe(false);
   });
 });

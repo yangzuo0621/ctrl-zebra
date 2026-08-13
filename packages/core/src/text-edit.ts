@@ -4,7 +4,7 @@ import {
   maxApprovalUriCharacters,
 } from "@ctrl-zebra/protocol";
 
-import { hasExactKeys, isRecord } from "./record-validation.js";
+import { hasExactKeys, isNonnegativeSafeInteger, isRecord } from "./record-validation.js";
 
 export interface TextPosition {
   readonly line: number;
@@ -137,8 +137,4 @@ function compareTextEdits(left: TextEdit, right: TextEdit): number {
 
 function comparePositions(left: TextPosition, right: TextPosition): number {
   return left.line - right.line || left.character - right.character;
-}
-
-function isNonnegativeSafeInteger(value: unknown): value is number {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }

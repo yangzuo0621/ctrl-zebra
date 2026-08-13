@@ -1,5 +1,5 @@
 import type { ModelMessage } from "./model-gateway.js";
-import { hasExactKeys, isRecord } from "./record-validation.js";
+import { hasExactKeys, isNonnegativeSafeInteger, isRecord } from "./record-validation.js";
 
 export const conversationSummaryKind = "conversation-summary" as const;
 export const conversationSummaryVersion = 1 as const;
@@ -97,8 +97,4 @@ function isSummaryContentLengthValid(value: string): boolean {
   }
 
   return true;
-}
-
-function isNonnegativeSafeInteger(value: unknown): value is number {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
