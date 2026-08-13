@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { McpToolDiscoveryError } from "./controlled-mcp-client.js";
 import { createMcpClientError, McpTransportFailure } from "./errors.js";
+import { McpNegotiationFailure } from "./mcp-negotiation.js";
 import { McpPromptError } from "./mcp-prompt.js";
 import { McpResourceError } from "./mcp-resource.js";
 import { McpToolSnapshotError } from "./mcp-tool-snapshot.js";
@@ -43,6 +44,7 @@ describe("MCP client errors", () => {
     ["resource", new McpResourceError("resource-unsupported")],
     ["tool snapshot", new McpToolSnapshotError("invalid-schema")],
     ["tool discovery", new McpToolDiscoveryError("invalid-schema")],
+    ["negotiation", new McpNegotiationFailure("protocol-incompatible")],
   ] as const)("keeps the %s domain error message client-owned", (_kind, error) => {
     expect(error.message).toBe(createMcpClientError(error.code).message);
   });

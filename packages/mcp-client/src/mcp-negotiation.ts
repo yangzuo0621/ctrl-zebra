@@ -1,6 +1,7 @@
 import type { DiscoverResult, JSONRPCMessage } from "@modelcontextprotocol/client";
 
 import { type McpClientErrorCode, type McpProtocolMode, mcpProtocolVersion } from "./contracts.js";
+import { createMcpClientError } from "./errors.js";
 import type { SdkStdioTransport } from "./sdk-stdio-transport.js";
 
 const modernMetaKey = "io.modelcontextprotocol/protocolVersion";
@@ -47,11 +48,7 @@ export class McpNegotiationFailure extends Error {
   constructor(
     readonly code: Extract<McpClientErrorCode, "malformed-message" | "protocol-incompatible">,
   ) {
-    super(
-      code === "malformed-message"
-        ? "The MCP Server sent a malformed message."
-        : "The MCP Server does not support the required protocol version.",
-    );
+    super(createMcpClientError(code).message);
     this.name = "McpNegotiationFailure";
   }
 }

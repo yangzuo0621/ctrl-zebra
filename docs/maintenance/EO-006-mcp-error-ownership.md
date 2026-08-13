@@ -25,7 +25,8 @@
   also used generic local messages, so a caller could lose the client's stable explanation at the
   Host boundary. The copies could drift in user-visible diagnostics and violate the controlled MCP
   client ownership boundary.
-- Scope: Reuse `createMcpClientError` in the client Prompt, Resource, and Tool snapshot error
+- Scope: Reuse `createMcpClientError` in the client negotiation, Prompt, Resource, and Tool snapshot
+  error
   classes; let the controller accept and preserve client-owned error objects; restrict its local
   message table and error-code type to Host/process/configuration fallback outcomes; retain
   connection lifecycle, diagnostics, cancellation, and process mapping behavior. Add focused
@@ -34,6 +35,7 @@
   - `packages/mcp-client/src/mcp-prompt.ts`
   - `packages/mcp-client/src/mcp-resource.ts`
   - `packages/mcp-client/src/mcp-tool-snapshot.ts`
+  - `packages/mcp-client/src/mcp-negotiation.ts`
   - `packages/mcp-client/src/errors.test.ts`
   - `apps/extension/src/controllers/mcp-connection-controller.ts`
   - `apps/extension/src/controllers/mcp-connection-controller.test.ts`
@@ -68,7 +70,8 @@
     and EO-005's completed maintenance evidence.
 - Found existing implementations and owners: `packages/mcp-client/src/errors.ts` owns the closed
   client message table and `createMcpClientError`; `McpToolDiscoveryError` already used that owner,
-  while `McpPromptError`, `McpResourceError`, and `McpToolSnapshotError` had generic local messages.
+  while `McpNegotiationFailure`, `McpPromptError`, `McpResourceError`, and `McpToolSnapshotError`
+  had equivalent local messages.
   `McpConnectionController` owned Host/process/configuration mapping but also duplicated all client
   messages. No existing cross-boundary adapter or public message helper was found.
 - Decision: deepen the existing package-private/client-owned normalization and pass its existing
@@ -78,10 +81,11 @@
 - Not reused: SDK errors and `Error` are not stable CtrlZebra client contracts; Protocol schemas
   consume the already-bounded controller snapshot and do not own MCP error text. Host process
   failures remain local because process creation/termination/display is an Extension boundary.
-- Second/third implementation assessment: the two message tables were the observed duplicate
-  implementations; the three domain error classes were local normalization gaps, not additional
-  owners. After migration there is one client table/constructor and one Host table/normalizer; no
-  third equivalent client-message implementation remains. Overlapping `server-exited`,
+- Second/third implementation assessment: the Extension table and package-private negotiation
+  message branch were the observed duplicate client-message implementations; the four domain error
+  classes were local normalization gaps, not additional owners. After migration there is one client
+  table/constructor and one Host table/normalizer; no third equivalent client-message implementation
+  remains. Overlapping `server-exited`,
   `termination-unconfirmed`, and `internal` codes are intentionally represented as Host fallback
   strings when the failure originates in the process/controller and as client objects when it
   originates in the MCP package.
@@ -92,14 +96,14 @@
 ## Similarity Audit
 
 - Final audit commands (run after implementation stabilizes):
-  - `rg -n '^const (errorMessages|mcpHostErrorMessages)|^export function createMcpClientError|^export class Mcp(TransportFailure|PromptError|ResourceError|ToolSnapshotError|ToolDiscoveryError)|^export type McpHostError(Code)?|#mapConnectionFailure|#failAndNotify' packages/mcp-client/src/errors.ts packages/mcp-client/src/mcp-prompt.ts packages/mcp-client/src/mcp-resource.ts packages/mcp-client/src/mcp-tool-snapshot.ts packages/mcp-client/src/controlled-mcp-client.ts apps/extension/src/controllers/mcp-connection-controller.ts`
+  - `rg -n '^const (errorMessages|mcpHostErrorMessages)|^export function createMcpClientError|^export class Mcp(TransportFailure|PromptError|ResourceError|ToolSnapshotError|ToolDiscoveryError|NegotiationFailure)|^export type McpHostError(Code)?|#mapConnectionFailure|#failAndNotify' packages/mcp-client/src/errors.ts packages/mcp-client/src/mcp-negotiation.ts packages/mcp-client/src/mcp-prompt.ts packages/mcp-client/src/mcp-resource.ts packages/mcp-client/src/mcp-tool-snapshot.ts packages/mcp-client/src/controlled-mcp-client.ts apps/extension/src/controllers/mcp-connection-controller.ts`
   - `rg -n 'Could not connect to the MCP Server|does not support the required protocol|requested an unsupported capability|sent a malformed message|supplied an invalid or unsupported Tool schema|exceeded a resource limit|exited unexpectedly|MCP Server is disconnected|MCP Tool is unavailable|MCP Resource is unavailable|MCP Prompt is unavailable|process could not be confirmed|connection failed unexpectedly' packages/mcp-client/src apps/extension/src/controllers/mcp-connection-controller.ts`
   - `rg -n -i 'error ownership|client-owned|Host/process|stable client message|McpClientError' docs/engineering-opportunities.md docs/maintenance/EO-006-mcp-error-ownership.md docs/architecture.md`
   - `git diff --check`, `git status --short`, and final diff review against exact base.
 - Actual symbols and definitions after implementation: `errorMessages` and
   `createMcpClientError` remain one definition in `packages/mcp-client/src/errors.ts`; the client
-  transport and Tool discovery classes consume that owner, and Prompt/Resource/Tool snapshot
-  classes now consume it at their constructors. `mcpHostErrorMessages` and
+  transport, negotiation, Tool discovery, Prompt, Resource, and Tool snapshot classes consume that
+  owner. `mcpHostErrorMessages` and
   `normalizeMcpFailure` are one Extension-local definition in
   `apps/extension/src/controllers/mcp-connection-controller.ts`, scoped to Host/process/
   configuration fallback codes. `McpHostError` is one controller type union that permits either a
@@ -113,8 +117,8 @@
   `termination-unconfirmed`, and generic `internal` fallback messages remain in the controller by
   ownership; the same codes in `errors.ts` remain for package-originated client failures. The
   disconnect informational text and disposal exception are Host UX/lifecycle text, not client
-  error mappings. Negotiation and diagnostic modules contain fixed protocol/diagnostic copy with
-  distinct ownership and are not equivalent controller tables.
+  error mappings. Tool execution and diagnostic modules contain fixed operation/diagnostic copy with
+  distinct ownership and are not equivalent client error tables.
 - Independent reviewer comparison: task-reviewer must repeat the commands above, verify one client
   normalization owner, verify deletion of the controller client entries and code-only remapping,
   and compare the remaining overlap disposition against the final diff.
