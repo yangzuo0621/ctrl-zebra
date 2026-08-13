@@ -60,6 +60,26 @@ describe("FileCreateApplier", () => {
     expect(dependencies.applyWorkspaceEdit).not.toHaveBeenCalled();
   });
 
+  it("rejects a target that appears during the final approval-time recheck", async () => {
+    const dependencies = createDependencies({ existsSequence: [false, true] });
+
+    await expect(
+      new FileCreateApplier(dependencies.values).apply(
+        plan,
+        ownership,
+        new AbortController().signal,
+      ),
+    ).rejects.toBeInstanceOf(FileCreateConflictError);
+
+    expect(dependencies.resolveTarget).toHaveBeenCalledTimes(2);
+    expect(dependencies.createCheckpoint).toHaveBeenCalledOnce();
+    expect(dependencies.createWorkspaceEdit).toHaveBeenCalledOnce();
+    expect(dependencies.edit.operations).toEqual([]);
+    expect(dependencies.createFile).not.toHaveBeenCalled();
+    expect(dependencies.insert).not.toHaveBeenCalled();
+    expect(dependencies.applyWorkspaceEdit).not.toHaveBeenCalled();
+  });
+
   it("keeps host application failure distinct", async () => {
     const dependencies = createDependencies({ applied: false });
     await expect(
@@ -73,11 +93,20 @@ describe("FileCreateApplier", () => {
 });
 
 function createDependencies(
-  options: { readonly exists?: boolean; readonly applied?: boolean } = {},
+  options: {
+    readonly exists?: boolean;
+    readonly existsSequence?: readonly boolean[];
+    readonly applied?: boolean;
+  } = {},
 ) {
   const resource = { toString: () => plan.uri };
   const edit = { operations: [] as string[] };
-  const resolveTarget = vi.fn(async () => ({ resource, exists: options.exists ?? false }));
+  let resolveCount = 0;
+  const resolveTarget = vi.fn(async () => {
+    const exists = options.existsSequence?.[resolveCount] ?? options.exists ?? false;
+    resolveCount += 1;
+    return { resource, exists };
+  });
   const createWorkspaceEdit = vi.fn(() => edit);
   const createFile = vi.fn((target, uri) => target.operations.push(`create:${uri.toString()}`));
   const insert = vi.fn((target, _uri, text) => target.operations.push(`insert:${text}`));
@@ -94,5 +123,14 @@ function createDependencies(
     createId: () => "checkpoint-1",
     now: () => new Date("2026-08-13T00:00:00.000Z"),
   } satisfies FileCreateApplierDependencies<typeof resource, typeof edit>;
-  return { values, createCheckpoint, createFile, insert, applyWorkspaceEdit };
+  return {
+    values,
+    resolveTarget,
+    createCheckpoint,
+    createWorkspaceEdit,
+    edit,
+    createFile,
+    insert,
+    applyWorkspaceEdit,
+  };
 }
