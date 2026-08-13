@@ -166,6 +166,6 @@
 - Deleted or replaced old implementations: controller-local client message entries and code-only
   client failure reconstruction.
 - Design deviation: None.
-- PR/branch: Draft PR to be created after the implementation commit; branch
-  `codex/eo-006-mcp-error-ownership`.
-- Completion date: 2026-08-13 implementation verification; finalizer owns closure date.
+- PR/branch: [PR #221](https://github.com/yangzuo0621/ctrl-zebra/pull/221), branch
+  `codex/eo-006-mcp-error-ownership`, squash-merged after independent review and passing CI.
+- Completion date: 2026-08-13.
