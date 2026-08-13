@@ -195,6 +195,7 @@ describe("MCP connection controller", () => {
       error: { code: "malformed-message" },
     });
     expect(harness.client.disconnect).toHaveBeenCalledTimes(1);
+    expect(harness.notifyError).toHaveBeenCalledWith("The MCP Server sent a malformed message.");
   });
 
   it("fails and closes the connection when initial Prompt discovery is rejected", async () => {
@@ -207,6 +208,23 @@ describe("MCP connection controller", () => {
       error: { code: "malformed-message" },
     });
     expect(harness.client.disconnect).toHaveBeenCalledTimes(1);
+    expect(harness.notifyError).toHaveBeenCalledWith("The MCP Server sent a malformed message.");
+  });
+
+  it("preserves a client-owned connection error message at the Host boundary", async () => {
+    const harness = createHarness();
+    const clientError = {
+      code: "protocol-incompatible",
+      message: "client-owned protocol incompatibility",
+    } as const;
+    harness.client.connect.mockResolvedValueOnce({ kind: "failed", error: clientError });
+    const controller = new McpConnectionController(harness.values);
+
+    await expect(controller.connect()).resolves.toMatchObject({
+      status: "failed",
+      error: clientError,
+    });
+    expect(harness.notifyError).toHaveBeenCalledWith(clientError.message);
   });
 
   it("merges concurrent connection requests before approval and process creation", async () => {

@@ -12,6 +12,7 @@ import {
   maxMcpResourceUriBytes,
   maxMcpResourceUriCodePoints,
 } from "./contracts.js";
+import { createMcpClientError } from "./errors.js";
 
 const resourceKeys = new Set([
   "_meta",
@@ -100,7 +101,7 @@ export class McpResourceError extends Error {
       | "resource-unavailable"
       | "resource-unsupported",
   ) {
-    super("MCP Resource operation could not be accepted.");
+    super(createMcpClientError(code).message);
     this.name = "McpResourceError";
   }
 }
