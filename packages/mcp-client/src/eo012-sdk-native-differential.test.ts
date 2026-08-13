@@ -182,18 +182,20 @@ describe("EO-012 SDK-native negotiation differential corpus", () => {
     });
   });
 
-  it("compares stale-generation cancellation and late delivery", async () => {
+  it("compares stale-generation disconnect and late delivery", async () => {
     const port = new FixtureStdioPort();
     const controlledClient = new ControlledMcpClient(port, { protocolMode: "dual" });
-    const controller = new AbortController();
-    const controlled = controlledClient.connect(controller.signal);
+    const controlled = controlledClient.connect();
     const probe = await port.waitForMessage(isMethod("server/discover"));
-    controller.abort();
+    const disconnecting = controlledClient.disconnect();
 
-    await expect(controlled).resolves.toEqual({ kind: "cancelled" });
     port.emitJson(discoveryResponse(jsonRpcId(probe)));
-    expect(port.terminateCount).toBe(1);
+    await expect(controlled).resolves.toEqual({ kind: "cancelled" });
+    await expect(disconnecting).resolves.toEqual({ kind: "disconnected" });
+    expect(controlledClient.getState()).toMatchObject({ status: "disconnected" });
     expect(port.messages.map((message) => String(message.method))).toEqual(["server/discover"]);
+    expect(port.closeInputCount).toBe(1);
+    expect(port.terminateCount).toBe(1);
 
     const sdk = await runSdkAbortAfterProbe();
     expect(sdk).toMatchObject({

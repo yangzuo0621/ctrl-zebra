@@ -30,7 +30,7 @@
   probe corpus through `ControlledMcpClient` and the SDK's public `Client.connect` negotiation modes.
   Cover modern success, defined non-modern error, timeout, unknown JSON-RPC error, malformed result,
   recognized modern error without a mutual modern version, malformed modern-only pin behavior,
-  server exit, stale-generation cancellation/late delivery, and cleanup/termination confirmation.
+  server exit, stale-generation disconnect/late delivery, and cleanup/termination confirmation.
   Preserve the current implementation and add no shadow production
   path. Record the decision and the conditions for reopening it.
 - **Planned files:**
@@ -118,7 +118,7 @@
 - **Measured package/type/test/net-code comparison:** `git diff --numstat` shows no production
   source, package manifest, or lockfile delta; the net implementation change is a 0-line
   production migration and one deterministic differential test file. The focused corpus now has
-  six tests (including server exit, stale-generation cancellation/late delivery, and termination
+  six tests (including server exit, stale-generation disconnect/late delivery, and termination
   confirmation), while the prior regression/package counts are preserved in Completion. Typecheck
   and repository checks exercise the same package graph; the VSIX comparison records the unchanged
   allowlist and artifact byte counts rather than a second SDK negotiation path.
@@ -169,7 +169,7 @@ different lifecycle ownership.
 | Modern-only pin with malformed result | Stable CtrlZebra `malformed-message` | SDK rejects with its own `SdkError`, with no CtrlZebra stable classification | SDK errors cannot replace the public client error mapping. |
 | Server exit during probe | Fails `server-exited`; one `closeInput` and one confirmed termination | Rejects with public `SdkErrorCode.EraNegotiationFailed`; one `closeInput`, one confirmed termination, and a late response is dropped by the custom transport gate | SDK error classification is observable, but Host cleanup remains the owner. |
 | Cancellation during probe | Cancelled outcome; delivery gate closes; one termination wait; late result ignored | SDK rejects its connect promise with `SdkErrorCode.EraNegotiationFailed`; the caller closes the custom transport, observes one termination, and confirms late delivery is dropped | Signal handling is not a substitute for CtrlZebra generation/cleanup ownership. |
-| Stale generation / disconnect race | Generation fence prevents late probe, initialize, catalog, or UI effects; the fixture emits a late probe response and no later method is sent | No SDK `generation` concept; after caller-owned close, the transport gate drops the same late response and emits no later method | Generation and post-cancel side-effect policy must remain package/Host-owned. |
+| Stale generation / disconnect race | `disconnect()` increments the active generation while the probe is in flight; a late probe response cannot commit the old connection, `connect` resolves cancelled, disconnect resolves disconnected, cleanup runs once, and no initialize/method side effect is sent | No SDK `generation` concept; after caller-owned close, the transport gate drops the same late response and emits no later method | Generation and post-cancel side-effect policy must remain package/Host-owned. |
 | Termination confirmation | Stable disconnect result distinguishes `terminated` from `unconfirmed` | SDK connect can resolve, while the custom transport still exposes `terminateCount=1` and `termination="unconfirmed"` | SDK does not own CtrlZebra's termination-confirmation contract. |
 
 ## Similarity Audit
@@ -214,16 +214,14 @@ different lifecycle ownership.
   the package-owned verdict via `{ prior }`.
 - **Test results:** The focused differential corpus/regression command passed 3 files and 33 tests;
   the six-case EO-012 corpus includes public `SdkError.isInstance`/`SdkErrorCode` assertions,
-  server-exit cleanup, stale-generation cancellation/late delivery, and termination confirmation;
+  server-exit cleanup, stale-generation disconnect/late delivery, and termination confirmation;
   `pnpm exec vitest run packages/mcp-client/src` passed 19 files and 161 tests; the repository unit
   suite passed 162 files and 1,773 tests; `pnpm --filter @ctrl-zebra/mcp-client exec tsc --noEmit`
   and `pnpm run typecheck` passed; `pnpm run check` passed for 415 files; `pnpm run build` passed;
   and `pnpm run test:integration` exited 0. Integration emitted the existing non-fatal VS Code
-  `cached-data` option and `Canceled Failed to load custom agents` warnings. `pnpm run package:vsix`
-  passed on the clean packaging source revision `1ce6ad8134cdbc60a2a6022c7b44797c1f10e019`
-  (the final evidence-only docs commit follows) with 12 allowlisted files, 831,672 compressed
-  bytes, and 3,797,841 uncompressed bytes at
-  `.artifacts/ctrl-zebra-0.1.1-1ce6ad8134cd.vsix`.
+  `cached-data` option and `Canceled Failed to load custom agents` warnings. A clean-tree
+  `pnpm run package:vsix` will be rerun for this final race assertion; its exact source revision
+  and artifact bytes are recorded in the follow-up evidence-only commit.
 - **Similarity Audit:** The final search confirms one package-owned negotiation definition and no
   second production negotiation path; the added test imports only public SDK APIs and existing
   package fixtures. The matrix above records all intentional behavioral differences.
