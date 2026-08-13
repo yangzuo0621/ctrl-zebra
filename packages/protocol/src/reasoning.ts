@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { utf8BytesForCodePoint } from "./text-primitives.js";
+
 export const maxReasoningBlockIdCharacters = 128;
 export const maxReasoningDeltaCodePoints = 8_192;
 export const maxReasoningDeltaUtf8Bytes = 32_768;
@@ -261,17 +263,4 @@ function createReasoningTextSchema(maxCodePoints: number, maxUtf8Bytes: number) 
         });
       }
     });
-}
-
-function utf8BytesForCodePoint(codePoint: number): number {
-  if (codePoint <= 0x7f) {
-    return 1;
-  }
-  if (codePoint <= 0x7ff) {
-    return 2;
-  }
-  if (codePoint <= 0xffff) {
-    return 3;
-  }
-  return 4;
 }

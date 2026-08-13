@@ -41,6 +41,7 @@ import {
   restoredReasoningSchema,
 } from "./reasoning.js";
 import { sessionIdSchema, sessionStatusSchema, sessionSummarySchema } from "./session.js";
+import { utf8ByteLength } from "./text-primitives.js";
 import { toolCallSchema, toolErrorResultSchema, toolSuccessResultSchema } from "./tool.js";
 import { tokenUsageSchema } from "./usage.js";
 
@@ -823,12 +824,4 @@ export type CheckpointRestoredMessage = z.infer<typeof checkpointRestoredMessage
 export type CheckpointErrorMessage = z.infer<typeof checkpointErrorMessageSchema>;
 export type WebviewToExtensionMessage = z.infer<typeof webviewToExtensionMessageSchema>;
 
-function utf8ByteLength(value: string): number {
-  let bytes = 0;
-  for (const character of value) {
-    const codePoint = character.codePointAt(0) ?? 0;
-    bytes += codePoint <= 0x7f ? 1 : codePoint <= 0x7ff ? 2 : codePoint <= 0xffff ? 3 : 4;
-  }
-  return bytes;
-}
 export type ExtensionToWebviewMessage = z.infer<typeof extensionToWebviewMessageSchema>;

@@ -13,6 +13,7 @@ import {
   protocolVersion,
   webviewToExtensionMessageSchema,
 } from "./messages.js";
+import { utf8ByteLength } from "./text-primitives.js";
 
 const server = { serverId: "local_fixture", displayName: "Local fixture" } as const;
 const capabilities = {
@@ -238,7 +239,7 @@ describe("MCP connection Protocol", () => {
         rejectedToolsTruncated: false,
       },
     };
-    const remaining = 1_048_576 - utf8Bytes(JSON.stringify(base));
+    const remaining = 1_048_576 - utf8ByteLength(JSON.stringify(base));
     const perEntry = Math.floor(remaining / base.catalog.rejectedTools.length);
     const remainder = remaining % base.catalog.rejectedTools.length;
     const exact = {
@@ -251,7 +252,7 @@ describe("MCP connection Protocol", () => {
         })),
       },
     };
-    expect(utf8Bytes(JSON.stringify(exact))).toBe(1_048_576);
+    expect(utf8ByteLength(JSON.stringify(exact))).toBe(1_048_576);
     expect(mcpToolCatalogMessageSchema.safeParse(exact).success).toBe(true);
     const oversized = {
       ...exact,
@@ -265,12 +266,3 @@ describe("MCP connection Protocol", () => {
     expect(mcpToolCatalogMessageSchema.safeParse(oversized).success).toBe(false);
   });
 });
-
-function utf8Bytes(value: string): number {
-  let bytes = 0;
-  for (const character of value) {
-    const codePoint = character.codePointAt(0) ?? 0;
-    bytes += codePoint <= 0x7f ? 1 : codePoint <= 0x7ff ? 2 : codePoint <= 0xffff ? 3 : 4;
-  }
-  return bytes;
-}

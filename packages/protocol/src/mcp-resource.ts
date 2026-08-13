@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { mcpNegotiatedProvenanceSchema } from "./mcp-negotiation.js";
+import { utf8ByteLength } from "./text-primitives.js";
 
 export const maxMcpServerDisplayNameCodePoints = 256;
 export const maxMcpResourceDescriptorTextCodePoints = 65_536;
@@ -136,12 +137,3 @@ export type McpResourceCatalogDto = z.infer<typeof mcpResourceCatalogSchema>;
 export type McpResourceSnapshotDto = z.infer<typeof mcpResourceSnapshotSchema>;
 export type McpResourceAttachment = z.infer<typeof mcpResourceAttachmentSchema>;
 export type McpResourceSelectionDto = z.infer<typeof mcpResourceSelectionSchema>;
-
-function utf8ByteLength(value: string): number {
-  let bytes = 0;
-  for (const character of value) {
-    const codePoint = character.codePointAt(0) ?? 0;
-    bytes += codePoint <= 0x7f ? 1 : codePoint <= 0x7ff ? 2 : codePoint <= 0xffff ? 3 : 4;
-  }
-  return bytes;
-}
