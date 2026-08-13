@@ -133,10 +133,34 @@
 
 ## Completion
 
-- Implementation summary: Pending final full-suite verification and reviewer handoff.
-- Test results: Focused and affected suites/typechecks will be recorded after the final run.
-- Similarity Audit: Commands and ownership/disposition are recorded above; final counts and
-  reviewer comparison will be added before handoff.
+- Implementation summary: `packages/mcp-client` now owns the stable messages for transport,
+  negotiation, Tool discovery/snapshot, Prompt, and Resource client failures through the existing
+  `createMcpClientError` owner. `McpConnectionController` preserves client `{ code, message }`
+  objects and retains only Host/process/configuration fallback messages. No Protocol/Core/Extension
+  public contract, SDK, dependency, lifecycle, diagnostics, or persisted behavior changed.
+- Test results:
+  - Focused client/Host ownership tests: 2 files, 28 tests passed after the final negotiation
+    normalization change; the controller-focused suite also passed earlier with 31 tests.
+  - Affected MCP + Extension controller suite: 46 files, 479 tests passed.
+  - Full unit suite: 147 files, 1,740 tests passed (`pnpm run test:unit`).
+  - MCP package typecheck and workspace typecheck passed (`pnpm --filter @ctrl-zebra/mcp-client exec
+    tsc --noEmit`, `pnpm run typecheck`).
+  - Biome repository check passed (`pnpm run check`, 384 files).
+  - Workspace build passed (`pnpm run build`).
+  - Extension integration passed with exit code 0 (`pnpm run test:integration`); the existing
+    VS Code harness emitted the non-fatal `Canceled Failed to load custom agents` warning.
+  - `git diff --check` passed; final worktree is clean.
+- Similarity Audit: Final repository search found one `errorMessages`/`createMcpClientError`
+  definition in `packages/mcp-client/src/errors.ts`, consumed by `McpTransportFailure`,
+  `McpNegotiationFailure`, `McpToolDiscoveryError`, `McpToolSnapshotError`, `McpPromptError`, and
+  `McpResourceError`; one Extension `mcpHostErrorMessages` table and one `normalizeMcpFailure`
+  helper for Host/process/configuration fallback. The controller's copied client entries and
+  code-only reconstruction are removed. Remaining `server-exited`, `termination-unconfirmed`,
+  and `internal` text is intentionally split by origin: Host process/controller failures stay in
+  Extension; package-originated client failures stay in the client owner. Disconnect informational
+  text, disposal exception, Tool execution text, negotiation diagnostics, and Webview diagnostic
+  copy have distinct UX/operation owners and are not duplicate client-error tables. Reviewer must
+  independently repeat the documented searches and compare this disposition with the final diff.
 - Actual direct reuse/deepening: existing `createMcpClientError`/`errorMessages`, client error
   classes, and the controller's Host mapping seam; no new dependency or public export.
 - Deleted or replaced old implementations: controller-local client message entries and code-only
@@ -144,4 +168,4 @@
 - Design deviation: None.
 - PR/branch: Draft PR to be created after the implementation commit; branch
   `codex/eo-006-mcp-error-ownership`.
-- Completion date: Executor verification date pending; finalizer owns closure date.
+- Completion date: 2026-08-13 implementation verification; finalizer owns closure date.
