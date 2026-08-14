@@ -13,22 +13,24 @@ Task execution evidence referenced below is transient conversation, handoff, or 
 
 - [ ] The change belongs to the authorized roadmap task or standalone maintenance scope.
 - [ ] Planned files, exclusions, public-contract impact, and verification match the implementation.
+- [ ] The compact Review Handoff satisfies the Task-Executor contract.
+- [ ] The Reviewer starts from the Review Handoff, current PR diff, and acceptance criteria. Additional
+      documents are opened only for a touched contract, independent verification of a material handoff
+      claim, or a concrete concern; only those additional documents are reported.
 - [ ] Required transient task execution, handoff, or PR evidence is present and updated when
       implementation findings changed the design.
 - [ ] Non-blocking discoveries are recorded instead of being implemented opportunistically.
 
 ## 2. Reuse Before Build
 
-- [ ] The selected audit tier is justified: targeted by default, or full when a trigger in
-      `docs/development.md` applies or concrete duplication evidence requires escalation.
+- [ ] The selected audit tier is justified: `TARGETED` by default; `FULL` only for a trigger in
+      `docs/development.md`; `ESCALATED FULL` only when the Reviewer records one of its escalation
+      conditions.
 - [ ] The implementer's search covered the relevant concepts, public entry points, owning and adjacent
       modules, tests/test support, and applicable architecture or domain documents.
 - [ ] Existing candidates and non-reuse reasons are recorded and consistent with the implementation.
-- [ ] For a targeted audit, the reviewer checks the handoff evidence and diff, then spot-checks likely
-      owners or suspicious similarities without mechanically repeating the entire search.
-- [ ] For a full audit, the implementing agent's final inventory covers every relevant definition with
-      repository locations, counts, semantic owners, and dispositions; the reviewer independently
-      repeats the material searches and records differences.
+- [ ] Reviewer verification matches the tier semantics in `docs/development.md`; only `ESCALATED FULL`
+      repeats the repository-wide inventory and records material differences.
 - [ ] The implementation identifies the existing functions, modules, Schemas, Fakes, or mechanisms it
       calls directly or deepens; reuse is visible in the code rather than deferred as reviewer cleanup.
 - [ ] A second implementation includes a direct-reuse or module-deepening assessment. A third equivalent
@@ -72,8 +74,7 @@ Task execution evidence referenced below is transient conversation, handoff, or 
 
 - Missing tier-appropriate reuse or Build vs Buy evidence in the transient execution, handoff, or PR
   record is an actionable review finding; reviewers do not infer a justification from the implementation.
-  Reviewers escalate targeted evidence to a full audit only when a documented trigger or concrete concern
-  applies.
+  Reviewers use the `ESCALATED FULL` conditions in `docs/development.md`.
 - A better library discovered during review does not authorize unrelated adoption. The reviewer
   reports the candidate, expected benefit, and best task or maintenance scope.
 - Review agents do not add, remove, or upgrade dependencies while performing a read-only review.

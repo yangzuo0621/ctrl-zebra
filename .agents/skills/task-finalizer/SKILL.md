@@ -48,22 +48,20 @@ Use this result shape and set `reReviewRequired` from the route above:
 Attach bounded observability to the Finalizer handoff/report without changing the route object:
 
 ```text
-Context Used:
-- handoff
-- PR metadata
-- CI/check status
-- docs/implementation-plan.md
-Context Count: <number of entries actually read>
+Finalizer implementation docs read:
+- <implementation documents actually read, or `none`>
+Finalizer implementation docs loaded: <number>
 Searches Performed:
-- <search category> — <target>; full-repo similarity audit: yes|no
+- <search category> — <target>; full-repo similarity audit: yes | no
 ```
 
 List only inputs actually read. Keep the normal Finalizer context to the handoff, PR metadata,
 CI/check status, and `docs/implementation-plan.md`; do not reopen specification or source files just
-to populate this report. If fewer inputs were read, list only those inputs. `Searches Performed` is
-limited to category/target and the full-repo similarity-audit flag; omit raw search output, exact
-token/match counts, and every tool call. Deduplicate entries and use the number of listed entries for
-`Context Count`.
+to populate this report. If fewer implementation documents were read, list only those inputs and use
+`0` when none were loaded. `Searches Performed` is limited to category/target and the full-repo
+similarity-audit flag; omit raw search output, exact token/match counts, and every tool call.
+Deduplicate entries and use the number of listed implementation documents for `Finalizer implementation
+docs loaded`.
 
 Do not route closure to Sol-Planner. A planning or architecture question discovered before approval
 belongs to the coordinator/Planner; one discovered after approval requires the coordinator to stop for

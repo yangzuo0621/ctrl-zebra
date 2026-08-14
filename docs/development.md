@@ -88,16 +88,27 @@ owned by Biome, EditorConfig, and Git attributes.
 - Before completion, repeat the targeted search against actual added symbols and behavior. Record the
   existing functions, modules, Schemas, Fakes, or mechanisms reused or deepened, plus remaining
   similarities, removed implementations, and dispositions.
-- Escalate to a **full similarity audit** when the change adds a shared abstraction, package, or
-  dependency; implements a general-purpose mechanism; creates or changes a second/third equivalent
-  implementation; centralizes duplicated behavior; changes security, persistence, state-machine,
-  cancellation, lifecycle, budget, protocol, or SDK-boundary infrastructure; or is explicitly a reuse
-  or deduplication task. A concrete duplication concern found during implementation or review also
-  triggers escalation.
-- A full audit searches the whole repository and engineering-opportunity records after the implementation
-  stabilizes. The implementer inventories each relevant definition with location, count, semantic owner,
-  and disposition. The reviewer independently repeats the material searches and records differences.
-  Normal targeted audits do not require repository-wide match counts or an independent reproduction.
+- Use one of these similarity-audit tiers and name the selected tier in the Review Handoff:
+  - **TARGETED** is the default. Search the relevant concepts, owners, entry points, adjacent modules,
+    tests, and domain documents; then repeat the search against actual added symbols before completion.
+    The reviewer checks the evidence and spot-checks likely owners or suspicious similarities.
+  - **FULL** is an Executor tier. Select it only when the change adds a new shared or reusable
+    abstraction, establishes a package or module owner, adds a dependency, changes likely-duplicated
+    infrastructure, adds a cross-package utility or wrapper, consolidates or replaces an implementation,
+    changes persistence, security, state-machine, or MCP-lifecycle infrastructure, or explicitly requires
+    a full audit. Ordinary UI behavior, a single adapter extension, local validation, task-specific
+    orchestration, and a small domain implementation remain TARGETED by default. A FULL audit searches
+    the whole repository and engineering-opportunity records after implementation stabilizes; the
+    Executor inventories each relevant definition with location, count, semantic owner, and disposition.
+    The reviewer independently verifies the material claims with targeted searches and does not
+    automatically reproduce the repository-wide inventory.
+  - **ESCALATED FULL** is a Reviewer tier. Escalate only when a new shared abstraction is added, likely
+    candidates were omitted, the Executor inventory is inconsistent, an unexpected package or module
+    boundary crossing exists, or concrete evidence indicates that the first audit is incomplete. Only
+    then does the reviewer repeat the full repository inventory and record the differences.
+- A concrete duplication concern found during implementation may require FULL; a concern found during
+  review may require ESCALATED FULL. A repository-wide reviewer reproduction is not required for a
+  TARGETED audit or an ordinary FULL handoff.
 - Prefer direct calls to an existing owner. When callers need different stable errors, use one narrow
   caller-local translation boundary instead of recreating one same-shaped wrapper per owned operation.
   A wrapper is retained only when it performs additional host integration, validation, composition,
