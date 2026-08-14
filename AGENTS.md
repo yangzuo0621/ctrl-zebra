@@ -124,10 +124,12 @@ owns wire and Tool DTO contracts.
 - Any agent implementing or changing code, regardless of configured role or orchestration, owns the
   active reuse decision and must follow [`Reuse Before Build`](docs/development.md#reuse-before-build)
   before adding an implementation, fake, or wrapper.
-- Any agent reviewing an implementation independently verifies the final reuse and similarity evidence
-  and blocks approval when required evidence is missing or an equivalent implementation is unjustified.
-  The linked development guidance, task template, and review checklist own the search dimensions,
-  wrapper/error-translation rules, inventory fields, and evidence semantics.
+- Every change uses a targeted reuse audit. A full similarity audit is reserved for the risk triggers
+  defined in [`Reuse Before Build`](docs/development.md#reuse-before-build). Reviewers validate the
+  selected tier and block missing evidence or unjustified equivalent implementations; they repeat a
+  repository-wide search only for a full audit or when concrete duplication evidence makes escalation
+  necessary. The linked development guidance, task template, and review checklist own the search
+  dimensions, wrapper/error-translation rules, inventory fields, and evidence semantics.
 
 - For general-purpose mechanisms, repeated infrastructure, or dependency changes, follow
   [`Build vs Buy`](docs/development.md#build-vs-buy) and record the decision in the task plan.
@@ -152,10 +154,10 @@ sections from `docs/roadmap/task-template.md`. For maintenance, post:
 - Explicitly excluded:
 - Build vs Buy triggers: None / explain
 - Build vs Buy decision and evidence: Not applicable / explain
-- Reuse Audit: Initial repository-wide searches/candidates/owners, active reuse plan, and second/third
-  implementation assessment
-- Final Similarity Audit plan: Actual-symbol inventory, definition counts, remaining similarities,
-  dispositions, and independent reviewer comparison
+- Reuse Audit: Targeted search scope/candidates/owners, selected audit tier and trigger, active reuse
+  plan, and second/third implementation assessment
+- Final Similarity Audit plan: Targeted actual-symbol check and remaining similarities; for full audits,
+  add repository-wide inventory, definition counts, dispositions, and independent reviewer comparison
 - Verification:
 ```
 
