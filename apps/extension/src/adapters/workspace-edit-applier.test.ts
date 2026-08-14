@@ -293,6 +293,185 @@ describe("WorkspaceEditApplier", () => {
     expect(dependencies.createWorkspaceEdit).not.toHaveBeenCalled();
     expect(dependencies.applyWorkspaceEdit).not.toHaveBeenCalled();
   });
+
+  it("maps a missing approved target to a conflict before creating a Checkpoint", async () => {
+    const a = resource("file:///workspace/a.ts");
+    const b = resource("file:///workspace/b.ts");
+    const multiPlan = {
+      operation: "edit",
+      files: [
+        {
+          path: "a.ts",
+          uri: a.toString(),
+          originalRevision: { kind: "document_version", value: 1 },
+          edits: [
+            {
+              range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } },
+              newText: "a",
+            },
+          ],
+        },
+        {
+          path: "b.ts",
+          uri: b.toString(),
+          originalRevision: { kind: "document_version", value: 2 },
+          edits: [
+            {
+              range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } },
+              newText: "b",
+            },
+          ],
+        },
+      ],
+    } satisfies WorkspaceEditPlan;
+    const dependencies = createMultiDependencies({
+      [a.toString()]: { resource: a, version: 1, text: "aaa" },
+    });
+    const applier = new WorkspaceEditApplier(dependencies.values);
+
+    await expect(
+      applier.apply(multiPlan, ownership, new AbortController().signal),
+    ).rejects.toBeInstanceOf(WorkspaceEditConflictError);
+    expect(dependencies.createCheckpoint).not.toHaveBeenCalled();
+    expect(dependencies.createWorkspaceEdit).not.toHaveBeenCalled();
+    expect(dependencies.applyWorkspaceEdit).not.toHaveBeenCalled();
+  });
+
+  it("maps a target resolution failure during the final recheck to a conflict", async () => {
+    const a = resource("file:///workspace/a.ts");
+    const b = resource("file:///workspace/b.ts");
+    const multiPlan = {
+      operation: "edit",
+      files: [
+        {
+          path: "a.ts",
+          uri: a.toString(),
+          originalRevision: { kind: "document_version", value: 1 },
+          edits: [
+            {
+              range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } },
+              newText: "a",
+            },
+          ],
+        },
+        {
+          path: "b.ts",
+          uri: b.toString(),
+          originalRevision: { kind: "document_version", value: 2 },
+          edits: [
+            {
+              range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } },
+              newText: "b",
+            },
+          ],
+        },
+      ],
+    } satisfies WorkspaceEditPlan;
+    const dependencies = createMultiDependencies(
+      {
+        [a.toString()]: { resource: a, version: 1, text: "aaa" },
+        [b.toString()]: { resource: b, version: 2, text: "bbb" },
+      },
+      { failAtResolve: 3 },
+    );
+    const applier = new WorkspaceEditApplier(dependencies.values);
+
+    await expect(
+      applier.apply(multiPlan, ownership, new AbortController().signal),
+    ).rejects.toBeInstanceOf(WorkspaceEditConflictError);
+    expect(dependencies.createCheckpoint).toHaveBeenCalledOnce();
+    expect(dependencies.createWorkspaceEdit).not.toHaveBeenCalled();
+    expect(dependencies.applyWorkspaceEdit).not.toHaveBeenCalled();
+  });
+
+  it("rejects unsupported before text before creating a Checkpoint", async () => {
+    const a = resource("file:///workspace/a.ts");
+    const b = resource("file:///workspace/b.ts");
+    const multiPlan = {
+      operation: "edit",
+      files: [
+        {
+          path: "a.ts",
+          uri: a.toString(),
+          originalRevision: { kind: "document_version", value: 1 },
+          edits: [
+            {
+              range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } },
+              newText: "a",
+            },
+          ],
+        },
+        {
+          path: "b.ts",
+          uri: b.toString(),
+          originalRevision: { kind: "document_version", value: 2 },
+          edits: [
+            {
+              range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } },
+              newText: "b",
+            },
+          ],
+        },
+      ],
+    } satisfies WorkspaceEditPlan;
+    const dependencies = createMultiDependencies({
+      [a.toString()]: { resource: a, version: 1, text: "a\0a" },
+      [b.toString()]: { resource: b, version: 2, text: "bbb" },
+    });
+    const applier = new WorkspaceEditApplier(dependencies.values);
+
+    await expect(
+      applier.apply(multiPlan, ownership, new AbortController().signal),
+    ).rejects.toBeInstanceOf(WorkspaceEditConflictError);
+    expect(dependencies.createCheckpoint).not.toHaveBeenCalled();
+    expect(dependencies.applyWorkspaceEdit).not.toHaveBeenCalled();
+  });
+
+  it("rejects a computed after text that exceeds the lifecycle text bound", async () => {
+    const a = resource("file:///workspace/a.ts");
+    const b = resource("file:///workspace/b.ts");
+    const multiPlan = {
+      operation: "edit",
+      files: [
+        {
+          path: "a.ts",
+          uri: a.toString(),
+          originalRevision: { kind: "document_version", value: 1 },
+          edits: [
+            {
+              range: {
+                start: { line: 0, character: 65_536 },
+                end: { line: 0, character: 65_536 },
+              },
+              newText: "x",
+            },
+          ],
+        },
+        {
+          path: "b.ts",
+          uri: b.toString(),
+          originalRevision: { kind: "document_version", value: 2 },
+          edits: [
+            {
+              range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } },
+              newText: "b",
+            },
+          ],
+        },
+      ],
+    } satisfies WorkspaceEditPlan;
+    const dependencies = createMultiDependencies({
+      [a.toString()]: { resource: a, version: 1, text: "x".repeat(65_536) },
+      [b.toString()]: { resource: b, version: 2, text: "bbb" },
+    });
+    const applier = new WorkspaceEditApplier(dependencies.values);
+
+    await expect(
+      applier.apply(multiPlan, ownership, new AbortController().signal),
+    ).rejects.toBeInstanceOf(WorkspaceEditConflictError);
+    expect(dependencies.createCheckpoint).not.toHaveBeenCalled();
+    expect(dependencies.applyWorkspaceEdit).not.toHaveBeenCalled();
+  });
 });
 
 function createDependencies(
@@ -360,8 +539,12 @@ function createMultiDependencies(
     string,
     { readonly resource: WorkspaceEditResource; readonly version: number; readonly text: string }
   >,
+  options: { readonly failAtResolve?: number } = {},
 ) {
+  let resolveCount = 0;
   const resolveDocument = vi.fn(async (serializedUri: string) => {
+    resolveCount += 1;
+    if (options.failAtResolve === resolveCount) throw new Error("missing document");
     const value = documents[serializedUri];
     if (value === undefined) throw new Error("missing document");
     return {
@@ -397,6 +580,7 @@ function createMultiDependencies(
     createWorkspaceEdit,
     applyWorkspaceEdit,
     createCheckpoint,
+    resolveDocument,
   };
 }
 

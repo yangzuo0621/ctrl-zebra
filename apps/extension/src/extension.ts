@@ -298,7 +298,7 @@ export function activate(context: ExtensionContext): void {
     async presentDiff(plan, signal) {
       await validateWorkspaceEditPlan(plan, signal);
       for (const file of plan.files) {
-        await diffPresenter.present(file, signal);
+        await diffPresenter.present(file, signal, { requireBoundedText: true });
       }
     },
     async applyPlan(plan, ownership, signal) {
@@ -313,6 +313,7 @@ export function activate(context: ExtensionContext): void {
           randomUUID,
           () => new Date(),
           () => workspaceTrust.requireTrusted(),
+          { requireSupportedText: true },
         ).apply(plan, ownership, signal);
         return "applied";
       } catch (error) {
@@ -706,7 +707,9 @@ export function activate(context: ExtensionContext): void {
     createProposeFileRenameWorkspace: (root, scope) =>
       new VsCodeProposeFileDeleteRenameWorkspace(root, scope, joinWorkspacePath),
     createProposeWorkspaceEditWorkspace: (root, scope) =>
-      new VsCodeProposeFileEditWorkspace(root, scope, joinWorkspacePath),
+      new VsCodeProposeFileEditWorkspace(root, scope, joinWorkspacePath, {
+        requireSupportedText: true,
+      }),
     commandExecutor,
     workspaceTrust,
     editorContext,

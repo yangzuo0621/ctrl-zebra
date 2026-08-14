@@ -3,6 +3,7 @@ import {
   type ApprovalResourceRevision,
   approvalResourceRevisionSchema,
   maxApprovalUriCharacters,
+  maxTextEdits,
   parseTextEditPlan,
   parseTextEdits,
   type TextEdit,
@@ -16,7 +17,7 @@ import { utf8ByteLength } from "./text-primitives.js";
 export const proposeFileEditToolName = "propose_file_edit" as const;
 export const proposeFileEditToolDescription =
   "Propose bounded text edits for one selected-workspace file; changes apply only after explicit user approval.";
-export const maxProposedFileEdits = 256;
+export const maxProposedFileEdits = maxTextEdits;
 export const maxProposedReplacementCharacters = 262_144;
 export const maxTotalProposedReplacementBytes = 786_432;
 

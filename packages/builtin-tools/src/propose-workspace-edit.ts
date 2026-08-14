@@ -1,6 +1,8 @@
 import {
   type AgentTool,
   InvalidWorkspaceEditPlanError,
+  isBoundedWorkspaceEditText,
+  maxTextEdits,
   maxWorkspaceEditAggregateReplacementBytes,
   maxWorkspaceEditFiles,
   maxWorkspaceEditPathBytes,
@@ -27,6 +29,7 @@ export const proposeWorkspaceEditToolDescription =
   "Propose bounded text edits across multiple selected-workspace files; changes apply atomically only after explicit user approval.";
 
 export const maxProposedWorkspaceEditFiles = maxWorkspaceEditFiles;
+export const maxProposedWorkspaceEditEdits = maxTextEdits;
 export const minProposedWorkspaceEditFiles = minWorkspaceEditFiles;
 export const maxProposedWorkspaceEditReplacementCharacters = maxWorkspaceEditReplacementCharacters;
 export const maxProposedWorkspaceEditReplacementBytes = maxWorkspaceEditReplacementBytes;
@@ -89,6 +92,7 @@ export const proposeWorkspaceEditInputSchema = {
             type: "array",
             description: "Non-overlapping text edits for this file.",
             minItems: 1,
+            maxItems: maxProposedWorkspaceEditEdits,
             items: editInputSchema,
           },
         },
@@ -218,12 +222,7 @@ function parseProposeWorkspaceEditInput(value: unknown): ProposeWorkspaceEditInp
       throw new TypeError("Invalid propose_workspace_edit edits.");
     }
     for (const edit of edits) {
-      if (
-        !edit.newText.isWellFormed() ||
-        edit.newText.includes("\0") ||
-        [...edit.newText].length > maxProposedWorkspaceEditReplacementCharacters ||
-        utf8ByteLength(edit.newText) > maxProposedWorkspaceEditReplacementBytes
-      ) {
+      if (!isBoundedWorkspaceEditText(edit.newText)) {
         throw new TypeError("propose_workspace_edit replacement is too large.");
       }
       aggregateReplacementBytes += utf8ByteLength(edit.newText);

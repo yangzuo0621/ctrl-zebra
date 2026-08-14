@@ -145,6 +145,7 @@ export type {
 } from "./propose-workspace-edit.js";
 export {
   createProposeWorkspaceEditTool,
+  maxProposedWorkspaceEditEdits,
   maxProposedWorkspaceEditFiles,
   maxProposedWorkspaceEditPathBytes,
   maxProposedWorkspaceEditReplacementBytes,

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   InvalidTextEditPlanError,
+  maxTextEdits,
   OverlappingTextEditsError,
   parseTextEditPlan,
 } from "./text-edit.js";
@@ -145,5 +146,13 @@ describe("Text Edit Plan", () => {
     expect(() => parseTextEditPlan({ uri: validPlan.uri, edits: validPlan.edits })).toThrow(
       InvalidTextEditPlanError,
     );
+  });
+
+  it("rejects more than the shared per-file edit limit, including empty replacements", () => {
+    const edits = Array.from({ length: maxTextEdits + 1 }, (_, index) => ({
+      range: { start: { line: 0, character: index }, end: { line: 0, character: index } },
+      newText: "",
+    }));
+    expect(() => parseTextEditPlan({ ...validPlan, edits })).toThrow(InvalidTextEditPlanError);
   });
 });

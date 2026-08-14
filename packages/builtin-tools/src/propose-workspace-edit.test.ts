@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   createProposeWorkspaceEditTool,
+  maxProposedWorkspaceEditEdits,
   maxProposedWorkspaceEditFiles,
   maxTotalProposedWorkspaceEditReplacementBytes,
   minProposedWorkspaceEditFiles,
@@ -53,9 +54,23 @@ describe("propose_workspace_edit", () => {
         type: "object",
         required: ["files"],
         additionalProperties: false,
-        properties: { files: expect.objectContaining({ minItems: minProposedWorkspaceEditFiles }) },
+        properties: {
+          files: expect.objectContaining({ minItems: minProposedWorkspaceEditFiles }),
+        },
       }),
     });
+    const objectSchema = tool.inputSchema as unknown as {
+      readonly properties: {
+        readonly files: {
+          readonly items: {
+            readonly properties: { readonly edits: { readonly maxItems: number } };
+          };
+        };
+      };
+    };
+    expect(objectSchema.properties.files.items.properties.edits.maxItems).toBe(
+      maxProposedWorkspaceEditEdits,
+    );
   });
 
   it("captures and rechecks every target before returning a sorted immutable plan", async () => {
@@ -125,6 +140,26 @@ describe("propose_workspace_edit", () => {
               newText: "x".repeat(maxTotalProposedWorkspaceEditReplacementBytes),
             },
           ],
+        },
+        input.files[1],
+      ],
+    };
+    expect(() => tool.parseInput(oversized)).toThrow(TypeError);
+  });
+
+  it("rejects more than the shared per-file edit limit before host capture", () => {
+    const tool = createProposeWorkspaceEditTool(createWorkspace().values);
+    const oversized = {
+      files: [
+        {
+          ...input.files[0],
+          edits: Array.from({ length: maxProposedWorkspaceEditEdits + 1 }, (_, index) => ({
+            range: {
+              start: { line: 0, character: index },
+              end: { line: 0, character: index },
+            },
+            newText: "",
+          })),
         },
         input.files[1],
       ],

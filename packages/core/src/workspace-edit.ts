@@ -17,8 +17,11 @@ export const minWorkspaceEditFiles = 2;
 export const maxWorkspaceEditFiles = 128;
 export const maxWorkspaceEditPathCharacters = 4_096;
 export const maxWorkspaceEditPathBytes = 16_384;
-export const maxWorkspaceEditReplacementCharacters = 65_536;
-export const maxWorkspaceEditReplacementBytes = 262_144;
+export const maxWorkspaceEditTextCharacters = 65_536;
+export const maxWorkspaceEditTextLines = 2_000;
+export const maxWorkspaceEditTextBytes = 262_144;
+export const maxWorkspaceEditReplacementCharacters = maxWorkspaceEditTextCharacters;
+export const maxWorkspaceEditReplacementBytes = maxWorkspaceEditTextBytes;
 export const maxWorkspaceEditAggregateReplacementBytes = 1_048_576;
 
 /** One immutable, host-bound target in a multi-file edit plan. */
@@ -114,7 +117,7 @@ function parseWorkspaceEditFile(value: unknown): WorkspaceEditFilePlan {
     throw error;
   }
   for (const edit of edits) {
-    if (!isBoundedWorkspaceEditReplacement(edit.newText)) {
+    if (!isBoundedWorkspaceEditText(edit.newText)) {
       throw new InvalidWorkspaceEditPlanError();
     }
   }
@@ -143,13 +146,18 @@ function isSafeWorkspaceEditPath(path: string): boolean {
     .every((segment) => segment.length > 0 && segment !== "." && segment !== "..");
 }
 
-function isBoundedWorkspaceEditReplacement(text: string): boolean {
+export function isBoundedWorkspaceEditText(text: string): boolean {
   return (
     text.isWellFormed() &&
     !text.includes("\0") &&
-    [...text].length <= maxWorkspaceEditReplacementCharacters &&
-    utf8ByteLength(text) <= maxWorkspaceEditReplacementBytes
+    [...text].length <= maxWorkspaceEditTextCharacters &&
+    countLogicalLines(text) <= maxWorkspaceEditTextLines &&
+    utf8ByteLength(text) <= maxWorkspaceEditTextBytes
   );
+}
+
+function countLogicalLines(text: string): number {
+  return text.length === 0 ? 0 : text.split(/\r\n|\r|\n/u).length;
 }
 
 function compareWorkspaceEditFiles(

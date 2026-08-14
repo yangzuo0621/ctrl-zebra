@@ -8,6 +8,7 @@ import {
   type DiffResource,
   DiffSourceChangedError,
   InvalidDiffEditRangeError,
+  InvalidDiffTextError,
 } from "./diff-presenter.js";
 
 const sourceUri = resource("file:///workspace/example.ts");
@@ -112,6 +113,40 @@ describe("DiffPresenter", () => {
     expect(dependencies.showDiff).not.toHaveBeenCalled();
   });
 
+  it("rejects unsupported source text for a workspace edit before opening a Diff", async () => {
+    const dependencies = createDependencies({ sourceText: "one\0two" });
+    const presenter = new DiffPresenter(dependencies.values);
+
+    await expect(
+      presenter.present(plan, new AbortController().signal, { requireBoundedText: true }),
+    ).rejects.toBeInstanceOf(InvalidDiffTextError);
+    expect(dependencies.showDiff).not.toHaveBeenCalled();
+  });
+
+  it("rejects a computed after text that exceeds the workspace text bound", async () => {
+    const dependencies = createDependencies({ sourceText: "x".repeat(65_536) });
+    const presenter = new DiffPresenter(dependencies.values);
+    const oversizedPlan = {
+      ...plan,
+      edits: [
+        {
+          range: {
+            start: { line: 0, character: 65_536 },
+            end: { line: 0, character: 65_536 },
+          },
+          newText: "x",
+        },
+      ],
+    } satisfies TextEditPlan;
+
+    await expect(
+      presenter.present(oversizedPlan, new AbortController().signal, {
+        requireBoundedText: true,
+      }),
+    ).rejects.toBeInstanceOf(InvalidDiffTextError);
+    expect(dependencies.showDiff).not.toHaveBeenCalled();
+  });
+
   it("releases virtual content when the Diff command fails or a document closes", async () => {
     const commandError = new Error("vscode.diff failed");
     const dependencies = createDependencies({ showDiffError: commandError });
@@ -159,7 +194,9 @@ describe("DiffPresenter", () => {
   });
 });
 
-function createDependencies(options: { readonly showDiffError?: Error } = {}) {
+function createDependencies(
+  options: { readonly showDiffError?: Error; readonly sourceText?: string } = {},
+) {
   let provider: Parameters<DiffPresenterDependencies["registerContentProvider"]>[0] | undefined;
   let closeListener: Parameters<DiffPresenterDependencies["onDidCloseDocument"]>[0] | undefined;
   const disposeProvider = vi.fn();
@@ -167,7 +204,7 @@ function createDependencies(options: { readonly showDiffError?: Error } = {}) {
   const openSourceDocument = vi.fn<DiffPresenterDependencies["openSourceDocument"]>(async () => ({
     uri: sourceUri,
     version: 7,
-    text: "one\r\ntwo\nthree",
+    text: options.sourceText ?? "one\r\ntwo\nthree",
     label: "example.ts",
   }));
   const showDiff = vi.fn<DiffPresenterDependencies["showDiff"]>(async () => {

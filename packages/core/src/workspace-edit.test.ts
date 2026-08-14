@@ -4,6 +4,9 @@ import {
   InvalidWorkspaceEditPlanError,
   maxWorkspaceEditAggregateReplacementBytes,
   maxWorkspaceEditFiles,
+  maxWorkspaceEditTextBytes,
+  maxWorkspaceEditTextCharacters,
+  maxWorkspaceEditTextLines,
   OverlappingWorkspaceEditError,
   parseWorkspaceEditPlan,
 } from "./workspace-edit.js";
@@ -87,6 +90,38 @@ describe("parseWorkspaceEditPlan", () => {
       {
         range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } },
         newText: "x".repeat(maxWorkspaceEditAggregateReplacementBytes),
+      },
+    ];
+    expect(() =>
+      parseWorkspaceEditPlan({ operation: "edit", files: [file, target("b.ts")] }),
+    ).toThrow(InvalidWorkspaceEditPlanError);
+  });
+
+  it("rejects more than the shared per-file edit limit, including empty replacements", () => {
+    const file = target("a.ts");
+    file.edits = Array.from({ length: 257 }, (_, index) => ({
+      range: { start: { line: 0, character: index }, end: { line: 0, character: index } },
+      newText: "",
+    }));
+    expect(() =>
+      parseWorkspaceEditPlan({ operation: "edit", files: [file, target("b.ts")] }),
+    ).toThrow(InvalidWorkspaceEditPlanError);
+  });
+
+  it.each([
+    { value: "x".repeat(maxWorkspaceEditTextCharacters + 1), reason: "scalars" },
+    {
+      value: Array.from({ length: maxWorkspaceEditTextLines + 1 }, () => "x").join("\n"),
+      reason: "lines",
+    },
+    { value: "😀".repeat(Math.ceil(maxWorkspaceEditTextBytes / 4) + 1), reason: "bytes" },
+    { value: "a\0b", reason: "NUL" },
+  ])("rejects unsupported replacement text ($reason)", ({ value }) => {
+    const file = target("a.ts");
+    file.edits = [
+      {
+        range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } },
+        newText: value,
       },
     ];
     expect(() =>
