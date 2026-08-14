@@ -56,7 +56,7 @@
 | [EO-009 Markdown renderer](#eo-009-markdown-renderer) | Buy re-evaluation | P3 | 先证明净收益并通过基线变更控制 | `暂缓` |
 | [EO-010 Targeted Zod reuse](#eo-010-targeted-zod-reuse) | 已有依赖复用 | P2 | 随拥有 schema 的任务分 tranche | `已发现` |
 | [EO-011 Provider token counting](#eo-011-provider-token-counting) | Buy / 实验 | P3 | 先有准确度或预算缺陷数据 | `暂缓` |
-| [EO-012 MCP SDK-native negotiation](#eo-012-mcp-sdk-native-negotiation) | Buy / 已有依赖深化 | P0 | MCP 再次演进前优先评估；不阻塞 Phase 20 | `评估中` |
+| [EO-012 MCP SDK-native negotiation](#eo-012-mcp-sdk-native-negotiation) | Buy / 已有依赖深化 | P0 | SDK public negotiation API or custom-stdio lifecycle changes后重新评估；不阻塞 Phase 20 | `已评估（Reject）` |
 
 建议的依赖链是：
 
@@ -293,3 +293,4 @@ EO-012 可独立于 Phase 20 评估；除非发现当前 negotiation 存在实�
 | 2026-08-13 | EO-007 | 独立 maintenance 已完成 | [EO-007 maintenance](maintenance/EO-007-package-local-text-primitives.md)；[PR #222](https://github.com/yangzuo0621/ctrl-zebra/pull/222) | Package-local text, record, URI, canonical JSON, and equality seams merged by reviewed squash commit `53bc57b`; CI and independent review gates passed; feature branch cleaned up. |
 | 2026-08-13 | EO-008 Safe regex engine | T2001 已完成契约评估，T2005 条件候选 | [T2001 Protocol contract](protocol.md#search-regex-mode) | 严格产品 dialect 采用 RE2 syntax/safety semantics；`re2js@2.8.5` 的 LOOKBEHINDS 扩展使其不是无过滤 drop-in，须由 T2005 adapter 拒绝扩展并完成 bounds/cancellation/adversarial evidence；T2001 未加依赖。 |
 | 2026-08-13 | EO-012 MCP SDK-native negotiation | 初始登记为评估候选 | — | 现有 MCP SDK v2 依赖已提供 version negotiation 能力；登记 differential validation 与 SDK-native replacement 的 Build vs Buy 评估，不改变当前路线图执行点。 |
+| 2026-08-13 | EO-012 MCP SDK-native negotiation | 独立 maintenance 评估完成；Reject | [EO-012 maintenance record](maintenance/EO-012-mcp-sdk-native-negotiation.md) | `@modelcontextprotocol/client@2.0.0` public `auto` negotiation widens fallback for unknown/malformed/modern-error outcomes and treats the custom stdio transport's timeout/close differently; the existing package-owned seam remains the sole production negotiation owner. |
