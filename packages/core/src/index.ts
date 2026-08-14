@@ -260,6 +260,7 @@ export {
 export type { TextEdit, TextEditPlan, TextPosition, TextRange } from "./text-edit.js";
 export {
   InvalidTextEditPlanError,
+  maxTextEdits,
   OverlappingTextEditsError,
   parseTextEditPlan,
   parseTextEdits,
@@ -300,3 +301,20 @@ export {
   ToolRepetitionDetectedError,
   ToolRepetitionDetector,
 } from "./tool-repetition-detector.js";
+export type { WorkspaceEditFilePlan, WorkspaceEditPlan } from "./workspace-edit.js";
+export {
+  InvalidWorkspaceEditPlanError,
+  isBoundedWorkspaceEditText,
+  maxWorkspaceEditAggregateReplacementBytes,
+  maxWorkspaceEditFiles,
+  maxWorkspaceEditPathBytes,
+  maxWorkspaceEditPathCharacters,
+  maxWorkspaceEditReplacementBytes,
+  maxWorkspaceEditReplacementCharacters,
+  maxWorkspaceEditTextBytes,
+  maxWorkspaceEditTextCharacters,
+  maxWorkspaceEditTextLines,
+  minWorkspaceEditFiles,
+  OverlappingWorkspaceEditError,
+  parseWorkspaceEditPlan,
+} from "./workspace-edit.js";

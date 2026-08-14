@@ -1,4 +1,10 @@
-import type { TextEditPlan, TextPosition, TextRange } from "@ctrl-zebra/core";
+import {
+  isBoundedWorkspaceEditText,
+  type TextEditPlan,
+  type TextPosition,
+  type TextRange,
+  type WorkspaceEditPlan,
+} from "@ctrl-zebra/core";
 import type { Checkpoint, CheckpointRunId, SessionId } from "@ctrl-zebra/protocol";
 
 export interface WorkspaceEditOwnership {
@@ -62,48 +68,113 @@ export class WorkspaceEditApplier<Resource extends WorkspaceEditResource, Edit> 
   }
 
   async apply(
-    plan: TextEditPlan,
+    plan: TextEditPlan | WorkspaceEditPlan,
     ownership: WorkspaceEditOwnership,
     signal: AbortSignal,
   ): Promise<void> {
-    signal.throwIfAborted();
-    const document = await this.#dependencies.resolveDocument(plan.uri, signal);
-    signal.throwIfAborted();
-    this.#assertCurrentRevision(plan, document);
+    const plans = "files" in plan ? plan.files : [plan];
+    await this.#applyPlans(plans, ownership, signal, "files" in plan);
+  }
 
-    for (const edit of plan.edits) {
-      if (
-        !document.isValidPosition(edit.range.start) ||
-        !document.isValidPosition(edit.range.end)
-      ) {
-        throw new InvalidWorkspaceEditRangeError();
+  async #applyPlans(
+    plans: readonly TextEditPlan[],
+    ownership: WorkspaceEditOwnership,
+    signal: AbortSignal,
+    lifecycleCheckpoint: boolean,
+  ): Promise<void> {
+    const uris = new Set<string>();
+    for (const plan of plans) {
+      if (uris.has(plan.uri)) {
+        throw new WorkspaceEditConflictError();
       }
+      uris.add(plan.uri);
     }
 
     signal.throwIfAborted();
-    const beforeHash = this.#dependencies.hashText(document.text);
-    const afterContent = applyTextEdits(document.text, plan, document.offsetAt);
+    const documents: WorkspaceEditDocument<Resource>[] = [];
+    const afterContents: string[] = [];
+    for (const plan of plans) {
+      const document = await this.#resolveDocumentOrConflict(plan.uri, signal);
+      signal.throwIfAborted();
+      this.#assertCurrentRevision(plan, document);
+
+      if (lifecycleCheckpoint && !isBoundedWorkspaceEditText(document.text)) {
+        throw new WorkspaceEditConflictError();
+      }
+
+      for (const edit of plan.edits) {
+        if (
+          !document.isValidPosition(edit.range.start) ||
+          !document.isValidPosition(edit.range.end)
+        ) {
+          throw new InvalidWorkspaceEditRangeError();
+        }
+      }
+      const afterContent = applyTextEdits(document.text, plan, document.offsetAt);
+      if (lifecycleCheckpoint && !isBoundedWorkspaceEditText(afterContent)) {
+        throw new WorkspaceEditConflictError();
+      }
+      documents.push(document);
+      afterContents.push(afterContent);
+    }
+
+    signal.throwIfAborted();
     await this.#dependencies.createCheckpoint(
       {
         id: this.#dependencies.createId(),
         sessionId: ownership.sessionId,
         runId: ownership.runId,
         createdAt: this.#dependencies.now().toISOString(),
-        files: [
-          {
-            uri: plan.uri,
-            beforeContent: document.text,
-            beforeHash,
-            afterHash: this.#dependencies.hashText(afterContent),
-          },
-        ],
+        files: plans.map((plan, index) => {
+          const document = documents[index];
+          const afterContent = afterContents[index];
+          if (document === undefined || afterContent === undefined) {
+            throw new WorkspaceEditConflictError();
+          }
+          const beforeHash = this.#dependencies.hashText(document.text);
+          const afterHash = this.#dependencies.hashText(afterContent);
+          return lifecycleCheckpoint
+            ? {
+                uri: plan.uri,
+                before: { kind: "text" as const, content: document.text, beforeHash },
+                after: { kind: "text" as const, afterHash },
+              }
+            : { uri: plan.uri, beforeContent: document.text, beforeHash, afterHash };
+        }),
       },
       signal,
     );
     signal.throwIfAborted();
+
+    const currentDocuments: WorkspaceEditDocument<Resource>[] = [];
+    for (const plan of plans) {
+      const document = await this.#resolveDocumentOrConflict(plan.uri, signal);
+      signal.throwIfAborted();
+      this.#assertCurrentRevision(plan, document);
+      if (lifecycleCheckpoint && !isBoundedWorkspaceEditText(document.text)) {
+        throw new WorkspaceEditConflictError();
+      }
+      for (const edit of plan.edits) {
+        if (
+          !document.isValidPosition(edit.range.start) ||
+          !document.isValidPosition(edit.range.end)
+        ) {
+          throw new InvalidWorkspaceEditRangeError();
+        }
+      }
+      currentDocuments.push(document);
+    }
+
     const workspaceEdit = this.#dependencies.createWorkspaceEdit();
-    for (const edit of plan.edits) {
-      this.#dependencies.replace(workspaceEdit, document.uri, edit.range, edit.newText);
+    for (let index = 0; index < plans.length; index += 1) {
+      const plan = plans[index];
+      const document = currentDocuments[index];
+      if (plan === undefined || document === undefined) {
+        throw new WorkspaceEditConflictError();
+      }
+      for (const edit of plan.edits) {
+        this.#dependencies.replace(workspaceEdit, document.uri, edit.range, edit.newText);
+      }
     }
 
     // VS Code exposes no cancellation input after this atomic text-only operation is submitted.
@@ -125,6 +196,18 @@ export class WorkspaceEditApplier<Resource extends WorkspaceEditResource, Edit> 
         ? document.version === revision.value
         : this.#dependencies.hashText(document.text) === revision.value;
     if (!current) {
+      throw new WorkspaceEditConflictError();
+    }
+  }
+
+  async #resolveDocumentOrConflict(
+    uri: string,
+    signal: AbortSignal,
+  ): Promise<WorkspaceEditDocument<Resource>> {
+    try {
+      return await this.#dependencies.resolveDocument(uri, signal);
+    } catch {
+      signal.throwIfAborted();
       throw new WorkspaceEditConflictError();
     }
   }

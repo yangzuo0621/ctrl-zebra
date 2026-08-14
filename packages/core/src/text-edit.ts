@@ -6,6 +6,9 @@ import {
 
 import { hasExactKeys, isNonnegativeSafeInteger, isRecord } from "./record-validation.js";
 
+/** Maximum number of non-overlapping replacements allowed for one file. */
+export const maxTextEdits = 256;
+
 export interface TextPosition {
   readonly line: number;
   readonly character: number;
@@ -68,7 +71,7 @@ export function parseTextEditPlan(value: unknown): TextEditPlan {
 }
 
 export function parseTextEdits(value: unknown): readonly TextEdit[] {
-  if (!Array.isArray(value) || value.length === 0) {
+  if (!Array.isArray(value) || value.length === 0 || value.length > maxTextEdits) {
     throw new InvalidTextEditPlanError();
   }
 

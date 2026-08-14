@@ -1,4 +1,4 @@
-import type { TextEditPlan, TextPosition } from "@ctrl-zebra/core";
+import { isBoundedWorkspaceEditText, type TextEditPlan, type TextPosition } from "@ctrl-zebra/core";
 
 export const diffDocumentScheme = "ctrlzebra-diff";
 
@@ -45,6 +45,13 @@ export class InvalidDiffEditRangeError extends Error {
   }
 }
 
+export class InvalidDiffTextError extends Error {
+  constructor() {
+    super("The proposed diff contains unsupported or unbounded text.");
+    this.name = "InvalidDiffTextError";
+  }
+}
+
 export class DiffPresenterDisposedError extends Error {
   constructor() {
     super("The Diff Presenter has been disposed.");
@@ -69,7 +76,11 @@ export class DiffPresenter implements DiffPresenterDisposable {
     });
   }
 
-  async present(plan: TextEditPlan, signal: AbortSignal): Promise<void> {
+  async present(
+    plan: TextEditPlan,
+    signal: AbortSignal,
+    options: DiffPresentationOptions = {},
+  ): Promise<void> {
     if (this.#disposed) {
       throw new DiffPresenterDisposedError();
     }
@@ -78,7 +89,13 @@ export class DiffPresenter implements DiffPresenterDisposable {
     const source = await this.#dependencies.openSourceDocument(plan.uri, signal);
     signal.throwIfAborted();
     this.#assertSourceRevision(plan, source);
+    if (options.requireBoundedText && !isBoundedWorkspaceEditText(source.text)) {
+      throw new InvalidDiffTextError();
+    }
     const afterText = applyTextEdits(source.text, plan);
+    if (options.requireBoundedText && !isBoundedWorkspaceEditText(afterText)) {
+      throw new InvalidDiffTextError();
+    }
     await this.#presentTextPair(source.label, source.text, afterText, signal);
   }
 
@@ -151,6 +168,10 @@ export class DiffPresenter implements DiffPresenterDisposable {
       throw new DiffSourceChangedError();
     }
   }
+}
+
+export interface DiffPresentationOptions {
+  readonly requireBoundedText?: boolean;
 }
 
 function applyTextEdits(text: string, plan: TextEditPlan): string {

@@ -1,4 +1,4 @@
-import type { TextEditPlan, TextPosition } from "@ctrl-zebra/core";
+import type { TextEditPlan, TextPosition, WorkspaceEditPlan } from "@ctrl-zebra/core";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -186,6 +186,292 @@ describe("WorkspaceEditApplier", () => {
     expect(dependencies.assertCanApply).toHaveBeenCalledOnce();
     expect(dependencies.applyWorkspaceEdit).not.toHaveBeenCalled();
   });
+
+  it("preflights every target, persists one state-union Checkpoint, and applies one atomic edit", async () => {
+    const a = resource("file:///workspace/a.ts");
+    const b = resource("file:///workspace/b.ts");
+    const multiPlan = {
+      operation: "edit",
+      files: [
+        {
+          path: "a.ts",
+          uri: a.toString(),
+          originalRevision: { kind: "document_version", value: 1 },
+          edits: [
+            {
+              range: { start: { line: 0, character: 0 }, end: { line: 0, character: 3 } },
+              newText: "AAA",
+            },
+          ],
+        },
+        {
+          path: "b.ts",
+          uri: b.toString(),
+          originalRevision: { kind: "document_version", value: 2 },
+          edits: [
+            {
+              range: { start: { line: 0, character: 0 }, end: { line: 0, character: 3 } },
+              newText: "BBB",
+            },
+          ],
+        },
+      ],
+    } satisfies WorkspaceEditPlan;
+    const dependencies = createMultiDependencies({
+      [a.toString()]: { resource: a, version: 1, text: "aaa" },
+      [b.toString()]: { resource: b, version: 2, text: "bbb" },
+    });
+    const applier = new WorkspaceEditApplier(dependencies.values);
+
+    await applier.apply(multiPlan, ownership, new AbortController().signal);
+
+    expect(dependencies.createCheckpoint).toHaveBeenCalledWith(
+      expect.objectContaining({
+        files: [
+          {
+            uri: a.toString(),
+            before: { kind: "text", content: "aaa", beforeHash: "hash:aaa" },
+            after: { kind: "text", afterHash: "hash:AAA" },
+          },
+          {
+            uri: b.toString(),
+            before: { kind: "text", content: "bbb", beforeHash: "hash:bbb" },
+            after: { kind: "text", afterHash: "hash:BBB" },
+          },
+        ],
+      }),
+      expect.any(AbortSignal),
+    );
+    expect(dependencies.createWorkspaceEdit).toHaveBeenCalledOnce();
+    expect(dependencies.applyWorkspaceEdit).toHaveBeenCalledOnce();
+    expect(dependencies.applyWorkspaceEdit.mock.calls[0]?.[0].replacements).toEqual([
+      { uri: a, range: multiPlan.files[0]?.edits[0]?.range, newText: "AAA" },
+      { uri: b, range: multiPlan.files[1]?.edits[0]?.range, newText: "BBB" },
+    ]);
+  });
+
+  it("rejects one stale target before Checkpoint creation and leaves all files untouched", async () => {
+    const a = resource("file:///workspace/a.ts");
+    const b = resource("file:///workspace/b.ts");
+    const multiPlan = {
+      operation: "edit",
+      files: [
+        {
+          path: "a.ts",
+          uri: a.toString(),
+          originalRevision: { kind: "document_version", value: 1 },
+          edits: [
+            {
+              range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } },
+              newText: "a",
+            },
+          ],
+        },
+        {
+          path: "b.ts",
+          uri: b.toString(),
+          originalRevision: { kind: "document_version", value: 2 },
+          edits: [
+            {
+              range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } },
+              newText: "b",
+            },
+          ],
+        },
+      ],
+    } satisfies WorkspaceEditPlan;
+    const dependencies = createMultiDependencies({
+      [a.toString()]: { resource: a, version: 1, text: "aaa" },
+      [b.toString()]: { resource: b, version: 3, text: "bbb" },
+    });
+    const applier = new WorkspaceEditApplier(dependencies.values);
+
+    await expect(
+      applier.apply(multiPlan, ownership, new AbortController().signal),
+    ).rejects.toBeInstanceOf(WorkspaceEditConflictError);
+    expect(dependencies.createCheckpoint).not.toHaveBeenCalled();
+    expect(dependencies.createWorkspaceEdit).not.toHaveBeenCalled();
+    expect(dependencies.applyWorkspaceEdit).not.toHaveBeenCalled();
+  });
+
+  it("maps a missing approved target to a conflict before creating a Checkpoint", async () => {
+    const a = resource("file:///workspace/a.ts");
+    const b = resource("file:///workspace/b.ts");
+    const multiPlan = {
+      operation: "edit",
+      files: [
+        {
+          path: "a.ts",
+          uri: a.toString(),
+          originalRevision: { kind: "document_version", value: 1 },
+          edits: [
+            {
+              range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } },
+              newText: "a",
+            },
+          ],
+        },
+        {
+          path: "b.ts",
+          uri: b.toString(),
+          originalRevision: { kind: "document_version", value: 2 },
+          edits: [
+            {
+              range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } },
+              newText: "b",
+            },
+          ],
+        },
+      ],
+    } satisfies WorkspaceEditPlan;
+    const dependencies = createMultiDependencies({
+      [a.toString()]: { resource: a, version: 1, text: "aaa" },
+    });
+    const applier = new WorkspaceEditApplier(dependencies.values);
+
+    await expect(
+      applier.apply(multiPlan, ownership, new AbortController().signal),
+    ).rejects.toBeInstanceOf(WorkspaceEditConflictError);
+    expect(dependencies.createCheckpoint).not.toHaveBeenCalled();
+    expect(dependencies.createWorkspaceEdit).not.toHaveBeenCalled();
+    expect(dependencies.applyWorkspaceEdit).not.toHaveBeenCalled();
+  });
+
+  it("maps a target resolution failure during the final recheck to a conflict", async () => {
+    const a = resource("file:///workspace/a.ts");
+    const b = resource("file:///workspace/b.ts");
+    const multiPlan = {
+      operation: "edit",
+      files: [
+        {
+          path: "a.ts",
+          uri: a.toString(),
+          originalRevision: { kind: "document_version", value: 1 },
+          edits: [
+            {
+              range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } },
+              newText: "a",
+            },
+          ],
+        },
+        {
+          path: "b.ts",
+          uri: b.toString(),
+          originalRevision: { kind: "document_version", value: 2 },
+          edits: [
+            {
+              range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } },
+              newText: "b",
+            },
+          ],
+        },
+      ],
+    } satisfies WorkspaceEditPlan;
+    const dependencies = createMultiDependencies(
+      {
+        [a.toString()]: { resource: a, version: 1, text: "aaa" },
+        [b.toString()]: { resource: b, version: 2, text: "bbb" },
+      },
+      { failAtResolve: 3 },
+    );
+    const applier = new WorkspaceEditApplier(dependencies.values);
+
+    await expect(
+      applier.apply(multiPlan, ownership, new AbortController().signal),
+    ).rejects.toBeInstanceOf(WorkspaceEditConflictError);
+    expect(dependencies.createCheckpoint).toHaveBeenCalledOnce();
+    expect(dependencies.createWorkspaceEdit).not.toHaveBeenCalled();
+    expect(dependencies.applyWorkspaceEdit).not.toHaveBeenCalled();
+  });
+
+  it("rejects unsupported before text before creating a Checkpoint", async () => {
+    const a = resource("file:///workspace/a.ts");
+    const b = resource("file:///workspace/b.ts");
+    const multiPlan = {
+      operation: "edit",
+      files: [
+        {
+          path: "a.ts",
+          uri: a.toString(),
+          originalRevision: { kind: "document_version", value: 1 },
+          edits: [
+            {
+              range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } },
+              newText: "a",
+            },
+          ],
+        },
+        {
+          path: "b.ts",
+          uri: b.toString(),
+          originalRevision: { kind: "document_version", value: 2 },
+          edits: [
+            {
+              range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } },
+              newText: "b",
+            },
+          ],
+        },
+      ],
+    } satisfies WorkspaceEditPlan;
+    const dependencies = createMultiDependencies({
+      [a.toString()]: { resource: a, version: 1, text: "a\0a" },
+      [b.toString()]: { resource: b, version: 2, text: "bbb" },
+    });
+    const applier = new WorkspaceEditApplier(dependencies.values);
+
+    await expect(
+      applier.apply(multiPlan, ownership, new AbortController().signal),
+    ).rejects.toBeInstanceOf(WorkspaceEditConflictError);
+    expect(dependencies.createCheckpoint).not.toHaveBeenCalled();
+    expect(dependencies.applyWorkspaceEdit).not.toHaveBeenCalled();
+  });
+
+  it("rejects a computed after text that exceeds the lifecycle text bound", async () => {
+    const a = resource("file:///workspace/a.ts");
+    const b = resource("file:///workspace/b.ts");
+    const multiPlan = {
+      operation: "edit",
+      files: [
+        {
+          path: "a.ts",
+          uri: a.toString(),
+          originalRevision: { kind: "document_version", value: 1 },
+          edits: [
+            {
+              range: {
+                start: { line: 0, character: 65_536 },
+                end: { line: 0, character: 65_536 },
+              },
+              newText: "x",
+            },
+          ],
+        },
+        {
+          path: "b.ts",
+          uri: b.toString(),
+          originalRevision: { kind: "document_version", value: 2 },
+          edits: [
+            {
+              range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } },
+              newText: "b",
+            },
+          ],
+        },
+      ],
+    } satisfies WorkspaceEditPlan;
+    const dependencies = createMultiDependencies({
+      [a.toString()]: { resource: a, version: 1, text: "x".repeat(65_536) },
+      [b.toString()]: { resource: b, version: 2, text: "bbb" },
+    });
+    const applier = new WorkspaceEditApplier(dependencies.values);
+
+    await expect(
+      applier.apply(multiPlan, ownership, new AbortController().signal),
+    ).rejects.toBeInstanceOf(WorkspaceEditConflictError);
+    expect(dependencies.createCheckpoint).not.toHaveBeenCalled();
+    expect(dependencies.applyWorkspaceEdit).not.toHaveBeenCalled();
+  });
 });
 
 function createDependencies(
@@ -247,6 +533,56 @@ function createDependencies(
 }
 
 type FakeDependencies = WorkspaceEditApplierDependencies<WorkspaceEditResource, FakeWorkspaceEdit>;
+
+function createMultiDependencies(
+  documents: Record<
+    string,
+    { readonly resource: WorkspaceEditResource; readonly version: number; readonly text: string }
+  >,
+  options: { readonly failAtResolve?: number } = {},
+) {
+  let resolveCount = 0;
+  const resolveDocument = vi.fn(async (serializedUri: string) => {
+    resolveCount += 1;
+    if (options.failAtResolve === resolveCount) throw new Error("missing document");
+    const value = documents[serializedUri];
+    if (value === undefined) throw new Error("missing document");
+    return {
+      uri: value.resource,
+      version: value.version,
+      text: value.text,
+      isValidPosition: () => true,
+      offsetAt: (position: TextPosition) => position.character,
+    };
+  });
+  const createWorkspaceEdit = vi.fn<FakeDependencies["createWorkspaceEdit"]>(() => ({
+    replacements: [],
+  }));
+  const replace = vi.fn<FakeDependencies["replace"]>((edit, target, range, newText) => {
+    edit.replacements.push({ uri: target, range, newText });
+  });
+  const applyWorkspaceEdit = vi.fn<FakeDependencies["applyWorkspaceEdit"]>(async () => true);
+  const assertCanApply = vi.fn();
+  const hashText = vi.fn<FakeDependencies["hashText"]>((text) => `hash:${text}`);
+  const createCheckpoint = vi.fn<FakeDependencies["createCheckpoint"]>(async () => {});
+  return {
+    values: {
+      resolveDocument,
+      createWorkspaceEdit,
+      replace,
+      assertCanApply,
+      applyWorkspaceEdit,
+      hashText,
+      createId: () => "checkpoint-1",
+      now: () => new Date("2026-07-19T00:00:00.000Z"),
+      createCheckpoint,
+    } satisfies FakeDependencies,
+    createWorkspaceEdit,
+    applyWorkspaceEdit,
+    createCheckpoint,
+    resolveDocument,
+  };
+}
 
 function resource(value: string): WorkspaceEditResource {
   return { toString: () => value };

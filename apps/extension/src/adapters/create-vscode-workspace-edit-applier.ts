@@ -2,8 +2,16 @@ import { createHash } from "node:crypto";
 
 import type { Checkpoint } from "@ctrl-zebra/protocol";
 import { Position, Range, Uri, WorkspaceEdit, workspace } from "vscode";
+import {
+  assertSupportedWorkspaceDocument,
+  readSupportedWorkspaceText,
+} from "./vscode-propose-file-edit-workspace.js";
 import { WorkspaceEditApplier } from "./workspace-edit-applier.js";
 import type { WorkspaceScope } from "./workspace-scope.js";
+
+export interface VsCodeWorkspaceEditApplierOptions {
+  readonly requireSupportedText?: boolean;
+}
 
 export function createVsCodeWorkspaceEditApplier(
   scope: Pick<WorkspaceScope, "validate">,
@@ -11,6 +19,7 @@ export function createVsCodeWorkspaceEditApplier(
   createId: () => string,
   now: () => Date,
   assertCanApply: () => void,
+  options: VsCodeWorkspaceEditApplierOptions = {},
 ): WorkspaceEditApplier<Uri, WorkspaceEdit> {
   return new WorkspaceEditApplier({
     async resolveDocument(serializedUri, signal) {
@@ -18,8 +27,14 @@ export function createVsCodeWorkspaceEditApplier(
       const requested = Uri.parse(serializedUri, true);
       const canonical = await scope.validate(requested, signal);
       signal.throwIfAborted();
+      const rawText = options.requireSupportedText
+        ? await readSupportedWorkspaceText(canonical, signal)
+        : undefined;
       const document = await workspace.openTextDocument(canonical);
       signal.throwIfAborted();
+      if (rawText !== undefined) {
+        assertSupportedWorkspaceDocument(document, rawText);
+      }
       return {
         uri: document.uri,
         version: document.version,

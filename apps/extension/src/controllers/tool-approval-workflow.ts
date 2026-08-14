@@ -33,6 +33,7 @@ export class ToolApprovalWorkflowRouter implements ToolApprovalWorkflow {
     private readonly fileCreates?: FileCreateApprovalWorkflowOwner,
     private readonly fileDeletes?: FileEditApprovalWorkflowOwner,
     private readonly fileRenames?: FileEditApprovalWorkflowOwner,
+    private readonly workspaceEdits?: FileEditApprovalWorkflowOwner,
   ) {}
 
   async create(
@@ -105,6 +106,8 @@ export class ToolApprovalWorkflowRouter implements ToolApprovalWorkflow {
       this.fileDeletes?.showDiff(approvalId);
     } else if (owner === this.fileRenames) {
       this.fileRenames?.showDiff(approvalId);
+    } else if (owner === this.workspaceEdits) {
+      this.workspaceEdits?.showDiff(approvalId);
     }
   }
 
@@ -122,6 +125,7 @@ export class ToolApprovalWorkflowRouter implements ToolApprovalWorkflow {
     this.fileCreates?.dispose();
     this.fileDeletes?.dispose();
     this.fileRenames?.dispose();
+    this.workspaceEdits?.dispose();
     this.commands.dispose();
     this.mcpTools?.dispose();
   }
@@ -145,7 +149,9 @@ export class ToolApprovalWorkflowRouter implements ToolApprovalWorkflow {
           ? this.fileDeletes
           : prepared.call.name === "propose_file_rename" && this.fileRenames !== undefined
             ? this.fileRenames
-            : this.fileEdits;
+            : prepared.call.name === "propose_workspace_edit" && this.workspaceEdits !== undefined
+              ? this.workspaceEdits
+              : this.fileEdits;
   }
 
   #release(approvalId: string, owned: OwnedApproval): void {
