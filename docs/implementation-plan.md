@@ -66,11 +66,11 @@
 **进度摘要**：
 
 - 总任务：148
-- 已完成：130
-- 进行中：1
+- 已完成：132
+- 进行中：0
 - 受阻：0
 - 待开始：16
-- 当前执行：T2003（T2002 合入后）
+- 当前执行：T2004（T2003 已合入）
 - 下一任务：T2004
 - 最后更新：2026-08-14
 
@@ -207,7 +207,7 @@
 | 19 | T1905 | 已完成 | [#207](https://github.com/yangzuo0621/ctrl-zebra/pull/207) | 2026-08-12 |
 | 20 | T2001 | 已完成 | [#227](https://github.com/yangzuo0621/ctrl-zebra/pull/227) | 2026-08-13 |
 | 20 | T2002 | 已完成 | [#229](https://github.com/yangzuo0621/ctrl-zebra/pull/229) | 2026-08-14 |
-| 20 | T2003 | 进行中 | — | — |
+| 20 | T2003 | 已完成 | [#231](https://github.com/yangzuo0621/ctrl-zebra/pull/231) | 2026-08-14 |
 | 20 | T2004 | 待开始 | — | — |
 | 20 | T2005 | 待开始 | — | — |
 | 21 | T2101 | 待开始 | — | — |
@@ -228,7 +228,7 @@
 ### 当前任务
 
 - ID：T2003
-- 状态：进行中（同步任务状态台账）
+- 状态：已完成
 - 规格：[阶段 20：T2003 实现受控删除与重命名](roadmap/phases/phase-20.md#t2003实现受控删除与重命名)
 - 目标：实现单个 UTF-8 文本文件的受控删除与重命名，绑定精确单次审批、源/目标身份和完整可恢复
   Checkpoint；拒绝不存在、目标冲突、stale、跨根、大小写歧义、批准后变化和不可信工作区。
@@ -287,8 +287,8 @@
 
 ### 完成结果
 
-- 实现摘要：实施中；待独立 Reviewer 批准后由 Task-Finalizer 填写。
-- 测试结果：聚焦与受影响包验证已记录在执行交接；完整/集成门禁将在 PR/CI 中确认。
+- 实现摘要：已实现并经独立 Reviewer 以 revision `b47888dccc81d4754e785e66f245a030ace3c932` 批准；PR #231 required CI 全部通过，具备 squash merge 条件。
+- 测试结果：聚焦 T2003 8 files/51 tests；core 30 files/473 tests；extension adapters/controllers 验证及 recursive TypeScript、`pnpm check`、extension build、`git diff --check` 均通过；GitHub Actions run `31758730278` 的 Ubuntu、macOS、Windows gates 全部通过。根 `pnpm run test:unit` 曾在 124s 后不退出，结果不定，未作为通过证据。
 - Similarity Audit：实现稳定后已执行全仓复查（命令：`rg -n --hidden -S --glob '!node_modules/**' --glob '!dist/**' --glob '!coverage/**' "File(Delete|Rename)(Plan|Applier|ApprovalWorkflow)|parseFile(Delete|Rename)Plan|propose_file_(delete|rename)|createProposeFile(Delete|Rename)Tool|VsCodeProposeFileDeleteRenameWorkspace|FileMutationApprovalWorkflow|WorkspaceScope|CheckpointRestorer|DiffPresenter|WorkspaceEdit|workspace[.]fs|hashText|countLogicalLines|assertParentDirectory" .`；定义计数只统计 packages/apps 生产源码声明，排除 import、re-export、测试和文档引用）。实际新增/修改符号、数量、owner 与处置如下：
   - 新建 core 计划边界（各 1 个定义）：`packages/core/src/file-delete-rename.ts:FileDeletePlan`、`FileRenamePlan`、`InvalidFileDeletePlanError`、`InvalidFileRenamePlanError`、`FileMutationTextHasher`、`parseFileDeletePlan`、`parseFileRenamePlan`（core 计划/内容身份 owner，新建）；`maxFileDeletePathCharacters`、`maxFileDeletePathBytes`、`maxFileDeleteContentCharacters`、`maxFileDeleteContentLines`、`maxFileDeleteContentBytes`、`maxFileRenamePathCharacters`、`maxFileRenamePathBytes`、`maxFileRenameContentCharacters`、`maxFileRenameContentLines`、`maxFileRenameContentBytes`（各 1，复用 `file-create` 的既有边界常量，不复制限制算法）；私有 `assertHash`、`isSafeMutationPath`、`isSafeUri`、`isBoundedMutationText`、`countLogicalLines`（各 1，core-local validation owner）。
   - 新建 builtin Tool 契约（列出的每个符号各 1 个定义）：`packages/builtin-tools/src/propose-file-delete.ts` 的 `proposeFileDeleteToolName`、`proposeFileDeleteToolDescription`、`maxProposedFileDeleteCharacters`、`maxProposedFileDeleteLines`、`maxProposedFileDeleteBytes`、`maxProposedFileDeletePathBytes`、`proposeFileDeleteInputSchema`、`ProposeFileDeleteInput`、`FileDeleteTargetSnapshot`、`ProposeFileDeleteWorkspace`、`InvalidWorkspaceFileDeleteTargetError`、`FileDeleteTargetNotFoundError`、`StaleFileDeleteTargetError`、`createProposeFileDeleteTool`；`packages/builtin-tools/src/propose-file-rename.ts` 的 `proposeFileRenameToolName`、`proposeFileRenameToolDescription`、`maxProposedFileRenameCharacters`、`maxProposedFileRenameLines`、`maxProposedFileRenameBytes`、`maxProposedFileRenamePathBytes`、`proposeFileRenameInputSchema`、`ProposeFileRenameInput`、`FileRenameTargetSnapshot`、`ProposeFileRenameWorkspace`、`InvalidWorkspaceFileRenameTargetError`、`FileRenameSourceNotFoundError`、`FileRenameTargetExistsError`、`StaleFileRenameTargetError`、`createProposeFileRenameTool`；private `prepareFileDeleteApproval`/`parseProposeFileDeleteInput`/`parseFileDeleteTargetSnapshot`/`isBoundedText`/`countLogicalLines` and `prepareFileRenameApproval`/`parseProposeFileRenameInput`/`parseFileRenameTargetSnapshot`/`isSafePath`/`isBoundedText`/`countLogicalLines` (each 1, operation-local boundary owner; no shared utility added). `FileDeleteTargetMissingError` 与 `FileRenameSourceMissingError` 各是 1 个显式兼容 alias export，不是第二个 error class。
@@ -301,8 +301,8 @@
   `DiffPresenter`、VS Code WorkspaceEdit/stat、core UTF-8/hash primitive。
 - 删除或替代的旧实现：无；legacy Checkpoint schema/restore 兼容路径保留。
 - 设计偏差：无已批准偏差。
-- 完成 PR：待创建/更新。
-- 完成日期：待合入后填写。
+- 完成 PR：[#231](https://github.com/yangzuo0621/ctrl-zebra/pull/231)。
+- 完成日期：2026-08-14
 - 下一任务：T2004（仅在 T2003 完成后启动）。
 
 ### T2002 完成记录
