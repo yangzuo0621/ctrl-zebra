@@ -1,9 +1,11 @@
+import type { ToolExecutionError } from "@ctrl-zebra/core";
 import { describe, expect, it, vi } from "vitest";
 
 import {
   createSearchFilesTool,
   listFilesExcludeGlob,
   maxSearchFileBytes,
+  maxSearchFileScalars,
   maxSearchFilesScanned,
   type SearchFilesWorkspace,
 } from "./index.js";
@@ -20,13 +22,140 @@ describe("search_files", () => {
       inputSchema: tool.inputSchema,
     }).toEqual({
       name: "search_files",
-      description: "Search bounded UTF-8 workspace text and return matching file locations.",
+      description:
+        "Search bounded UTF-8 workspace text literally or with a controlled RE2-compatible pattern and return matching file locations.",
       inputSchema: expect.objectContaining({
         type: "object",
         required: ["query"],
         additionalProperties: false,
+        properties: expect.objectContaining({
+          mode: expect.objectContaining({ enum: ["literal", "regex"] }),
+        }),
       }),
     });
+  });
+
+  it("keeps literal mode as the default and supports bounded RE2 matching", async () => {
+    const workspace = createWorkspace({
+      "a.txt": "zebra zebra\n猫 zebra",
+      "b.txt": "zoo",
+    });
+    const tool = createSearchFilesTool(workspace);
+
+    await expect(
+      tool.execute(tool.parseInput({ query: "z+", mode: "regex" }), {
+        signal: new AbortController().signal,
+      }),
+    ).resolves.toEqual({
+      output: {
+        matches: [
+          { path: "a.txt", line: 1, column: 1, preview: "zebra zebra" },
+          { path: "a.txt", line: 1, column: 7, preview: "zebra zebra" },
+          { path: "a.txt", line: 2, column: 3, preview: "猫 zebra" },
+          { path: "b.txt", line: 1, column: 1, preview: "zoo" },
+        ],
+      },
+      truncated: false,
+    });
+  });
+
+  it("accepts RE2 rune escapes and rejects unsupported escapes and flags", () => {
+    const tool = createSearchFilesTool(createWorkspace({}));
+
+    for (const query of ["\\07", "\\123", "\\x7f", "\\x{1f600}", "\\Q(a+)\\E", "\\p{L}"]) {
+      expect(() => tool.parseInput({ query, mode: "regex" })).not.toThrow();
+    }
+    for (const query of ["\\q", "\\Z", "\\C", "\\1", "a{1,2}+", "(?i:zebra)"]) {
+      expect(() => tool.parseInput({ query, mode: "regex" })).toThrow(TypeError);
+    }
+  });
+
+  it("rejects unsupported backreferences, look-around, and possessive syntax", () => {
+    const tool = createSearchFilesTool(createWorkspace({}));
+
+    for (const query of ["(a)\\1", "(?=zebra)", "(?<=zebra)", "a*+"]) {
+      expect(() => tool.parseInput({ query, mode: "regex" })).toThrow(TypeError);
+    }
+  });
+
+  it("does not emit empty regex matches", async () => {
+    const tool = createSearchFilesTool(createWorkspace({ "a.txt": "bbb" }));
+
+    await expect(
+      tool.execute(tool.parseInput({ query: "a*", mode: "regex" }), {
+        signal: new AbortController().signal,
+      }),
+    ).resolves.toEqual({ output: { matches: [] }, truncated: false });
+  });
+
+  it("handles a catastrophic-backtracking shape with the linear engine", async () => {
+    const tool = createSearchFilesTool(createWorkspace({ "a.txt": `${"a".repeat(10_000)}!` }));
+
+    await expect(
+      tool.execute(tool.parseInput({ query: "(a+)+$", mode: "regex" }), {
+        signal: new AbortController().signal,
+      }),
+    ).resolves.toEqual({ output: { matches: [] }, truncated: false });
+  });
+
+  it("matches Unicode classes with one-based UTF-16 columns", async () => {
+    const tool = createSearchFilesTool(createWorkspace({ "a.txt": "猫 x" }));
+
+    await expect(
+      tool.execute(tool.parseInput({ query: "\\p{L}+", mode: "regex" }), {
+        signal: new AbortController().signal,
+      }),
+    ).resolves.toEqual({
+      output: {
+        matches: [
+          { path: "a.txt", line: 1, column: 1, preview: "猫 x" },
+          { path: "a.txt", line: 1, column: 3, preview: "猫 x" },
+        ],
+      },
+      truncated: false,
+    });
+  });
+
+  it("rejects a pattern whose per-file complexity exceeds the budget", async () => {
+    const query = "a".repeat(256);
+    const tool = createSearchFilesTool(
+      createWorkspace({ "a.txt": "a".repeat(maxSearchFileScalars) }),
+    );
+
+    await expect(
+      tool.execute(tool.parseInput({ query, mode: "regex" }), {
+        signal: new AbortController().signal,
+      }),
+    ).rejects.toMatchObject({
+      code: "invalid-input",
+      message: "Regex search exceeds the configured complexity limit.",
+    } satisfies Partial<ToolExecutionError>);
+  });
+
+  it("rejects regex work when the aggregate complexity budget would overflow", async () => {
+    const query = "a".repeat(256);
+    const files = Object.fromEntries(
+      Array.from({ length: 8 }, (_, index) => [`${index}.txt`, "b".repeat(33_000)]),
+    );
+    const tool = createSearchFilesTool(createWorkspace(files));
+
+    await expect(
+      tool.execute(tool.parseInput({ query, mode: "regex" }), {
+        signal: new AbortController().signal,
+      }),
+    ).rejects.toMatchObject({ code: "invalid-input" });
+  });
+
+  it("marks regex input truncated when scalar bounds trim a file", async () => {
+    const tool = createSearchFilesTool(
+      createWorkspace({ "a.txt": `${"x".repeat(maxSearchFileScalars)}z` }),
+    );
+
+    await expect(
+      tool.execute(tool.parseInput({ query: "z", mode: "regex" }), {
+        signal: new AbortController().signal,
+      }),
+    ).resolves.toEqual({ output: { matches: [] }, truncated: true });
   });
 
   it("returns no matches for text that is absent", async () => {
@@ -145,6 +274,31 @@ describe("search_files", () => {
       tool.execute(tool.parseInput({ query: "text" }), { signal: controller.signal }),
     ).rejects.toBe(cancellation);
     expect(readFile).toHaveBeenCalledTimes(1);
+  });
+
+  it("propagates cancellation before regex matching starts", async () => {
+    const controller = new AbortController();
+    const cancellation = new Error("cancel regex search");
+    const findFiles = vi.fn<SearchFilesWorkspace["findFiles"]>(async () => ["a.txt"]);
+    const readFile = vi.fn<SearchFilesWorkspace["readFile"]>(async () => {
+      controller.abort(cancellation);
+      return { bytes: encoder.encode("text"), truncated: false };
+    });
+    const tool = createSearchFilesTool({ findFiles, readFile });
+
+    await expect(
+      tool.execute(tool.parseInput({ query: "text", mode: "regex" }), {
+        signal: controller.signal,
+      }),
+    ).rejects.toBe(cancellation);
+  });
+
+  it("enforces scalar, UTF-8, and well-formed query bounds", () => {
+    const tool = createSearchFilesTool(createWorkspace({}));
+
+    expect(() => tool.parseInput({ query: "😀".repeat(257) })).toThrow(TypeError);
+    expect(() => tool.parseInput({ query: "\ud800" })).toThrow(TypeError);
+    expect(() => tool.parseInput({ query: "😀".repeat(256) })).not.toThrow();
   });
 
   it.each([

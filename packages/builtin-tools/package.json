@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@ctrl-zebra/core": "workspace:*",
-    "@ctrl-zebra/protocol": "workspace:*"
+    "@ctrl-zebra/protocol": "workspace:*",
+    "re2js": "2.8.6"
   }
 }

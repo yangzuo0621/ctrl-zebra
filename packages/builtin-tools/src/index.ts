@@ -205,6 +205,7 @@ export {
 export type {
   SearchFileMatch,
   SearchFilesInput,
+  SearchFilesMode,
   SearchFilesOutput,
   SearchFilesWorkspace,
 } from "./search-files.js";
@@ -213,10 +214,17 @@ export {
   defaultSearchFilesLimit,
   InvalidWorkspaceSearchDataError,
   maxSearchFileBytes,
+  maxSearchFileScalars,
   maxSearchFilesLimit,
   maxSearchFilesScanned,
   maxSearchPreviewCharacters,
+  maxSearchQueryBytes,
+  maxSearchQueryScalars,
+  maxSearchRegexAggregateComplexity,
+  maxSearchRegexPerFileComplexity,
   searchFilesInputSchema,
+  searchFilesModes,
   searchFilesToolDescription,
   searchFilesToolName,
+  searchRegexLimitErrorMessage,
 } from "./search-files.js";
