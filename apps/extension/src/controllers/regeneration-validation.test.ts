@@ -35,6 +35,14 @@ describe("regeneration relation validation parity", () => {
       name: "a target from an older Run",
       events: wrongRunTargetEvents(),
     },
+    {
+      name: "a replacement prompt with mismatched content",
+      events: baseEvents({ replacementContent: "Different question" }),
+    },
+    {
+      name: "a completed replacement Run without text",
+      events: completedWithoutTextEvents(),
+    },
   ] as const;
 
   it.each(cases)("rejects $name consistently for continuation and restore", async ({ events }) => {
@@ -63,7 +71,11 @@ describe("regeneration relation validation parity", () => {
 });
 
 function baseEvents(
-  options: { targetMessageId?: string; replacementUserMessageId?: string } = {},
+  options: {
+    targetMessageId?: string;
+    replacementUserMessageId?: string;
+    replacementContent?: string;
+  } = {},
 ): readonly PersistedEventRecord[] {
   return normalize([
     user("message-1", "Question"),
@@ -72,7 +84,7 @@ function baseEvents(
     text("Original"),
     text(" answer"),
     status("streaming", "completed"),
-    user(options.replacementUserMessageId ?? "message-2", "Question"),
+    user(options.replacementUserMessageId ?? "message-2", options.replacementContent ?? "Question"),
     relation(
       options.targetMessageId ?? "assistant-4",
       options.replacementUserMessageId ?? "message-2",
@@ -82,6 +94,12 @@ function baseEvents(
     text("Replacement"),
     status("streaming", "completed"),
   ]);
+}
+
+function completedWithoutTextEvents(): readonly PersistedEventRecord[] {
+  const events = [...baseEvents()];
+  events.splice(10, 1);
+  return normalize(events.map(({ event }) => ({ type: event.type, data: event.data })));
 }
 
 function failedTargetEvents(): readonly PersistedEventRecord[] {

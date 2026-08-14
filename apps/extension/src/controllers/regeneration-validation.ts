@@ -65,7 +65,7 @@ export function validateRegenerationRelations(
     if (!parsed.success || parsed.data.sessionId !== sessionId) {
       throw new RegenerationRelationCorruptError();
     }
-    return [{ index, messageId: parsed.data.messageId }];
+    return [{ index, messageId: parsed.data.messageId, content: parsed.data.content }];
   });
   const seenTargets = new Set<string>();
   const seenReplacementUsers = new Set<string>();
@@ -120,6 +120,11 @@ export function validateRegenerationRelations(
     if (targetUserIndex < 0) {
       throw new RegenerationRelationCorruptError();
     }
+    const targetUser = users.find(({ index }) => index === targetUserIndex);
+    const replacementUser = replacementUsers[0];
+    if (targetUser === undefined || replacementUser?.content !== targetUser.content) {
+      throw new RegenerationRelationCorruptError();
+    }
     const targetRunEvents = events.slice(targetUserIndex + 1, replacementUserIndex);
     const targetFirstTextIndex = findFirstTextDeltaIndex(targetRunEvents, targetUserIndex + 1);
     if (targetFirstTextIndex === undefined) {
@@ -138,6 +143,10 @@ export function validateRegenerationRelations(
       replacementRunEvents,
       replacementRunStartIndex,
     );
+    const replacementCompleted = isCompletedRun(replacementRunEvents);
+    if (replacementCompleted && replacementFirstTextIndex === undefined) {
+      throw new RegenerationRelationCorruptError();
+    }
     relations.push({
       relationIndex,
       targetMessageId,
@@ -148,7 +157,7 @@ export function validateRegenerationRelations(
       replacementRunStartIndex,
       replacementRunEndIndex,
       ...(replacementFirstTextIndex === undefined ? {} : { replacementFirstTextIndex }),
-      replacementCompleted: isCompletedRun(replacementRunEvents),
+      replacementCompleted,
     });
   }
 
