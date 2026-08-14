@@ -232,14 +232,18 @@ function getRenamePair(files: readonly CheckpointFile[]): RenamePair | undefined
     const sourceAfter = getState(source, "after");
     const targetBefore = getState(target, "before");
     const targetAfter = getState(target, "after");
-    if (
-      sourceBefore.kind !== "text" ||
-      sourceAfter.kind !== "absent" ||
-      targetBefore.kind !== "absent" ||
-      targetAfter.kind !== "text" ||
-      sourceBefore.beforeHash !== targetAfter.afterHash
-    ) {
+    const sourceShape = sourceBefore.kind === "text" && sourceAfter.kind === "absent";
+    const targetShape = targetBefore.kind === "absent" && targetAfter.kind === "text";
+    if (!sourceShape || !targetShape) {
+      const reversedSourceShape = sourceBefore.kind === "absent" && sourceAfter.kind === "text";
+      const reversedTargetShape = targetBefore.kind === "text" && targetAfter.kind === "absent";
+      if (reversedSourceShape && reversedTargetShape) {
+        throw new CheckpointRestoreConflictError();
+      }
       return undefined;
+    }
+    if (sourceBefore.beforeHash !== targetAfter.afterHash) {
+      throw new CheckpointRestoreConflictError();
     }
     return { sourceIndex: 0, targetIndex: 1 };
   } catch {
