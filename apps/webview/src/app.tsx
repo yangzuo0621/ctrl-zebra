@@ -93,6 +93,7 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
   const reasoningAnnouncement = useStore(store, (state) => state.reasoningAnnouncement);
   const sessionAnnouncement = useStore(store, (state) => state.sessionAnnouncement);
   const usage = useStore(store, (state) => state.usage);
+  const regeneratingMessageId = useStore(store, (state) => state.regeneratingMessageId);
   const approval = useStore(approvalStore, (state) => state.current);
   const pendingDecision = useStore(approvalStore, (state) => state.pendingDecision);
   const providerStatus = useStore(onboardingStore, (state) => state.status);
@@ -323,7 +324,7 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
               <p className={styles.emptyText}>{strings.app.noMessages}</p>
             </li>
           ) : (
-            messages.map((message) => (
+            messages.map((message, index) => (
               <li
                 className={styles.message}
                 data-role={message.role}
@@ -363,6 +364,27 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
                   content={messageContent(message, status)}
                   onOpenLink={handleOpenLink}
                 />
+                {message.role === "assistant" &&
+                index === messages.length - 1 &&
+                message.content.length > 0 ? (
+                  <div className={styles.messageActions}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => store.getState().regenerate(message.id)}
+                      disabled={
+                        activeRequestId !== undefined ||
+                        restoring ||
+                        regeneratingMessageId !== undefined ||
+                        selectedSessionId === undefined
+                      }
+                      aria-label={strings.chat.regenerateScope}
+                      title={strings.chat.regenerateScope}
+                    >
+                      {strings.chat.regenerate}
+                    </Button>
+                  </div>
+                ) : null}
               </li>
             ))
           )}

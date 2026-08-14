@@ -619,6 +619,84 @@ describe("createChatRunner", () => {
     ).toHaveLength(2);
   });
 
+  it("regenerates the latest completed answer from the history prefix without replaying its Tools", async () => {
+    const repository = new InMemorySessionRepository();
+    const requests: ModelRequest[] = [];
+    let invocation = 0;
+    const runner = createChatRunner({
+      modelGateway: {
+        async *stream(request) {
+          requests.push(request);
+          invocation += 1;
+          if (invocation === 1) {
+            yield {
+              type: "tool.call",
+              call: { id: "call-1", name: "list_files", input: {} },
+            } as const;
+            yield { type: "finish", reason: "tool-calls" } as const;
+            return;
+          }
+          yield {
+            type: "text.delta",
+            text: invocation === 2 ? "Original" : "Replacement",
+          } as const;
+          yield { type: "finish", reason: "stop" } as const;
+        },
+      },
+      toolRegistry: (() => {
+        const registry = new ToolRegistry();
+        registry.register({
+          name: "list_files",
+          description: "List files.",
+          inputSchema: {
+            type: "object",
+            properties: {},
+            required: [],
+            additionalProperties: false,
+          },
+          risk: "read",
+          parseInput: () => null,
+          execute: async () => ({ output: { files: ["README.md"] }, truncated: false }),
+        });
+        return registry;
+      })(),
+      createId: (() => {
+        const ids = ["session-regenerate", "message-1", "message-2"];
+        return () => ids.shift() ?? "unexpected-id";
+      })(),
+      now: () => new Date("2026-08-12T00:00:00.000Z"),
+      sessionRepository: repository,
+    });
+
+    await runner.run("List files.", new AbortController().signal, () => {});
+    const record = await repository.get("session-regenerate");
+    const targetSequence = record?.events.find(
+      ({ event }) => event.type === "agent.text-delta",
+    )?.sequence;
+    expect(targetSequence).toBeDefined();
+
+    await runner.regenerate?.(
+      "session-regenerate",
+      "request-1:assistant",
+      new AbortController().signal,
+      () => {},
+    );
+
+    expect(requests[2]?.messages).toEqual([{ role: "user", content: "List files." }]);
+    const regenerated = await repository.get("session-regenerate");
+    expect(regenerated?.events.some(({ event }) => event.type === "session.regeneration")).toBe(
+      true,
+    );
+    const relation = regenerated?.events.find(({ event }) => event.type === "session.regeneration");
+    expect(relation?.event).toMatchObject({
+      type: "session.regeneration",
+      data: { targetMessageId: `assistant-${targetSequence}` },
+    });
+    expect(
+      regenerated?.events.filter(({ event }) => event.type === "agent.tool-state"),
+    ).toHaveLength(3);
+  });
+
   it("does not append or start the gateway when continuation loading is cancelled", async () => {
     const controller = new AbortController();
     const cancellation = new Error("cancelled while loading history");

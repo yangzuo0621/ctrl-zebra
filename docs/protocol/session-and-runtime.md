@@ -18,6 +18,16 @@ new-Session behavior.
   restore state; the Webview clears its transcript and selected Session. The next submit omits
   `sessionId`. A command racing an active Run, restore, or Session switch is ignored or rejected
   without changing the active owner, and stale replies remain ignored by request correlation.
+- `webview/regenerate` is the strict object `{ protocolVersion, type: "webview/regenerate",
+  requestId, sessionId, messageId }`. `sessionId` must be the selected, idle/restored Session and
+  `messageId` must identify its latest completed assistant projection. The Host validates both
+  against the immutable event log before allocating a fresh Run; an unknown, stale, non-latest,
+  active, or failed target is rejected through the ordinary correlated `extension/run-error` path.
+  Regeneration reuses the target user prompt and only the completed history before that Run. It
+  never replays the target Run's Tool Call/Result, external attachment, Provider request, or
+  approval. The old answer remains visible until a replacement emits an accepted event and reaches
+  `completed`; cancellation, failure, truncation, rapid duplicate intents, and late events leave it
+  unchanged. Every accepted request receives a fresh Run identity and cancellation gate.
 - `extension/session-started` is a strict Host-to-Webview event containing `{ protocolVersion,
   type: "extension/session-started", requestId, sessionId }`. The Host emits it once, after the
   requested Session has been validated or a new Session has been allocated and the Run has produced

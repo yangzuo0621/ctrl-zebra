@@ -38,7 +38,11 @@ import {
   isRuntimeReasoningEvent,
   ReasoningCollector,
 } from "./reasoning-collector.js";
-import { projectSessionModelHistory, SessionHistoryCorruptError } from "./session-history.js";
+import {
+  projectRegenerationContext,
+  projectSessionModelHistory,
+  SessionHistoryCorruptError,
+} from "./session-history.js";
 import { SessionRecoveryError } from "./session-recovery.js";
 
 type NonReasoningAgentRuntimeEvent = Exclude<
@@ -70,6 +74,12 @@ export interface ChatRunner {
     externalPrompts?: readonly McpPromptConfirmation[],
     sessionId?: string,
   ): Promise<void>;
+  regenerate?(
+    sessionId: string,
+    targetAssistantMessageId: string,
+    signal: AbortSignal,
+    emit: (event: ChatRunnerEvent) => void,
+  ): Promise<void>;
 }
 
 interface ChatRunnerDependencies {
@@ -100,6 +110,10 @@ interface SelectingChatRunnerDependencies {
   readonly selectSessionRepository?: () => Promise<SessionRepository>;
 }
 
+interface InternalRunOptions {
+  readonly regenerationTargetMessageId?: string;
+}
+
 export function createChatRunner({
   modelGateway,
   diagnosticSink,
@@ -110,173 +124,83 @@ export function createChatRunner({
   sessionRepository,
   mcpToolSources,
 }: ChatRunnerDependencies): ChatRunner {
-  return {
-    async run(
-      content,
-      signal,
-      emit,
-      externalResources = [],
-      externalPrompts = [],
-      requestedSessionId,
-    ) {
+  const runInternal = async (
+    content: string,
+    signal: AbortSignal,
+    emit: (event: ChatRunnerEvent) => void,
+    externalResources: readonly McpResourceAttachment[] = [],
+    externalPrompts: readonly McpPromptConfirmation[] = [],
+    requestedSessionId: string | undefined,
+    options: InternalRunOptions = {},
+  ): Promise<void> => {
+    signal.throwIfAborted();
+    projectExternalMcpContext(
+      externalResources,
+      externalPrompts,
+      allocateTokenBudget(maxModelContextWindowTokens).filesTokens,
+    );
+    const normalizedRequestedSessionId =
+      requestedSessionId === undefined ? undefined : parseRequestedSessionId(requestedSessionId);
+    let existingRecord: SessionRecord | undefined;
+    let history: readonly ModelMessage[] = [];
+    let initialSessionStatus: SessionStatus = "idle";
+    let persistedRegenerationTargetMessageId: string | undefined;
+    if (normalizedRequestedSessionId !== undefined) {
+      if (sessionRepository === undefined) {
+        throw new SessionRecoveryError("unavailable");
+      }
+      try {
+        existingRecord = await sessionRepository.get(normalizedRequestedSessionId);
+      } catch (error) {
+        if (signal.aborted) {
+          signal.throwIfAborted();
+        }
+        throw toContinuationError(error);
+      }
       signal.throwIfAborted();
-      projectExternalMcpContext(
-        externalResources,
-        externalPrompts,
-        allocateTokenBudget(maxModelContextWindowTokens).filesTokens,
-      );
-      const normalizedRequestedSessionId =
-        requestedSessionId === undefined ? undefined : parseRequestedSessionId(requestedSessionId);
-      let existingRecord: SessionRecord | undefined;
-      let history: readonly ModelMessage[] = [];
-      let initialSessionStatus: SessionStatus = "idle";
-      if (normalizedRequestedSessionId !== undefined) {
-        if (sessionRepository === undefined) {
-          throw new SessionRecoveryError("unavailable");
+      if (existingRecord === undefined) {
+        throw new SessionRecoveryError("not-found");
+      }
+      if (existingRecord.eventLogTailDamaged) {
+        throw new SessionRecoveryError("corrupt");
+      }
+      if (isActiveSessionStatus(existingRecord.manifest.status)) {
+        throw new SessionRecoveryError("unavailable");
+      }
+      try {
+        if (options.regenerationTargetMessageId === undefined) {
+          history = projectSessionModelHistory(existingRecord);
+        } else {
+          const regeneration = projectRegenerationContext(
+            existingRecord,
+            options.regenerationTargetMessageId,
+          );
+          history = regeneration.history;
+          content = regeneration.targetUserMessage.content;
+          persistedRegenerationTargetMessageId = regeneration.targetAssistantMessageId;
         }
-        try {
-          existingRecord = await sessionRepository.get(normalizedRequestedSessionId);
-        } catch (error) {
-          if (signal.aborted) {
-            signal.throwIfAborted();
-          }
-          throw toContinuationError(error);
-        }
-        signal.throwIfAborted();
-        if (existingRecord === undefined) {
-          throw new SessionRecoveryError("not-found");
-        }
-        if (existingRecord.eventLogTailDamaged) {
+      } catch (error) {
+        if (error instanceof SessionHistoryCorruptError) {
           throw new SessionRecoveryError("corrupt");
         }
-        if (isActiveSessionStatus(existingRecord.manifest.status)) {
-          throw new SessionRecoveryError("unavailable");
-        }
-        try {
-          history = projectSessionModelHistory(existingRecord);
-        } catch (error) {
-          if (error instanceof SessionHistoryCorruptError) {
-            throw new SessionRecoveryError("corrupt");
-          }
-          throw error;
-        }
-        initialSessionStatus = existingRecord.manifest.status;
+        throw error;
       }
+      initialSessionStatus = existingRecord.manifest.status;
+    }
 
+    signal.throwIfAborted();
+    const sessionId = normalizedRequestedSessionId ?? createId();
+    signal.throwIfAborted();
+    const userMessage: UserMessage = {
+      messageId: createId(),
+      sessionId,
+      createdAt: now().toISOString(),
+      role: "user",
+      content,
+    };
+    const reasoning = new ReasoningCollector(sessionId);
+    if (sessionRepository === undefined) {
       signal.throwIfAborted();
-      const sessionId = normalizedRequestedSessionId ?? createId();
-      signal.throwIfAborted();
-      const userMessage: UserMessage = {
-        messageId: createId(),
-        sessionId,
-        createdAt: now().toISOString(),
-        role: "user",
-        content,
-      };
-      const reasoning = new ReasoningCollector(sessionId);
-      if (sessionRepository === undefined) {
-        signal.throwIfAborted();
-        const runtime = new AgentRuntime(
-          modelGateway,
-          {
-            emit: (event) => {
-              for (const projected of projectRuntimeEvent(
-                sessionId,
-                signal,
-                reasoning,
-                event,
-                mcpToolSources,
-              )) {
-                emit(projected);
-              }
-            },
-          },
-          toolRegistry,
-          {
-            approvalWorkflow,
-            diagnosticSink,
-          },
-        );
-        try {
-          signal.throwIfAborted();
-          await runtime.run(userMessage, signal, { externalResources, externalPrompts });
-        } finally {
-          reasoning.close();
-        }
-        return;
-      }
-
-      let sequence: number;
-      if (existingRecord === undefined) {
-        signal.throwIfAborted();
-        await sessionRepository.create({
-          formatVersion: persistenceFormatVersion,
-          sessionId,
-          status: "idle",
-          createdAt: userMessage.createdAt,
-          updatedAt: userMessage.createdAt,
-          lastEventSequence: 0,
-        });
-        signal.throwIfAborted();
-        sequence = 1;
-      } else {
-        sequence =
-          (existingRecord.events.at(-1)?.sequence ?? existingRecord.manifest.lastEventSequence) + 1;
-      }
-      signal.throwIfAborted();
-      await sessionRepository.appendEvent(sessionId, {
-        sequence,
-        recordedAt: userMessage.createdAt,
-        event: {
-          type: "session.user-message",
-          data: jsonValueSchema.parse({ ...userMessage }),
-        },
-      });
-      for (const attachment of externalResources) {
-        signal.throwIfAborted();
-        sequence += 1;
-        await sessionRepository.appendEvent(sessionId, {
-          sequence,
-          recordedAt: userMessage.createdAt,
-          event: {
-            type: "session.mcp-resource-attached",
-            data: jsonValueSchema.parse(attachment),
-          },
-        });
-      }
-      for (const confirmation of externalPrompts) {
-        signal.throwIfAborted();
-        sequence += 1;
-        await sessionRepository.appendEvent(sessionId, {
-          sequence,
-          recordedAt: userMessage.createdAt,
-          event: {
-            type: "session.mcp-prompt-confirmed",
-            data: jsonValueSchema.parse(confirmation),
-          },
-        });
-      }
-      let persistence = Promise.resolve();
-      const persist = (event: ChatRunnerEvent) => {
-        emit(event);
-        for (const persistedEvent of projectPersistedEvents(event, mcpToolSources)) {
-          sequence += 1;
-          const eventSequence = sequence;
-          const recordedAt = now().toISOString();
-          persistence = persistence.then(() =>
-            sessionRepository.appendEvent(sessionId, {
-              sequence: eventSequence,
-              recordedAt,
-              event: persistedEvent,
-            }),
-          );
-          if (event.type === "session.status-changed") {
-            persistence = persistence.then(() =>
-              sessionRepository.update(sessionId, { status: event.status, updatedAt: recordedAt }),
-            );
-          }
-        }
-      };
       const runtime = new AgentRuntime(
         modelGateway,
         {
@@ -288,7 +212,7 @@ export function createChatRunner({
               event,
               mcpToolSources,
             )) {
-              persist(projected);
+              emit(projected);
             }
           },
         },
@@ -296,22 +220,149 @@ export function createChatRunner({
         {
           approvalWorkflow,
           diagnosticSink,
-          ...(existingRecord === undefined
-            ? {}
-            : {
-                initialSessionStatus,
-                historyProvider: { load: () => history },
-              }),
         },
       );
-
       try {
         signal.throwIfAborted();
         await runtime.run(userMessage, signal, { externalResources, externalPrompts });
       } finally {
         reasoning.close();
-        await persistence;
       }
+      return;
+    }
+
+    let sequence: number;
+    if (existingRecord === undefined) {
+      signal.throwIfAborted();
+      await sessionRepository.create({
+        formatVersion: persistenceFormatVersion,
+        sessionId,
+        status: "idle",
+        createdAt: userMessage.createdAt,
+        updatedAt: userMessage.createdAt,
+        lastEventSequence: 0,
+      });
+      signal.throwIfAborted();
+      sequence = 1;
+    } else {
+      sequence =
+        (existingRecord.events.at(-1)?.sequence ?? existingRecord.manifest.lastEventSequence) + 1;
+    }
+    signal.throwIfAborted();
+    await sessionRepository.appendEvent(sessionId, {
+      sequence,
+      recordedAt: userMessage.createdAt,
+      event: {
+        type: "session.user-message",
+        data: jsonValueSchema.parse({ ...userMessage }),
+      },
+    });
+    for (const attachment of externalResources) {
+      signal.throwIfAborted();
+      sequence += 1;
+      await sessionRepository.appendEvent(sessionId, {
+        sequence,
+        recordedAt: userMessage.createdAt,
+        event: {
+          type: "session.mcp-resource-attached",
+          data: jsonValueSchema.parse(attachment),
+        },
+      });
+    }
+    for (const confirmation of externalPrompts) {
+      signal.throwIfAborted();
+      sequence += 1;
+      await sessionRepository.appendEvent(sessionId, {
+        sequence,
+        recordedAt: userMessage.createdAt,
+        event: {
+          type: "session.mcp-prompt-confirmed",
+          data: jsonValueSchema.parse(confirmation),
+        },
+      });
+    }
+    if (persistedRegenerationTargetMessageId !== undefined) {
+      signal.throwIfAborted();
+      sequence += 1;
+      await sessionRepository.appendEvent(sessionId, {
+        sequence,
+        recordedAt: userMessage.createdAt,
+        event: {
+          type: "session.regeneration",
+          data: jsonValueSchema.parse({
+            targetMessageId: persistedRegenerationTargetMessageId,
+            replacementUserMessageId: userMessage.messageId,
+          }),
+        },
+      });
+    }
+    let persistence = Promise.resolve();
+    const persist = (event: ChatRunnerEvent) => {
+      emit(event);
+      for (const persistedEvent of projectPersistedEvents(event, mcpToolSources)) {
+        sequence += 1;
+        const eventSequence = sequence;
+        const recordedAt = now().toISOString();
+        persistence = persistence.then(() =>
+          sessionRepository.appendEvent(sessionId, {
+            sequence: eventSequence,
+            recordedAt,
+            event: persistedEvent,
+          }),
+        );
+        if (event.type === "session.status-changed") {
+          persistence = persistence.then(() =>
+            sessionRepository.update(sessionId, { status: event.status, updatedAt: recordedAt }),
+          );
+        }
+      }
+    };
+    const runtime = new AgentRuntime(
+      modelGateway,
+      {
+        emit: (event) => {
+          for (const projected of projectRuntimeEvent(
+            sessionId,
+            signal,
+            reasoning,
+            event,
+            mcpToolSources,
+          )) {
+            persist(projected);
+          }
+        },
+      },
+      toolRegistry,
+      {
+        approvalWorkflow,
+        diagnosticSink,
+        ...(existingRecord === undefined
+          ? {}
+          : {
+              initialSessionStatus,
+              historyProvider: { load: () => history },
+            }),
+      },
+    );
+
+    try {
+      signal.throwIfAborted();
+      await runtime.run(userMessage, signal, { externalResources, externalPrompts });
+    } finally {
+      reasoning.close();
+      await persistence;
+    }
+  };
+
+  return {
+    run: runInternal,
+    async regenerate(sessionId, targetAssistantMessageId, signal, emit) {
+      if (sessionRepository === undefined) {
+        throw new SessionRecoveryError("unavailable");
+      }
+      await runInternal("regenerate", signal, emit, [], [], sessionId, {
+        regenerationTargetMessageId: targetAssistantMessageId,
+      });
     },
   };
 }
@@ -391,6 +442,31 @@ export function createSelectingChatRunner({
         sessionRepository,
         mcpToolSources: selection.mcpToolSources,
       }).run(content, signal, emit, externalResources, externalPrompts, sessionId);
+    },
+    async regenerate(sessionId, targetAssistantMessageId, signal, emit) {
+      signal.throwIfAborted();
+      const sessionRepository = await selectSessionRepository?.();
+      signal.throwIfAborted();
+      const selected = await selectToolRegistry(signal);
+      const selection = selected instanceof ToolRegistry ? { registry: selected } : selected;
+      signal.throwIfAborted();
+      const modelGateway = await selectModelGateway();
+      signal.throwIfAborted();
+
+      const runner = createChatRunner({
+        modelGateway,
+        toolRegistry: selection.registry,
+        createId,
+        now,
+        approvalWorkflow,
+        diagnosticSink,
+        sessionRepository,
+        mcpToolSources: selection.mcpToolSources,
+      });
+      if (runner.regenerate === undefined) {
+        throw new SessionRecoveryError("unavailable");
+      }
+      await runner.regenerate(sessionId, targetAssistantMessageId, signal, emit);
     },
   };
 }

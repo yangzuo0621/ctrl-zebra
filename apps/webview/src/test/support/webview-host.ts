@@ -30,6 +30,16 @@ class TestWebviewHost implements WebviewHostFixture {
     });
   }
 
+  regenerate(requestId: string, sessionId: string, messageId: string): void {
+    this.sent.push({
+      protocolVersion,
+      type: "webview/regenerate",
+      requestId,
+      sessionId,
+      messageId,
+    });
+  }
+
   newChat(requestId: string): void {
     this.sent.push({ protocolVersion, type: "webview/new-chat", requestId });
   }

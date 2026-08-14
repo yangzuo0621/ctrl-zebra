@@ -1,5 +1,8 @@
 import type { ModelMessage, SessionRecord, ToolCall, ToolResult } from "@ctrl-zebra/core";
 import {
+  messageIdSchema,
+  type PersistedEventRecord,
+  persistedRegenerationEventPayloadSchema,
   type SessionStatus,
   sessionStatusSchema,
   toolCallSchema,
@@ -56,6 +59,80 @@ export class SessionHistoryCorruptError extends Error {
   }
 }
 
+export interface RegenerationContext {
+  readonly targetUserMessage: UserMessage;
+  readonly targetAssistantMessageId: string;
+  readonly history: readonly ModelMessage[];
+}
+
+/**
+ * Builds the exact model input for a regeneration without replaying the target Run. The source
+ * events remain immutable; only the new Run receives the history prefix before the target user
+ * message. Assistant projection IDs are derived from the first persisted text delta, matching
+ * Session recovery's stable display identity.
+ */
+export function projectRegenerationContext(
+  record: SessionRecord,
+  targetAssistantMessageId: string,
+): RegenerationContext {
+  if (record.eventLogTailDamaged) {
+    throw new SessionHistoryCorruptError();
+  }
+
+  let targetUserIndex = -1;
+  let targetUser: UserMessage | undefined;
+  for (let index = 0; index < record.events.length; index += 1) {
+    const persisted = record.events[index];
+    if (persisted?.event.type !== "session.user-message") {
+      continue;
+    }
+    const parsed = requireUserMessage(persisted.event.data);
+    if (parsed === undefined || parsed.sessionId !== record.manifest.sessionId) {
+      throw new SessionHistoryCorruptError();
+    }
+    targetUserIndex = index;
+    targetUser = parsed;
+  }
+
+  if (targetUserIndex < 0 || targetUser === undefined) {
+    throw new SessionHistoryCorruptError();
+  }
+
+  const expectedAssistantMessageId = findAssistantProjectionId(
+    record.events.slice(targetUserIndex + 1),
+  );
+  if (
+    expectedAssistantMessageId === undefined ||
+    (expectedAssistantMessageId !== targetAssistantMessageId &&
+      !isLiveAssistantProjectionAlias(targetAssistantMessageId))
+  ) {
+    throw new SessionHistoryCorruptError();
+  }
+
+  if (!hasCompletedTargetRun(record.events.slice(targetUserIndex + 1))) {
+    throw new SessionHistoryCorruptError();
+  }
+
+  const suppressedUserMessageIds = new Set<string>();
+  const projectedEvents = hideSupersededRunOutput(record.events, suppressedUserMessageIds);
+  const targetUserSequence = record.events[targetUserIndex]?.sequence;
+  if (targetUserSequence === undefined) {
+    throw new SessionHistoryCorruptError();
+  }
+  const prefixRecord: SessionRecord = {
+    manifest: { ...record.manifest, status: "completed" },
+    events: projectedEvents.filter(({ sequence }) => sequence < targetUserSequence),
+    eventLogTailDamaged: false,
+  };
+  return {
+    targetUserMessage: targetUser,
+    // Restored messages use this canonical sequence identity. A live Webview may still hold its
+    // request-scoped `<requestId>:assistant` alias; persistence always records the canonical ID.
+    targetAssistantMessageId: expectedAssistantMessageId,
+    history: projectSessionModelHistory(prefixRecord),
+  };
+}
+
 type HistoryUnit =
   | { readonly kind: "assistant"; readonly content: string }
   | { readonly kind: "tool"; readonly call: ToolCall; readonly result: ToolResult };
@@ -67,6 +144,7 @@ interface PendingToolCall {
 
 interface RunProjection {
   readonly user: UserMessage;
+  readonly suppressUser: boolean;
   readonly units: HistoryUnit[];
   readonly pendingToolCalls: Map<string, PendingToolCall>;
   readonly textParts: string[];
@@ -86,15 +164,15 @@ type TerminalRunStatus = Extract<
  * Display projections and persisted operational events intentionally remain outside this function.
  */
 export function projectSessionModelHistory(record: SessionRecord): readonly ModelMessage[] {
+  const suppressedUserMessageIds = new Set<string>();
+  const sourceEvents = hideSupersededRunOutput(record.events, suppressedUserMessageIds);
   const history: ModelMessage[] = [];
   const seenToolCallIds = new Set<string>();
-  const hasStatusEvents = record.events.some(
-    ({ event }) => event.type === "session.status-changed",
-  );
+  const hasStatusEvents = sourceEvents.some(({ event }) => event.type === "session.status-changed");
   let currentStatus: SessionStatus = hasStatusEvents ? "idle" : record.manifest.status;
   let currentRun: RunProjection | undefined;
 
-  for (const persisted of record.events) {
+  for (const persisted of sourceEvents) {
     const event = persisted.event;
 
     if (event.type === "session.user-message") {
@@ -105,6 +183,7 @@ export function projectSessionModelHistory(record: SessionRecord): readonly Mode
       }
       currentRun = {
         user,
+        suppressUser: suppressedUserMessageIds.has(user.messageId),
         units: [],
         pendingToolCalls: new Map(),
         textParts: [],
@@ -161,6 +240,125 @@ export function projectSessionModelHistory(record: SessionRecord): readonly Mode
   return history;
 }
 
+/**
+ * A successful regeneration replaces only the projected answer. Its original source events stay
+ * durable, but their assistant text and Tool pairs must not be fed into later model context.
+ */
+function hideSupersededRunOutput(
+  events: readonly PersistedEventRecord[],
+  suppressedUserMessageIds: Set<string>,
+): readonly PersistedEventRecord[] {
+  const hiddenSequences = new Set<number>();
+  const seenTargets = new Set<string>();
+
+  for (let relationIndex = 0; relationIndex < events.length; relationIndex += 1) {
+    const relation = events[relationIndex];
+    if (relation?.event.type !== "session.regeneration") {
+      continue;
+    }
+    const parsed = persistedRegenerationEventPayloadSchema.safeParse(relation.event);
+    if (!parsed.success || seenTargets.has(parsed.data.data.targetMessageId)) {
+      throw new SessionHistoryCorruptError();
+    }
+    seenTargets.add(parsed.data.data.targetMessageId);
+
+    const replacementUserIndex = events.findIndex(
+      (candidate, candidateIndex) =>
+        candidateIndex !== relationIndex &&
+        candidate.event.type === "session.user-message" &&
+        isUserMessageId(candidate.event.data, parsed.data.data.replacementUserMessageId),
+    );
+    if (replacementUserIndex < 0) {
+      throw new SessionHistoryCorruptError();
+    }
+    if (suppressedUserMessageIds.has(parsed.data.data.replacementUserMessageId)) {
+      throw new SessionHistoryCorruptError();
+    }
+    suppressedUserMessageIds.add(parsed.data.data.replacementUserMessageId);
+    const replacementRunEnd = events.findIndex(
+      (candidate, candidateIndex) =>
+        candidateIndex > replacementUserIndex && candidate.event.type === "session.user-message",
+    );
+    const replacementEvents = events.slice(
+      replacementUserIndex + 1,
+      replacementRunEnd < 0 ? events.length : replacementRunEnd,
+    );
+    const replacementCompleted = hasCompletedTargetRun(replacementEvents);
+    const replacementHasText = replacementEvents.some(
+      ({ event }) => event.type === "agent.text-delta",
+    );
+    if (replacementCompleted && !replacementHasText) {
+      throw new SessionHistoryCorruptError();
+    }
+    if (!replacementCompleted) {
+      for (const replacementEvent of replacementEvents) {
+        if (
+          replacementEvent.event.type === "agent.text-delta" ||
+          replacementEvent.event.type === "agent.tool-state"
+        ) {
+          hiddenSequences.add(replacementEvent.sequence);
+        }
+      }
+      continue;
+    }
+
+    const targetSequence = parseAssistantSequence(parsed.data.data.targetMessageId);
+    if (targetSequence === undefined) {
+      throw new SessionHistoryCorruptError();
+    }
+    const targetDeltaIndex = events.findIndex(
+      (candidate) =>
+        candidate.sequence === targetSequence && candidate.event.type === "agent.text-delta",
+    );
+    if (targetDeltaIndex < 0) {
+      throw new SessionHistoryCorruptError();
+    }
+    let originalUserIndex = -1;
+    for (let index = targetDeltaIndex - 1; index >= 0; index -= 1) {
+      if (events[index]?.event.type === "session.user-message") {
+        originalUserIndex = index;
+        break;
+      }
+    }
+    if (originalUserIndex < 0) {
+      throw new SessionHistoryCorruptError();
+    }
+    const originalRunEnd = events.findIndex(
+      (candidate, candidateIndex) =>
+        candidateIndex > originalUserIndex && candidate.event.type === "session.user-message",
+    );
+    for (
+      let index = originalUserIndex + 1;
+      index < (originalRunEnd < 0 ? events.length : originalRunEnd);
+      index += 1
+    ) {
+      const event = events[index]?.event.type;
+      if (event === "agent.text-delta" || event === "agent.tool-state") {
+        hiddenSequences.add(events[index]?.sequence ?? 0);
+      }
+    }
+  }
+
+  return events.filter((event) => !hiddenSequences.has(event.sequence));
+}
+
+function isUserMessageId(data: unknown, messageId: string): boolean {
+  return isPlainRecord(data) && data.role === "user" && data.messageId === messageId;
+}
+
+function parseAssistantSequence(messageId: string): number | undefined {
+  const match = /^assistant-(\d+)$/.exec(messageId);
+  if (match === null) {
+    return undefined;
+  }
+  const sequence = Number(match[1]);
+  return Number.isSafeInteger(sequence) && sequence > 0 ? sequence : undefined;
+}
+
+function isLiveAssistantProjectionAlias(messageId: string): boolean {
+  return messageIdSchema.safeParse(messageId).success && /:assistant$/.test(messageId);
+}
+
 function closeRun(
   run: RunProjection,
   history: ModelMessage[],
@@ -189,7 +387,9 @@ function closeRun(
   }
 
   flushText(run);
-  appendHistoryMessage(history, { role: "user", content: run.user.content });
+  if (!run.suppressUser) {
+    appendHistoryMessage(history, { role: "user", content: run.user.content });
+  }
 
   const retainAssistantText = outcome === "completed";
   for (const unit of run.units) {
@@ -330,6 +530,41 @@ function parseUserMessage(data: unknown, sessionId: string): UserMessage {
     throw new SessionHistoryCorruptError();
   }
   return result;
+}
+
+function findAssistantProjectionId(events: readonly PersistedEventRecord[]): string | undefined {
+  for (const persisted of events) {
+    if (persisted.event.type !== "agent.text-delta") {
+      continue;
+    }
+    const data = asRecord(persisted.event.data);
+    if (data === undefined || typeof data.text !== "string" || data.text.length === 0) {
+      throw new SessionHistoryCorruptError();
+    }
+    const messageId = `assistant-${persisted.sequence}`;
+    const parsed = messageIdSchema.safeParse(messageId);
+    if (!parsed.success) {
+      throw new SessionHistoryCorruptError();
+    }
+    return parsed.data;
+  }
+  return undefined;
+}
+
+function hasCompletedTargetRun(events: readonly PersistedEventRecord[]): boolean {
+  let status: SessionStatus | undefined;
+  for (const persisted of events) {
+    if (persisted.event.type !== "session.status-changed") {
+      continue;
+    }
+    const data = requireExactRecord(persisted.event.data, ["previousStatus", "status"]);
+    const parsed = sessionStatusSchema.safeParse(data.status);
+    if (!parsed.success) {
+      throw new SessionHistoryCorruptError();
+    }
+    status = parsed.data;
+  }
+  return status === "completed";
 }
 
 function requireUserMessage(value: unknown): UserMessage | undefined {

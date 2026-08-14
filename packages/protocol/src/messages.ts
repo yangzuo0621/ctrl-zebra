@@ -4,7 +4,7 @@ import {
   approvalRequestSchema,
   approvalStatusSchema,
 } from "./approval.js";
-import { assistantMessageSchema, userMessageSchema } from "./chat-message.js";
+import { assistantMessageSchema, messageIdSchema, userMessageSchema } from "./chat-message.js";
 import { checkpointIdSchema, checkpointSummarySchema } from "./checkpoint.js";
 import { ideTextContextSchema } from "./ide-context.js";
 import {
@@ -203,6 +203,17 @@ export const newChatMessageSchema = z.strictObject({
 export const cancelMessageSchema = z.strictObject({
   ...protocolEnvelopeSchema.shape,
   type: z.literal("webview/cancel"),
+});
+
+/**
+ * Regeneration is bound to the exact assistant projection the user reviewed. The Host
+ * revalidates the Session and target against persisted history before allocating a new Run.
+ */
+export const regenerateMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("webview/regenerate"),
+  sessionId: sessionIdSchema,
+  messageId: messageIdSchema,
 });
 
 export const editorContextRefreshMessageSchema = z.strictObject({
@@ -692,6 +703,7 @@ export const webviewToExtensionMessageSchema = z.discriminatedUnion("type", [
   submitMessageSchema,
   newChatMessageSchema,
   cancelMessageSchema,
+  regenerateMessageSchema,
   editorContextRefreshMessageSchema,
   editorContextRemoveMessageSchema,
   editorContextUseStaleMessageSchema,
@@ -767,6 +779,7 @@ export type ProviderActionMessage = z.infer<typeof providerActionMessageSchema>;
 export type SubmitMessage = z.infer<typeof submitMessageSchema>;
 export type NewChatMessage = z.infer<typeof newChatMessageSchema>;
 export type CancelMessage = z.infer<typeof cancelMessageSchema>;
+export type RegenerateMessage = z.infer<typeof regenerateMessageSchema>;
 export type EditorContextRefreshMessage = z.infer<typeof editorContextRefreshMessageSchema>;
 export type EditorContextRemoveMessage = z.infer<typeof editorContextRemoveMessageSchema>;
 export type EditorContextUseStaleMessage = z.infer<typeof editorContextUseStaleMessageSchema>;

@@ -227,6 +227,12 @@ focus, selection, disclosure state, and transcript scroll position.
   labelled as partial/unfinished where applicable; it is not assumed to be complete model history.
   A subsequent Run appends to the validated Session projection only after the Host has rebuilt bounded
   history.
+- The latest completed assistant projection exposes one keyboard-operable, scope-labelled
+  `Regenerate response` action. It sends the exact Session and assistant message identity; it is
+  disabled during a Run or restore and cannot be clicked twice for the same request. The previous
+  answer remains visible while the Host prepares the replacement. The store stages the replacement
+  against the same stable message key, commits it only after `completed`, restores the previous
+  projection on cancellation/failure/truncation, and ignores late or mismatched events.
 
 ## Answer Markdown Rendering (T1702)
 

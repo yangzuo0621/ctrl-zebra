@@ -90,6 +90,24 @@ written and how they rebuild repository state.
   identity, pair, and bound checks. Context pruning may remove old units later, but it never rewrites
   persisted history or removes the newest user message to conceal an overflow.
 
+### Regeneration projection (T2101)
+
+- A regeneration appends a fresh `session.user-message` with a new message ID and a strict additive
+  `session.regeneration` relation `{ targetMessageId, replacementUserMessageId }`. The relation stores
+  only bounded identifiers; it never stores replacement text, Tool input/output, Provider data, or an
+  approval token. Existing source events remain immutable and the version `1` layout is unchanged.
+- Before the replacement Run starts, the Host validates that `targetMessageId` is the latest completed
+  assistant projection in the selected Session. The new model input contains the target user prompt
+  and the validated history prefix before that Run. The target Run's assistant text, Tool Call/Result,
+  attachments, Provider request, and approval are never replayed.
+- Recovery and later history projection apply a completed relation as a replacement: the old assistant
+  text and its Tool pairs remain in the source log but are omitted from the projected history/display.
+  The replacement user event is source-only and is not shown as a duplicate prompt. Until the
+  replacement reaches normal `completed`, the old answer stays visible and remains the projected
+  answer; cancellation, failure, truncation, a damaged tail, or an incomplete relation preserves it
+  and omits partial replacement output. A malformed or orphaned relation makes the Session corrupt
+  rather than guessed.
+
 ## IDE context and read-only Tool persistence (T1901)
 
 IDE observations are ephemeral by default and do not change the version `1` directory layout,

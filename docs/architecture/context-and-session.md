@@ -76,6 +76,12 @@ IDE context uses the same budget authority rather than creating a second quota:
 - The newest user message is appended only after prior history has been validated. A continuation
   never replays a persisted approval, Tool, Provider request, or side effect. History remains
   untrusted model context and is bounded before constructing an unbounded array or string.
+- Regeneration is a fresh Run over the same user prompt and the history prefix before the selected
+  completed assistant response. A strict persisted relation keeps the old source events immutable;
+  after a successful replacement, projection removes only the superseded assistant text and Tool
+  pairs. Until normal completion, the old answer remains the display and history fallback. A fresh
+  Run ID, AbortSignal, Tool lifecycle, and approval scope are mandatory; no prior approval or Tool
+  side effect is eligible for reuse.
 
 ## Session State Machine
 

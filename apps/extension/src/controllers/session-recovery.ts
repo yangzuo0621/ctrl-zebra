@@ -17,12 +17,16 @@ import {
   maxReasoningRunUtf8Bytes,
   measureReasoningText,
   mergeTokenUsage,
+  type PersistedEventRecord,
   persistedReasoningEventPayloadSchema,
+  persistedRegenerationEventPayloadSchema,
   type RestoredReasoning,
   type RestoredSession,
   restoredReasoningSchema,
   restoredSessionSchema,
+  type SessionStatus,
   type SessionSummary,
+  sessionStatusSchema,
   type TokenUsage,
   tokenUsageSchema,
   userMessageSchema,
@@ -138,11 +142,12 @@ export function createSessionRecoveryActions(
         }
       }
 
+      const projectedMessages = applyRegenerationProjection(messages, record);
       return {
         session: restoredSessionSchema.parse({
           sessionId,
           status,
-          messages,
+          messages: projectedMessages,
           eventLogTailDamaged: record.eventLogTailDamaged,
           usage: recoverUsage(record),
         }),
@@ -150,6 +155,97 @@ export function createSessionRecoveryActions(
       };
     },
   };
+}
+
+function applyRegenerationProjection(
+  messages: readonly RestoredSession["messages"][number][],
+  record: SessionRecord,
+): readonly RestoredSession["messages"][number][] {
+  const replacedMessageIds = new Set<string>();
+  const suppressedMessageIds = new Set<string>();
+  const seenTargets = new Set<string>();
+
+  for (let index = 0; index < record.events.length; index += 1) {
+    const persisted = record.events[index];
+    if (persisted?.event.type !== "session.regeneration") {
+      continue;
+    }
+    const parsed = persistedRegenerationEventPayloadSchema.safeParse(persisted.event);
+    if (!parsed.success || seenTargets.has(parsed.data.data.targetMessageId)) {
+      throw new SessionRecoveryError("corrupt");
+    }
+    seenTargets.add(parsed.data.data.targetMessageId);
+    if (!messages.some((message) => message.messageId === parsed.data.data.targetMessageId)) {
+      throw new SessionRecoveryError("corrupt");
+    }
+
+    const replacementUserIndex = record.events.findIndex(
+      (candidate, candidateIndex) =>
+        candidateIndex !== index &&
+        candidate.event.type === "session.user-message" &&
+        isMessageWithId(candidate.event.data, parsed.data.data.replacementUserMessageId),
+    );
+    if (replacementUserIndex < 0) {
+      throw new SessionRecoveryError("corrupt");
+    }
+    if (suppressedMessageIds.has(parsed.data.data.replacementUserMessageId)) {
+      throw new SessionRecoveryError("corrupt");
+    }
+    suppressedMessageIds.add(parsed.data.data.replacementUserMessageId);
+
+    const nextUserIndex = record.events.findIndex(
+      (candidate, candidateIndex) =>
+        candidateIndex > replacementUserIndex && candidate.event.type === "session.user-message",
+    );
+    const runEvents = record.events.slice(
+      replacementUserIndex + 1,
+      nextUserIndex < 0 ? record.events.length : nextUserIndex,
+    );
+    const replacementCompleted = runCompleted(runEvents);
+    const replacementAssistant = runEvents.find(({ event }) => event.type === "agent.text-delta");
+    if (replacementCompleted && replacementAssistant === undefined) {
+      throw new SessionRecoveryError("corrupt");
+    }
+    if (
+      replacementAssistant !== undefined &&
+      replacementAssistant.event.type === "agent.text-delta"
+    ) {
+      const replacementAssistantId = `assistant-${replacementAssistant.sequence}`;
+      if (!replacementCompleted) {
+        suppressedMessageIds.add(replacementAssistantId);
+      }
+    }
+    if (replacementCompleted) {
+      replacedMessageIds.add(parsed.data.data.targetMessageId);
+    }
+  }
+
+  return messages.filter(
+    (message) =>
+      !replacedMessageIds.has(message.messageId) && !suppressedMessageIds.has(message.messageId),
+  );
+}
+
+function isMessageWithId(data: unknown, messageId: string): boolean {
+  return isRecord(data) && data.role === "user" && data.messageId === messageId;
+}
+
+function runCompleted(events: readonly PersistedEventRecord[]): boolean {
+  let status: SessionStatus | undefined;
+  for (const persisted of events) {
+    if (persisted.event.type !== "session.status-changed") {
+      continue;
+    }
+    if (!isRecord(persisted.event.data) || typeof persisted.event.data.status !== "string") {
+      throw new SessionRecoveryError("corrupt");
+    }
+    const parsed = sessionStatusSchema.safeParse(persisted.event.data.status);
+    if (!parsed.success) {
+      throw new SessionRecoveryError("corrupt");
+    }
+    status = parsed.data;
+  }
+  return status === "completed";
 }
 
 function recoverUsage(record: SessionRecord): TokenUsage | undefined {

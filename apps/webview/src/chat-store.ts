@@ -66,6 +66,7 @@ interface ChatState {
   readonly messages: readonly DisplayMessage[];
   readonly status: "idle" | "interrupted" | RunStatus;
   readonly activeRequestId?: string;
+  readonly regeneratingMessageId?: string;
   readonly sessions: readonly SessionSummary[];
   readonly selectedSessionId?: string;
   readonly sessionSelectionId?: string;
@@ -77,6 +78,7 @@ interface ChatState {
   readonly sessionAnnouncement: string;
   readonly usage?: DisplayTokenUsage;
   submit(content: string): boolean;
+  regenerate(messageId: string): boolean;
   cancel(): void;
   newChat(): boolean;
   loadSessions(): void;
@@ -149,6 +151,10 @@ export function createChatStore({
   const mismatchedSessionRequests = new Set<string>();
   let stagedReasoningRestore: ReasoningRestoredMessage | undefined;
   let activeAssistantMessageId: string | undefined;
+  let regenerationBackup:
+    | { readonly messageId: string; readonly message: DisplayMessage }
+    | undefined;
+  let regenerationProjectionStarted = false;
   let openReasoningBlockId: string | undefined;
   let reasoningRunCodePoints = 0;
   let reasoningRunUtf8Bytes = 0;
@@ -178,6 +184,47 @@ export function createChatStore({
   };
 
   const store = createStore<ChatState>()((set, get) => {
+    const beginRegenerationProjection = () => {
+      if (regenerationBackup === undefined || regenerationProjectionStarted) {
+        return;
+      }
+      regenerationProjectionStarted = true;
+      cancelFlush();
+      pendingTextDelta = "";
+      resetLiveReasoning();
+      const targetId = regenerationBackup.messageId;
+      set((state) => ({
+        messages: state.messages.map((message) =>
+          message.id === targetId
+            ? {
+                ...message,
+                content: "",
+                toolCalls: [],
+                reasoningBlocks: [],
+                reasoningRunTruncated: false,
+              }
+            : message,
+        ),
+      }));
+    };
+
+    const restoreRegenerationProjection = () => {
+      if (regenerationBackup === undefined) {
+        return;
+      }
+      const { messageId, message } = regenerationBackup;
+      cancelFlush();
+      pendingTextDelta = "";
+      resetLiveReasoning();
+      activeAssistantMessageId = undefined;
+      set((state) => ({
+        messages: state.messages.map((current) => (current.id === messageId ? message : current)),
+        regeneratingMessageId: undefined,
+      }));
+      regenerationBackup = undefined;
+      regenerationProjectionStarted = false;
+    };
+
     const reasoningSnapshots = (): readonly DisplayReasoningBlock[] =>
       [...liveReasoningBlocks.values()]
         .filter((block) => block.content.length > 0 || block.pendingParts.length > 0)
@@ -384,6 +431,7 @@ export function createChatStore({
     return {
       messages: [],
       status: "idle",
+      regeneratingMessageId: undefined,
       usage: undefined,
       sessions: [],
       sessionSwitchPending: false,
@@ -440,6 +488,47 @@ export function createChatStore({
         host.submit(requestId, content, sessionId);
         return true;
       },
+      regenerate(messageId) {
+        const state = get();
+        if (
+          state.activeRequestId !== undefined ||
+          restoreRequestId !== undefined ||
+          state.sessionSwitchPending ||
+          state.selectedSessionId === undefined
+        ) {
+          return false;
+        }
+        const targetIndex = state.messages.findIndex((message) => message.id === messageId);
+        const target = state.messages[targetIndex];
+        if (
+          target === undefined ||
+          target.role !== "assistant" ||
+          targetIndex !== state.messages.length - 1 ||
+          target.content.length === 0 ||
+          host.regenerate === undefined
+        ) {
+          return false;
+        }
+
+        cancelFlush();
+        pendingTextDelta = "";
+        stagedReasoningRestore = undefined;
+        resetLiveReasoning();
+        const requestId = createRequestId();
+        activeAssistantMessageId = messageId;
+        regenerationBackup = { messageId, message: target };
+        regenerationProjectionStarted = false;
+        set({
+          status: "preparing",
+          activeRequestId: requestId,
+          regeneratingMessageId: messageId,
+          runError: undefined,
+          reasoningAnnouncement: "",
+          sessionAnnouncement: strings.chat.regenerationStarted,
+        });
+        host.regenerate(requestId, state.selectedSessionId, messageId);
+        return true;
+      },
       cancel() {
         const { activeRequestId } = get();
         if (activeRequestId !== undefined) {
@@ -466,12 +555,15 @@ export function createChatStore({
         mismatchedSessionRequests.clear();
         stagedReasoningRestore = undefined;
         activeAssistantMessageId = undefined;
+        regenerationBackup = undefined;
+        regenerationProjectionStarted = false;
         resetLiveReasoning();
         usageOverflowed = false;
         const requestId = createRequestId();
         set({
           messages: [],
           status: "idle",
+          regeneratingMessageId: undefined,
           activeRequestId: undefined,
           selectedSessionId: undefined,
           sessionSelectionId: undefined,
@@ -499,6 +591,8 @@ export function createChatStore({
           return;
         }
         stagedReasoningRestore = undefined;
+        regenerationBackup = undefined;
+        regenerationProjectionStarted = false;
         const sessionSelectionId = sessionId.length === 0 ? undefined : sessionId;
         set({
           sessionSelectionId,
@@ -654,6 +748,7 @@ export function createChatStore({
             runError:
               message.session.status === "truncated" ? strings.chat.truncatedFollowUp : undefined,
             sessionAnnouncement: strings.chat.sessionRestored,
+            regeneratingMessageId: undefined,
           });
           return;
         }
@@ -704,6 +799,7 @@ export function createChatStore({
 
         if (message.type === "extension/text-delta") {
           if (state.status === "preparing" || state.status === "streaming") {
+            beginRegenerationProjection();
             queueTextDelta(message.text);
           }
           return;
@@ -725,6 +821,7 @@ export function createChatStore({
           ) {
             return;
           }
+          beginRegenerationProjection();
           if (liveReasoningBlocks.size >= maxReasoningBlocksPerRun) {
             reasoningBlockCountLimited = true;
             reasoningRunTruncated = true;
@@ -803,6 +900,7 @@ export function createChatStore({
 
         if (message.type === "extension/tool-state") {
           if (state.status === "preparing" || state.status === "streaming") {
+            beginRegenerationProjection();
             applyToolState(message);
           }
           return;
@@ -820,6 +918,9 @@ export function createChatStore({
             message.status === "cancelled" ||
             message.status === "failed"
           ) {
+            if (message.status !== "completed" && regenerationBackup !== undefined) {
+              restoreRegenerationProjection();
+            }
             const openBlock =
               openReasoningBlockId === undefined
                 ? undefined
@@ -834,6 +935,11 @@ export function createChatStore({
             }
             openReasoningBlockId = undefined;
             applyPendingStreams(message.status);
+            if (message.status === "completed") {
+              regenerationBackup = undefined;
+              regenerationProjectionStarted = false;
+              set({ regeneratingMessageId: undefined });
+            }
             if (message.status === "truncated") {
               set({
                 runError: strings.chat.truncatedFollowUp,
@@ -854,6 +960,9 @@ export function createChatStore({
         mismatchedSessionRequests.clear();
         stagedReasoningRestore = undefined;
         activeAssistantMessageId = undefined;
+        regenerationBackup = undefined;
+        regenerationProjectionStarted = false;
+        set({ regeneratingMessageId: undefined });
         resetLiveReasoning();
       },
     };

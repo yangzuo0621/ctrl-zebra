@@ -293,6 +293,27 @@ describe("Webview protocol messages", () => {
     expect(extensionToWebviewMessageSchema.parse(usage)).toEqual(usage);
   });
 
+  it("round-trips a strictly target-bound regeneration command", () => {
+    const regenerate = {
+      protocolVersion,
+      type: "webview/regenerate",
+      requestId: "request-regenerate",
+      sessionId: "session-1",
+      messageId: "assistant-42",
+    } as const;
+
+    expect(
+      webviewToExtensionMessageSchema.parse(JSON.parse(JSON.stringify(regenerate)) as unknown),
+    ).toEqual(regenerate);
+    expect(
+      webviewToExtensionMessageSchema.safeParse({ ...regenerate, messageId: "" }).success,
+    ).toBe(false);
+    expect(
+      webviewToExtensionMessageSchema.safeParse({ ...regenerate, unexpected: true }).success,
+    ).toBe(false);
+    expect(extensionToWebviewMessageSchema.safeParse(regenerate).success).toBe(false);
+  });
+
   describe("multi-turn Session commands", () => {
     const legacySubmit = {
       protocolVersion,

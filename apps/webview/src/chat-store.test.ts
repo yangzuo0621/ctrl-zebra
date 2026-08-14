@@ -13,6 +13,7 @@ function createHarness(ids: string[] = ["request-1"]) {
   const cancelledFlushes: number[] = [];
   const host: WebviewHost = {
     submit: vi.fn(),
+    regenerate: vi.fn(),
     newChat: vi.fn(),
     cancel: vi.fn(),
     showApprovalDiff: vi.fn(),
@@ -573,6 +574,42 @@ describe("chat reasoning store", () => {
       "Continue here.",
       "session-host",
     );
+  });
+
+  it("keeps the previous answer until a regeneration replacement completes and restores it on cancel", () => {
+    const harness = createHarness(["request-1", "regenerate-1"]);
+    expect(harness.store.getState().submit("Explain this.")).toBe(true);
+    harness.receive({
+      protocolVersion,
+      type: "extension/session-started",
+      requestId: "request-1",
+      sessionId: "session-1",
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/text-delta",
+      requestId: "request-1",
+      text: "Original answer",
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/run-status",
+      requestId: "request-1",
+      status: "completed",
+    });
+    const targetId = "request-1:assistant";
+    expect(harness.store.getState().messages.at(-1)?.content).toBe("Original answer");
+
+    expect(harness.store.getState().regenerate(targetId)).toBe(true);
+    expect(harness.store.getState().messages.at(-1)?.content).toBe("Original answer");
+    expect(harness.host.regenerate).toHaveBeenCalledWith("regenerate-1", "session-1", targetId);
+    harness.receive({
+      protocolVersion,
+      type: "extension/run-status",
+      requestId: "regenerate-1",
+      status: "cancelled",
+    });
+    expect(harness.store.getState().messages.at(-1)?.content).toBe("Original answer");
   });
 
   it("keeps usage cumulative for a continuation within the same Session", () => {

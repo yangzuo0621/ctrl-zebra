@@ -365,6 +365,10 @@ export const strings = {
     usageLimit: "Provider usage exceeded the supported Session limit.",
     startNewSession: "Starting a new Session.",
     continueSession: "Continuing the current Session.",
+    regenerationStarted: "Regenerating this response using the same user prompt and prior history.",
+    regenerate: "Regenerate response",
+    regenerateScope:
+      "Regenerates this response with its user prompt and prior completed history. The existing response stays visible until replacement succeeds.",
     newChatReady: "New chat ready.",
     restoringSession: "Restoring Session.",
     currentSessionConfirmed: "Current Session confirmed.",

@@ -6,7 +6,11 @@ import {
 } from "@ctrl-zebra/protocol";
 import { describe, expect, it } from "vitest";
 
-import { projectSessionModelHistory, SessionHistoryCorruptError } from "./session-history.js";
+import {
+  projectRegenerationContext,
+  projectSessionModelHistory,
+  SessionHistoryCorruptError,
+} from "./session-history.js";
 
 describe("projectSessionModelHistory", () => {
   it("projects ordered text across multiple completed Runs", () => {
@@ -278,6 +282,57 @@ describe("projectSessionModelHistory", () => {
     );
 
     expect(projectSessionModelHistory(session)).toEqual([{ role: "user", content: "Continue" }]);
+  });
+
+  it("projects a completed regeneration as one prompt and the replacement answer", () => {
+    const session = record([
+      userEvent("message-1", "Explain this."),
+      statusEvent("idle", "preparing"),
+      statusEvent("preparing", "streaming"),
+      textEvent("Original answer"),
+      statusEvent("streaming", "completed"),
+      userEvent("message-2", "Explain this."),
+      event("session.regeneration", {
+        targetMessageId: "assistant-4",
+        replacementUserMessageId: "message-2",
+      }),
+      statusEvent("completed", "preparing"),
+      statusEvent("preparing", "streaming"),
+      textEvent("Replacement answer"),
+      statusEvent("streaming", "completed"),
+    ]);
+
+    expect(projectSessionModelHistory(session)).toEqual([
+      { role: "user", content: "Explain this." },
+      { role: "assistant", content: "Replacement answer" },
+    ]);
+    expect(projectRegenerationContext(session, "assistant-10").history).toEqual([
+      { role: "user", content: "Explain this." },
+    ]);
+  });
+
+  it("keeps the old answer and omits a cancelled replacement from history", () => {
+    const session = record([
+      userEvent("message-1", "Explain this."),
+      statusEvent("idle", "preparing"),
+      statusEvent("preparing", "streaming"),
+      textEvent("Original answer"),
+      statusEvent("streaming", "completed"),
+      userEvent("message-2", "Explain this."),
+      event("session.regeneration", {
+        targetMessageId: "assistant-4",
+        replacementUserMessageId: "message-2",
+      }),
+      statusEvent("completed", "preparing"),
+      statusEvent("preparing", "streaming"),
+      textEvent("Partial replacement"),
+      statusEvent("streaming", "cancelled"),
+    ]);
+
+    expect(projectSessionModelHistory(session)).toEqual([
+      { role: "user", content: "Explain this." },
+      { role: "assistant", content: "Original answer" },
+    ]);
   });
 });
 
