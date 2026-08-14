@@ -1,7 +1,7 @@
 # T2001 文件生命周期契约审计（历史执行记录）
 
 > 本文件是 T2001 的非权威历史执行记录，不维护任务状态、当前执行点或当前契约。
-> 冲突时以 [`implementation-plan.md`](../implementation-plan.md) 的状态台账、[阶段 20 规格](../roadmap/phases/phase-20.md)
+> 冲突时以 [`implementation-plan.md`](../implementation-plan.md) 的状态台账、[阶段 20 归档规格](../roadmap/archive/phase-20.md)
 > 及其引用的领域文档为准。契约正文仍由 [Protocol T2001](../protocol/tools-and-file-lifecycle.md#file-lifecycle-and-atomic-mutation-contracts-t2001)、
 > [Architecture T2001](../architecture/tools-and-files.md#file-lifecycle-and-atomic-workspaceedit-boundary-t2001)、
 > [Security T2001](../security.md#file-lifecycle-mutation-boundary-t2001)、
