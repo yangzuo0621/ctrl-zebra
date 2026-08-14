@@ -43,6 +43,10 @@ describe("regeneration relation validation parity", () => {
       name: "a completed replacement Run without text",
       events: completedWithoutTextEvents(),
     },
+    {
+      name: "a replacement Run with an unowned idle start",
+      events: replacementIdleStartEvents(),
+    },
   ] as const;
 
   it.each(cases)("rejects $name consistently for continuation and restore", async ({ events }) => {
@@ -100,6 +104,13 @@ function completedWithoutTextEvents(): readonly PersistedEventRecord[] {
   const events = [...baseEvents()];
   events.splice(10, 1);
   return normalize(events.map(({ event }) => ({ type: event.type, data: event.data })));
+}
+
+function replacementIdleStartEvents(): readonly PersistedEventRecord[] {
+  const events = [...baseEvents()];
+  const rawEvents = events.map(({ event }) => ({ type: event.type, data: event.data }));
+  rawEvents[8] = status("idle", "preparing");
+  return normalize(rawEvents);
 }
 
 function failedTargetEvents(): readonly PersistedEventRecord[] {

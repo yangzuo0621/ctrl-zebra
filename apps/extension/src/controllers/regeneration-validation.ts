@@ -143,7 +143,10 @@ export function validateRegenerationRelations(
       replacementRunEvents,
       replacementRunStartIndex,
     );
-    const replacementCompleted = isCompletedRun(replacementRunEvents);
+    // A replacement Run follows the target Run's completed terminal state. Seed the shared
+    // transition validator from that state so recovery and continuation reject malformed
+    // persisted relations such as an unowned idle -> preparing transition.
+    const replacementCompleted = isCompletedRun(replacementRunEvents, "completed");
     if (replacementCompleted && replacementFirstTextIndex === undefined) {
       throw new RegenerationRelationCorruptError();
     }
@@ -206,7 +209,10 @@ function assistantProjectionId(sequence: number | undefined): string | undefined
   return parsed.data;
 }
 
-function isCompletedRun(events: readonly PersistedEventRecord[]): boolean {
+function isCompletedRun(
+  events: readonly PersistedEventRecord[],
+  expectedInitialStatus?: SessionStatus,
+): boolean {
   let currentStatus: string | undefined;
   let terminal = false;
   let sawStatus = false;
@@ -232,6 +238,11 @@ function isCompletedRun(events: readonly PersistedEventRecord[]): boolean {
     const status = sessionStatusSchema.safeParse(data.status);
     if (!previousStatus.success || !status.success) {
       throw new RegenerationRelationCorruptError();
+    }
+    if (currentStatus === undefined && expectedInitialStatus !== undefined) {
+      if (previousStatus.data !== expectedInitialStatus) {
+        throw new RegenerationRelationCorruptError();
+      }
     }
     if (currentStatus !== undefined && currentStatus !== previousStatus.data) {
       throw new RegenerationRelationCorruptError();
