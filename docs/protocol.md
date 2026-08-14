@@ -8,7 +8,7 @@ topic has one normative owner:
 | Topic | Owner |
 |---|---|
 | Envelope, direction, correlation, Provider model selection/onboarding, and restricted Markdown | [Wire and Provider](protocol/wire-and-provider.md#envelope) |
-| Session/Run commands, reasoning and usage events, runtime validation, errors, and serialization | [Session and Runtime](protocol/session-and-runtime.md#session-and-run-commands) |
+| Session/Run commands (including target-bound regeneration), reasoning and usage events, runtime validation, errors, and serialization | [Session and Runtime](protocol/session-and-runtime.md#session-and-run-commands) |
 | Tool DTOs, file lifecycle/atomic mutation, and search regex mode | [Tools and File Lifecycle](protocol/tools-and-file-lifecycle.md#tool-data-contracts) |
 | IDE context/read-only Tools and editor-initiated context entry | [IDE Context](protocol/ide-context.md#ide-context-and-read-only-tool-dtos-t1901) |
 | MCP identity, status, errors, message correlation, and Tool catalog projections | [MCP Connection](protocol/mcp-connection.md#mcp-cross-boundary-contract) |

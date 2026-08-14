@@ -10,6 +10,7 @@ export class WebviewSessionMessageHandler {
   constructor(
     private readonly post: PostWebviewMessage,
     private readonly actions?: SessionRecoveryActions,
+    private readonly onRestored?: (sessionId: string) => void,
   ) {}
 
   isRestoring(): boolean {
@@ -43,6 +44,7 @@ export class WebviewSessionMessageHandler {
     void restore
       .then(
         ({ session, reasoning }) => {
+          this.onRestored?.(session.sessionId);
           this.post({
             protocolVersion,
             type: "extension/reasoning-restored",

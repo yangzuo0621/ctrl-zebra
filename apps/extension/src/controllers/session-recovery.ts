@@ -28,6 +28,11 @@ import {
   userMessageSchema,
 } from "@ctrl-zebra/protocol";
 import { isRecord } from "../adapters/record-validation.js";
+import {
+  RegenerationRelationCorruptError,
+  type ValidatedRegenerationRelation,
+  validateRegenerationRelations,
+} from "./regeneration-validation.js";
 
 export interface SessionRecoveryActions {
   list(): Promise<readonly SessionSummary[]>;
@@ -138,11 +143,12 @@ export function createSessionRecoveryActions(
         }
       }
 
+      const projectedMessages = applyRegenerationProjection(messages, record);
       return {
         session: restoredSessionSchema.parse({
           sessionId,
           status,
-          messages,
+          messages: projectedMessages,
           eventLogTailDamaged: record.eventLogTailDamaged,
           usage: recoverUsage(record),
         }),
@@ -150,6 +156,45 @@ export function createSessionRecoveryActions(
       };
     },
   };
+}
+
+function applyRegenerationProjection(
+  messages: readonly RestoredSession["messages"][number][],
+  record: SessionRecord,
+): readonly RestoredSession["messages"][number][] {
+  const replacedMessageIds = new Set<string>();
+  const suppressedMessageIds = new Set<string>();
+  let relations: readonly ValidatedRegenerationRelation[];
+  try {
+    relations = validateRegenerationRelations(record.events, record.manifest.sessionId);
+  } catch (error) {
+    if (error instanceof RegenerationRelationCorruptError) {
+      throw new SessionRecoveryError("corrupt");
+    }
+    throw error;
+  }
+
+  for (const relation of relations) {
+    if (
+      !messages.some((message) => message.messageId === relation.targetMessageId) ||
+      suppressedMessageIds.has(relation.replacementUserMessageId)
+    ) {
+      throw new SessionRecoveryError("corrupt");
+    }
+    suppressedMessageIds.add(relation.replacementUserMessageId);
+    if (relation.replacementCompleted) {
+      replacedMessageIds.add(relation.targetMessageId);
+    } else if (relation.replacementFirstTextIndex !== undefined) {
+      suppressedMessageIds.add(
+        `assistant-${record.events[relation.replacementFirstTextIndex]?.sequence}`,
+      );
+    }
+  }
+
+  return messages.filter(
+    (message) =>
+      !replacedMessageIds.has(message.messageId) && !suppressedMessageIds.has(message.messageId),
+  );
 }
 
 function recoverUsage(record: SessionRecord): TokenUsage | undefined {

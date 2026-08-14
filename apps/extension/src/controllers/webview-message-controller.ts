@@ -95,7 +95,9 @@ export function bindWebviewMessageController({
     approvalActions,
     reportRunFailure,
   );
-  const sessionMessages = new WebviewSessionMessageHandler(post, sessionActions);
+  const sessionMessages = new WebviewSessionMessageHandler(post, sessionActions, (sessionId) =>
+    runMessages.setOwnedSession(sessionId),
+  );
   const checkpointMessages = new WebviewCheckpointMessageHandler(post, checkpointActions);
   mcpActions?.bind(post);
 
@@ -143,8 +145,14 @@ export function bindWebviewMessageController({
           );
         }
         return;
+      case "webview/regenerate":
+        if (runMessages.canStart() && !sessionMessages.isRestoring()) {
+          runMessages.regenerate(data.requestId, data.sessionId, data.messageId);
+        }
+        return;
       case "webview/new-chat":
         if (runMessages.canStart() && !sessionMessages.isRestoring()) {
+          runMessages.clearOwnedSession();
           editorContextActions?.clearForNewChat();
           resourceActions?.clearInput();
           promptActions?.clearInput();

@@ -19,6 +19,7 @@ let vscodeApi: VsCodeApi | undefined;
 export interface WebviewHost {
   ping?(requestId: string): void;
   submit(requestId: string, content: string, sessionId?: string): void;
+  regenerate?(requestId: string, sessionId: string, messageId: string): void;
   newChat?(requestId: string): void;
   cancel(requestId: string): void;
   showApprovalDiff(requestId: string, approvalId: string): void;
@@ -124,6 +125,15 @@ const webviewHost: WebviewHost = {
       requestId,
       content,
       ...(sessionId === undefined ? {} : { sessionId }),
+    });
+  },
+  regenerate(requestId, sessionId, messageId) {
+    getVsCodeApi().postMessage({
+      protocolVersion,
+      type: "webview/regenerate",
+      requestId,
+      sessionId,
+      messageId,
     });
   },
   newChat(requestId) {

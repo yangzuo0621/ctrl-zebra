@@ -24,11 +24,13 @@ interface ActiveRun {
   sessionStartedSent: boolean;
   eventsClosed: boolean;
   terminalSent: boolean;
+  readonly regenerationTargetMessageId?: string;
 }
 
 export class WebviewRunMessageHandler {
   #activeRun: ActiveRun | undefined;
   #disposed = false;
+  #ownedSessionId: string | undefined;
 
   constructor(
     private readonly post: PostWebviewMessage,
@@ -47,6 +49,13 @@ export class WebviewRunMessageHandler {
     if (this.#activeRun !== undefined) {
       return;
     }
+    if (
+      sessionId !== undefined &&
+      this.#ownedSessionId !== undefined &&
+      sessionId !== this.#ownedSessionId
+    ) {
+      return;
+    }
 
     const run: ActiveRun = {
       requestId,
@@ -56,18 +65,53 @@ export class WebviewRunMessageHandler {
       eventsClosed: false,
       terminalSent: false,
     };
-    this.#activeRun = run;
-    this.#postStatus(requestId, "preparing");
-
-    void this.chatRunner
-      .run(
+    this.#launch(run, (signal) =>
+      this.chatRunner.run(
         content,
-        run.abortController.signal,
+        signal,
         (event) => this.#handleRuntimeEvent(run, event),
         externalResources,
         externalPrompts,
         sessionId,
-      )
+      ),
+    );
+  }
+
+  regenerate(requestId: string, sessionId: string, targetAssistantMessageId: string): void {
+    const regenerate = this.chatRunner.regenerate;
+    if (this.#activeRun !== undefined) {
+      return;
+    }
+    if (regenerate === undefined) {
+      this.#rejectRegeneration(requestId, new Error("Regeneration is unavailable."));
+      return;
+    }
+    if (this.#ownedSessionId !== sessionId) {
+      this.#rejectRegeneration(requestId, new Error("Regeneration Session ownership changed."));
+      return;
+    }
+
+    const run: ActiveRun = {
+      requestId,
+      abortController: new AbortController(),
+      sessionId,
+      sessionStartedSent: false,
+      eventsClosed: false,
+      terminalSent: false,
+      regenerationTargetMessageId: targetAssistantMessageId,
+    };
+    this.#launch(run, (signal) =>
+      regenerate(sessionId, targetAssistantMessageId, signal, (event) =>
+        this.#handleRuntimeEvent(run, event),
+      ),
+    );
+  }
+
+  #launch(run: ActiveRun, execute: (signal: AbortSignal) => Promise<void>): void {
+    this.#activeRun = run;
+    this.#postStatus(run.requestId, "preparing");
+
+    void execute(run.abortController.signal)
       .then(
         () => {
           const status = run.abortController.signal.aborted ? "cancelled" : "completed";
@@ -100,6 +144,18 @@ export class WebviewRunMessageHandler {
     return !this.#disposed && this.#activeRun === undefined;
   }
 
+  setOwnedSession(sessionId: string): void {
+    if (this.#activeRun === undefined) {
+      this.#ownedSessionId = sessionId;
+    }
+  }
+
+  clearOwnedSession(): void {
+    if (this.#activeRun === undefined) {
+      this.#ownedSessionId = undefined;
+    }
+  }
+
   cancel(requestId: string): void {
     const run = this.#activeRun;
     if (run?.requestId !== requestId) {
@@ -126,6 +182,7 @@ export class WebviewRunMessageHandler {
     this.#disposed = true;
     this.#activeRun?.abortController.abort(new Error("Webview disposed during chat run."));
     this.#activeRun = undefined;
+    this.#ownedSessionId = undefined;
   }
 
   #postStatus(requestId: string, status: RunStatus): void {
@@ -135,6 +192,20 @@ export class WebviewRunMessageHandler {
       requestId,
       status,
     });
+  }
+
+  #rejectRegeneration(requestId: string, error: unknown): void {
+    if (this.#disposed) {
+      return;
+    }
+    this.reportRunFailure(error);
+    this.post({
+      protocolVersion,
+      type: "extension/run-error",
+      requestId,
+      ...mapRunErrorToUi(error),
+    });
+    this.#postStatus(requestId, "failed");
   }
 
   #finish(run: ActiveRun, status: "completed" | "truncated" | "cancelled" | "failed"): void {
@@ -153,6 +224,11 @@ export class WebviewRunMessageHandler {
     }
     if (run.sessionId === undefined) {
       run.sessionId = event.sessionId;
+      if (this.#ownedSessionId !== undefined && this.#ownedSessionId !== event.sessionId) {
+        run.eventsClosed = true;
+        return;
+      }
+      this.#ownedSessionId = event.sessionId;
     } else if (run.sessionId !== event.sessionId) {
       return;
     }

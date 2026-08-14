@@ -159,6 +159,73 @@ describe("Session recovery", () => {
     });
   });
 
+  it("restores a completed regeneration without duplicating the replacement prompt", async () => {
+    const repository = new InMemorySessionRepository();
+    await repository.create(manifest("session-regeneration", "2026-07-19T10:00:00.000Z"));
+    const events = [
+      {
+        type: "session.user-message",
+        data: {
+          messageId: "message-1",
+          sessionId: "session-regeneration",
+          createdAt: "2026-07-19T10:00:00.000Z",
+          role: "user",
+          content: "Question",
+        },
+      },
+      { type: "agent.text-delta", data: { text: "Original" } },
+      {
+        type: "session.status-changed",
+        data: { previousStatus: "streaming", status: "completed" },
+      },
+      {
+        type: "session.user-message",
+        data: {
+          messageId: "message-2",
+          sessionId: "session-regeneration",
+          createdAt: "2026-07-19T10:00:01.000Z",
+          role: "user",
+          content: "Question",
+        },
+      },
+      {
+        type: "session.regeneration",
+        data: { targetMessageId: "assistant-2", replacementUserMessageId: "message-2" },
+      },
+      {
+        type: "session.status-changed",
+        data: { previousStatus: "completed", status: "preparing" },
+      },
+      {
+        type: "session.status-changed",
+        data: { previousStatus: "preparing", status: "streaming" },
+      },
+      { type: "agent.text-delta", data: { text: "Replacement" } },
+      {
+        type: "session.status-changed",
+        data: { previousStatus: "streaming", status: "completed" },
+      },
+    ] as const;
+    for (const [index, event] of events.entries()) {
+      await repository.appendEvent("session-regeneration", {
+        sequence: index + 1,
+        recordedAt: `2026-07-19T10:00:0${index}.000Z`,
+        event,
+      });
+    }
+
+    await expect(
+      createSessionRecoveryActions(async () => repository).restore("session-regeneration"),
+    ).resolves.toMatchObject({
+      session: {
+        messages: [
+          { role: "user", content: "Question" },
+          { role: "assistant", content: "Replacement" },
+        ],
+      },
+    });
+  });
+
   it("recovers cumulative and partial Provider Usage without treating it as model history", async () => {
     const repository = new InMemorySessionRepository();
     await repository.create(manifest("session-usage", "2026-08-10T00:00:00.000Z"));

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { chatMessageSchema } from "./chat-message.js";
+import { chatMessageSchema, messageIdSchema } from "./chat-message.js";
 import { checkpointIdSchema } from "./checkpoint.js";
 import { mcpNegotiatedProvenanceSchema } from "./mcp-negotiation.js";
 import { mcpPromptConfirmationSchema } from "./mcp-prompt.js";
@@ -153,6 +153,13 @@ export const persistedUsageEventPayloadSchema = z.strictObject({
   type: z.literal("session.usage"),
   data: tokenUsageSchema,
 });
+export const persistedRegenerationEventPayloadSchema = z.strictObject({
+  type: z.literal("session.regeneration"),
+  data: z.strictObject({
+    targetMessageId: messageIdSchema,
+    replacementUserMessageId: messageIdSchema,
+  }),
+});
 
 const persistedReasoningEventTypes = new Set([
   "session.reasoning-start",
@@ -164,6 +171,7 @@ const persistedMcpToolEventTypes = new Set(["session.mcp-tool-call", "session.mc
 const persistedMcpResourceEventTypes = new Set(["session.mcp-resource-attached"]);
 const persistedMcpPromptEventTypes = new Set(["session.mcp-prompt-confirmed"]);
 const persistedUsageEventTypes = new Set(["session.usage"]);
+const persistedRegenerationEventTypes = new Set(["session.regeneration"]);
 
 export const persistedEventPayloadSchema = genericPersistedEventPayloadSchema.superRefine(
   (payload, context) => {
@@ -212,6 +220,15 @@ export const persistedEventPayloadSchema = genericPersistedEventPayloadSchema.su
         message: "Persisted Usage events must match their strict version 1 schema.",
       });
     }
+    if (
+      persistedRegenerationEventTypes.has(payload.type) &&
+      !persistedRegenerationEventPayloadSchema.safeParse(payload).success
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Persisted regeneration events must match their strict version 1 schema.",
+      });
+    }
   },
 );
 
@@ -233,6 +250,9 @@ export type PersistedMcpResourceEventPayload = z.infer<
 >;
 export type PersistedMcpPromptEventPayload = z.infer<typeof persistedMcpPromptEventPayloadSchema>;
 export type PersistedUsageEventPayload = z.infer<typeof persistedUsageEventPayloadSchema>;
+export type PersistedRegenerationEventPayload = z.infer<
+  typeof persistedRegenerationEventPayloadSchema
+>;
 export type PersistedEventRecord = z.infer<typeof persistedEventRecordSchema>;
 
 export interface SessionPersistencePaths {

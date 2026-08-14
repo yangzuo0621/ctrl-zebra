@@ -116,6 +116,12 @@ This document defines the Webview security constraints established before T0104.
   Tool Result, retry, approval response, persistence mutation, or side effect is accepted. Explicit
   `webview/new-chat` clears unconsumed user-context attachments and staged restore state but does not
   delete persisted Sessions or resume an active Run.
+- Regeneration is accepted only for the selected idle/restored Session's latest completed assistant
+  projection and carries the exact `sessionId` plus assistant `messageId`. It allocates a new Run and
+  one-time approval scope; the target Run's Tool Call/Result, external context, Provider request, and
+  approval are never replayed. The Webview keeps the old answer visible until the replacement reaches
+  `completed`; cancellation, failure, truncation, duplicate intent, and late events close the new
+  gate without changing the old projection.
 
 ## Tool Input and Output
 
