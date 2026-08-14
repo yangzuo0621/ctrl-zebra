@@ -31,10 +31,8 @@ most two correction cycles before the coordinator stops.
 
 ## Reuse evidence
 
-Every task performs a targeted reuse audit. Repository-wide definition inventories and independent
-reviewer reproduction are required only for the full-audit triggers in `docs/development.md`, such as
-shared/general-purpose infrastructure, duplicate centralization, sensitive cross-cutting boundaries,
-or concrete duplication concerns.
+`docs/development.md` owns the `TARGETED`/`FULL`/`ESCALATED FULL` rules. The compact Review Handoff and
+PR diff are the shared evidence surface; Reviewer loads other documents only for concrete verification.
 
 ## Ownership principle
 

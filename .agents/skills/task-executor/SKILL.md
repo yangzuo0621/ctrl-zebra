@@ -39,6 +39,11 @@ the user explicitly authorized the selected profile from `auto-workflow` for thi
 `BLOCKED`.
 
 ### 4. Implement and Create PR Early
+Before implementation stabilizes, select the Executor similarity tier:
+- select `TARGETED` by default or `FULL` only under the triggers in
+  [`docs/development.md`](../../../docs/development.md#reuse-before-build);
+- never claim `ESCALATED FULL`, which is Reviewer-only.
+
 After the gate:
 - implement only the validated contract;
 - run relevant verification;
@@ -50,34 +55,32 @@ After the gate:
 In MANUAL mode, request authorization before each Git/PR operation not already explicitly authorized.
 In an AUTO profile, use only the operations listed in that profile’s explicit authorization envelope.
 
-Keep the same PR open as the shared handoff surface across roles.
-
-Attach one compact handoff packet to the shared PR/review request:
+Keep the same PR open as the shared handoff surface across roles. Attach one compact Review Handoff to
+the shared PR/review request:
 
 ```text
-task, base, head, PR
-scope and acceptance summary
-changed files
-docs consulted
-verification and CI state
-reuse-audit tier, candidates, reuse decisions, and final evidence
-known caveats or deviations
-Context Used:
-- <actually read specification document or principal source file>
-Context Count: <number of listed entries>
-Searches Performed:
-- <search category> — <target>; full-repo similarity audit: yes|no
+## Review Handoff
+- task; PR; exact revision
+- acceptance criteria; changed areas; contracts touched
+- docs actually consulted; verification, including unrun checks
+- reuse tier; candidates; conclusion
+- known caveats or deviations
 ```
 
-Do not reproduce whole source documents in the packet. Point to the owning section and let the Reviewer
-open it only when the diff, task, or a suspected conflict requires it. `Context Used` lists only the
-specification documents and principal source files actually read by the Executor; omit incidental
-guidance and unreferenced files. `Searches Performed` contains only category/target pairs and the
-full-repo similarity-audit flag, never raw search output, exact token counts, or a tool-call transcript.
-Deduplicate context entries and use the number of listed entries for `Context Count`.
+Do not reproduce whole source documents in the handoff. Point to the owning section and let the Reviewer
+open it only when the diff, a touched contract, a material handoff claim, or a concrete concern requires
+it. `docs actually consulted` lists only documents actually read by the Executor; deduplicate entries.
+
+Attach these separate observability fields to the Executor report:
+
+```text
+Executor document count: <number of deduplicated docs actually consulted>
+Executor similarity tier: TARGETED | FULL
+```
 
 ### 5. Review Loop
-Hand off the current PR/revision to `task-reviewer`.
+Hand off the current PR/revision to `task-reviewer` with the compact Review Handoff, actual PR diff,
+and acceptance criteria.
 
 If `REJECTED`:
 - fix only blocking findings within task scope;

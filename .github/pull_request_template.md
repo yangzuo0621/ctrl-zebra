@@ -17,6 +17,14 @@ Title format:
 - Public-contract impact: None
 - Explicitly excluded:
 
+## Review Handoff
+
+- Task / PR / exact revision:
+- Acceptance criteria / changed areas / contracts touched:
+- Docs actually consulted:
+- Reuse tier / candidates / conclusion:
+- Known caveats or deviations: None
+
 ## Verification
 
 <!-- List each command or manual check with its result. Report required checks that were not run. -->
@@ -24,13 +32,14 @@ Title format:
 
 ## Reuse and Similarity Audit
 
-- Audit tier and trigger: Targeted / Full — <!-- reason -->
+- Audit tier and trigger: TARGETED / FULL / ESCALATED FULL — <!-- Executor reason; Reviewer escalation reason when applicable -->
 - Initial targeted search scope and existing candidates:
 - Existing functions/modules actively reused or deepened:
 - Final targeted search against actual symbols:
 - Remaining similarities and disposition:
-- Full-audit inventory and definition counts: Not required / <!-- evidence -->
-- Reviewer independent-search differences: Not required / Pending full-audit review
+- Full-audit inventory and definition counts: Not required / <!-- Executor evidence -->
+- Reviewer verification: Evidence check/spot-check / Independent targeted verification / Independent full audit
+- Reviewer full audit repeated: No / Yes — <!-- escalation reason and material differences -->
 
 ## Notes
 

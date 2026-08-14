@@ -46,13 +46,15 @@ current profiles and renewed authorization; do not create aliases or silently br
 
 ## Coordinator Workflow
 1. Pin the assigned task, base revision, branch, authorization profile, authorized operations, and
-   targeted/full reuse-audit tier.
+   Executor reuse-audit tier (`TARGETED` or `FULL`). The Reviewer may escalate to `ESCALATED FULL`
+   only under the documented evidence conditions.
 2. Use `sol-planner` only before implementation when task decomposition, architecture, or roadmap
    ambiguity cannot be resolved inside the existing task. Planner is not part of routine closure.
 3. Dispatch `task-executor` for startup, contract, implementation, verification, early PR creation,
-   and a compact handoff packet.
-4. Dispatch `task-reviewer` against the actual current PR revision. The Reviewer is the only code
-   quality gate and returns one consolidated finding set.
+   and the compact Review Handoff.
+4. Dispatch `task-reviewer` against the actual current PR revision with only the Review Handoff, PR
+   diff, and acceptance criteria as base context. The Reviewer is the only code quality gate and
+   returns one consolidated finding set.
 5. Route `REJECTED` to `task-executor`, then review the new revision. Do not distribute the same
    correction across multiple roles.
 6. After `APPROVED`, dispatch `task-finalizer` against that exact revision. Finalizer verifies only
@@ -70,29 +72,9 @@ dispatched or running role as completed.
 
 ## Lightweight Workflow Observability
 
-Every Executor, Reviewer, and Finalizer handoff/report carries two bounded evidence fields:
-
-```text
-Context Used:
-- <one actually read specification, principal source, or allowed operational input>
-Context Count: <number of listed entries>
-
-Searches Performed:
-- <search category> — <target>; full-repo similarity audit: yes|no
-```
-
-`Context Used` names only files or operational inputs that the role actually read. The Executor lists
-the specification documents and principal source files it used; the Reviewer lists only context read
-in addition to the handoff and PR diff (it may report `handoff + PR diff only`); and the Finalizer keeps
-its list to the handoff, PR metadata, CI, and `docs/implementation-plan.md` when those are the only
-inputs read. Deduplicate entries and do not list incidental guidance, unreferenced files, full command
-output, exact token counts, or every tool call. `Context Count` is the number of listed entries, with
-`handoff + PR diff only` counting as zero additional context.
-
-`Searches Performed` records only a search category and target plus whether a full-repo similarity audit
-was triggered. It never includes raw `rg` output, exact match/token counts, or a tool-call transcript.
-The root coordinator carries the role counts and audit flags into the final report without inventing
-missing values.
+Carry the bounded observability fields defined by each role into the completion report below. Count
+deduplicated documents actually read, omit raw outputs and tool-call transcripts, and never infer a
+missing value.
 
 ## Retry and Circuit Breakers
 - Allow at most two Reviewer rejection/correction cycles. Require each review to consolidate all
@@ -118,12 +100,17 @@ completed root report:
 
 ### Workflow Observability
 
-- Executor context count: `<n>`
-- Reviewer additional context count: `<n>`
-- Finalizer context count: `<n>`
+- Executor document count: `<n>`
+- Executor audit tier: `TARGETED | FULL`
+- Reviewer base context: `Review Handoff + current PR diff + task acceptance criteria`
+- Reviewer additional docs count: `<n>`
+- Reviewer similarity verification: `evidence check/spot-check | independent targeted verification | independent full audit`
+- Reviewer full audit repeated: `yes | no`
+- Finalizer implementation docs loaded: `<n>`
 - Full-repo similarity audit count: `<n>`
 - Review-loop count: `<n>`
 
 The full-repo audit count is the number of role reports marking `full-repo similarity audit: yes`;
-the review-loop count is the number of Reviewer rejection/correction cycles. Never invent state or
-replace these summaries with raw search output.
+the review-loop count is the number of Reviewer rejection/correction cycles. `Reviewer full audit
+repeated` is `yes` only for an `ESCALATED FULL` review. Never invent state or replace these summaries
+with raw search output.

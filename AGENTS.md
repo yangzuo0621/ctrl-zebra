@@ -130,12 +130,16 @@ owns wire and Tool DTO contracts.
 - Any agent implementing or changing code, regardless of configured role or orchestration, owns the
   active reuse decision and must follow [`Reuse Before Build`](docs/development.md#reuse-before-build)
   before adding an implementation, fake, or wrapper.
-- Every change uses a targeted reuse audit. A full similarity audit is reserved for the risk triggers
-  defined in [`Reuse Before Build`](docs/development.md#reuse-before-build). Reviewers validate the
-  selected tier and block missing evidence or unjustified equivalent implementations; they repeat a
-  repository-wide search only for a full audit or when concrete duplication evidence makes escalation
-  necessary. The linked development guidance, task template, and review checklist own the search
-  dimensions, wrapper/error-translation rules, inventory fields, and evidence semantics.
+- Every change uses `TARGETED` by default; `FULL` is the Executor whole-repository tier and
+  `ESCALATED FULL` is the Reviewer independent whole-repository tier. Reviewers validate the tier and
+  evidence, but repeat a full audit only for the escalation conditions in
+  [`Reuse Before Build`](docs/development.md#reuse-before-build). That guidance owns the detailed
+  triggers, search dimensions, inventories, and evidence semantics.
+
+- Reviewers start with the compact Review Handoff, the current PR diff, and the task acceptance
+  criteria. Do not reconstruct the Executor’s entire document context unless concrete review evidence
+  requires it. Independent review requires independent judgment, not automatic duplication of
+  repository-wide searches already evidenced in the handoff.
 
 - For general-purpose mechanisms, repeated infrastructure, or dependency changes, follow
   [`Build vs Buy`](docs/development.md#build-vs-buy) and record the decision in the task's transient
@@ -163,10 +167,12 @@ transient execution, handoff, or PR evidence:
 - Explicitly excluded:
 - Build vs Buy triggers: None / explain
 - Build vs Buy decision and evidence: Not applicable / explain
-- Reuse Audit: Targeted search scope/candidates/owners, selected audit tier and trigger, active reuse
-  plan, and second/third implementation assessment
-- Final Similarity Audit plan: Targeted actual-symbol check and remaining similarities; for full audits,
-  add repository-wide inventory, definition counts, dispositions, and independent reviewer comparison
+- Reuse Audit: Targeted search scope/candidates/owners, selected `TARGETED`/`FULL` tier and trigger,
+  active reuse plan, and second/third implementation assessment
+- Final Similarity Audit plan: `TARGETED` actual-symbol check and remaining similarities; for `FULL`,
+  add the Executor repository-wide inventory, definition counts, and dispositions plus Reviewer
+  independent targeted verification; for `ESCALATED FULL`, add the Reviewer full independent audit
+  and material differences
 - Verification:
 ```
 
