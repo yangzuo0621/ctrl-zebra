@@ -5,28 +5,16 @@
 Execute T1510 in MANUAL mode using the configured project workflow.
 ```
 
-## AUTO_DRAFT_V1
+## AUTO_DRAFT (recommended for review-before-merge)
 ```text
-Use auto-workflow to execute T1510 in AUTO_DRAFT_V1.
-I explicitly authorize AUTO_DRAFT_V1 for T1510 only.
+Use auto-workflow to execute T1510 in AUTO_DRAFT.
+I explicitly authorize AUTO_DRAFT for T1510 only.
 ```
 
-## AUTO_FULL_V1
+## AUTO_FULL (recommended for end-to-end execution)
 ```text
-Use auto-workflow to execute T1510 in AUTO_FULL_V1.
-I explicitly authorize AUTO_FULL_V1 for T1510 only.
-```
-
-## AUTO_DRAFT_V2 (recommended for review-before-merge)
-```text
-Use auto-workflow to execute T1510 in AUTO_DRAFT_V2.
-I explicitly authorize AUTO_DRAFT_V2 for T1510 only.
-```
-
-## AUTO_FULL_V2 (recommended for end-to-end execution)
-```text
-Use auto-workflow to execute T1510 in AUTO_FULL_V2.
-I explicitly authorize AUTO_FULL_V2 for T1510 only.
+Use auto-workflow to execute T1510 in AUTO_FULL.
+I explicitly authorize AUTO_FULL for T1510 only.
 ```
 
 ## Project / Phase planning

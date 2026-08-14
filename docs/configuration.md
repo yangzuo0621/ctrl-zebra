@@ -120,7 +120,7 @@ classifications (including unknown future or otherwise unclassified values) is
 `protocol-incompatible`. Neither outcome authorizes fallback. Cancellation, trust loss, process exit,
 or cleanup failure is terminal and never authorizes fallback. Late probe data is discarded by the
 connection generation gate. The complete eligible/forbidden matrix is authoritative in
-[Architecture](architecture.md#closed-modern-first-fallback-decision-matrix-t1804).
+[Architecture](architecture/mcp-schema-and-discovery.md#closed-modern-first-fallback-decision-matrix-t1804).
 
 The connected Protocol projection carries a CtrlZebra-owned negotiated value:
 

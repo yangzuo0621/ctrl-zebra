@@ -3,15 +3,16 @@
 ## 1. 目的与权限
 
 本台账记录尚未获准实施的复用、模块深化、依赖引入和重复消除机会，使发现不会丢失，也不会
-借“清理”绕过任务范围。它只拥有候选项的证据、评估和处置；不拥有路线图顺序、任务状态、
-产品语义、公共契约或技术基线。
+借“清理”绕过任务范围。本文件只拥有机会状态、评估门禁和下一评估窗口；maintenance 记录与 PR
+保存已完成的决策、执行证据和验证结论；`docs/implementation-plan.md` 只拥有路线图顺序、任务状态
+和完成引用。它不拥有产品语义、公共契约或技术基线。
 
 - `EO-*` 是稳定的机会编号，不是路线图任务编号，也不代表已经授权。
 - 候选项只有在明确批准后，才进入一个路线图任务或独立 maintenance 变更。
 - 需要跨会话跟踪、依赖评审、多 PR 或外部讨论的独立变更，在实施前创建 GitHub Issue，并从
   本台账链接；可在一次已授权会话中完成的小型 maintenance 可以直接使用任务计划。
-- 晋升后的执行顺序和状态只记录在 `docs/implementation-plan.md` 或对应 Issue/PR；本台账只
-  保留链接和最终处置，避免形成第二套任务状态。
+- 晋升后的执行顺序和状态只记录在 `docs/implementation-plan.md` 或对应 Issue/PR；maintenance
+  记录和 PR 是已完成决策与执行证据的来源，本台账只保留入口、状态和最终处置，避免形成第二套任务状态。
 - 发现不在当前范围内的机会时，只更新本台账，不顺带实现。
 
 ## 2. 状态与晋升流程
@@ -41,135 +42,49 @@
 
 ## 3. 候选组合与建议窗口
 
-下表的窗口是规划建议，不改变当前执行点；T2001 已按单独授权进入 docs-only 约束阶段。
+下表只列仍未完全处置、需要后续评估或明确窗口的机会；已晋升/已完成项目移入第 4 节台账。窗口
+是规划建议，不改变当前执行点；T2001 已按单独授权进入 docs-only 约束阶段。
 
 | 机会 | 类型 | 优先级 | 建议窗口或依赖 | 状态 |
 |---|---|---:|---|---|
-| [EO-001 Provider endpoint policy](#eo-001-provider-endpoint-policy) | 深化 | P0 | 首个独立 maintenance 窗口 | `已晋升` |
-| [EO-002 Extension test support](#eo-002-extension-test-support) | 复用 | P1 | EO-003、EO-004 前 | `已晋升` |
-| [EO-003 IDE source projection](#eo-003-ide-source-projection) | 深化 | P1 | EO-002 后；新增 IDE 投影前 | `已晋升` |
-| [EO-004 Bounded text persistence](#eo-004-bounded-text-persistence) | 深化 | P1 | EO-002 后；Phase 21 数据控制前优先评估 | `已晋升` |
-| [EO-005 MCP catalog refresh](#eo-005-mcp-catalog-refresh) | 深化 | P1 | MCP 再次演进或独立 maintenance 窗口 | `已晋升` |
-| [EO-006 MCP error ownership](#eo-006-mcp-error-ownership) | 深化 | P2 | EO-005 后；需要契约影响确认 | `已完成` |
-| [EO-007 Package-local text primitives](#eo-007-package-local-text-primitives) | 复用 | P2 | EO-003、EO-004 后；单一 maintenance 内按 package-local tranche 执行 | `已完成` |
 | [EO-008 Safe regex engine](#eo-008-safe-regex-engine) | Buy | P0 | 纳入 T2001 决策、T2005 实施，不单独插队 | `评估中` |
 | [EO-009 Markdown renderer](#eo-009-markdown-renderer) | Buy re-evaluation | P3 | 先证明净收益并通过基线变更控制 | `暂缓` |
 | [EO-010 Targeted Zod reuse](#eo-010-targeted-zod-reuse) | 已有依赖复用 | P2 | 随拥有 schema 的任务分 tranche | `已发现` |
 | [EO-011 Provider token counting](#eo-011-provider-token-counting) | Buy / 实验 | P3 | 先有准确度或预算缺陷数据 | `暂缓` |
 | [EO-012 MCP SDK-native negotiation](#eo-012-mcp-sdk-native-negotiation) | Buy / 已有依赖深化 | P0 | MCP 再次演进前优先评估；不阻塞 Phase 20 | `评估中` |
 
-建议的依赖链是：
+仍影响未来执行的关系是：
 
 ```text
-EO-002 ──→ EO-003
-   └─────→ EO-004 ──→ EO-007
-
 T2001 decision ──→ EO-008 evidence ──→ T2005 implementation
-
-EO-005 ──→ EO-006
-
 EO-012 evidence ──→ independent maintenance decision
 ```
 
-EO-001 可以独立进行。EO-009 和 EO-011 不应阻塞 Phase 20–22。
 EO-012 可独立于 Phase 20 评估；除非发现当前 negotiation 存在实际缺陷，否则不阻塞 T2001–T2005。
-若验证 SDK-native negotiation 能保持现有安全语义，再晋升为独立 maintenance。
+EO-009 和 EO-011 不应阻塞 Phase 20–22。若验证 SDK-native negotiation 能保持现有安全语义，再晋升为
+独立 maintenance。
 
-## 4. 重复消除机会
+## 4. 已晋升/已完成台账
 
-### EO-001 Provider endpoint policy
+EO-001–EO-007 的技术决策、执行证据和逐项验证以各自 maintenance 记录为准。本表只保留每项的最终
+状态、长期 owner/结论和入口；PR 链接仅在现有记录明确存在时列出，未创建或未推送的 PR 不补造。
+问题证据、候选比较、迁移步骤和执行流水不在本文件重复。
 
-- **执行记录**：[EO-001 maintenance record](maintenance/EO-001-provider-endpoint-policy.md)
-
-- **问题证据**：`apps/extension/src/adapters/provider-configuration.ts` 与
-  `apps/extension/src/controllers/provider-connection-check-command.ts` 分别维护 loopback 和 endpoint
-  判定。
-- **目标 seam**：Extension-private `provider-endpoint-policy` module；调用方保留各自的诊断和 UI
-  错误映射。
-- **Build vs Buy**：优先深化本地 module。逻辑较小且承载产品安全策略，引入依赖没有足够收益。
-- **验收**：两条调用路径通过同一 policy interface；安全边界测试覆盖允许、拒绝和规范化失败；
-  删除两处旧判定及其实现专用测试；不改变配置或命令契约。
-- **规模与风险**：小；安全敏感，必须独立审查。
-
-### EO-002 Extension test support
-
-- **问题证据**：Extension 测试中存在多份 `TestUri`，Webview 测试也重复维护 host fake。
-- **目标 seam**：分别在 `apps/extension/src/test/support/` 和 Webview 私有测试支持目录建立最小
-  fixture interface；不扩大 `packages/testkit` 的依赖方向。
-- **Build vs Buy**：直接复用仓库内测试支持；无需运行时依赖。
-- **验收**：迁移调用方后删除重复 fake 及实现专用测试；fixture 不承载生产策略、不导出到公共
-  package entry point；测试行为和失败可读性保持不变。
-- **规模与风险**：小；是 EO-003、EO-004 的迁移前置。
-
-### EO-003 IDE source projection
-
-- **问题证据**：`vscode-diagnostics.ts`、`vscode-language-services.ts` 和
-  `vscode-editor-context.ts` 重复组合 URI identity、相对路径、Unicode position、range 排序与
-  UTF-8/code-point 投影。
-- **目标 seam**：Extension-private `IdeSourceProjector` deep module，以小 interface 隐藏
-  URI/text/range 投影算法；三个 adapter 只保留来源采集和调用方错误映射。
-- **Build vs Buy**：先评估 VS Code API 和现有 module；产品投影语义保留自有。只有通用 Unicode
-  算法无法由平台可靠提供时，才单独评估库。
-- **验收**：契约测试覆盖 ASCII、surrogate pair、多字节字符、边界 range、不同 URI scheme 和
-  排序；三个 adapter 的等价逻辑全部删除；不得新增公共 package 或仓库级文本工具箱。
-- **规模与风险**：大；应拆成一个行为锁定 tranche 和一个调用方迁移 tranche，但同一时间只执行
-  一个获准变更。
-
-### EO-004 Bounded text persistence
-
-- **问题证据**：`vscode-session-storage.ts` 与 `vscode-checkpoint-storage.ts` 重复实现路径段校验、
-  URI resolve、父目录创建、bounded UTF-8 read/write、FileNotFound、delete 和 rename。
-- **目标 seam**：Extension-private `VscodeBoundedTextStorage` deep module；Session 和 Checkpoint
-  module 继续拥有原子性、恢复、兼容性和领域错误。
-- **Build vs Buy**：优先深化 VS Code adapter；VS Code API 已提供底层文件能力，不引入新的文件
-  系统库。
-- **验收**：共享 interface 的契约测试覆盖大小上限、缺失文件、非法路径、原子替换失败和清理；
-  两个调用方旧 I/O 实现及其专用测试被删除；不得弱化 persistence 或 checkpoint 规则。
-- **规模与风险**：中到大；在 Phase 21 会话数据控制开始前重新评估，可减少后续第三份实现。
-
-### EO-005 MCP catalog refresh
-
-- **问题证据**：`packages/mcp-client/src/controlled-mcp-client.ts` 的 Tool、Prompt、Resource 刷新
-  分支重复维护分页 cursor、上限、并发合并、generation fencing 和 `AbortSignal`。
-- **目标 seam**：package-private pagination collector 加一个拥有刷新生命周期的 catalog module；
-  Tool policy 继续拥有 schema 拒绝、撤销和诊断语义。
-- **Build vs Buy**：先深化现有 MCP module。SDK 可提供 transport 和 DTO，但不能接管 CtrlZebra
-  的 stale fencing、budget、cancellation 和错误语义。
-- **验收**：三类 catalog 共享分页与 refresh interface；覆盖重复 cursor、越界页、取消、并发刷新、
-  stale completion 和部分失败；删除三份等价控制流，不保留转发壳。
-- **规模与风险**：中；生命周期敏感。
-
-### EO-006 MCP error ownership
-
-- **执行记录**：[EO-006 maintenance record](maintenance/EO-006-mcp-error-ownership.md)
-
-- **问题证据**：`packages/mcp-client/src/errors.ts` 与 Extension 的
-  `apps/extension/src/controllers/mcp-connection-controller.ts` 同时维护部分 client error 文案。
-- **目标 seam**：MCP client 拥有 client code 与规范化信息，Extension 只拥有 host/process/config
-  错误和展示映射。
-- **Build vs Buy**：深化现有错误 module，不引入依赖。
-- **验收**：先确认公共 entry point 和稳定错误契约影响；删除 Extension 中等价 client 映射；测试
-  分别锁定 client normalization 和 host-only mapping。
-- **规模与风险**：小到中；若改变公共契约，必须先执行变更控制。
-
-### EO-007 Package-local text primitives
-
-- **执行记录**：[EO-007 maintenance record](maintenance/EO-007-package-local-text-primitives.md)
-
-- **问题证据**：多个 package 内散布 `utf8ByteLength`、code-point byte count、`isRecord`、URI
-  比较和 canonical JSON 等小型实现。
-- **目标 seam**：在同一个独立 maintenance 中按语义拥有者建立 package-local seam；不建立跨包
-  `text-utils` 或 `common`，也不把等价类别拆成互相延后的 modifications。
-- **Build vs Buy**：标准库或现有 Zod/schema 优先；禁止建立跨仓库 `text-utils` 或 `common`。
-- **验收**：scope matrix 列出每个 package、symbol/file、disposition、reuse/Build-vs-Buy、
-  tests 和 exclusions；列出删除位置；调用者需要不同错误时使用映射；没有证据证明相同语义
-  的实现保持分离并记录原因。
-- **规模与风险**：每 tranche 小；整体不得作为一次全仓机械重构。
+| 机会 | 最终状态 | 长期 owner / 结论 | Maintenance / PR |
+|---|---|---|---|
+| EO-001 Provider endpoint policy | `已晋升` | Extension-private endpoint policy 拥有 normalization、loopback 与 credential 语义；调用方保留诊断和 UI 映射。 | [maintenance](maintenance/EO-001-provider-endpoint-policy.md)；[PR #215](https://github.com/yangzuo0621/ctrl-zebra/pull/215) |
+| EO-002 Extension test support | `已晋升` | Extension URI fixture 与 Webview host fixture 仅供测试使用；不扩大公共 package 或生产策略。 | [maintenance](maintenance/EO-002-extension-test-support.md)；[PR #216](https://github.com/yangzuo0621/ctrl-zebra/pull/216) |
+| EO-003 IDE source projection | `已完成` | Extension `IdeSourceProjector` 拥有 URI/path、Unicode/UTF-8、range/order 与 truncation 投影；adapters 保留来源和错误映射。 | [maintenance](maintenance/EO-003-ide-source-projection.md)；[PR #217](https://github.com/yangzuo0621/ctrl-zebra/pull/217) |
+| EO-004 Bounded text persistence | `已晋升` | Extension `VscodeBoundedTextStorage` 拥有 bounded persistence I/O；Session/Checkpoint 保留领域行为、原子性、恢复和兼容性。 | [maintenance](maintenance/EO-004-bounded-text-persistence.md)；[PR #218](https://github.com/yangzuo0621/ctrl-zebra/pull/218) |
+| EO-005 MCP catalog refresh | `已晋升` | package-private collector 与 refresh lifecycle 拥有分页、generation 与 cancellation 复用；Tool/Prompt/Resource policy 保留 schema、撤销和诊断。 | [maintenance](maintenance/EO-005-mcp-catalog-refresh.md)；[PR #220](https://github.com/yangzuo0621/ctrl-zebra/pull/220) |
+| EO-006 MCP error ownership | `已完成` | MCP client 拥有稳定 client error normalization；Extension 保留 Host/process/configuration fallback 与展示映射。 | [maintenance](maintenance/EO-006-mcp-error-ownership.md)；[PR #221](https://github.com/yangzuo0621/ctrl-zebra/pull/221) |
+| EO-007 Package-local text primitives | `已完成` | 各 package 按语义拥有 text/record/URI/canonical JSON/equality seam；不建立跨包 `text-utils` 或 `common`。 | [maintenance](maintenance/EO-007-package-local-text-primitives.md)；[PR #222](https://github.com/yangzuo0621/ctrl-zebra/pull/222)，merged commit `53bc57b` |
 
 ## 5. Build vs Buy 机会
 
 ### EO-008 Safe regex engine
 
+- **契约记录**：[T2001 Protocol contract](protocol/tools-and-file-lifecycle.md#search-regex-mode)。
 - **路线图关系**：T2001 应先决定允许的 regex 语法、安全界限和失败契约；T2005 才实现受控 regex
   搜索。本机会不创建插队任务。
 - **候选机制**：优先评估纯 JavaScript `re2js`。当前公开资料描述其为 RE2/RE2J 的 JavaScript
@@ -276,20 +191,3 @@ EO-012 可独立于 Phase 20 评估；除非发现当前 negotiation 存在实�
   实现，不保留双路径；全量 MCP unit、Extension integration、VSIX smoke tests 通过。
 - **规模与风险**：中到大；协议和兼容性敏感，但净删除潜力较高。应先做独立 investigation / proof
   tranche，再决定是否晋升为 maintenance。
-
-## 6. 处置记录
-
-晋升或关闭机会时追加一行；不要在上方复制正式任务状态。
-
-| 日期 | 机会 | 处置 | 正式记录 | 说明 |
-|---|---|---|---|---|
-| 2026-08-12 | EO-003 IDE source projection | 独立 maintenance 已完成 | [EO-003 maintenance record](maintenance/EO-003-ide-source-projection.md)；[PR #217](https://github.com/yangzuo0621/ctrl-zebra/pull/217) | Projector 契约、三处 adapter 迁移及全套验证已完成；Task-reviewer 已批准，PR 通过 CI 后按 reviewed squash flow 合入。 |
-| 2026-08-12 | EO-001–EO-011 | 初始登记 | — | 来自 Phase 19 后的重复实现与 Build vs Buy 审查 |
-| 2026-08-12 | EO-001 | 已晋升为独立 maintenance | [EO-001 maintenance](maintenance/EO-001-provider-endpoint-policy.md) / [PR #215](https://github.com/yangzuo0621/ctrl-zebra/pull/215) | 在最新 `origin/main` 上重新验证两处重复 endpoint/loopback 判定后建立 Extension-private policy seam |
-| 2026-08-12 | EO-002 | 已晋升为独立 maintenance | [EO-002 maintenance](maintenance/EO-002-extension-test-support.md) | 在最新 `origin/main` 上重新验证六份 Extension `TestUri` 与两份 Webview host fake 后建立两个 application-private test-support seam |
-| 2026-08-12 | EO-004 | 已晋升为独立 maintenance | [EO-004 maintenance](maintenance/EO-004-bounded-text-persistence.md) | 在最新 `origin/main` `6ef3a3b` 上重新验证 Session/Checkpoint 的重复 bounded text I/O 后建立 Extension-private `VscodeBoundedTextStorage` seam |
-| 2026-08-13 | EO-005 | 已晋升为独立 maintenance | [EO-005 maintenance](maintenance/EO-005-mcp-catalog-refresh.md) | 在最新 `origin/main` `9e9e98e` 上重新验证 Tool/Prompt/Resource 的重复分页与刷新生命周期后建立 package-private MCP catalog collector/refresh seam |
-| 2026-08-13 | EO-006 | 独立 maintenance 已完成 | [EO-006 maintenance](maintenance/EO-006-mcp-error-ownership.md)；[PR #221](https://github.com/yangzuo0621/ctrl-zebra/pull/221) | MCP client stable error normalization is package-owned; Extension retains Host/process/configuration fallback mapping; duplicate client-message ownership removed and verified. |
-| 2026-08-13 | EO-007 | 独立 maintenance 已完成 | [EO-007 maintenance](maintenance/EO-007-package-local-text-primitives.md)；[PR #222](https://github.com/yangzuo0621/ctrl-zebra/pull/222) | Package-local text, record, URI, canonical JSON, and equality seams merged by reviewed squash commit `53bc57b`; CI and independent review gates passed; feature branch cleaned up. |
-| 2026-08-13 | EO-008 Safe regex engine | T2001 已完成契约评估，T2005 条件候选 | [T2001 Protocol contract](protocol.md#search-regex-mode) | 严格产品 dialect 采用 RE2 syntax/safety semantics；`re2js@2.8.5` 的 LOOKBEHINDS 扩展使其不是无过滤 drop-in，须由 T2005 adapter 拒绝扩展并完成 bounds/cancellation/adversarial evidence；T2001 未加依赖。 |
-| 2026-08-13 | EO-012 MCP SDK-native negotiation | 初始登记为评估候选 | — | 现有 MCP SDK v2 依赖已提供 version negotiation 能力；登记 differential validation 与 SDK-native replacement 的 Build vs Buy 评估，不改变当前路线图执行点。 |
