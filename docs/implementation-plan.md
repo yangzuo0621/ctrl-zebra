@@ -208,7 +208,7 @@
 | 20 | T2001 | 已完成 | [#227](https://github.com/yangzuo0621/ctrl-zebra/pull/227) | 2026-08-13 |
 | 20 | T2002 | 已完成 | [#229](https://github.com/yangzuo0621/ctrl-zebra/pull/229) | 2026-08-14 |
 | 20 | T2003 | 已完成 | [#231](https://github.com/yangzuo0621/ctrl-zebra/pull/231) | 2026-08-14 |
-| 20 | T2004 | 进行中 | — | — |
+| 20 | T2004 | 进行中 | [#232](https://github.com/yangzuo0621/ctrl-zebra/pull/232) | 2026-08-14 |
 | 20 | T2005 | 待开始 | — | — |
 | 21 | T2101 | 待开始 | — | — |
 | 21 | T2102 | 待开始 | — | — |
