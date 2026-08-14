@@ -62,10 +62,19 @@ docs consulted
 verification and CI state
 reuse-audit tier, candidates, reuse decisions, and final evidence
 known caveats or deviations
+Context Used:
+- <actually read specification document or principal source file>
+Context Count: <number of listed entries>
+Searches Performed:
+- <search category> — <target>; full-repo similarity audit: yes|no
 ```
 
 Do not reproduce whole source documents in the packet. Point to the owning section and let the Reviewer
-open it only when the diff, task, or a suspected conflict requires it.
+open it only when the diff, task, or a suspected conflict requires it. `Context Used` lists only the
+specification documents and principal source files actually read by the Executor; omit incidental
+guidance and unreferenced files. `Searches Performed` contains only category/target pairs and the
+full-repo similarity-audit flag, never raw search output, exact token counts, or a tool-call transcript.
+Deduplicate context entries and use the number of listed entries for `Context Count`.
 
 ### 5. Review Loop
 Hand off the current PR/revision to `task-reviewer`.

@@ -68,6 +68,32 @@ current profiles and renewed authorization; do not create aliases or silently br
 The coordinator waits for each role, records the actual revision reviewed, and never treats a
 dispatched or running role as completed.
 
+## Lightweight Workflow Observability
+
+Every Executor, Reviewer, and Finalizer handoff/report carries two bounded evidence fields:
+
+```text
+Context Used:
+- <one actually read specification, principal source, or allowed operational input>
+Context Count: <number of listed entries>
+
+Searches Performed:
+- <search category> — <target>; full-repo similarity audit: yes|no
+```
+
+`Context Used` names only files or operational inputs that the role actually read. The Executor lists
+the specification documents and principal source files it used; the Reviewer lists only context read
+in addition to the handoff and PR diff (it may report `handoff + PR diff only`); and the Finalizer keeps
+its list to the handoff, PR metadata, CI, and `docs/implementation-plan.md` when those are the only
+inputs read. Deduplicate entries and do not list incidental guidance, unreferenced files, full command
+output, exact token counts, or every tool call. `Context Count` is the number of listed entries, with
+`handoff + PR diff only` counting as zero additional context.
+
+`Searches Performed` records only a search category and target plus whether a full-repo similarity audit
+was triggered. It never includes raw `rg` output, exact match/token counts, or a tool-call transcript.
+The root coordinator carries the role counts and audit flags into the final report without inventing
+missing values.
+
 ## Retry and Circuit Breakers
 - Allow at most two Reviewer rejection/correction cycles. Require each review to consolidate all
   current blocking findings; stop rather than continue agent ping-pong after the limit.
@@ -87,4 +113,17 @@ dispatched or running role as completed.
 
 ## Completion
 Report the task, profile, branch, PR, reviewed and merged revisions when applicable, checks/CI evidence,
-review cycles, final task state, and cleanup actually performed. Never invent state.
+review cycles, final task state, and cleanup actually performed. Include this concise section in every
+completed root report:
+
+### Workflow Observability
+
+- Executor context count: `<n>`
+- Reviewer additional context count: `<n>`
+- Finalizer context count: `<n>`
+- Full-repo similarity audit count: `<n>`
+- Review-loop count: `<n>`
+
+The full-repo audit count is the number of role reports marking `full-repo similarity audit: yes`;
+the review-loop count is the number of Reviewer rejection/correction cycles. Never invent state or
+replace these summaries with raw search output.
