@@ -50,6 +50,24 @@ Do not route V2 closure to Sol-Planner. A planning or architecture question disc
 belongs to the coordinator/Planner; one discovered after approval requires the coordinator to stop for
 change-control direction rather than asking Finalizer to redesign the task.
 
+## V2 Plan Write Scope
+
+For `AUTO_DRAFT_V2` and `AUTO_FULL_V2`, writes to `docs/implementation-plan.md` are limited to this
+exact allowlist:
+
+- task status;
+- completion PR reference and completion date;
+- progress counts;
+- current task;
+- next task.
+
+No other plan writes are permitted in V2. Never copy implementation summaries, reuse/similarity
+audits, Build-vs-Buy decisions, test/CI details, reviewer findings, symbol inventories, design
+rationale, or other execution details into the plan. Ordinary execution evidence remains in the
+conversation, handoff, or PR; durable architecture or audit conclusions belong in the owning domain
+document, an ADR, or an exceptional maintenance record. The `Allowed Updates` list below remains the
+documented V1 compatibility contract and is not expanded by this V2 narrowing.
+
 ## Legacy V1 Finalization Audit
 
 For `MANUAL`, `AUTO_DRAFT_V1`, and `AUTO_FULL_V1`, verify:
@@ -88,6 +106,14 @@ determines re-review impact after a V1 planning escalation and stops for user di
 control applies.
 
 ## Allowed Updates
+
+For `MANUAL`, `AUTO_DRAFT_V1`, and `AUTO_FULL_V1`, retain the existing closure update scope below:
+
+Every V1 write to `docs/implementation-plan.md` still obeys the root `AGENTS.md` index-only ownership;
+the operation categories below remain unchanged, but none authorizes persisting execution details.
+Do not copy implementation summaries, reuse/similarity audits, Build-vs-Buy decisions, test/CI details,
+reviewer findings, symbol inventories, design rationale, or other execution evidence into the plan.
+
 You may:
 - update `docs/implementation-plan.md`;
 - mark the completed task **Done** using the project's existing status convention;

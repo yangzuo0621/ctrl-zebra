@@ -6,9 +6,15 @@ These rules keep contributor and agent work scoped, verifiable, and architectura
 
 - Work on one roadmap task ID or standalone maintenance change at a time; verify and report it before
   starting another.
-- `docs/implementation-plan.md` owns roadmap order, status, evidence, and execution point. Linked
-  specifications under `docs/roadmap/phases/` own task goals, deliverables, tests, exclusions,
-  prerequisites, and gates; completed specifications move to `docs/roadmap/archive/`.
+- `docs/implementation-plan.md` owns only roadmap order, task status, completion PR/date references,
+  progress summary, current/next execution point, and links to detailed task specifications. It is
+  an index rather than an execution log: never persist task-specific implementation summaries,
+  reuse/similarity audits, Build-vs-Buy decisions, test/CI details, reviewer findings, symbol
+  inventories, or design rationale there. Ordinary task execution evidence belongs in the
+  conversation, handoff, or PR; only durable architecture or audit conclusions belong in the owning
+  domain document, an ADR, or an exceptional maintenance record. Linked specifications under
+  `docs/roadmap/phases/` own task goals, deliverables, tests, exclusions, prerequisites, and gates;
+  completed specifications move to `docs/roadmap/archive/`.
 - `docs/roadmap/product-foundation.md` owns product scope, baseline, module boundaries, contract map,
   product verification, and definition of done. Public entry points and domain documents own exact
   interfaces and schemas.
@@ -132,7 +138,8 @@ owns wire and Tool DTO contracts.
   dimensions, wrapper/error-translation rules, inventory fields, and evidence semantics.
 
 - For general-purpose mechanisms, repeated infrastructure, or dependency changes, follow
-  [`Build vs Buy`](docs/development.md#build-vs-buy) and record the decision in the task plan.
+  [`Build vs Buy`](docs/development.md#build-vs-buy) and record the decision in the task's transient
+  execution, handoff, or PR evidence.
 - CtrlZebra owns policy, authorization, lifecycle, state, security, budgets, cancellation,
   persistence compatibility, and stable errors. Use maintained mechanisms only when they reduce
   total maintenance, remain behind CtrlZebra-owned interfaces, and preserve those boundaries.
@@ -141,7 +148,9 @@ owns wire and Tool DTO contracts.
   unjustified repeated infrastructure.
 
 For roadmap work, post the Current Task, Reuse Audit, Build vs Buy, Test Plan, and Constraint Gate
-sections from `docs/roadmap/task-template.md`. For maintenance, post:
+sections from `docs/roadmap/task-template.md` as transient execution, handoff, and PR evidence; do
+not copy those details into `docs/implementation-plan.md`. For maintenance, post the following as
+transient execution, handoff, or PR evidence:
 
 ```md
 ### Maintenance Change
@@ -171,8 +180,8 @@ sections from `docs/roadmap/task-template.md`. For maintenance, post:
   required smoke tests.
 - Finish with `git diff --check`, `git status --short`, and final diff review. Report checks that could
   not run; never claim an unexecuted check passed.
-- Use the roadmap template's completion section. For maintenance, replace `Task` with `Maintenance`,
-  omit `Next task`, report, and stop.
+- Use the roadmap template's completion section for transient execution, handoff, and PR evidence.
+  For maintenance, replace `Task` with `Maintenance`, omit `Next task`, report, and stop.
 
 ## 5. Git and Change Control
 

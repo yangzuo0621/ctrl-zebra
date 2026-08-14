@@ -2,7 +2,7 @@
 
 ## 1. 文档目标与读取顺序
 
-本文档是 roadmap 的权威入口，只维护任务顺序、状态、完成证据、当前执行点以及详细规格的位置。完整产品基础和任务正文拆分保存，避免每次执行任务都把全部历史内容载入 AI 上下文。
+本文档是 roadmap 的权威入口，只维护任务顺序、任务状态、完成 PR/日期引用、进度摘要、当前/下一执行点以及详细规格链接。它是索引而不是执行日志：不得在此持久化任务特定的实现摘要、复用/相似性审计、Build-vs-Buy、测试/CI 细节、Reviewer findings、symbol inventories 或 design rationale。普通任务执行证据保留在会话、handoff 或 PR 中；只有持久的架构或审计结论才进入所属领域文档、ADR 或例外 maintenance 记录。
 
 开始 roadmap 工作时按以下顺序读取：
 
@@ -15,7 +15,7 @@
 
 | 信息 | 唯一权威位置 |
 |---|---|
-| 任务顺序、状态、完成 PR、完成日期、当前执行点 | 本文档 |
+| 任务顺序、状态、完成 PR、完成日期、进度摘要、当前/下一执行点、规格链接 | 本文档 |
 | 活动或计划中任务的目标、产物、测试、排除项、前置条件和阶段门禁 | 对应的 `docs/roadmap/phases/phase-xx.md` |
 | 已完成任务的历史规格和阶段门禁 | 对应的 `docs/roadmap/archive/phase-xx.md` |
 | 当前授权产品范围、技术基线、模块边界、跨模块契约地图、产品级验证要求和完成定义 | [产品与技术基础规格](roadmap/product-foundation.md) |
@@ -24,7 +24,7 @@
 | 任务执行报告格式 | [任务执行模板](roadmap/task-template.md) |
 | 尚未获准的复用、模块深化、依赖引入和重复消除候选及其评估处置 | [工程机会台账](engineering-opportunities.md) |
 
-任务正文不重复维护状态，领域文档不重复维护任务顺序。发生冲突时，先按上表确定权威位置，再通过变更控制修正文档。
+本文档只作索引，不持久化任务执行日志或详细证据；任务正文不重复维护状态，领域文档不重复维护任务顺序。发生冲突时，先按上表确定权威位置，再通过变更控制修正文档。
 
 ## 3. 范围与技术基础
 
@@ -61,7 +61,7 @@
 4. 任务通过全部验证后，在最终 PR 中将状态改为 `已完成`，填写完成 PR 和完成日期；PR 未合入前，主干中的任务仍不算完成。
 5. 约束 PR 不能把任务标记为 `已完成`。如果任务长期受阻且工作分支不会合入，应通过独立状态 PR 将 `受阻` 状态同步到主干。
 6. `已完成` 任务只有在发现验收记录错误或实施规格被正式修订时才能重新打开，并必须说明原因。
-7. 每次状态变化同时更新下方进度摘要；完成证据使用 GitHub PR 编号或链接，不记录无法在 squash 前确定的最终 commit SHA。
+7. 每次状态变化同时更新下方进度摘要；完成引用使用 GitHub PR 编号或链接，不记录无法在 squash 前确定的最终 commit SHA。
 
 **进度摘要**：
 
@@ -227,175 +227,9 @@
 
 ### 当前任务
 
-- ID：T2004
-- 状态：进行中
-- 规格：[阶段 20：T2004 实现多文件原子编辑](roadmap/phases/phase-20.md#t2004实现多文件原子编辑)
-
-### 完成结果
-
-- 实现摘要：已实现并经独立 Reviewer 以 revision `b47888dccc81d4754e785e66f245a030ace3c932` 批准；PR #231 required CI 全部通过，具备 squash merge 条件。
-- 测试结果：聚焦 T2003 8 files/51 tests；core 30 files/473 tests；extension adapters/controllers 验证及 recursive TypeScript、`pnpm check`、extension build、`git diff --check` 均通过；GitHub Actions run `31758730278` 的 Ubuntu、macOS、Windows gates 全部通过。根 `pnpm run test:unit` 曾在 124s 后不退出，结果不定，未作为通过证据。
-- Similarity Audit：实现稳定后已执行全仓复查（命令：`rg -n --hidden -S --glob '!node_modules/**' --glob '!dist/**' --glob '!coverage/**' "File(Delete|Rename)(Plan|Applier|ApprovalWorkflow)|parseFile(Delete|Rename)Plan|propose_file_(delete|rename)|createProposeFile(Delete|Rename)Tool|VsCodeProposeFileDeleteRenameWorkspace|FileMutationApprovalWorkflow|WorkspaceScope|CheckpointRestorer|DiffPresenter|WorkspaceEdit|workspace[.]fs|hashText|countLogicalLines|assertParentDirectory" .`；定义计数只统计 packages/apps 生产源码声明，排除 import、re-export、测试和文档引用）。实际新增/修改符号、数量、owner 与处置如下：
-  - 新建 core 计划边界（各 1 个定义）：`packages/core/src/file-delete-rename.ts:FileDeletePlan`、`FileRenamePlan`、`InvalidFileDeletePlanError`、`InvalidFileRenamePlanError`、`FileMutationTextHasher`、`parseFileDeletePlan`、`parseFileRenamePlan`（core 计划/内容身份 owner，新建）；`maxFileDeletePathCharacters`、`maxFileDeletePathBytes`、`maxFileDeleteContentCharacters`、`maxFileDeleteContentLines`、`maxFileDeleteContentBytes`、`maxFileRenamePathCharacters`、`maxFileRenamePathBytes`、`maxFileRenameContentCharacters`、`maxFileRenameContentLines`、`maxFileRenameContentBytes`（各 1，复用 `file-create` 的既有边界常量，不复制限制算法）；私有 `assertHash`、`isSafeMutationPath`、`isSafeUri`、`isBoundedMutationText`、`countLogicalLines`（各 1，core-local validation owner）。
-  - 新建 builtin Tool 契约（列出的每个符号各 1 个定义）：`packages/builtin-tools/src/propose-file-delete.ts` 的 `proposeFileDeleteToolName`、`proposeFileDeleteToolDescription`、`maxProposedFileDeleteCharacters`、`maxProposedFileDeleteLines`、`maxProposedFileDeleteBytes`、`maxProposedFileDeletePathBytes`、`proposeFileDeleteInputSchema`、`ProposeFileDeleteInput`、`FileDeleteTargetSnapshot`、`ProposeFileDeleteWorkspace`、`InvalidWorkspaceFileDeleteTargetError`、`FileDeleteTargetNotFoundError`、`StaleFileDeleteTargetError`、`createProposeFileDeleteTool`；`packages/builtin-tools/src/propose-file-rename.ts` 的 `proposeFileRenameToolName`、`proposeFileRenameToolDescription`、`maxProposedFileRenameCharacters`、`maxProposedFileRenameLines`、`maxProposedFileRenameBytes`、`maxProposedFileRenamePathBytes`、`proposeFileRenameInputSchema`、`ProposeFileRenameInput`、`FileRenameTargetSnapshot`、`ProposeFileRenameWorkspace`、`InvalidWorkspaceFileRenameTargetError`、`FileRenameSourceNotFoundError`、`FileRenameTargetExistsError`、`StaleFileRenameTargetError`、`createProposeFileRenameTool`；private `prepareFileDeleteApproval`/`parseProposeFileDeleteInput`/`parseFileDeleteTargetSnapshot`/`isBoundedText`/`countLogicalLines` and `prepareFileRenameApproval`/`parseProposeFileRenameInput`/`parseFileRenameTargetSnapshot`/`isSafePath`/`isBoundedText`/`countLogicalLines` (each 1, operation-local boundary owner; no shared utility added). `FileDeleteTargetMissingError` 与 `FileRenameSourceMissingError` 各是 1 个显式兼容 alias export，不是第二个 error class。
-  - 新建 Extension operation owners（各 1 个定义）：`apps/extension/src/adapters/vscode-propose-file-delete-rename-workspace.ts:VsCodeProposeFileDeleteRenameWorkspace`（Host capture/scope owner；同文件 private `assertParentDirectory`、`isPresent`、`hashText` 也各 1）；`file-delete-applier.ts` 的 `FileDeleteOwnership`、`FileDeleteResource`、`FileDeleteTarget`、`FileDeleteApplierDependencies`、`FileDeleteConflictError`、`FileDeleteApplyError`、`FileDeleteApplier`；`file-rename-applier.ts` 的对应 `FileRenameOwnership`、`FileRenameResource`、`FileRenameTarget`、`FileRenameApplierDependencies`、`FileRenameConflictError`、`FileRenameApplyError`、`FileRenameApplier`（各自精确身份/原子 WorkspaceEdit owner）；`create-vscode-file-delete-applier.ts:createVsCodeFileDeleteApplier` 与 `create-vscode-file-rename-applier.ts:createVsCodeFileRenameApplier`（各 1，VS Code composition adapter）；`file-delete-approval-workflow.ts:FileDeleteApprovalWorkflowDependencies`/`FileDeleteApprovalWorkflow` 与 `file-rename-approval-workflow.ts:FileRenameApprovalWorkflowDependencies`/`FileRenameApprovalWorkflow`（各 1，operation-specific approval owner，深化既有 `FileMutationApprovalWorkflow`）。
-  - 既有 owner 的修改计数仍各 1：`apps/extension/src/adapters/checkpoint-restorer.ts:CheckpointRestorerDependencies`、`CheckpointRestorer`（加入 lifecycle rename restore），同文件 `RenamePair`/`getRenamePair`（各 1，rename pairing private owner，新建）；`create-vscode-checkpoint-restorer.ts:createVsCodeCheckpointRestorer`、`controllers/tool-approval-workflow.ts:ToolApprovalWorkflowRouter`、`controllers/readonly-tool-registry.ts:WorkspaceToolRegistryDependencies`/`createWorkspaceToolRegistryProvider`、`extension.ts:activate`（各 1，分别深化既有 restore/router/registry/composition seam，无平行 owner）。
-  - 直接复用/深化清单：`FileMutationApprovalWorkflow`（approval lifecycle）、`WorkspaceScope.validate`/`validateNewFile`（selected-root/canonical containment）、`CheckpointRestorer`（legacy/lifecycle recovery）、`DiffPresenter.presentTextPair`（temporary Diff）、VS Code `WorkspaceEdit.deleteFile`/`renameFile` 与 `workspace.fs.stat`/`openTextDocument`（Host atomic/stat）、既有 UTF-8/hash primitives 与 `file-create` 的 bounded text/path constants；未引入依赖。
-  - Remaining justified similarities：delete 与 rename 各保留一套 operation-specific plan/parser/Tool/applier/workflow/error contract（source/target identity 与副作用不同，不能由 create/edit owner 表达）；私有 `countLogicalLines` 生产定义 5 处（core create/delete-rename、builtin create/delete/rename）、`isBoundedText` 3 处（builtin create/delete/rename）、Host `hashText` 3 处（create/edit/delete-rename adapters）及 `assertParentDirectory` 2 处（create 与 delete/rename adapters）均维持边界内局部 owner，未抽出无授权的跨层 utility 或 pass-through wrapper。
-  - 审计结论：每个新增公开符号只有 1 个生产定义；未发现第二/第三份可替代实现、由测试 fake 晋升的实现、无额外语义的 wrapper、被遗留实现与新实现并存，或新增依赖。上述局部相似性均已记录并有明确 owner/语义处置；无待处理的 duplicate/fake/wrapper/dependency finding，Reviewer 将独立复查差异与定义计数。
-- 实际直接复用或深化的已有功能：`FileMutationApprovalWorkflow`、`WorkspaceScope`、`CheckpointRestorer`、
-  `DiffPresenter`、VS Code WorkspaceEdit/stat、core UTF-8/hash primitive。
-- 删除或替代的旧实现：无；legacy Checkpoint schema/restore 兼容路径保留。
-- 设计偏差：无已批准偏差。
-- 完成 PR：[#231](https://github.com/yangzuo0621/ctrl-zebra/pull/231)。
-- 完成日期：2026-08-14
-- 下一任务：T2004（仅在 T2003 完成后启动）。
-
-### T2002 完成记录
-
-- 完成摘要：已实现并经独立 Reviewer 以 revision `48099e8a6bce365b69f22bd9b9a60e1d0c764432` 批准，
-  PR #229 已通过 required CI，具备合入条件。
-- 测试结果：聚焦单元 34、完整单元 166 files/1808 tests、递归 TypeScript、Biome/pnpm check、构建及
-  `git diff --check` 均通过；CI run `31720666201` 的 Ubuntu、macOS、Windows gates 均通过。VS Code
-  集成命令曾被测试环境取消，结果保持不定性，未作为通过证据。
-- Similarity Audit：最终复查命令为 `rg -n "parseFileCreatePlan|proposeFileCreateToolName|FileCreateApprovalWorkflow|FileMutationApprovalWorkflow|validateNewFile|FileCreateApplier|checkpoint(Before|After)StateSchema|presentTextPair" packages apps`。实际符号清单与定义计数：`packages/core/src/file-create.ts:parseFileCreatePlan`（1，core owner，深化 strict parser）；`packages/builtin-tools/src/propose-file-create.ts:createProposeFileCreateTool/proposeFileCreateToolName`（各 1，builtin owner，新建）；`apps/extension/src/controllers/file-mutation-approval-workflow.ts:FileMutationApprovalWorkflow`（1，通用 owner，深化）；`apps/extension/src/controllers/file-create-approval-workflow.ts:FileCreateApprovalWorkflow`（1，create owner，新建）；`apps/extension/src/adapters/workspace-scope.ts:WorkspaceScope.validateNewFile`（1，scope owner，深化）；`apps/extension/src/adapters/file-create-applier.ts:FileCreateApplier`（1，host mutation owner，新建）；`packages/protocol/src/checkpoint.ts:checkpointBeforeStateSchema/checkpointAfterStateSchema`（各 1，protocol owner，新建）；`apps/extension/src/adapters/diff-presenter.ts:DiffPresenter.presentTextPair`（1，Diff owner，深化）。既有 `propose_file_edit`/`WorkspaceEditApplier` 定义各保留 1 份，语义不同且不替代；无第二份/第三份算法、fake、wrapper 或依赖。Reviewer 将独立复查差异与定义计数。
-- 实际直接复用或深化的已有功能：`FileMutationApprovalWorkflow`、`WorkspaceScope`、`CheckpointRestorer`、
-  `DiffPresenter`、VS Code WorkspaceEdit/stat、core `utf8ByteLength`。
-- 删除或替代的旧实现：无；legacy Checkpoint schema/restore 兼容路径保留。
-- 设计偏差：无已批准偏差；集成命令在当前环境取消属于验证环境状态，不改变契约。
-- 完成 PR：[#229](https://github.com/yangzuo0621/ctrl-zebra/pull/229)（待 squash merge）。
-- 完成日期：2026-08-14
-- 下一任务：T2003（仅在 T2002 完成后启动）。
-
-### T2001 完成记录
-
-- 完成摘要：完成文件创建、删除、重命名、单文件/多文件编辑的不可变计划、精确一次性审批、Diff、
-  Checkpoint、原子提交、失败优先级、恢复/兼容规则及显式 RE2-compatible regex 搜索契约；本任务
-  仅更新规范与约束文档，未引入 runtime 实现、依赖或 Schema 源码。
-- 复用/Similarity：复用既有 owners；无新增 runtime 定义、重复算法、fake、wrapper 或依赖。详见
-  [历史审计记录](maintenance/T2001-file-lifecycle-contract-audit.md)。
-- 完成证据：[PR #227](https://github.com/yangzuo0621/ctrl-zebra/pull/227)，审阅通过 revision
-  `bab91b1b07222c1fd83cea9ed40e7e476d4a9ce7`；GitHub Actions Ubuntu、macOS、Windows required
-  checks 均通过；本地 package/smoke 验证、`pnpm check` 与 `git diff --check` 均通过。
-- 完成日期：2026-08-13
-- 下一任务：T2002
-
----
-
-### T1901 完成记录
-
-- 完成摘要：仅定义 IDE context 与 read-only Tool 契约；docs-only PR #201 即为完整任务产物，T1902 负责实现 Host adapter。
-- 完成证据：[PR #201](https://github.com/yangzuo0621/ctrl-zebra/pull/201)，squash merge revision `d15efff1fd6f09d07abad9fd7f427b2d052a2b19`；GitHub Actions run `31544541307` 的 Ubuntu、macOS、Windows 验证均通过；`pnpm check`、`git diff --check` 及 T1901 跨文档 anchor/file validation 均通过。
-- 完成日期：2026-08-12
-- 下一任务：T1902
-
----
-
-### T1902 完成记录
-
-- 完成摘要：实现 IDE editor context Host adapter、read-only Tool 注册与 bounded editor/selection projection，覆盖活动编辑器、selection、可见范围和打开编辑器信息；接入 protocol、builtin Tool、registry，并保留 workspace/trust、取消、预算、竞态与硬限制边界，同时遵守 disabled setting boundary（T1905）。
-- 完成证据：[PR #203](https://github.com/yangzuo0621/ctrl-zebra/pull/203)，实现 revision `2bbe094e30cf9aed2fdc14322e1e4601ad75840d`；GitHub Actions run `31548420686` 的 Ubuntu、macOS、Windows 验证均通过（Ubuntu integration tests、coverage gate、build 均通过）；实现 revision 的单元测试、类型检查、格式/lint、构建及 `git diff --check` 均通过。
-- 完成日期：2026-08-12
-- 下一任务：T1903
-
----
-
-### T1903 完成记录
-
-- 完成摘要：实现结构化 diagnostics Tool，接入 VS Code diagnostics Host adapter；对语言、来源聚合、去重、排序、预算、取消、workspace/trust 与输出边界提供约束和回归覆盖。
-- 完成证据：[PR #204](https://github.com/yangzuo0621/ctrl-zebra/pull/204)，实现 revision `8d1ce7f4356293984774010080a376f30232579f`；聚焦测试、完整单元测试、类型检查、Biome 检查、构建、Ubuntu 集成测试、coverage gate 及 `git diff --check` 均通过；GitHub Actions run `31551947592` 的 Ubuntu、macOS、Windows 验证均通过。
-- 完成日期：2026-08-12
-- 下一任务：T1904
-
-### T1904 完成记录
-
-- 完成摘要：实现 VS Code 语言服务定义、引用和符号查询的最小只读 Tool 集合；复用现有 Provider 命令，校验返回 URI 与范围，并对 workspace/trust、取消、Provider 失败、结果数量和 URI 组件实施确定性边界。
-- 完成证据：[PR #205](https://github.com/yangzuo0621/ctrl-zebra/pull/205)，实现 revision `94f75d55c00a3b00ca1b1b7948be5317c4ca857a`；GitHub Actions run `31556983168` 的 Ubuntu、macOS、Windows 验证均通过（实际 required checks）；实现 revision 的聚焦/完整测试、类型检查、Biome 检查、构建及 `git diff --check` 均通过。
-- 完成日期：2026-08-12
-- 下一任务：T1905；Phase 19 归档门禁完成后方可进入 T2001。
-
----
-
-### T1905 完成记录
-
-- 完成摘要：实现显式 Ask about Selection / Ask about Active File 入口与可选 editor context 流程；完成 Protocol-v1 DTO、Host capture/owner gates、取消与 stale fencing、去重、clear/overflow 边界，以及 Webview 来源草稿、stale/use-stale/remove 控件、会话/新聊天/销毁清理和无障碍播报；仅在 `ctrlZebra.editorContext.enabled` 启用时接入 staged read-editor-context Tool。
-- 完成证据：[PR #207](https://github.com/yangzuo0621/ctrl-zebra/pull/207)，生产实现 revision `9c991c3ac584095c9fadc7e2b702fae98227cb04`；最新验证 revision `79fb42ba6aff6afb530b8f9ef9f63beb398b87d9`（coverage gate 修复）。本地/PR 验证：完整单元测试 1699 个、T1905 聚焦测试、`pnpm check`、类型检查、`pnpm build`、集成测试（exit 0）、VSIX/package smoke、`git diff --check`；GitHub Actions run `31564300781` 的 Ubuntu、macOS、Windows required checks 全部通过，Ubuntu 集成测试与 coverage gate 均通过。
-- 完成日期：2026-08-12
-- 启动门禁：Phase 19 归档校验已于 2026-08-12 通过；T2001 于该门禁后按独立授权启动。
-
----
-
-### T1701 完成记录
-
-- 完成摘要：统一 Webview 产品语言与字符串所有权，集中用户可见文案，并统一屏幕阅读器播报、状态和错误文案。
-- 完成证据：[PR #183](https://github.com/yangzuo0621/ctrl-zebra/pull/183)；单元测试（124 个文件、1466 个测试）、类型检查、Biome 检查（337 个文件）、Webview 构建及 `git diff --check` 均通过；GitHub CI 的 Ubuntu、macOS、Windows 验证均通过。
-- 完成日期：2026-08-11
-- 下一任务：T1702
-
-### T1702 完成记录
-
-- 完成摘要：实现受限的技术 Markdown 呈现，支持常用技术结构并阻断原始 HTML、危险链接协议与未授权资源；通过 Extension/VS Code 打开外链。
-- 完成证据：[PR #184](https://github.com/yangzuo0621/ctrl-zebra/pull/184)；聚焦测试 31/31、完整单元测试（125 个文件、1482 个测试）、类型检查、Biome 检查、Webview 构建、集成测试（exit 0）及 `git diff --check` 均通过；GitHub CI 的 Ubuntu、macOS、Windows 验证均通过。
-- 完成日期：2026-08-11
-- 下一任务：T1703
-
-### T1703 完成记录
-
-- 完成摘要：修复 assistant 消息气泡样式选择器与角色契约失配，并补充角色属性与布局回归覆盖。
-- 完成证据：[PR #185](https://github.com/yangzuo0621/ctrl-zebra/pull/185)；GitHub CI 的 Ubuntu、macOS、Windows 验证均通过（格式与 lint、类型检查、单元测试、构建；Ubuntu 另含集成测试与覆盖率门禁）；`git diff --check` 通过。
-- 完成日期：2026-08-11
-- 下一任务：T1801
-
-### T1801 完成记录
-
-- 完成摘要：实现 MCP Tool Schema 的单工具失败隔离、稳定拒绝原因与有界 `rejectedTools` 投影；以带序列号的单一 combined extension/mcp-tool-catalog 扩展投影原子发布接受与拒绝结果，同时保持 legacy extension/mcp-tools 兼容，并覆盖分页、刷新、断开竞态、上限与旧客户端兼容。
-- 完成证据：[PR #188](https://github.com/yangzuo0621/ctrl-zebra/pull/188)；实现 revision `4bc1efc` 的 GitHub Actions run `31507602189` 中 Ubuntu、macOS、Windows 均通过，并完成 `pnpm check`、`pnpm typecheck`、完整单元测试（1503 个）、集成测试、聚焦 T1801 测试及 `git diff --check`；后续 closure-only 计划文档提交以 required checks 作为合并门禁。
-- 完成日期：2026-08-11
-- 下一任务：T1802
-
-### T1802 完成记录
-
-- 完成摘要：按已归档的 Schema 关键字分类与引用规则规范化 MCP Tool Schema，保留受支持关键字并以稳定 reason 拒绝不支持结构，不泄漏 schema 路径信息。
-- 完成证据：[PR #191](https://github.com/yangzuo0621/ctrl-zebra/pull/191)，最终实现 revision `0a23753fb9d0f7a4de92f20980f51b7d74bc3af5`；最新本地聚焦测试 45/45、MCP 测试 110/110、完整单元测试 1517 个、集成测试 exit 0、`pnpm check`、`pnpm typecheck` 与 `git diff --check` 均通过；GitHub Actions run `31512898994` 的 Ubuntu、macOS、Windows 验证均通过。
-- 完成日期：2026-08-12
-- 下一任务：T1803
-
-### T1803 完成记录
-
-- 完成摘要：实现 MCP 诊断恢复投影与连接生命周期竞态防护，清理断开与重连诊断，隔离过期刷新/清理意图及失败，并补充 UTF-8 诊断截断覆盖。
-- 完成证据：[PR #193](https://github.com/yangzuo0621/ctrl-zebra/pull/193)，最终实现 revision `e98e7b3631a9593977732fdc63b2437bbe10a787`；本地单元测试 1535 个、`pnpm check`、`pnpm typecheck`、构建、集成测试及 `git diff --check` 均通过；GitHub Actions run `31521263866` 的 Ubuntu、macOS、Windows 验证均通过。
-- 完成日期：2026-08-12
-- 下一任务：T1804
-
-### T1804 完成记录
-
-- 完成摘要：固化双纪元 MCP 配置、启动身份与激活门禁，实现协商/降级错误分类、协议与持久化契约、兼容 fixtures 及扩展侧验证。
-- 完成证据：[PR #195](https://github.com/yangzuo0621/ctrl-zebra/pull/195)，最终实现 revision `fc8e31a62f1528382ea498ed551eff97640cf7d3`；GitHub Actions run `31529057458` 的 Ubuntu、macOS、Windows 验证均通过；本地 `pnpm test`（1552）、`pnpm check`、`pnpm typecheck`、VSIX 构建、差异/Parity 校验及 `git diff --check` 均通过。
-- 完成日期：2026-08-12
-- 下一任务：T1805
-
-### T1805 完成记录
-
-- 完成摘要：在 `packages/mcp-client` 实现 modern-first stdio 双纪元探测与协商：有界 `server/discover`、modern 成功/可识别错误锁定、dual 模式下仅对规范允许的非 modern 结果或超时执行一次 legacy 回退；取消、malformed、超限、进程退出、Trust 失效、清理失败和迟到 probe 结果均不会触发错误回退，并覆盖版本闭集与重复协商边界。
-- 完成证据：[PR #197](https://github.com/yangzuo0621/ctrl-zebra/pull/197)，实现 revision `83a1f136e9904e8e9e3e616385516094513912f2`；GitHub Actions run `31532442329` 的 Ubuntu、macOS、Windows 验证均通过；本地 MCP 聚焦测试 132 个、完整测试 1574 个、`pnpm typecheck`、`pnpm check`、构建、集成测试及 `git diff --check` 均通过。
-- 完成日期：2026-08-12
-- 下一任务：T1806
-
-### T1806 完成记录
-
-- 完成摘要：加固 legacy MCP 请求边界，拒绝不符合安全矩阵的 Server 请求并补齐边界验证。
-- 完成证据：[PR #198](https://github.com/yangzuo0621/ctrl-zebra/pull/198)，最终实现 revision `effe08d35c10014c4105dd54af292750984f4351`；GitHub Actions run `31534831357` 的 Ubuntu、macOS、Windows 验证均通过；本地 MCP 聚焦测试 138 个、完整测试 1580 个、`pnpm typecheck`、`pnpm check`、构建、集成测试及 `git diff --check` 均通过。
-- 完成日期：2026-08-12
-- 下一任务：T1807（阶段 18 全部任务完成后先进行阶段性归档校验，再进入阶段 19）
-
-### T1807 完成记录
-
-- 完成摘要：完成 Extension mode-aware wiring、Webview configured/negotiated UI、bounded persistence provenance/recovery no reconnect，以及 real stdio fixtures/e2e/VSIX evidence，满足任务验收要求。
-- 完成证据：[PR #199](https://github.com/yangzuo0621/ctrl-zebra/pull/199)，实现 revision `570531bfc69c6b76ab8386d37483154d5d7266dc`；GitHub Actions run `31539176012` 的 Ubuntu、macOS、Windows 验证均通过；本地 unit 1585、`pnpm check`、`pnpm typecheck`、VSIX 构建、smoke、build、integration 及 `git diff --check` 均通过。
-- 完成日期：2026-08-12
-- 下一任务：T1901（阶段 18 归档校验门禁通过后方可启动）
-
----
+- ID：T2005
+- 状态：待开始
+- 规格：[阶段 20：T2005 为搜索增加受控正则模式](roadmap/phases/phase-20.md#t2005为搜索增加受控正则模式)
 
 ## 5. 阶段规格索引
 
@@ -459,9 +293,10 @@
 多 Agent、多模态输入和运行中插话。它们各自需要新的路线图变更控制；涉及产品范围、信任模型或
 长期架构时还需同步产品基础规格和 ADR。
 
-## 7. 任务执行模板
+## 7. 任务执行、交接和 PR 证据
 
-开始和完成任务时使用 [任务执行模板](roadmap/task-template.md)。
+任务开始、完成和审查时，使用 [任务执行模板](roadmap/task-template.md) 记录临时执行、交接和 PR
+证据。不得将模板详细内容复制到本文档；本文档仅按第 1 节规则回写索引字段。
 
 ## 8. 变更控制
 

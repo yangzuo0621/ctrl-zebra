@@ -5,7 +5,8 @@ Independently review one `Txxxx` implementation against the actual current featu
 
 ## Inputs
 - `AGENTS.md`
-- task definition in `docs/implementation-plan.md`
+- `docs/implementation-plan.md` (task status and specification-link index)
+- linked active phase specification (task definition)
 - current feature PR / actual revision
 - V2 handoff packet when provided
 - relevant source and tests
@@ -19,11 +20,12 @@ Check:
 - required tests and verification;
 - material code smells, including unnecessary complexity, duplication, excessive coupling, SRP violations, deep nesting, and maintenance debt introduced or worsened by the task.
 
-For V2, start with the task definition, handoff packet, and actual diff. Open the owning documents and
-source needed to verify material claims; do not reload unrelated project background. Validate the reuse
-audit tier. For a targeted audit, inspect the evidence and spot-check likely owners or suspicious
-similarities. Repeat repository-wide searches only for a full audit or when concrete evidence requires
-escalation. Return one consolidated set of current blocking findings.
+For V2, start with the linked active phase specification (task definition), the handoff packet, and the
+actual diff. Use `docs/implementation-plan.md` only to confirm task status and the specification link.
+Open the owning documents and source needed to verify material claims; do not reload unrelated project
+background. Validate the reuse audit tier. For a targeted audit, inspect the evidence and spot-check
+likely owners or suspicious similarities. Repeat repository-wide searches only for a full audit or when
+concrete evidence requires escalation. Return one consolidated set of current blocking findings.
 
 Classify findings as:
 - **BLOCKING** → `REJECTED`

@@ -1,6 +1,9 @@
 # Roadmap 任务执行模板
 
-后续每次开始一个任务时使用以下模板；状态只在 [实施计划索引](../implementation-plan.md) 的任务台账中维护。
+后续每次开始一个任务时使用以下模板；状态、完成 PR/日期、进度摘要以及当前/下一任务只在
+[实施计划索引](../implementation-plan.md) 的任务台账中维护。模板其余详细字段是本次任务的
+临时执行、交接和 PR 证据，保留在会话、handoff 或 PR 中，绝不复制或持久化到
+`docs/implementation-plan.md`。
 
 Reuse Before Build 与 Build vs Buy 遵循根 [`AGENTS.md`](../../AGENTS.md) 的强制原则和
 [`Reuse Before Build`](../development.md#reuse-before-build) 及
@@ -8,7 +11,7 @@ Reuse Before Build 与 Build vs Buy 遵循根 [`AGENTS.md`](../../AGENTS.md) 的
 [`Implementation Review Checklist`](../review-checklist.md) 复核。
 
 ```md
-### 当前任务
+### 当前任务（仅索引字段可回写）
 
 - ID：Txxxx
 - 状态：进行中（同步任务状态台账）
