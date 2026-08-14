@@ -16,14 +16,16 @@ the progressive-loading rules.
 
 ## 2. Reuse Before Build
 
-- [ ] The reviewer independently searched by concept, behavior, owning type, error, invariant, and
-      dependency combination rather than relying on the proposed symbol name or author-provided audit.
-- [ ] The search covered public entry points, owning and adjacent modules, tests and test support, and
-      applicable architecture or domain documents.
+- [ ] The selected audit tier is justified: targeted by default, or full when a trigger in
+      `docs/development.md` applies or concrete duplication evidence requires escalation.
+- [ ] The implementer's search covered the relevant concepts, public entry points, owning and adjacent
+      modules, tests/test support, and applicable architecture or domain documents.
 - [ ] Existing candidates and non-reuse reasons are recorded and consistent with the implementation.
-- [ ] The implementing agent's final inventory covers every actually added or materially changed symbol
-      and behavior, with repository definition locations, counts, semantic owners, and dispositions;
-      the reviewing agent records any difference found by the independent search.
+- [ ] For a targeted audit, the reviewer checks the handoff evidence and diff, then spot-checks likely
+      owners or suspicious similarities without mechanically repeating the entire search.
+- [ ] For a full audit, the implementing agent's final inventory covers every relevant definition with
+      repository locations, counts, semantic owners, and dispositions; the reviewer independently
+      repeats the material searches and records differences.
 - [ ] The implementation identifies the existing functions, modules, Schemas, Fakes, or mechanisms it
       calls directly or deepens; reuse is visible in the code rather than deferred as reviewer cleanup.
 - [ ] A second implementation includes a direct-reuse or module-deepening assessment. A third equivalent
@@ -37,7 +39,7 @@ the progressive-loading rules.
 - [ ] Different caller-facing errors use a narrow error-translation boundary rather than repeated
       operation-specific forwarding wrappers, unless each retained wrapper has documented additional
       host integration, validation, composition, or policy semantics.
-- [ ] The completion report includes a Similarity Audit based on the actual implementation.
+- [ ] The completion report includes a tier-appropriate Similarity Audit based on the actual implementation.
 
 ## 3. Build vs Buy
 
@@ -65,8 +67,9 @@ the progressive-loading rules.
 
 ## 4. Review Outcomes
 
-- Missing required reuse or Build vs Buy evidence is an actionable review finding; reviewers do not
-  infer a justification from the implementation.
+- Missing tier-appropriate reuse or Build vs Buy evidence is an actionable review finding; reviewers do
+  not infer a justification from the implementation. Reviewers escalate targeted evidence to a full
+  audit only when a documented trigger or concrete concern applies.
 - A better library discovered during review does not authorize unrelated adoption. The reviewer
   reports the candidate, expected benefit, and best task or maintenance scope.
 - Review agents do not add, remove, or upgrade dependencies while performing a read-only review.

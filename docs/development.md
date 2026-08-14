@@ -69,11 +69,10 @@ owned by Biome, EditorConfig, and Git attributes.
 ## Reuse Before Build
 
 - Before adding a file, module, interface, helper, error, constant, test fake, or general-purpose
-  mechanism, search the repository by concept, behavior, owning type, error, invariant, and relevant
-  dependency combination—not only by the proposed symbol name.
-- Search public package entry points, the owning and adjacent modules, tests and test support, and
-  applicable architecture or domain documents. Record search terms, locations, relevant candidates,
-  the decision, and why a candidate was not reused.
+  mechanism, perform a targeted search by concept, behavior, owning type, error, invariant, and relevant
+  dependency combination—not only by the proposed symbol name. Cover public package entry points, the
+  owning and adjacent modules, their tests/test support, and applicable architecture or domain documents.
+  Record the search scope, relevant candidates, decision, and why a candidate was not reused.
 - Reuse an existing interface when it already owns the behavior. If callers repeatedly assemble the
   same limits, ordering, validation, cancellation, stale fencing, or error rules, deepen that module
   rather than copying helpers.
@@ -86,13 +85,19 @@ owned by Biome, EditorConfig, and Git attributes.
 - Replacement work removes superseded implementation and implementation-specific tests once the new
   interface has equivalent behavioral coverage. Do not leave both paths active or layer a pass-through
   abstraction over the duplicate implementation.
-- Before completion, repeat the search against actual added symbols and behavior. Record remaining
-  similarities, removed implementations, and any follow-up disposition in the Similarity Audit.
-- The agent implementing the change performs that final search after the implementation has stabilized
-  and inventories every relevant definition with its location, count, semantic owner, and disposition.
-  They also name the existing functions, modules, Schemas, Fakes, or mechanisms reused by the
-  implementation. Search the whole repository and existing engineering-opportunity records; a task-local
-  search or an unsupported "no duplicates" conclusion is not sufficient evidence.
+- Before completion, repeat the targeted search against actual added symbols and behavior. Record the
+  existing functions, modules, Schemas, Fakes, or mechanisms reused or deepened, plus remaining
+  similarities, removed implementations, and dispositions.
+- Escalate to a **full similarity audit** when the change adds a shared abstraction, package, or
+  dependency; implements a general-purpose mechanism; creates or changes a second/third equivalent
+  implementation; centralizes duplicated behavior; changes security, persistence, state-machine,
+  cancellation, lifecycle, budget, protocol, or SDK-boundary infrastructure; or is explicitly a reuse
+  or deduplication task. A concrete duplication concern found during implementation or review also
+  triggers escalation.
+- A full audit searches the whole repository and engineering-opportunity records after the implementation
+  stabilizes. The implementer inventories each relevant definition with location, count, semantic owner,
+  and disposition. The reviewer independently repeats the material searches and records differences.
+  Normal targeted audits do not require repository-wide match counts or an independent reproduction.
 - Prefer direct calls to an existing owner. When callers need different stable errors, use one narrow
   caller-local translation boundary instead of recreating one same-shaped wrapper per owned operation.
   A wrapper is retained only when it performs additional host integration, validation, composition,

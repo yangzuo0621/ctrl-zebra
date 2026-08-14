@@ -24,11 +24,13 @@ Title format:
 
 ## Reuse and Similarity Audit
 
-- Initial repository-wide search and existing candidates:
+- Audit tier and trigger: Targeted / Full — <!-- reason -->
+- Initial targeted search scope and existing candidates:
 - Existing functions/modules actively reused or deepened:
-- Final search against actual symbols (definition locations and counts):
+- Final targeted search against actual symbols:
 - Remaining similarities and disposition:
-- Reviewer independent-search differences: Pending review
+- Full-audit inventory and definition counts: Not required / <!-- evidence -->
+- Reviewer independent-search differences: Not required / Pending full-audit review
 
 ## Notes
 

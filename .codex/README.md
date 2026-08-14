@@ -1,50 +1,53 @@
-# Ctrl-Zebra Codex Multi-Agent Workflow — Finalizer Owns Closure
+# Ctrl-Zebra Codex Multi-Agent Workflow
 
-## Roles
-- root coordinator using `auto-workflow` — authorization validation, dispatch, waits, revision tracking, retry routing, and circuit breakers
-- `task-executor` — In Progress, implementation, early PR creation, implementation/rework
-- `task-reviewer` — independent code review
-- `task-finalizer` — closure audit, Done state, blocker routing, squash merge, cleanup
-- `sol-planner` — project/Phase decomposition, architecture analysis, dependency/roadmap replanning
+## Recommended V2 roles
 
-## Routine lifecycle
+- root coordinator using `auto-workflow` — authorization, dispatch, waits, revision tracking, and circuit breakers
+- `task-executor` — task startup, implementation, verification, early PR, and review fixes
+- `task-reviewer` — the only implementation-quality gate
+- `task-finalizer` — low-reasoning transactional closure, plan state, merge, and cleanup
+- `sol-planner` — optional project/Phase architecture and roadmap escalation before approval
+
+## V2 routine lifecycle
+
 ```text
 Pending
-→ Root coordinator: validate task + authorization profile
-→ Task-Executor: In Progress
-→ Contract
-→ MANUAL approval / AUTO gate
-→ Implementation
-→ Early PR
-→ Task-Reviewer
-   ├─ REJECTED
-   │    → Task-Executor fix
-   │    → Task-Reviewer
+→ Root: validate task, authorization, and reuse-audit tier
+→ Task-Executor: In Progress, contract, implementation, verification, early PR, handoff packet
+→ Task-Reviewer: review exact revision
+   ├─ REJECTED → consolidated fixes → re-review
    └─ APPROVED
-        → Task-Finalizer
-           ├─ READY_FOR_MERGE (AUTO_DRAFT_V1)
-           │    → stop before merge
-           ├─ COMPLETED (AUTO_FULL_V1 or authorized MANUAL closure)
-           │    → plan/status updated
-           │    → squash merge
-           │    → cleanup
-           ├─ BLOCKED: IMPLEMENTATION_FIX_REQUIRED
-           │    → Task-Executor fix
-           │    → re-review if required
-           │    → Task-Finalizer again
-           └─ BLOCKED: PLANNING_ESCALATION
-                → Sol-Planner
-                → Root coordinator checks change-control and re-review impact
-                → resume workflow or stop for user direction
+        → Task-Finalizer: revision + approval + CI + mergeability + state transition only
+           ├─ APPROVAL_STALE → Task-Reviewer
+           ├─ CHECKS_NOT_GREEN / MERGE_CONFLICT → Task-Executor
+           │    └─ re-review only when the approved revision changes
+           ├─ READY_FOR_MERGE (AUTO_DRAFT_V2)
+           └─ COMPLETED (AUTO_FULL_V2 or authorized MANUAL closure)
 ```
 
-## Ownership principle
-**Task-Executor opens the PR. Task-Finalizer closes the PR.**
+Finalizer does not repeat acceptance, architecture, scope, test-sufficiency, or similarity review in V2.
+Planner is not part of routine task closure. The normal quality loop is Executor → Reviewer, with at
+most two correction cycles before the coordinator stops.
 
-The feature PR is the shared handoff surface across all task-level agents.
+## Reuse evidence
+
+Every task performs a targeted reuse audit. Repository-wide definition inventories and independent
+reviewer reproduction are required only for the full-audit triggers in `docs/development.md`, such as
+shared/general-purpose infrastructure, duplicate centralization, sensitive cross-cutting boundaries,
+or concrete duplication concerns.
+
+## Ownership principle
+
+**Task-Executor opens the PR. Task-Reviewer owns quality approval. Task-Finalizer closes the PR.**
+
+The feature PR and compact V2 handoff packet are the shared surfaces across task-level agents.
 
 ## AUTO authorization profiles
 
-AUTO mode is coordinated by the root agent through the repository's `auto-workflow` skill. The role agents never dispatch themselves or infer completion from a pending handoff.
+V2 is recommended for routine work. V1 remains available as a legacy workflow and preserves its
+existing routing. The authoritative, immutable authorization profiles are defined only in
+`.agents/skills/auto-workflow/SKILL.md`.
 
-The authoritative, immutable authorization profiles are defined only in `.agents/skills/auto-workflow/SKILL.md`. Invoke a profile by its exact versioned name and explicitly authorize it for one task. Any permission change requires a new profile version rather than modifying an existing version.
+Invoke a profile by its exact versioned name and explicitly authorize it for one task. V2 uses the same
+Git/PR operation envelopes as V1 but must still be authorized by its own exact name. Any permission
+change requires a new profile version rather than modifying an existing version.
