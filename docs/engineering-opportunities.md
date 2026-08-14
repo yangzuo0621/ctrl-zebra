@@ -47,7 +47,6 @@
 
 | 机会 | 类型 | 优先级 | 建议窗口或依赖 | 状态 |
 |---|---|---:|---|---|
-| [EO-008 Safe regex engine](#eo-008-safe-regex-engine) | Buy | P0 | 纳入 T2001 决策、T2005 实施，不单独插队 | `评估中` |
 | [EO-009 Markdown renderer](#eo-009-markdown-renderer) | Buy re-evaluation | P3 | 先证明净收益并通过基线变更控制 | `暂缓` |
 | [EO-010 Targeted Zod reuse](#eo-010-targeted-zod-reuse) | 已有依赖复用 | P2 | 随拥有 schema 的任务分 tranche | `已发现` |
 | [EO-011 Provider token counting](#eo-011-provider-token-counting) | Buy / 实验 | P3 | 先有准确度或预算缺陷数据 | `暂缓` |
@@ -56,7 +55,6 @@
 仍影响未来执行的关系是：
 
 ```text
-T2001 decision ──→ EO-008 evidence ──→ T2005 implementation
 EO-012 evidence ──→ independent maintenance decision
 ```
 
@@ -66,7 +64,7 @@ EO-009 和 EO-011 不应阻塞 Phase 20–22。若验证 SDK-native negotiation 
 
 ## 4. 已晋升/已完成台账
 
-EO-001–EO-007 的技术决策、执行证据和逐项验证以各自 maintenance 记录为准。本表只保留每项的最终
+EO-001–EO-008 的技术决策、执行证据和逐项验证以各自 maintenance 记录为准。本表只保留每项的最终
 状态、长期 owner/结论和入口；PR 链接仅在现有记录明确存在时列出，未创建或未推送的 PR 不补造。
 问题证据、候选比较、迁移步骤和执行流水不在本文件重复。
 
@@ -79,35 +77,9 @@ EO-001–EO-007 的技术决策、执行证据和逐项验证以各自 maintenan
 | EO-005 MCP catalog refresh | `已晋升` | package-private collector 与 refresh lifecycle 拥有分页、generation 与 cancellation 复用；Tool/Prompt/Resource policy 保留 schema、撤销和诊断。 | [maintenance](maintenance/EO-005-mcp-catalog-refresh.md)；[PR #220](https://github.com/yangzuo0621/ctrl-zebra/pull/220) |
 | EO-006 MCP error ownership | `已完成` | MCP client 拥有稳定 client error normalization；Extension 保留 Host/process/configuration fallback 与展示映射。 | [maintenance](maintenance/EO-006-mcp-error-ownership.md)；[PR #221](https://github.com/yangzuo0621/ctrl-zebra/pull/221) |
 | EO-007 Package-local text primitives | `已完成` | 各 package 按语义拥有 text/record/URI/canonical JSON/equality seam；不建立跨包 `text-utils` 或 `common`。 | [maintenance](maintenance/EO-007-package-local-text-primitives.md)；[PR #222](https://github.com/yangzuo0621/ctrl-zebra/pull/222)，merged commit `53bc57b` |
+| EO-008 Safe regex engine | `已完成` | `packages/builtin-tools` 的 package-local controlled RE2JS adapter 拥有 RE2-compatible syntax filtering, bounded program/input/aggregate budgets, cancellation and empty-match policy, and stable `invalid-input` mapping; RE2JS types and failures remain private. | [PR #235](https://github.com/yangzuo0621/ctrl-zebra/pull/235) |
 
 ## 5. Build vs Buy 机会
-
-### EO-008 Safe regex engine
-
-- **契约记录**：[T2001 Protocol contract](protocol/tools-and-file-lifecycle.md#search-regex-mode)。
-- **路线图关系**：T2001 应先决定允许的 regex 语法、安全界限和失败契约；T2005 才实现受控 regex
-  搜索。本机会不创建插队任务。
-- **候选机制**：优先评估纯 JavaScript `re2js`。当前公开资料描述其为 RE2/RE2J 的 JavaScript
-  port，目标是线性时间匹配；其 RE2 语法与 JavaScript `RegExp` 不完全相同，因此不能只替换构造器。
-- **初筛资料**：[`re2js` npm metadata](https://www.npmjs.com/package/re2js)、
-  [`re2js` repository](https://github.com/le0pard/re2js) 和
-  [RE2 syntax](https://github.com/google/re2/wiki/Syntax)。
-- **T2001 评估（2026-08-13）**：RE2 的 Context7 文档确认其线性时间/非回溯安全模型，并明确
-  拒绝 backreference、look-around、possessive/atomic 等只靠回溯的语法。`re2js` npm metadata
-  当前为 `2.8.5`，MIT、0 个 runtime dependency、内置 TypeScript declarations，并同时发布
-  ESM/CJS 入口；其 README 还暴露 `RE2JS.LOOKBEHINDS` 扩展。因而未经过滤的 `re2js` **不满足**
-  T2001 的严格 RE2-compatible dialect：lookbehind 必须在 CtrlZebra-owned adapter 中拒绝，
-  不能把库的扩展当作产品能力。它仍是 T2005 的条件候选，只有在固定版本、严格语法拒绝、
-  Unicode/空匹配/取消、编译状态和 adversarial benchmark 全部通过后才可 adopt。T2001 不引入
-  依赖，不实现 parser 或 engine。
-- **替代方案与影响**：Node native `re2` 更接近官方实现但带 native addon、跨平台 VSIX 构建与
-  分发负担；原生 JavaScript `RegExp` 不能证明 ReDoS 安全；自研 parser/VM 会接管成熟正则
-  算法与 Unicode 维护，均不在 T2001 范围。T2005 必须在 controlled regex interface 后
-  重新比较这些方案，并以失败即拒绝而不是降级为回溯匹配。
-- **目标 seam**：Builtin Tool 或 Extension host 拥有的 controlled regex interface；第三方 pattern、
-  match、failure 类型不得进入 Protocol 或 Core 契约。
-- **验收**：T2001 记录 adopt/reject 及替代方案；若 adopt，T2005 同时删除任何被取代的自制 parser、
-  guard 或执行路径，并以 adversarial tests 证明界限。
 
 ### EO-009 Markdown renderer
 

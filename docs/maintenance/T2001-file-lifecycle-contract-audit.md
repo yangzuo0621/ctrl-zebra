@@ -6,7 +6,7 @@
 > [Architecture T2001](../architecture/tools-and-files.md#file-lifecycle-and-atomic-workspaceedit-boundary-t2001)、
 > [Security T2001](../security.md#file-lifecycle-mutation-boundary-t2001)、
 > [Persistence T2001](../persistence.md#file-lifecycle-checkpoint-extension-t2001) 和
-> [EO-008](../engineering-opportunities.md#eo-008-safe-regex-engine) 分别负责。
+> [EO-008](../engineering-opportunities.md#4-已晋升已完成台账) 分别负责。
 
 ## 1. 任务上下文快照
 
@@ -63,5 +63,5 @@ state-union compatibility 和 failure precedence 仅在契约正文中固定，�
 - 完成证据：[PR #227](https://github.com/yangzuo0621/ctrl-zebra/pull/227)，审阅通过 revision
   `bab91b1b07222c1fd83cea9ed40e7e476d4a9ce7`；required checks、本地 package/smoke 验证、
   `pnpm check` 与 `git diff --check` 均通过。
-- 完成日期：2026-08-13。后续执行点为 T2002；T2005 负责 EO-008 `re2js` fit evaluation
-  与受控 regex engine 选型；本记录不替代状态台账。
+- 完成日期：2026-08-13。后续执行点为 T2002；T2005 已完成 EO-008 `re2js` fit evaluation
+  与受控 regex engine 选型，本记录不替代状态台账。
