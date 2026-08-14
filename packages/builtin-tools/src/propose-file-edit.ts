@@ -199,7 +199,7 @@ function parseProposeFileEditInput(value: unknown): ProposeFileEditInput {
   return { path: value.path, edits };
 }
 
-function parseFileEditRevisionSnapshot(value: unknown): FileEditRevisionSnapshot {
+export function parseFileEditRevisionSnapshot(value: unknown): FileEditRevisionSnapshot {
   if (
     !isRecord(value) ||
     !hasOnlyKeys(value, new Set(["uri", "revision"])) ||

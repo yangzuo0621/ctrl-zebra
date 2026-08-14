@@ -2,7 +2,12 @@ import { createHash, randomUUID } from "node:crypto";
 import { realpath } from "node:fs/promises";
 import { performance } from "node:perf_hooks";
 import { env, memoryUsage, platform } from "node:process";
-import type { FileCreatePlan, FileDeletePlan, FileRenamePlan } from "@ctrl-zebra/core";
+import type {
+  FileCreatePlan,
+  FileDeletePlan,
+  FileRenamePlan,
+  WorkspaceEditPlan,
+} from "@ctrl-zebra/core";
 import { ControlledMcpClient } from "@ctrl-zebra/mcp-client";
 import { isApprovedExternalLink } from "@ctrl-zebra/protocol";
 import {
@@ -121,6 +126,7 @@ import {
   selectCommandEnvironment,
   WorkspaceCommandExecutor,
 } from "./controllers/workspace-command-executor.js";
+import { WorkspaceEditApprovalWorkflow } from "./controllers/workspace-edit-approval-workflow.js";
 import { createWorkspaceTrustPolicy } from "./controllers/workspace-trust-policy.js";
 
 export function activate(context: ExtensionContext): void {
@@ -175,6 +181,7 @@ export function activate(context: ExtensionContext): void {
       "propose_file_create",
       "propose_file_delete",
       "propose_file_rename",
+      "propose_workspace_edit",
       "read_file",
       "read_editor_context",
       "get_diagnostics",
@@ -233,6 +240,67 @@ export function activate(context: ExtensionContext): void {
       }
     },
     presentDiff: (plan, signal) => diffPresenter.present(plan, signal),
+    async applyPlan(plan, ownership, signal) {
+      try {
+        const checkpointStore = await selectCheckpointStore();
+        signal.throwIfAborted();
+        await createVsCodeWorkspaceEditApplier(
+          createCurrentScope(),
+          async (checkpoint, checkpointSignal) => {
+            await checkpointStore.create(checkpoint, checkpointSignal);
+          },
+          randomUUID,
+          () => new Date(),
+          () => workspaceTrust.requireTrusted(),
+        ).apply(plan, ownership, signal);
+        return "applied";
+      } catch (error) {
+        if (error instanceof WorkspaceEditConflictError || error instanceof WorkspaceScopeError) {
+          return "conflict";
+        }
+        throw error;
+      }
+    },
+    reportError: (message) => {
+      void window.showErrorMessage(message);
+    },
+    workspaceTrust,
+  });
+  const validateWorkspaceEditPlan = async (
+    plan: WorkspaceEditPlan,
+    signal: AbortSignal,
+  ): Promise<void> => {
+    const scope = createCurrentScope();
+    for (const file of plan.files) {
+      const canonical = await scope.validate(Uri.parse(file.uri, true), signal);
+      signal.throwIfAborted();
+      if (canonical.toString() !== file.uri) {
+        throw new WorkspaceScopeError("canonicalization-failed");
+      }
+    }
+  };
+  const workspaceEditApprovalWorkflow = new WorkspaceEditApprovalWorkflow({
+    createId: randomUUID,
+    now: () => new Date(),
+    async bindPlan(plan, signal) {
+      const root = getSelectedRoot();
+      const scope = new WorkspaceScope(root, canonicalize);
+      for (const file of plan.files) {
+        const canonical = await scope.validate(Uri.parse(file.uri, true), signal);
+        signal.throwIfAborted();
+        if (canonical.toString() !== file.uri) {
+          throw new WorkspaceScopeError("canonicalization-failed");
+        }
+      }
+      return root.toString();
+    },
+    validatePlan: validateWorkspaceEditPlan,
+    async presentDiff(plan, signal) {
+      await validateWorkspaceEditPlan(plan, signal);
+      for (const file of plan.files) {
+        await diffPresenter.present(file, signal);
+      }
+    },
     async applyPlan(plan, ownership, signal) {
       try {
         const checkpointStore = await selectCheckpointStore();
@@ -485,6 +553,7 @@ export function activate(context: ExtensionContext): void {
     fileCreateApprovalWorkflow,
     fileDeleteApprovalWorkflow,
     fileRenameApprovalWorkflow,
+    workspaceEditApprovalWorkflow,
   );
   const editorContext = new VsCodeEditorContext({
     getActiveEditor: () => window.activeTextEditor,
@@ -636,6 +705,8 @@ export function activate(context: ExtensionContext): void {
       new VsCodeProposeFileDeleteRenameWorkspace(root, scope, joinWorkspacePath),
     createProposeFileRenameWorkspace: (root, scope) =>
       new VsCodeProposeFileDeleteRenameWorkspace(root, scope, joinWorkspacePath),
+    createProposeWorkspaceEditWorkspace: (root, scope) =>
+      new VsCodeProposeFileEditWorkspace(root, scope, joinWorkspacePath),
     commandExecutor,
     workspaceTrust,
     editorContext,

@@ -139,6 +139,24 @@ export {
   StaleFileRenameTargetError,
 } from "./propose-file-rename.js";
 export type {
+  ProposeWorkspaceEditFileInput,
+  ProposeWorkspaceEditInput,
+  ProposeWorkspaceEditWorkspace,
+} from "./propose-workspace-edit.js";
+export {
+  createProposeWorkspaceEditTool,
+  maxProposedWorkspaceEditFiles,
+  maxProposedWorkspaceEditPathBytes,
+  maxProposedWorkspaceEditReplacementBytes,
+  maxProposedWorkspaceEditReplacementCharacters,
+  maxTotalProposedWorkspaceEditReplacementBytes,
+  minProposedWorkspaceEditFiles,
+  proposeWorkspaceEditInputSchema,
+  proposeWorkspaceEditToolDescription,
+  proposeWorkspaceEditToolName,
+  StaleWorkspaceEditTargetError,
+} from "./propose-workspace-edit.js";
+export type {
   IdeContextPort,
   ReadEditorContextInput,
   ReadEditorContextPort,

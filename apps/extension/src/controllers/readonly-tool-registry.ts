@@ -8,6 +8,7 @@ import {
   createProposeFileDeleteTool,
   createProposeFileEditTool,
   createProposeFileRenameTool,
+  createProposeWorkspaceEditTool,
   createReadEditorContextTool,
   createReadFileTool,
   createRunCommandTool,
@@ -19,6 +20,7 @@ import {
   type ProposeFileDeleteWorkspace,
   type ProposeFileEditWorkspace,
   type ProposeFileRenameWorkspace,
+  type ProposeWorkspaceEditWorkspace,
   type RunCommandExecutor,
 } from "@ctrl-zebra/builtin-tools";
 import { ToolRegistry } from "@ctrl-zebra/core";
@@ -75,6 +77,10 @@ interface WorkspaceToolRegistryDependencies {
     root: Uri,
     scope: WorkspaceScope,
   ) => ProposeFileRenameWorkspace;
+  readonly createProposeWorkspaceEditWorkspace?: (
+    root: Uri,
+    scope: WorkspaceScope,
+  ) => ProposeWorkspaceEditWorkspace;
   readonly commandExecutor: RunCommandExecutor;
   readonly workspaceTrust: WorkspaceTrustPolicy;
   readonly editorContext?: IdeContextPort;
@@ -94,6 +100,7 @@ export function createWorkspaceToolRegistryProvider({
   createProposeFileCreateWorkspace,
   createProposeFileDeleteWorkspace,
   createProposeFileRenameWorkspace,
+  createProposeWorkspaceEditWorkspace,
   commandExecutor,
   workspaceTrust,
   editorContext,
@@ -145,6 +152,11 @@ export function createWorkspaceToolRegistryProvider({
       if (createProposeFileRenameWorkspace !== undefined) {
         registry.register(
           createProposeFileRenameTool(createProposeFileRenameWorkspace(selectedRoot, scope)),
+        );
+      }
+      if (createProposeWorkspaceEditWorkspace !== undefined) {
+        registry.register(
+          createProposeWorkspaceEditTool(createProposeWorkspaceEditWorkspace(selectedRoot, scope)),
         );
       }
       registry.register(

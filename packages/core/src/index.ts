@@ -300,3 +300,16 @@ export {
   ToolRepetitionDetectedError,
   ToolRepetitionDetector,
 } from "./tool-repetition-detector.js";
+export type { WorkspaceEditFilePlan, WorkspaceEditPlan } from "./workspace-edit.js";
+export {
+  InvalidWorkspaceEditPlanError,
+  maxWorkspaceEditAggregateReplacementBytes,
+  maxWorkspaceEditFiles,
+  maxWorkspaceEditPathBytes,
+  maxWorkspaceEditPathCharacters,
+  maxWorkspaceEditReplacementBytes,
+  maxWorkspaceEditReplacementCharacters,
+  minWorkspaceEditFiles,
+  OverlappingWorkspaceEditError,
+  parseWorkspaceEditPlan,
+} from "./workspace-edit.js";
