@@ -43,6 +43,19 @@ Classify findings as:
 ### Non-Blocking Suggestions
 - optional improvements
 
+### Context Used
+
+- Additional context actually read beyond the handoff and PR diff, or `handoff + PR diff only`
+- Context Count: `<number of additional entries>` (`handoff + PR diff only` is `0`)
+
+### Searches Performed
+
+- `<search category> — <target>; full-repo similarity audit: yes|no>`
+
+Record only additional context and concise search categories/targets. Do not include incidental
+guidance, raw `rg` output, exact token or match counts, or a tool-call transcript. A full-repo
+similarity audit is required only when a documented trigger or concrete duplication concern applies.
+
 `APPROVED` applies only to the implementation revision actually reviewed. Any subsequent
 implementation-code change requires re-review.
 
