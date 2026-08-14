@@ -127,7 +127,8 @@ owned by Biome, EditorConfig, and Git attributes.
   dependency merely to replace small, stable utility logic.
 - Record alternatives, maintenance status, license, runtime and toolchain compatibility, packaging
   or VSIX impact, cancellation and security behavior, required adapter code, the decision, and its
-  rationale in the task plan. If no trigger applies, record that explicitly.
+  rationale in transient task execution, handoff, or PR evidence. If no trigger applies, record that
+  explicitly in the same evidence.
 - Isolate third-party mechanisms behind CtrlZebra-owned interfaces. Third-party types, failures,
   defaults, lifecycle decisions, and unbounded values must not enter public contracts or bypass
   validation, budgets, cancellation, security, or error normalization.

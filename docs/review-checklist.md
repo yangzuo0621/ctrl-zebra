@@ -6,12 +6,15 @@ the rules in [`AGENTS.md`](../AGENTS.md) and the operational criteria in
 Any agent reviewing the implementation reads only the task-relevant documents and changes required by
 the progressive-loading rules.
 
+Task execution evidence referenced below is transient conversation, handoff, or PR evidence;
+`docs/implementation-plan.md` remains an index and must not be treated as an execution evidence log.
+
 ## 1. Scope and Evidence
 
 - [ ] The change belongs to the authorized roadmap task or standalone maintenance scope.
 - [ ] Planned files, exclusions, public-contract impact, and verification match the implementation.
-- [ ] Required task-plan evidence is present and updated when implementation findings changed the
-      design.
+- [ ] Required transient task execution, handoff, or PR evidence is present and updated when
+      implementation findings changed the design.
 - [ ] Non-blocking discoveries are recorded instead of being implemented opportunistically.
 
 ## 2. Reuse Before Build
@@ -49,9 +52,9 @@ the progressive-loading rules.
       mechanism.
 - [ ] The reviewer checked the additional triggers: roughly 100 lines of general-purpose logic,
       implementation in two or more places, or substantial algorithm-specific boundary tests.
-- [ ] When a trigger applies, the task plan evaluates the standard library or VS Code API, existing
-      dependencies, official SDKs, maintained third-party libraries, and self-implementation in the
-      order required by `docs/development.md`.
+- [ ] When a trigger applies, transient task execution, handoff, or PR evidence records an evaluation of
+      the standard library or VS Code API, existing dependencies, official SDKs, maintained third-party
+      libraries, and self-implementation in the order required by `docs/development.md`.
 - [ ] The chosen option has concrete evidence covering maintenance status, license, runtime and
       toolchain compatibility, packaging or VSIX impact, cancellation behavior, security behavior,
       and the amount of project-owned adapter code still required.
@@ -67,9 +70,10 @@ the progressive-loading rules.
 
 ## 4. Review Outcomes
 
-- Missing tier-appropriate reuse or Build vs Buy evidence is an actionable review finding; reviewers do
-  not infer a justification from the implementation. Reviewers escalate targeted evidence to a full
-  audit only when a documented trigger or concrete concern applies.
+- Missing tier-appropriate reuse or Build vs Buy evidence in the transient execution, handoff, or PR
+  record is an actionable review finding; reviewers do not infer a justification from the implementation.
+  Reviewers escalate targeted evidence to a full audit only when a documented trigger or concrete concern
+  applies.
 - A better library discovered during review does not authorize unrelated adoption. The reviewer
   reports the candidate, expected benefit, and best task or maintenance scope.
 - Review agents do not add, remove, or upgrade dependencies while performing a read-only review.
