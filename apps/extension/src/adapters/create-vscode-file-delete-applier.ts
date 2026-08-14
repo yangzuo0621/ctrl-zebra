@@ -9,6 +9,10 @@ import {
   type FileDeleteTarget,
 } from "./file-delete-applier.js";
 import { isVscodeFileNotFound } from "./vscode-file-system-error.js";
+import {
+  readSupportedWorkspaceText,
+  UnsupportedWorkspaceTextError,
+} from "./vscode-propose-file-edit-workspace.js";
 import type { WorkspaceScope } from "./workspace-scope.js";
 
 export function createVsCodeFileDeleteApplier(
@@ -30,12 +34,17 @@ export function createVsCodeFileDeleteApplier(
         if ((stat.type & FileType.File) === 0 || (stat.type & FileType.Directory) !== 0) {
           throw new FileDeleteConflictError();
         }
-        const document = await workspace.openTextDocument(canonical);
-        signal.throwIfAborted();
-        if (document.uri.toString() !== canonical.toString()) {
-          throw new FileDeleteConflictError();
+        let text: string;
+        try {
+          text = await readSupportedWorkspaceText(canonical, signal);
+        } catch (error) {
+          signal.throwIfAborted();
+          if (error instanceof UnsupportedWorkspaceTextError) {
+            throw new FileDeleteConflictError();
+          }
+          throw error;
         }
-        return { resource: document.uri, exists: true, text: document.getText() };
+        return { resource: canonical, exists: true, text };
       } catch (error) {
         signal.throwIfAborted();
         if (error instanceof FileDeleteConflictError) throw error;

@@ -66,7 +66,11 @@ import { isVscodeFileNotFound } from "./adapters/vscode-file-system-error.js";
 import { VsCodeLanguageServices } from "./adapters/vscode-language-services.js";
 import { VsCodeProposeFileCreateWorkspace } from "./adapters/vscode-propose-file-create-workspace.js";
 import { VsCodeProposeFileDeleteRenameWorkspace } from "./adapters/vscode-propose-file-delete-rename-workspace.js";
-import { VsCodeProposeFileEditWorkspace } from "./adapters/vscode-propose-file-edit-workspace.js";
+import {
+  readSupportedWorkspaceText,
+  UnsupportedWorkspaceTextError,
+  VsCodeProposeFileEditWorkspace,
+} from "./adapters/vscode-propose-file-edit-workspace.js";
 import { createWorkspaceSessionRepositoryProvider } from "./adapters/vscode-session-storage.js";
 import { findWorkspaceFiles } from "./adapters/vscode-workspace-find-files.js";
 import {
@@ -401,11 +405,17 @@ export function activate(context: ExtensionContext): void {
     if (canonical.toString() !== plan.uri) {
       throw new WorkspaceScopeError("canonicalization-failed");
     }
-    const document = await workspace.openTextDocument(canonical);
-    signal.throwIfAborted();
-    if (document.uri.toString() !== plan.uri || hashText(document.getText()) !== plan.beforeHash) {
-      throw new FileDeleteConflictError();
+    let text: string;
+    try {
+      text = await readSupportedWorkspaceText(canonical, signal);
+    } catch (error) {
+      signal.throwIfAborted();
+      if (error instanceof UnsupportedWorkspaceTextError) {
+        throw new FileDeleteConflictError();
+      }
+      throw error;
     }
+    if (hashText(text) !== plan.beforeHash) throw new FileDeleteConflictError();
   };
   const fileDeleteApprovalWorkflow = new FileDeleteApprovalWorkflow({
     createId: randomUUID,
@@ -463,11 +473,17 @@ export function activate(context: ExtensionContext): void {
     if (source.toString() !== plan.sourceUri || target.toString() !== plan.targetUri) {
       throw new WorkspaceScopeError("canonicalization-failed");
     }
-    const sourceDocument = await workspace.openTextDocument(source);
-    signal.throwIfAborted();
-    if (hashText(sourceDocument.getText()) !== plan.beforeHash) {
-      throw new FileRenameConflictError();
+    let sourceText: string;
+    try {
+      sourceText = await readSupportedWorkspaceText(source, signal);
+    } catch (error) {
+      signal.throwIfAborted();
+      if (error instanceof UnsupportedWorkspaceTextError) {
+        throw new FileRenameConflictError();
+      }
+      throw error;
     }
+    if (hashText(sourceText) !== plan.beforeHash) throw new FileRenameConflictError();
     try {
       await workspace.fs.stat(target);
       throw new FileRenameConflictError();

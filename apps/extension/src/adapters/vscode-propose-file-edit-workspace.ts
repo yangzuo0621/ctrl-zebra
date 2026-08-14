@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { FileEditRevisionSnapshot, ProposeFileEditWorkspace } from "@ctrl-zebra/builtin-tools";
 import { isBoundedWorkspaceEditText, maxWorkspaceEditTextBytes } from "@ctrl-zebra/core";
-import { FileType, type TextDocument, Uri, workspace } from "vscode";
+import { type FileStat, FileType, type TextDocument, Uri, workspace } from "vscode";
 import { readLocalFilePrefix } from "./read-local-file-prefix.js";
 import type { JoinWorkspacePath } from "./workspace-file-reader.js";
 import type { WorkspaceScope } from "./workspace-scope.js";
@@ -109,7 +109,7 @@ export async function readSupportedWorkspaceText(uri: Uri, signal: AbortSignal):
     throw new UnsupportedWorkspaceTextError();
   }
 
-  let stat: { readonly type: FileType; readonly size: number };
+  let stat: BoundedWorkspaceFileStat;
   let bytes: Uint8Array;
   try {
     stat = await workspace.fs.stat(uri);
@@ -119,7 +119,12 @@ export async function readSupportedWorkspaceText(uri: Uri, signal: AbortSignal):
     }
     const prefix = await readLocalFilePrefix(uri.fsPath, maxWorkspaceEditTextBytes, signal);
     signal.throwIfAborted();
-    if (prefix.truncated) {
+    if (prefix.truncated || prefix.bytes.byteLength !== stat.size) {
+      throw new UnsupportedWorkspaceTextError();
+    }
+    const afterReadStat = await workspace.fs.stat(uri);
+    signal.throwIfAborted();
+    if (!sameBoundedWorkspaceFileStat(stat, afterReadStat)) {
       throw new UnsupportedWorkspaceTextError();
     }
     bytes = prefix.bytes;
@@ -145,6 +150,20 @@ export async function readSupportedWorkspaceText(uri: Uri, signal: AbortSignal):
     throw new UnsupportedWorkspaceTextError();
   }
   return rawText;
+}
+
+type BoundedWorkspaceFileStat = Pick<FileStat, "ctime" | "mtime" | "size" | "type">;
+
+function sameBoundedWorkspaceFileStat(
+  before: BoundedWorkspaceFileStat,
+  after: BoundedWorkspaceFileStat,
+): boolean {
+  return (
+    before.type === after.type &&
+    before.size === after.size &&
+    before.ctime === after.ctime &&
+    before.mtime === after.mtime
+  );
 }
 
 export function assertSupportedWorkspaceDocument(

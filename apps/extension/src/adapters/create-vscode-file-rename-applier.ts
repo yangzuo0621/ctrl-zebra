@@ -9,6 +9,10 @@ import {
   type FileRenameTarget,
 } from "./file-rename-applier.js";
 import { isVscodeFileNotFound } from "./vscode-file-system-error.js";
+import {
+  readSupportedWorkspaceText,
+  UnsupportedWorkspaceTextError,
+} from "./vscode-propose-file-edit-workspace.js";
 import type { WorkspaceScope } from "./workspace-scope.js";
 
 export function createVsCodeFileRenameApplier(
@@ -30,12 +34,17 @@ export function createVsCodeFileRenameApplier(
         if ((stat.type & FileType.Directory) !== 0 || (stat.type & FileType.File) === 0) {
           return { resource: canonical, exists: true };
         }
-        const document = await workspace.openTextDocument(canonical);
-        signal.throwIfAborted();
-        if (document.uri.toString() !== canonical.toString()) {
-          throw new FileRenameConflictError();
+        let text: string;
+        try {
+          text = await readSupportedWorkspaceText(canonical, signal);
+        } catch (error) {
+          signal.throwIfAborted();
+          if (error instanceof UnsupportedWorkspaceTextError) {
+            throw new FileRenameConflictError();
+          }
+          throw error;
         }
-        return { resource: document.uri, exists: true, text: document.getText() };
+        return { resource: canonical, exists: true, text };
       } catch (error) {
         signal.throwIfAborted();
         if (error instanceof FileRenameConflictError) throw error;

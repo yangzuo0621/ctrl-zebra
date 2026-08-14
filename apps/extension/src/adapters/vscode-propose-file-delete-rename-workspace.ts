@@ -14,6 +14,10 @@ import {
 import { FileType, Uri, workspace } from "vscode";
 
 import { isVscodeFileNotFound } from "./vscode-file-system-error.js";
+import {
+  readSupportedWorkspaceText,
+  UnsupportedWorkspaceTextError,
+} from "./vscode-propose-file-edit-workspace.js";
 import type { JoinWorkspacePath } from "./workspace-file-reader.js";
 import type { WorkspaceScope } from "./workspace-scope.js";
 
@@ -127,18 +131,16 @@ export class VsCodeProposeFileDeleteRenameWorkspace
 
   async #readText(target: Uri, missing: Error, signal: AbortSignal): Promise<string> {
     try {
-      const stat = await workspace.fs.stat(target);
-      signal.throwIfAborted();
-      if ((stat.type & FileType.File) === 0 || (stat.type & FileType.Directory) !== 0) {
-        throw missing;
-      }
-      const document = await workspace.openTextDocument(target);
-      signal.throwIfAborted();
-      if (document.uri.toString() !== target.toString()) throw missing;
-      return document.getText();
+      return await readSupportedWorkspaceText(target, signal);
     } catch (error) {
       signal.throwIfAborted();
-      if (error === missing || isVscodeFileNotFound(error)) throw missing;
+      if (
+        error === missing ||
+        error instanceof UnsupportedWorkspaceTextError ||
+        isVscodeFileNotFound(error)
+      ) {
+        throw missing;
+      }
       throw error;
     }
   }

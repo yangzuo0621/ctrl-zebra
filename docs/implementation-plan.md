@@ -67,10 +67,10 @@
 
 - 总任务：148
 - 已完成：134
-- 进行中：0
+- 进行中：1
 - 受阻：0
 - 待开始：14
-- 当前执行：T2101（T2005 已合入）
+- 当前执行：无
 - 下一任务：T2101
 - 最后更新：2026-08-14
 
@@ -207,7 +207,7 @@
 | 19 | T1905 | 已完成 | [#207](https://github.com/yangzuo0621/ctrl-zebra/pull/207) | 2026-08-12 |
 | 20 | T2001 | 已完成 | [#227](https://github.com/yangzuo0621/ctrl-zebra/pull/227) | 2026-08-13 |
 | 20 | T2002 | 已完成 | [#229](https://github.com/yangzuo0621/ctrl-zebra/pull/229) | 2026-08-14 |
-| 20 | T2003 | 已完成 | [#231](https://github.com/yangzuo0621/ctrl-zebra/pull/231) | 2026-08-14 |
+| 20 | T2003 | 已完成 | [#238](https://github.com/yangzuo0621/ctrl-zebra/pull/238) | 2026-08-14 |
 | 20 | T2004 | 已完成 | [#232](https://github.com/yangzuo0621/ctrl-zebra/pull/232) | 2026-08-14 |
 | 20 | T2005 | 已完成 | [#235](https://github.com/yangzuo0621/ctrl-zebra/pull/235) | 2026-08-14 |
 | 21 | T2101 | 待开始 | — | — |
@@ -227,9 +227,10 @@
 
 ### 当前任务
 
-- ID：T2101
-- 状态：待开始
-- 规格：[阶段 21：T2101](roadmap/phases/phase-21.md)
+- ID：T2003
+- 状态：进行中
+- 规格：[阶段 20：T2003 实现受控删除与重命名](roadmap/phases/phase-20.md#t2003实现受控删除与重命名)
+- 重开原因：Issue [#236](https://github.com/yangzuo0621/ctrl-zebra/issues/236) 证明原 PR [#231](https://github.com/yangzuo0621/ctrl-zebra/pull/231) 的删除/重命名 Host capture、批准复核和副作用前复核仍通过 `openTextDocument(...).getText()` 先构造完整文件内容，未满足有界原始读取安全边界；必须修复并重新验证后才能归档 Phase 20。
 
 ## 5. 阶段规格索引
 
