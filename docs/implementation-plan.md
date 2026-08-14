@@ -66,13 +66,13 @@
 **进度摘要**：
 
 - 总任务：148
-- 已完成：130
-- 进行中：1
+- 已完成：132
+- 进行中：0
 - 受阻：0
-- 待开始：17
-- 当前执行：T2003（T2002 合入后）
+- 待开始：16
+- 当前执行：T2004（T2003 已合入）
 - 下一任务：T2004
-- 最后更新：2026-08-13
+- 最后更新：2026-08-14
 
 | 阶段 | 任务 | 状态 | 完成 PR | 完成日期 |
 |---|---|---|---|---|
@@ -207,7 +207,7 @@
 | 19 | T1905 | 已完成 | [#207](https://github.com/yangzuo0621/ctrl-zebra/pull/207) | 2026-08-12 |
 | 20 | T2001 | 已完成 | [#227](https://github.com/yangzuo0621/ctrl-zebra/pull/227) | 2026-08-13 |
 | 20 | T2002 | 已完成 | [#229](https://github.com/yangzuo0621/ctrl-zebra/pull/229) | 2026-08-14 |
-| 20 | T2003 | 待开始 | — | — |
+| 20 | T2003 | 已完成 | [#231](https://github.com/yangzuo0621/ctrl-zebra/pull/231) | 2026-08-14 |
 | 20 | T2004 | 待开始 | — | — |
 | 20 | T2005 | 待开始 | — | — |
 | 21 | T2101 | 待开始 | — | — |
@@ -227,68 +227,87 @@
 
 ### 当前任务
 
-- ID：T2002
+- ID：T2003
 - 状态：已完成
-- 规格：[阶段 20：T2002 实现受控文件创建](roadmap/phases/phase-20.md#t2002实现受控文件创建)
-- 目标：实现受控的 UTF-8 新文件提议、完整内容 Diff、精确单次审批、写前复核、原子创建和可恢复
-  Checkpoint；拒绝越界、已有目标、二进制/超限内容及不可信工作区。
-- 前置条件：T2001 独立 docs-only 约束门禁已于 PR #227 合入；Phase 20 活动规格及其安全、架构、协议、
-  持久化、测试文档已读取并适用。
-- 计划修改的文件：`packages/protocol` Checkpoint 生命周期 DTO；`packages/core` 文件创建计划与审批
-  结果；`packages/builtin-tools` 创建 Tool；`apps/extension` Scope、Host adapter、Diff、审批、
-  Checkpoint restore、Tool registry/composition 及测试；本任务记录。
-- 明确不做：删除、重命名、多文件编辑、正则搜索、目录递归、覆盖已有目标、无审批写入、Git/shell 操作、
-  新依赖或产品/模块边界变更。
+- 规格：[阶段 20：T2003 实现受控删除与重命名](roadmap/phases/phase-20.md#t2003实现受控删除与重命名)
+- 目标：实现单个 UTF-8 文本文件的受控删除与重命名，绑定精确单次审批、源/目标身份和完整可恢复
+  Checkpoint；拒绝不存在、目标冲突、stale、跨根、大小写歧义、批准后变化和不可信工作区。
+- 前置条件：T2001 独立 docs-only 约束门禁已于 PR #227 合入，T2002 文件创建已于 PR #229 完成；Phase 20
+  活动规格及其 architecture/protocol/security/persistence/UX/Webview/test 约束已读取并适用。
+- 计划修改的文件：`packages/core` 删除/重命名不可变计划解析；`packages/builtin-tools` 删除与重命名
+  Tool；`apps/extension` workspace capture、删除/重命名 applier、审批 workflow、Checkpoint restore、
+  Tool registry/composition 及测试；本任务记录。
+- 明确不做：多文件编辑、正则搜索、目录递归删除、覆盖已有目标、跨选定根操作、无审批写入、Git/shell
+  操作、新依赖或产品/模块边界变更。
 
 ### Reuse Audit
 
-- 计划新增的行为与符号：`parseFileCreatePlan`、`propose_file_create`、`FileCreateApprovalWorkflow`、
-  `WorkspaceScope.validateNewFile`、生命周期 Checkpoint 状态、`FileCreateApplier` 和
-  `DiffPresenter.presentTextPair`。
-- 初始全仓搜索命令、关键词与 engineering-opportunity 记录：`rg -n "parseTextEditPlan|FileMutationApprovalWorkflow|WorkspaceScope|CheckpointRestorer|presentTextPair|WorkspaceEdit" packages apps docs`；未发现对应 T2002 机会台账条目。
-- 找到的现有实现（路径、符号、语义 owner）：`packages/core/src/text-edit.ts:parseTextEditPlan`（既有编辑计划校验 owner）；`apps/extension/src/controllers/file-mutation-approval-workflow.ts:FileMutationApprovalWorkflow`（文件变更审批生命周期 owner）；`apps/extension/src/adapters/workspace-scope.ts:WorkspaceScope`（URI 范围 owner）；`apps/extension/src/adapters/checkpoint-restorer.ts:CheckpointRestorer`（恢复状态机 owner）；`WorkspaceEdit`/`TextEncoder`（VS Code/标准库 API）。
-- 决定：深化通用审批、范围、Diff、Checkpoint owners；新增创建计划、Tool 和 Host adapter 以保持语义边界。
-- 未复用理由：既有编辑计划携带文档版本/范围，无法表达“目标必须不存在”；既有 WorkspaceEdit applier
-  允许替换，不满足创建的 absent-state 与 `createFile + insert` 原子要求。
-- 是否形成第二份或第三份实现：否；创建专属语义由 `FileCreate*` owner 承担，通用生命周期只保留一份。
-- 执行中将主动调用或深化的已有功能：`FileMutationApprovalWorkflow`、`WorkspaceScope`、
-  `CheckpointRestorer`、VS Code `WorkspaceEdit`，以及 core UTF-8 primitive。
+- 计划新增的行为与符号：`parseFileDeletePlan`、`parseFileRenamePlan`、`propose_file_delete`、
+  `propose_file_rename`、删除/重命名审批 workflow、Host capture/applier，以及 rename-aware
+  `CheckpointRestorer`。
+- 初始全仓搜索命令、关键词与 engineering-opportunity 记录：`rg -n "parseFile(Create|Edit)Plan|propose_file_(create|edit)|File(Create|Mutation)ApprovalWorkflow|Workspace(Edit|Scope)|Checkpoint(Restorer|File)|deleteFile|renameFile" packages apps docs`；未发现 T2003 对应机会台账条目。
+- 找到的现有实现（路径、符号、语义 owner）：`packages/core/src/file-create.ts:parseFileCreatePlan`（计划边界与文本限制 owner）；`packages/builtin-tools/src/propose-file-create.ts`（严格 path/input owner）；`apps/extension/src/controllers/file-mutation-approval-workflow.ts:FileMutationApprovalWorkflow`（审批生命周期 owner）；`apps/extension/src/adapters/workspace-scope.ts:WorkspaceScope`（选定根与 canonical containment owner）；`apps/extension/src/adapters/checkpoint-restorer.ts:CheckpointRestorer`（恢复与 legacy 兼容 owner）；`apps/extension/src/adapters/diff-presenter.ts:DiffPresenter.presentTextPair`（临时 Diff owner）；VS Code `WorkspaceEdit`/`workspace.fs`（Host 原子应用与 stat API）。
+- 决定：深化通用审批、scope、Diff、Checkpoint owners；新增删除/重命名计划、Tool 和 Host applier，保持单文件语义边界。
+- 未复用理由：创建计划要求目标 absent，编辑计划携带范围编辑；删除必须保留完整 before 文本，重命名还需绑定 source/target 与 source 内容身份，均不能由现有 create/edit plan 表达。
+- 是否形成第二份或第三份实现：否；共享文本/path/hash 边界与审批生命周期，删除/重命名副作用由各自 `File*Applier` owner 持有，不复制通用 WorkspaceEdit 算法。
+- 执行中将主动调用或深化的已有功能：`FileMutationApprovalWorkflow`、`WorkspaceScope.validate`/`validateNewFile`、`CheckpointRestorer`、`DiffPresenter.presentTextPair`、VS Code `WorkspaceEdit`/`workspace.fs` 及现有 UTF-8/hash primitive。
 
 ### Build vs Buy
 
-- 涉及的通用机制：UTF-8/NUL/行/字节边界、SHA-256 内容身份、WorkspaceEdit 原子应用及路径身份。
-- 触发条件：已有重复实现与大量安全边界测试；未触发依赖变更或新通用算法采购。
+- 涉及的通用机制：UTF-8/NUL/行/字节边界、SHA-256 内容身份、WorkspaceEdit 原子删除/重命名及路径身份。
+- 触发条件：已有生命周期 owners 与安全边界测试；未触发依赖变更或新通用算法采购。
 - 标准库或 VS Code API：标准 `TextEncoder`/Unicode well-formed 检查、Node `crypto.createHash`、VS Code
-  `WorkspaceEdit` 和 `workspace.fs.stat`。
+  `WorkspaceEdit.deleteFile`/`renameFile` 与 `workspace.fs.stat`/`openTextDocument`。
 - 现有依赖：仓库已有 `zod`、VS Code API 和 Node crypto；不增加依赖。
 - 官方 SDK 或第三方候选：无；候选会绕过 CtrlZebra-owned approval、scope、lifecycle 边界。
-- 决定：复用标准库/API，深化现有 owners，自研最小计划校验；不引入依赖。
-- 理由与证据：内容哈希、路径 containment、审批失效、取消和 Checkpoint 是产品安全策略，必须保留在
-  CtrlZebra-owned interfaces；VS Code 提供的原子 WorkspaceEdit 已满足 Host side-effect boundary。
-- 影响：无额外许可证、包体积或运行时兼容影响；所有异步 Host 操作继续接受 AbortSignal。
-- 隔离边界：core 仅接受注入的 text hasher；Node/VS Code SDK 类型和副作用留在 Extension adapter。
+- 决定：复用标准库/API，深化现有 owners，自研最小严格计划校验；不引入依赖。
+- 理由与证据：内容身份、canonical containment、审批失效、取消和 Checkpoint 是产品安全策略，必须保留在
+  CtrlZebra-owned interfaces；VS Code `WorkspaceEdit` 提供 Host-owned 原子删除/重命名提交。
+- 影响：无额外许可证、包体积或运行时兼容影响；所有异步 Host 操作继续接受 AbortSignal，取消不会产生副作用。
+- 隔离边界：core/builtin 仅处理严格 JSON/文本/hash 数据；Node/VS Code SDK 类型、副作用和 URI 解析留在 Extension adapter。
 
 ### 测试计划
 
-- 单元测试：core 创建计划正常/边界/路径、UTF-8/NUL/行/字节/hash 失败；builtin 输入/目标存在/取消；
-  protocol 生命周期 Checkpoint；Extension Scope parent/symlink/case、URI preflight、Checkpoint
-  absent-state/竞态/取消、FileCreateApplier、创建审批过期/取消/一次性消费。
-- 集成测试：Extension build 与 VS Code integration；验证创建、冲突、恢复和未信任工作区路径。
-- 人工烟雾测试：可信工作区创建 UTF-8 文本、展示完整 Diff、批准后生成文件、重启后恢复到不存在；
-  未信任/已有/越界目标均无写入。
+- 单元测试：core 删除/重命名计划正常、路径/文本/hash/source-target 身份边界；builtin 严格 input、
+  不存在/目标冲突/stale/取消；Extension capture/applier 的批准后变化、大小写/跨根、部分失败与零写入；
+  审批过期/取消/一次性消费；Checkpoint rename restore、冲突、竞态和取消。
+- 集成测试：Extension build 与 VS Code integration；验证可信工作区删除/重命名、目标冲突、恢复和未信任路径。
+- 人工烟雾测试：展示完整删除 Diff 与 source/target rename Diff，批准后单文件变更，重启后恢复；不存在、覆盖、
+  stale、跨根和大小写边界均无写入。
 
 ### 约束门禁
 
 - 需要新建或更新的规范：不需要新门禁；T2001 PR #227 已更新 Phase 20 所需 architecture/protocol/
   security/persistence/UX/Webview 约束，本任务仅实现并记录证据。
-- 必须覆盖的规则：selected-root scheme/authority/lexical + canonical containment；UTF-8 text/NUL/
-  line/byte bounds；absent target recheck；single-use expiring approval；cancellation/race zero side
-  effect；lifecycle Checkpoint restore。
+- 必须覆盖的规则：selected-root scheme/authority/lexical + canonical containment；UTF-8 text/NUL/line/byte
+  bounds；delete source present and rename source present/target absent recheck；rename source/target and
+  before-content identity binding；single-use expiring approval；cancellation/race/partial-failure zero side
+  effect；lifecycle Checkpoint delete/rename restore。
 - 是否需要独立约束 PR（docs-only / config-only）：否；当前实现分支继承已合入的 T2001 门禁。
 
 ### 完成结果
 
-- 实现摘要：已实现并经独立 Reviewer 以 revision `48099e8a6bce365b69f22bd9b9a60e1d0c764432` 批准，
+- 实现摘要：已实现并经独立 Reviewer 以 revision `b47888dccc81d4754e785e66f245a030ace3c932` 批准；PR #231 required CI 全部通过，具备 squash merge 条件。
+- 测试结果：聚焦 T2003 8 files/51 tests；core 30 files/473 tests；extension adapters/controllers 验证及 recursive TypeScript、`pnpm check`、extension build、`git diff --check` 均通过；GitHub Actions run `31758730278` 的 Ubuntu、macOS、Windows gates 全部通过。根 `pnpm run test:unit` 曾在 124s 后不退出，结果不定，未作为通过证据。
+- Similarity Audit：实现稳定后已执行全仓复查（命令：`rg -n --hidden -S --glob '!node_modules/**' --glob '!dist/**' --glob '!coverage/**' "File(Delete|Rename)(Plan|Applier|ApprovalWorkflow)|parseFile(Delete|Rename)Plan|propose_file_(delete|rename)|createProposeFile(Delete|Rename)Tool|VsCodeProposeFileDeleteRenameWorkspace|FileMutationApprovalWorkflow|WorkspaceScope|CheckpointRestorer|DiffPresenter|WorkspaceEdit|workspace[.]fs|hashText|countLogicalLines|assertParentDirectory" .`；定义计数只统计 packages/apps 生产源码声明，排除 import、re-export、测试和文档引用）。实际新增/修改符号、数量、owner 与处置如下：
+  - 新建 core 计划边界（各 1 个定义）：`packages/core/src/file-delete-rename.ts:FileDeletePlan`、`FileRenamePlan`、`InvalidFileDeletePlanError`、`InvalidFileRenamePlanError`、`FileMutationTextHasher`、`parseFileDeletePlan`、`parseFileRenamePlan`（core 计划/内容身份 owner，新建）；`maxFileDeletePathCharacters`、`maxFileDeletePathBytes`、`maxFileDeleteContentCharacters`、`maxFileDeleteContentLines`、`maxFileDeleteContentBytes`、`maxFileRenamePathCharacters`、`maxFileRenamePathBytes`、`maxFileRenameContentCharacters`、`maxFileRenameContentLines`、`maxFileRenameContentBytes`（各 1，复用 `file-create` 的既有边界常量，不复制限制算法）；私有 `assertHash`、`isSafeMutationPath`、`isSafeUri`、`isBoundedMutationText`、`countLogicalLines`（各 1，core-local validation owner）。
+  - 新建 builtin Tool 契约（列出的每个符号各 1 个定义）：`packages/builtin-tools/src/propose-file-delete.ts` 的 `proposeFileDeleteToolName`、`proposeFileDeleteToolDescription`、`maxProposedFileDeleteCharacters`、`maxProposedFileDeleteLines`、`maxProposedFileDeleteBytes`、`maxProposedFileDeletePathBytes`、`proposeFileDeleteInputSchema`、`ProposeFileDeleteInput`、`FileDeleteTargetSnapshot`、`ProposeFileDeleteWorkspace`、`InvalidWorkspaceFileDeleteTargetError`、`FileDeleteTargetNotFoundError`、`StaleFileDeleteTargetError`、`createProposeFileDeleteTool`；`packages/builtin-tools/src/propose-file-rename.ts` 的 `proposeFileRenameToolName`、`proposeFileRenameToolDescription`、`maxProposedFileRenameCharacters`、`maxProposedFileRenameLines`、`maxProposedFileRenameBytes`、`maxProposedFileRenamePathBytes`、`proposeFileRenameInputSchema`、`ProposeFileRenameInput`、`FileRenameTargetSnapshot`、`ProposeFileRenameWorkspace`、`InvalidWorkspaceFileRenameTargetError`、`FileRenameSourceNotFoundError`、`FileRenameTargetExistsError`、`StaleFileRenameTargetError`、`createProposeFileRenameTool`；private `prepareFileDeleteApproval`/`parseProposeFileDeleteInput`/`parseFileDeleteTargetSnapshot`/`isBoundedText`/`countLogicalLines` and `prepareFileRenameApproval`/`parseProposeFileRenameInput`/`parseFileRenameTargetSnapshot`/`isSafePath`/`isBoundedText`/`countLogicalLines` (each 1, operation-local boundary owner; no shared utility added). `FileDeleteTargetMissingError` 与 `FileRenameSourceMissingError` 各是 1 个显式兼容 alias export，不是第二个 error class。
+  - 新建 Extension operation owners（各 1 个定义）：`apps/extension/src/adapters/vscode-propose-file-delete-rename-workspace.ts:VsCodeProposeFileDeleteRenameWorkspace`（Host capture/scope owner；同文件 private `assertParentDirectory`、`isPresent`、`hashText` 也各 1）；`file-delete-applier.ts` 的 `FileDeleteOwnership`、`FileDeleteResource`、`FileDeleteTarget`、`FileDeleteApplierDependencies`、`FileDeleteConflictError`、`FileDeleteApplyError`、`FileDeleteApplier`；`file-rename-applier.ts` 的对应 `FileRenameOwnership`、`FileRenameResource`、`FileRenameTarget`、`FileRenameApplierDependencies`、`FileRenameConflictError`、`FileRenameApplyError`、`FileRenameApplier`（各自精确身份/原子 WorkspaceEdit owner）；`create-vscode-file-delete-applier.ts:createVsCodeFileDeleteApplier` 与 `create-vscode-file-rename-applier.ts:createVsCodeFileRenameApplier`（各 1，VS Code composition adapter）；`file-delete-approval-workflow.ts:FileDeleteApprovalWorkflowDependencies`/`FileDeleteApprovalWorkflow` 与 `file-rename-approval-workflow.ts:FileRenameApprovalWorkflowDependencies`/`FileRenameApprovalWorkflow`（各 1，operation-specific approval owner，深化既有 `FileMutationApprovalWorkflow`）。
+  - 既有 owner 的修改计数仍各 1：`apps/extension/src/adapters/checkpoint-restorer.ts:CheckpointRestorerDependencies`、`CheckpointRestorer`（加入 lifecycle rename restore），同文件 `RenamePair`/`getRenamePair`（各 1，rename pairing private owner，新建）；`create-vscode-checkpoint-restorer.ts:createVsCodeCheckpointRestorer`、`controllers/tool-approval-workflow.ts:ToolApprovalWorkflowRouter`、`controllers/readonly-tool-registry.ts:WorkspaceToolRegistryDependencies`/`createWorkspaceToolRegistryProvider`、`extension.ts:activate`（各 1，分别深化既有 restore/router/registry/composition seam，无平行 owner）。
+  - 直接复用/深化清单：`FileMutationApprovalWorkflow`（approval lifecycle）、`WorkspaceScope.validate`/`validateNewFile`（selected-root/canonical containment）、`CheckpointRestorer`（legacy/lifecycle recovery）、`DiffPresenter.presentTextPair`（temporary Diff）、VS Code `WorkspaceEdit.deleteFile`/`renameFile` 与 `workspace.fs.stat`/`openTextDocument`（Host atomic/stat）、既有 UTF-8/hash primitives 与 `file-create` 的 bounded text/path constants；未引入依赖。
+  - Remaining justified similarities：delete 与 rename 各保留一套 operation-specific plan/parser/Tool/applier/workflow/error contract（source/target identity 与副作用不同，不能由 create/edit owner 表达）；私有 `countLogicalLines` 生产定义 5 处（core create/delete-rename、builtin create/delete/rename）、`isBoundedText` 3 处（builtin create/delete/rename）、Host `hashText` 3 处（create/edit/delete-rename adapters）及 `assertParentDirectory` 2 处（create 与 delete/rename adapters）均维持边界内局部 owner，未抽出无授权的跨层 utility 或 pass-through wrapper。
+  - 审计结论：每个新增公开符号只有 1 个生产定义；未发现第二/第三份可替代实现、由测试 fake 晋升的实现、无额外语义的 wrapper、被遗留实现与新实现并存，或新增依赖。上述局部相似性均已记录并有明确 owner/语义处置；无待处理的 duplicate/fake/wrapper/dependency finding，Reviewer 将独立复查差异与定义计数。
+- 实际直接复用或深化的已有功能：`FileMutationApprovalWorkflow`、`WorkspaceScope`、`CheckpointRestorer`、
+  `DiffPresenter`、VS Code WorkspaceEdit/stat、core UTF-8/hash primitive。
+- 删除或替代的旧实现：无；legacy Checkpoint schema/restore 兼容路径保留。
+- 设计偏差：无已批准偏差。
+- 完成 PR：[#231](https://github.com/yangzuo0621/ctrl-zebra/pull/231)。
+- 完成日期：2026-08-14
+- 下一任务：T2004（仅在 T2003 完成后启动）。
+
+### T2002 完成记录
+
+- 完成摘要：已实现并经独立 Reviewer 以 revision `48099e8a6bce365b69f22bd9b9a60e1d0c764432` 批准，
   PR #229 已通过 required CI，具备合入条件。
 - 测试结果：聚焦单元 34、完整单元 166 files/1808 tests、递归 TypeScript、Biome/pnpm check、构建及
   `git diff --check` 均通过；CI run `31720666201` 的 Ubuntu、macOS、Windows gates 均通过。VS Code
