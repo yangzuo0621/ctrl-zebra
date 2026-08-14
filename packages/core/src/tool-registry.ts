@@ -33,7 +33,7 @@ export class ToolUnavailableError extends Error {
 
 export class ToolExecutionError extends Error {
   constructor(
-    readonly code: Extract<ToolErrorCode, "failed" | "invalid-output">,
+    readonly code: Extract<ToolErrorCode, "invalid-input" | "failed" | "invalid-output">,
     message: string,
   ) {
     super(message);

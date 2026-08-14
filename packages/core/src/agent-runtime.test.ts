@@ -2702,6 +2702,7 @@ describe("AgentRuntime", () => {
   });
 
   it.each([
+    [new ToolExecutionError("invalid-input", "The Tool input is invalid."), "invalid-input"],
     [
       new ToolExecutionError("invalid-output", "External Tool output is invalid."),
       "invalid-output",
