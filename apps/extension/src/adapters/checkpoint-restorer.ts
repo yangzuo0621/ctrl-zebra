@@ -26,6 +26,7 @@ export interface CheckpointRestorerDependencies<Resource extends CheckpointResto
   readonly createFile?: (edit: Edit, uri: Resource) => void;
   readonly insert?: (edit: Edit, uri: Resource, text: string) => void;
   readonly deleteFile?: (edit: Edit, uri: Resource) => void;
+  readonly renameFile?: (edit: Edit, source: Resource, target: Resource) => void;
   readonly applyWorkspaceEdit: (edit: Edit) => Promise<boolean>;
   readonly hashText: (text: string) => string;
 }
@@ -79,12 +80,39 @@ export class CheckpointRestorer<Resource extends CheckpointRestoreResource, Edit
     signal.throwIfAborted();
 
     const workspaceEdit = this.#dependencies.createWorkspaceEdit();
+    const renamePair = getRenamePair(checkpoint.files);
+    const renamedIndexes = new Set<number>();
+    if (renamePair !== undefined) {
+      const sourceFile = checkpoint.files[renamePair.sourceIndex];
+      const targetFile = checkpoint.files[renamePair.targetIndex];
+      const sourceCurrent = afterDocuments[renamePair.sourceIndex];
+      const targetCurrent = afterDocuments[renamePair.targetIndex];
+      if (
+        sourceFile === undefined ||
+        targetFile === undefined ||
+        sourceCurrent !== undefined ||
+        targetCurrent === undefined ||
+        this.#dependencies.createResource === undefined ||
+        this.#dependencies.renameFile === undefined
+      ) {
+        throw new CheckpointRestoreConflictError();
+      }
+      this.#dependencies.renameFile(
+        workspaceEdit,
+        targetCurrent.uri,
+        this.#dependencies.createResource(sourceFile.uri),
+      );
+      signal.throwIfAborted();
+      renamedIndexes.add(renamePair.sourceIndex);
+      renamedIndexes.add(renamePair.targetIndex);
+    }
     for (let index = 0; index < checkpoint.files.length; index += 1) {
       const file = checkpoint.files[index];
       const document = afterDocuments[index];
       if (file === undefined) {
         throw new CheckpointRestoreConflictError();
       }
+      if (renamedIndexes.has(index)) continue;
       this.#applyBeforeState(workspaceEdit, file, document);
     }
 
@@ -186,6 +214,36 @@ export class CheckpointRestorer<Resource extends CheckpointRestoreResource, Edit
       { start: { line: 0, character: 0 }, end: current.end },
       before.content,
     );
+  }
+}
+
+interface RenamePair {
+  readonly sourceIndex: number;
+  readonly targetIndex: number;
+}
+
+function getRenamePair(files: readonly CheckpointFile[]): RenamePair | undefined {
+  if (files.length !== 2) return undefined;
+  const source = files[0];
+  const target = files[1];
+  if (source === undefined || target === undefined) return undefined;
+  try {
+    const sourceBefore = getState(source, "before");
+    const sourceAfter = getState(source, "after");
+    const targetBefore = getState(target, "before");
+    const targetAfter = getState(target, "after");
+    if (
+      sourceBefore.kind !== "text" ||
+      sourceAfter.kind !== "absent" ||
+      targetBefore.kind !== "absent" ||
+      targetAfter.kind !== "text" ||
+      sourceBefore.beforeHash !== targetAfter.afterHash
+    ) {
+      return undefined;
+    }
+    return { sourceIndex: 0, targetIndex: 1 };
+  } catch {
+    return undefined;
   }
 }
 

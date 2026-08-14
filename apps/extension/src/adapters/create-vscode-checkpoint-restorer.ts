@@ -57,6 +57,9 @@ export function createVsCodeCheckpointRestorer(
     deleteFile(edit, uri) {
       edit.deleteFile(uri, { recursive: false, ignoreIfNotExists: false });
     },
+    renameFile(edit, source, target) {
+      edit.renameFile(source, target, { overwrite: false, ignoreIfExists: false });
+    },
     applyWorkspaceEdit: (edit) => Promise.resolve(workspace.applyEdit(edit)),
     hashText: (text) => createHash("sha256").update(text, "utf8").digest("hex"),
   });

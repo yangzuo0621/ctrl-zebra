@@ -83,6 +83,25 @@ export {
   StaleFileCreateTargetError,
 } from "./propose-file-create.js";
 export type {
+  FileDeleteTargetSnapshot,
+  ProposeFileDeleteInput,
+  ProposeFileDeleteWorkspace,
+} from "./propose-file-delete.js";
+export {
+  createProposeFileDeleteTool,
+  FileDeleteTargetMissingError,
+  FileDeleteTargetNotFoundError,
+  InvalidWorkspaceFileDeleteTargetError,
+  maxProposedFileDeleteBytes,
+  maxProposedFileDeleteCharacters,
+  maxProposedFileDeleteLines,
+  maxProposedFileDeletePathBytes,
+  proposeFileDeleteInputSchema,
+  proposeFileDeleteToolDescription,
+  proposeFileDeleteToolName,
+  StaleFileDeleteTargetError,
+} from "./propose-file-delete.js";
+export type {
   CaptureFileEditRevisionRequest,
   FileEditRevisionSnapshot,
   ProposeFileEditInput,
@@ -99,6 +118,26 @@ export {
   proposeFileEditToolName,
   StaleFileRevisionError,
 } from "./propose-file-edit.js";
+export type {
+  FileRenameTargetSnapshot,
+  ProposeFileRenameInput,
+  ProposeFileRenameWorkspace,
+} from "./propose-file-rename.js";
+export {
+  createProposeFileRenameTool,
+  FileRenameSourceMissingError,
+  FileRenameSourceNotFoundError,
+  FileRenameTargetExistsError,
+  InvalidWorkspaceFileRenameTargetError,
+  maxProposedFileRenameBytes,
+  maxProposedFileRenameCharacters,
+  maxProposedFileRenameLines,
+  maxProposedFileRenamePathBytes,
+  proposeFileRenameInputSchema,
+  proposeFileRenameToolDescription,
+  proposeFileRenameToolName,
+  StaleFileRenameTargetError,
+} from "./propose-file-rename.js";
 export type {
   IdeContextPort,
   ReadEditorContextInput,

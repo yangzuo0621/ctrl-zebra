@@ -159,6 +159,27 @@ export {
   maxFileCreatePathCharacters,
   parseFileCreatePlan,
 } from "./file-create.js";
+export type {
+  FileDeletePlan,
+  FileMutationTextHasher,
+  FileRenamePlan,
+} from "./file-delete-rename.js";
+export {
+  InvalidFileDeletePlanError,
+  InvalidFileRenamePlanError,
+  maxFileDeleteContentBytes,
+  maxFileDeleteContentCharacters,
+  maxFileDeleteContentLines,
+  maxFileDeletePathBytes,
+  maxFileDeletePathCharacters,
+  maxFileRenameContentBytes,
+  maxFileRenameContentCharacters,
+  maxFileRenameContentLines,
+  maxFileRenamePathBytes,
+  maxFileRenamePathCharacters,
+  parseFileDeletePlan,
+  parseFileRenamePlan,
+} from "./file-delete-rename.js";
 export {
   defaultModelMessageTokenCounter,
   HeuristicModelMessageTokenCounter,

@@ -5,7 +5,9 @@ import {
   createListFilesTool,
   createListSymbolsTool,
   createProposeFileCreateTool,
+  createProposeFileDeleteTool,
   createProposeFileEditTool,
+  createProposeFileRenameTool,
   createReadEditorContextTool,
   createReadFileTool,
   createRunCommandTool,
@@ -14,7 +16,9 @@ import {
   type IdeDiagnosticsPort,
   type IdeLanguageServicePort,
   type ProposeFileCreateWorkspace,
+  type ProposeFileDeleteWorkspace,
   type ProposeFileEditWorkspace,
+  type ProposeFileRenameWorkspace,
   type RunCommandExecutor,
 } from "@ctrl-zebra/builtin-tools";
 import { ToolRegistry } from "@ctrl-zebra/core";
@@ -63,6 +67,14 @@ interface WorkspaceToolRegistryDependencies {
     root: Uri,
     scope: WorkspaceScope,
   ) => ProposeFileCreateWorkspace;
+  readonly createProposeFileDeleteWorkspace?: (
+    root: Uri,
+    scope: WorkspaceScope,
+  ) => ProposeFileDeleteWorkspace;
+  readonly createProposeFileRenameWorkspace?: (
+    root: Uri,
+    scope: WorkspaceScope,
+  ) => ProposeFileRenameWorkspace;
   readonly commandExecutor: RunCommandExecutor;
   readonly workspaceTrust: WorkspaceTrustPolicy;
   readonly editorContext?: IdeContextPort;
@@ -80,6 +92,8 @@ export function createWorkspaceToolRegistryProvider({
   onDidGrantWorkspaceTrust,
   createProposeFileEditWorkspace,
   createProposeFileCreateWorkspace,
+  createProposeFileDeleteWorkspace,
+  createProposeFileRenameWorkspace,
   commandExecutor,
   workspaceTrust,
   editorContext,
@@ -121,6 +135,16 @@ export function createWorkspaceToolRegistryProvider({
       if (createProposeFileCreateWorkspace !== undefined) {
         registry.register(
           createProposeFileCreateTool(createProposeFileCreateWorkspace(selectedRoot, scope)),
+        );
+      }
+      if (createProposeFileDeleteWorkspace !== undefined) {
+        registry.register(
+          createProposeFileDeleteTool(createProposeFileDeleteWorkspace(selectedRoot, scope)),
+        );
+      }
+      if (createProposeFileRenameWorkspace !== undefined) {
+        registry.register(
+          createProposeFileRenameTool(createProposeFileRenameWorkspace(selectedRoot, scope)),
         );
       }
       registry.register(
