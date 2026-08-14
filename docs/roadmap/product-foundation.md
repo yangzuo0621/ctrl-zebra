@@ -175,7 +175,7 @@ ctrl-zebra/
 Phase 20 的文件生命周期契约保留 `propose_file_edit` 的单文件含义，并新增
 `propose_file_create`、`propose_file_delete`、`propose_file_rename` 和 edit-only 的
 `propose_workspace_edit`。这些名称、输入闭集、边界和失败/恢复语义由
-[Protocol 的 T2001 契约](../protocol.md#file-lifecycle-and-atomic-mutation-contracts-t2001)拥有；
+[Protocol 的 T2001 契约](../protocol/tools-and-file-lifecycle.md#file-lifecycle-and-atomic-mutation-contracts-t2001)拥有；
 Extension 仍是唯一可以解析 VS Code URI、校验 Trust、创建 Checkpoint 和提交原子
 `WorkspaceEdit` 的模块。正则搜索通过 `search_files.mode: "regex"` 显式启用受控
 RE2-compatible dialect，默认 literal 行为不变；T2005 才选择和接入引擎。
@@ -285,15 +285,15 @@ mcp-client → extension
 
 | 契约 | 代码事实来源 | 语义所有者 |
 |---|---|---|
-| Model 请求、事件、Usage、Finish 与稳定错误 | [`packages/core/src/model-gateway.ts`](../../packages/core/src/model-gateway.ts) | [Architecture：Model Provider Boundary](../architecture.md#model-provider-boundary) |
-| Agent Loop、Tool 生命周期和 Session 转换 | [`packages/core`](../../packages/core/src/index.ts) 与 [`packages/protocol/src/session.ts`](../../packages/protocol/src/session.ts) | [Architecture：Tool Contract、Context 与 Session](../architecture.md#tool-contract-boundary) |
-| Tool Call、Result、风险和 JSON 值 | [`packages/protocol/src/tool.ts`](../../packages/protocol/src/tool.ts) | [Protocol：Tool Data Contracts](../protocol.md#tool-data-contracts) 与 [Security：Tool Input and Output](../security.md#tool-input-and-output) |
+| Model 请求、事件、Usage、Finish 与稳定错误 | [`packages/core/src/model-gateway.ts`](../../packages/core/src/model-gateway.ts) | [Architecture：Model Provider Boundary](../architecture/providers.md#model-provider-boundary) |
+| Agent Loop、Tool 生命周期和 Session 转换 | [`packages/core`](../../packages/core/src/index.ts) 与 [`packages/protocol/src/session.ts`](../../packages/protocol/src/session.ts) | [Architecture：Tool Contract、Context 与 Session](../architecture/tools-and-files.md#tool-contract-boundary) |
+| Tool Call、Result、风险和 JSON 值 | [`packages/protocol/src/tool.ts`](../../packages/protocol/src/tool.ts) | [Protocol：Tool Data Contracts](../protocol/tools-and-file-lifecycle.md#tool-data-contracts) 与 [Security：Tool Input and Output](../security.md#tool-input-and-output) |
 | Webview/Extension 消息和请求关联 | [`packages/protocol/src/messages.ts`](../../packages/protocol/src/messages.ts) | [Protocol Guidelines](../protocol.md) |
 | Session Repository、事件和恢复投影 | [`packages/core/src/session-repository.ts`](../../packages/core/src/session-repository.ts) 与 [`packages/protocol/src/persistence.ts`](../../packages/protocol/src/persistence.ts) | [Persistence Contract](../persistence.md) |
 | Approval 请求、决定、消费和失效 | [`packages/core`](../../packages/core/src/index.ts) 与 [`packages/protocol/src/approval.ts`](../../packages/protocol/src/approval.ts) | [Security：Approval Boundary](../security.md#approval-boundary) |
 | MCP Client、Tool、Resource 与 Prompt 投影 | [`packages/mcp-client`](../../packages/mcp-client/src/index.ts) 与 [`packages/protocol`](../../packages/protocol/src/index.ts) | Architecture、Security、Protocol、Persistence、Webview 和 UX 中各自拥有的 MCP 章节 |
-| IDE 上下文与只读 Tool DTO、来源和生命周期 | （T1902–T1904 的 Extension adapters、`packages/builtin-tools` 与 `packages/protocol` 公共入口） | [Architecture：IDE context and read-only Tool boundary](../architecture.md#ide-context-and-read-only-tool-boundary-t1901)、[Protocol：IDE context and read-only Tool DTOs](../protocol.md#ide-context-and-read-only-tool-dtos-t1901)、[Security](../security.md#ide-context-and-read-only-tool-boundary-t1901)、[Persistence](../persistence.md#ide-context-and-read-only-tool-persistence-t1901)、[UX](../ux.md#ide-context-and-read-only-tool-experience-t1901)、[Webview](../webview.md#ide-context-and-read-only-tool-projection-t1901) |
-| 文件生命周期、原子编辑与恢复计划 | （T2002–T2004 的 `packages/builtin-tools`、Core approval/checkpoint contracts 与 Extension workspace adapters） | [Architecture：File lifecycle and atomic WorkspaceEdit boundary](../architecture.md#file-lifecycle-and-atomic-workspaceedit-boundary-t2001)、[Protocol：File lifecycle and atomic mutation contracts](../protocol.md#file-lifecycle-and-atomic-mutation-contracts-t2001)、[Security：File lifecycle mutation boundary](../security.md#file-lifecycle-mutation-boundary-t2001)、[Persistence：File lifecycle Checkpoint extension](../persistence.md#file-lifecycle-checkpoint-extension-t2001) |
+| IDE 上下文与只读 Tool DTO、来源和生命周期 | （T1902–T1904 的 Extension adapters、`packages/builtin-tools` 与 `packages/protocol` 公共入口） | [Architecture：IDE context and read-only Tool boundary](../architecture/ide-context.md#ide-context-and-read-only-tool-boundary-t1901)、[Protocol：IDE context and read-only Tool DTOs](../protocol/ide-context.md#ide-context-and-read-only-tool-dtos-t1901)、[Security](../security.md#ide-context-and-read-only-tool-boundary-t1901)、[Persistence](../persistence.md#ide-context-and-read-only-tool-persistence-t1901)、[UX](../ux.md#ide-context-and-read-only-tool-experience-t1901)、[Webview](../webview.md#ide-context-and-read-only-tool-projection-t1901) |
+| 文件生命周期、原子编辑与恢复计划 | （T2002–T2004 的 `packages/builtin-tools`、Core approval/checkpoint contracts 与 Extension workspace adapters） | [Architecture：File lifecycle and atomic WorkspaceEdit boundary](../architecture/tools-and-files.md#file-lifecycle-and-atomic-workspaceedit-boundary-t2001)、[Protocol：File lifecycle and atomic mutation contracts](../protocol/tools-and-file-lifecycle.md#file-lifecycle-and-atomic-mutation-contracts-t2001)、[Security：File lifecycle mutation boundary](../security.md#file-lifecycle-mutation-boundary-t2001)、[Persistence：File lifecycle Checkpoint extension](../persistence.md#file-lifecycle-checkpoint-extension-t2001) |
 
 跨模块契约共同遵守以下不变量：
 

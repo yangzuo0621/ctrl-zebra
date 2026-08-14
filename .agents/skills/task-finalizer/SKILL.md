@@ -1,8 +1,8 @@
 # Task-Finalizer
 
 ## Purpose
-Close one reviewed task on the same feature PR. Under V2 this is a transactional role, not a second
-implementation reviewer. V1 retains the legacy closure audit for compatibility.
+Close one reviewed task on the same feature PR. This is a transactional role, not a second
+implementation reviewer.
 
 ## Preconditions
 Run only when:
@@ -13,9 +13,9 @@ Run only when:
 
 Work on the **same feature branch/PR**.
 
-## V2 Transaction Gates
+## AUTO Transaction Gates
 
-For `AUTO_DRAFT_V2` and `AUTO_FULL_V2`, verify only:
+For `AUTO_DRAFT` and `AUTO_FULL`, verify only:
 - current implementation HEAD exactly matches the Reviewer-approved revision;
 - the approval is current;
 - required CI/checks for that revision are green;
@@ -24,11 +24,10 @@ For `AUTO_DRAFT_V2` and `AUTO_FULL_V2`, verify only:
   criteria, architecture, or implementation.
 
 Treat Reviewer approval as authoritative for acceptance criteria, correctness, architecture, security,
-scope, test sufficiency, code smells, and reuse evidence. Do not reopen those judgments, inspect the diff
-for new findings, or request implementation changes based on a second review.
+scope, test sufficiency, code smells, and reuse evidence. Do not reopen those judgments, inspect the
+diff for new findings, or request implementation changes based on a second review.
 
-If a V2 gate fails, return one mechanical route:
-
+If an AUTO gate fails, return one mechanical route:
 - changed HEAD or stale approval: `APPROVAL_STALE`, owner `task-reviewer`, re-review required;
 - failed/missing required CI: `CHECKS_NOT_GREEN`, owner `task-executor`, re-review only if the revision changes;
 - merge conflict: `MERGE_CONFLICT`, owner `task-executor`, re-review if the resolution changes the revision;
@@ -46,31 +45,29 @@ Use this result shape and set `reReviewRequired` from the route above:
 }
 ```
 
-Do not route V2 closure to Sol-Planner. A planning or architecture question discovered before approval
+Do not route closure to Sol-Planner. A planning or architecture question discovered before approval
 belongs to the coordinator/Planner; one discovered after approval requires the coordinator to stop for
 change-control direction rather than asking Finalizer to redesign the task.
 
-## V2 Plan Write Scope
+## AUTO Plan Write Scope
 
-For `AUTO_DRAFT_V2` and `AUTO_FULL_V2`, writes to `docs/implementation-plan.md` are limited to this
-exact allowlist:
-
+For `AUTO_DRAFT` and `AUTO_FULL`, writes to `docs/implementation-plan.md` are limited to this exact
+allowlist:
 - task status;
 - completion PR reference and completion date;
 - progress counts;
 - current task;
 - next task.
 
-No other plan writes are permitted in V2. Never copy implementation summaries, reuse/similarity
-audits, Build-vs-Buy decisions, test/CI details, reviewer findings, symbol inventories, design
-rationale, or other execution details into the plan. Ordinary execution evidence remains in the
-conversation, handoff, or PR; durable architecture or audit conclusions belong in the owning domain
-document, an ADR, or an exceptional maintenance record. The `Allowed Updates` list below remains the
-documented V1 compatibility contract and is not expanded by this V2 narrowing.
+No other plan writes are permitted. Never copy implementation summaries, reuse/similarity audits,
+Build-vs-Buy decisions, test/CI details, reviewer findings, symbol inventories, design rationale, or
+other execution details into the plan. Ordinary execution evidence remains in the conversation,
+handoff, or PR; durable architecture or audit conclusions belong in the owning domain document, an ADR,
+or an exceptional maintenance record.
 
-## Legacy V1 Finalization Audit
+## MANUAL Closure Audit
 
-For `MANUAL`, `AUTO_DRAFT_V1`, and `AUTO_FULL_V1`, verify:
+For `MANUAL`, verify:
 - acceptance criteria are satisfied;
 - reviewer approval is current and not stale;
 - required tests/checks/CI evidence is present and consistent with current PR state;
@@ -79,54 +76,18 @@ For `MANUAL`, `AUTO_DRAFT_V1`, and `AUTO_FULL_V1`, verify:
 - direct dependencies unlocked by this task are correctly reflected;
 - no unresolved merge conflict or unexpected implementation change exists.
 
-Legacy V1 may return:
+Any implementation revision change invalidates approval and requires re-review. A planning escalation
+stays with the root coordinator and stops for user direction when change control applies.
 
-```json
-{
-  "status": "BLOCKED",
-  "reason": "IMPLEMENTATION_FIX_REQUIRED",
-  "owner": "task-executor",
-  "reReviewRequired": true
-}
-```
-
-or:
-
-```json
-{
-  "status": "BLOCKED",
-  "reason": "PLANNING_ESCALATION",
-  "owner": "sol-planner",
-  "reReviewRequired": null
-}
-```
-
-Any implementation revision change invalidates the approval and requires re-review. The root coordinator
-determines re-review impact after a V1 planning escalation and stops for user direction when change
-control applies.
-
-## Allowed Updates
-
-For `MANUAL`, `AUTO_DRAFT_V1`, and `AUTO_FULL_V1`, retain the existing closure update scope below:
-
-Every V1 write to `docs/implementation-plan.md` still obeys the root `AGENTS.md` index-only ownership;
-the operation categories below remain unchanged, but none authorizes persisting execution details.
-Do not copy implementation summaries, reuse/similarity audits, Build-vs-Buy decisions, test/CI details,
-reviewer findings, symbol inventories, design rationale, or other execution evidence into the plan.
-
-You may:
-- update `docs/implementation-plan.md`;
-- mark the completed task **Done** using the project's existing status convention;
-- update direct dependency/status references caused by this task;
-- update task/PR closure metadata where the repository workflow uses it.
-
-Keep updates plan/metadata-only. Commit/push them to the same PR only when the active authorization
-profile explicitly permits those operations. If a supposedly mechanical update would change task
-meaning or implementation scope, stop for the coordinator instead.
+Every MANUAL write to `docs/implementation-plan.md` still obeys root `AGENTS.md` index-only ownership
+and remains plan/metadata-only. You may mark the completed task **Done**, update direct dependency/status
+references, and update task/PR closure metadata where the repository workflow uses it. Do not persist
+execution evidence in the plan. Request explicit authorization for each closure operation unless already
+authorized.
 
 ## Successful Closure
 
-Under `AUTO_DRAFT_V1` or `AUTO_DRAFT_V2`, do not mark the task Done or perform merge/cleanup. Return:
+Under `AUTO_DRAFT`, do not mark the task Done or perform merge/cleanup. Return:
 
 ```json
 {
@@ -137,9 +98,7 @@ Under `AUTO_DRAFT_V1` or `AUTO_DRAFT_V2`, do not mark the task Done or perform m
 }
 ```
 
-Under `MANUAL`, request explicit authorization for each closure operation unless already authorized.
-Under `AUTO_FULL_V1` or `AUTO_FULL_V2`, use the exact profile authorization envelope. Continue only
-when it covers:
+Under `AUTO_FULL`, use the exact profile authorization envelope. Continue only when it covers:
 - commit/push of final plan/metadata updates;
 - confirmation that the task is Done;
 - the authorized squash merge;

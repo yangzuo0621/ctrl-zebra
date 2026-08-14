@@ -32,16 +32,16 @@ for cross-cutting work. Do not load completed phase archives by default.
 | Roadmap task | `docs/implementation-plan.md` and the linked active phase specification |
 | Product scope or technical baseline | `docs/roadmap/product-foundation.md` |
 | Code, config, or dependency | `docs/development.md`; add `docs/testing.md` for tests or logic |
-| Extension lifecycle, disposal, adapters, or lazy initialization | Applicable section from [`Extension Lifecycle`](docs/architecture.md#extension-lifecycle) through [`Lazy Initialization`](docs/architecture.md#lazy-initialization) |
-| Provider boundary or configuration | [`Model Provider Boundary`](docs/architecture.md#model-provider-boundary) and/or [`Provider Configuration Boundary`](docs/architecture.md#provider-configuration-boundary) |
-| Core Tool lifecycle, context budgeting, history, or Session state | Applicable section from [`Tool Contract Boundary`](docs/architecture.md#tool-contract-boundary) through [`Session State Machine`](docs/architecture.md#session-state-machine) |
-| Webview/Extension messages, Session/Run commands, or Tool DTOs | Applicable [`docs/protocol.md`](docs/protocol.md) section; add the owning Architecture section for runtime behavior |
+| Extension lifecycle, disposal, adapters, or lazy initialization | Applicable section from [`Extension Lifecycle`](docs/architecture/lifecycle.md#extension-lifecycle) through [`Lazy Initialization`](docs/architecture/lifecycle.md#lazy-initialization) |
+| Provider boundary or configuration | [`Model Provider Boundary`](docs/architecture/providers.md#model-provider-boundary) and/or [`Provider Configuration Boundary`](docs/architecture/providers.md#provider-configuration-boundary) |
+| Core Tool lifecycle, context budgeting, history, or Session state | Applicable section from [`Tool Contract Boundary`](docs/architecture/tools-and-files.md#tool-contract-boundary) through [`Session State Machine`](docs/architecture/context-and-session.md#session-state-machine) |
+| Webview/Extension messages, Session/Run commands, or Tool DTOs | Applicable [`Protocol index`](docs/protocol.md) section; add the owning Architecture section for runtime behavior |
 | Workspace access, Tool I/O, approvals, commands, or checkpoints | Applicable section from [`Tool Input and Output`](docs/security.md#tool-input-and-output) through [`Checkpoint and restore boundary`](docs/security.md#checkpoint-and-restore-boundary) |
 | Diagnostics, API keys, Provider endpoints, or credentials | Applicable section from [`Structured Diagnostic Logging`](docs/security.md#structured-diagnostic-logging) through [`Gemini API Key Entry`](docs/security.md#gemini-api-key-entry) |
 | Webview state, components, styling, accessibility, or streaming | Applicable [`docs/webview.md`](docs/webview.md) section |
 | Journeys, information architecture, feedback, hierarchy, or UX acceptance | Applicable [`docs/ux.md`](docs/ux.md) section; add the corresponding Webview constraints |
 | Persistence, recovery, or checkpoints | Applicable [`docs/persistence.md`](docs/persistence.md) section; add [`Checkpoint and restore boundary`](docs/security.md#checkpoint-and-restore-boundary) for restore |
-| MCP lifecycle, transport, or SDK isolation | [`Controlled MCP Client Boundary`](docs/architecture.md#controlled-mcp-client-boundary) and applicable MCP domain sections |
+| MCP lifecycle, transport, or SDK isolation | [`Controlled MCP Client Boundary`](docs/architecture/mcp-client.md#controlled-mcp-client-boundary) and applicable MCP domain sections |
 | CI, VSIX packaging, or release | `docs/ci.md`, `docs/packaging.md`, or `docs/release-checklist.md` as applicable |
 | Implementation review | `docs/review-checklist.md` plus the reviewed task's required documents and declared scope |
 
