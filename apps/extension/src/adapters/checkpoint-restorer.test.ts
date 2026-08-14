@@ -70,6 +70,24 @@ const lifecycleRenameCheckpoint = {
   ],
 } satisfies Checkpoint;
 
+const lifecycleReversedRenameCheckpoint = {
+  ...lifecycleRenameCheckpoint,
+  id: "checkpoint-reversed-rename",
+  files: [lifecycleRenameCheckpoint.files[1], lifecycleRenameCheckpoint.files[0]],
+} satisfies Checkpoint;
+
+const lifecycleMismatchedRenameCheckpoint = {
+  ...lifecycleRenameCheckpoint,
+  id: "checkpoint-mismatched-rename",
+  files: [
+    lifecycleRenameCheckpoint.files[0],
+    {
+      ...lifecycleRenameCheckpoint.files[1],
+      after: { kind: "text", afterHash: lifecycleHashText("different\n") },
+    },
+  ],
+} satisfies Checkpoint;
+
 const checkpoint = {
   id: "checkpoint-1",
   sessionId: "session-1",
@@ -198,6 +216,40 @@ describe("CheckpointRestorer", () => {
     expect(dependencies.current).toEqual(
       new Map([[lifecycleRenameCheckpoint.files[0].uri, "before rename\n"]]),
     );
+  });
+
+  it("rejects a reversed lifecycle rename before generic writes", async () => {
+    const sourceUri = lifecycleReversedRenameCheckpoint.files[0]?.uri;
+    if (sourceUri === undefined) throw new Error("reversed rename checkpoint is incomplete");
+    const dependencies = createRenameDependencies(lifecycleReversedRenameCheckpoint, [
+      [sourceUri, "before rename\n"],
+    ]);
+    const restorer = new CheckpointRestorer(dependencies.values);
+
+    await expect(
+      restorer.restore(lifecycleReversedRenameCheckpoint.id, new AbortController().signal),
+    ).rejects.toBeInstanceOf(CheckpointRestoreConflictError);
+    expect(dependencies.deleteFile).not.toHaveBeenCalled();
+    expect(dependencies.createFile).not.toHaveBeenCalled();
+    expect(dependencies.applyWorkspaceEdit).not.toHaveBeenCalled();
+    expect(dependencies.current).toEqual(new Map([[sourceUri, "before rename\n"]]));
+  });
+
+  it("rejects a hash-mismatched lifecycle rename before generic writes", async () => {
+    const targetUri = lifecycleMismatchedRenameCheckpoint.files[1]?.uri;
+    if (targetUri === undefined) throw new Error("mismatched rename checkpoint is incomplete");
+    const dependencies = createRenameDependencies(lifecycleMismatchedRenameCheckpoint, [
+      [targetUri, "different\n"],
+    ]);
+    const restorer = new CheckpointRestorer(dependencies.values);
+
+    await expect(
+      restorer.restore(lifecycleMismatchedRenameCheckpoint.id, new AbortController().signal),
+    ).rejects.toBeInstanceOf(CheckpointRestoreConflictError);
+    expect(dependencies.deleteFile).not.toHaveBeenCalled();
+    expect(dependencies.createFile).not.toHaveBeenCalled();
+    expect(dependencies.applyWorkspaceEdit).not.toHaveBeenCalled();
+    expect(dependencies.current).toEqual(new Map([[targetUri, "different\n"]]));
   });
 
   it("does not apply a lifecycle restore when cancellation races edit construction", async () => {
@@ -374,13 +426,16 @@ type LifecycleDependencies = CheckpointRestorerDependencies<
 
 type FakeDependencies = CheckpointRestorerDependencies<CheckpointRestoreResource, FakeEdit>;
 
-function createRenameDependencies() {
-  const sourceUri = lifecycleRenameCheckpoint.files[0]?.uri;
-  const targetUri = lifecycleRenameCheckpoint.files[1]?.uri;
+function createRenameDependencies(
+  renameCheckpoint: Checkpoint = lifecycleRenameCheckpoint,
+  currentEntries?: readonly (readonly [string, string])[],
+) {
+  const sourceUri = renameCheckpoint.files[0]?.uri;
+  const targetUri = renameCheckpoint.files[1]?.uri;
   if (sourceUri === undefined || targetUri === undefined) {
     throw new Error("rename test checkpoint is incomplete");
   }
-  const current = new Map([[targetUri, "before rename\n"]]);
+  const current = new Map(currentEntries ?? [[targetUri, "before rename\n"]]);
   const renameFile = vi.fn<NonNullable<LifecycleDependencies["renameFile"]>>(
     (edit, source, target) => {
       edit.operations.push({
@@ -391,10 +446,30 @@ function createRenameDependencies() {
       });
     },
   );
+  const replace = vi.fn<NonNullable<LifecycleDependencies["replace"]>>(
+    (edit, resourceValue, _range, text) => {
+      edit.operations.push({ kind: "replace", uri: resourceValue.toString(), text });
+    },
+  );
+  const createFile = vi.fn<NonNullable<LifecycleDependencies["createFile"]>>(
+    (edit, resourceValue) => {
+      edit.operations.push({ kind: "create", uri: resourceValue.toString(), text: "" });
+    },
+  );
+  const insert = vi.fn<NonNullable<LifecycleDependencies["insert"]>>(
+    (edit, resourceValue, text) => {
+      edit.operations.push({ kind: "insert", uri: resourceValue.toString(), text });
+    },
+  );
+  const deleteFile = vi.fn<NonNullable<LifecycleDependencies["deleteFile"]>>(
+    (edit, resourceValue) => {
+      edit.operations.push({ kind: "delete", uri: resourceValue.toString(), text: "" });
+    },
+  );
   const edit: LifecycleEdit = { operations: [] };
   const values = {
     loadCheckpoint: vi.fn(async (checkpointId) =>
-      checkpointId === lifecycleRenameCheckpoint.id ? lifecycleRenameCheckpoint : undefined,
+      checkpointId === renameCheckpoint.id ? renameCheckpoint : undefined,
     ),
     resolveDocument: vi.fn(async (uri: string) => {
       const text = current.get(uri);
@@ -403,7 +478,10 @@ function createRenameDependencies() {
     }),
     createWorkspaceEdit: vi.fn(() => edit),
     createResource: resource,
-    replace: vi.fn(),
+    replace,
+    createFile,
+    insert,
+    deleteFile,
     renameFile,
     applyWorkspaceEdit: vi.fn(async (workspaceEdit: LifecycleEdit) => {
       for (const operation of workspaceEdit.operations) {
@@ -411,13 +489,26 @@ function createRenameDependencies() {
           const text = current.get(operation.uri);
           current.delete(operation.uri);
           if (text !== undefined) current.set(operation.targetUri, text);
+        } else if (operation.kind === "delete") {
+          current.delete(operation.uri);
+        } else {
+          current.set(operation.uri, operation.text);
         }
       }
       return true;
     }),
     hashText: lifecycleHashText,
   } satisfies LifecycleDependencies;
-  return { values, current, renameFile, applyWorkspaceEdit: values.applyWorkspaceEdit };
+  return {
+    values,
+    current,
+    renameFile,
+    replace,
+    createFile,
+    insert,
+    deleteFile,
+    applyWorkspaceEdit: values.applyWorkspaceEdit,
+  };
 }
 
 function resource(uri: string): CheckpointRestoreResource {

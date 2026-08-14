@@ -227,28 +227,24 @@ function getRenamePair(files: readonly CheckpointFile[]): RenamePair | undefined
   const source = files[0];
   const target = files[1];
   if (source === undefined || target === undefined) return undefined;
-  try {
-    const sourceBefore = getState(source, "before");
-    const sourceAfter = getState(source, "after");
-    const targetBefore = getState(target, "before");
-    const targetAfter = getState(target, "after");
-    const sourceShape = sourceBefore.kind === "text" && sourceAfter.kind === "absent";
-    const targetShape = targetBefore.kind === "absent" && targetAfter.kind === "text";
-    if (!sourceShape || !targetShape) {
-      const reversedSourceShape = sourceBefore.kind === "absent" && sourceAfter.kind === "text";
-      const reversedTargetShape = targetBefore.kind === "text" && targetAfter.kind === "absent";
-      if (reversedSourceShape && reversedTargetShape) {
-        throw new CheckpointRestoreConflictError();
-      }
-      return undefined;
-    }
-    if (sourceBefore.beforeHash !== targetAfter.afterHash) {
+  const sourceBefore = getState(source, "before");
+  const sourceAfter = getState(source, "after");
+  const targetBefore = getState(target, "before");
+  const targetAfter = getState(target, "after");
+  const sourceShape = sourceBefore.kind === "text" && sourceAfter.kind === "absent";
+  const targetShape = targetBefore.kind === "absent" && targetAfter.kind === "text";
+  if (!sourceShape || !targetShape) {
+    const reversedSourceShape = sourceBefore.kind === "absent" && sourceAfter.kind === "text";
+    const reversedTargetShape = targetBefore.kind === "text" && targetAfter.kind === "absent";
+    if (reversedSourceShape && reversedTargetShape) {
       throw new CheckpointRestoreConflictError();
     }
-    return { sourceIndex: 0, targetIndex: 1 };
-  } catch {
     return undefined;
   }
+  if (sourceBefore.beforeHash !== targetAfter.afterHash) {
+    throw new CheckpointRestoreConflictError();
+  }
+  return { sourceIndex: 0, targetIndex: 1 };
 }
 
 type CheckpointState =
