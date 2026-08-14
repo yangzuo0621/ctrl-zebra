@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { FileEditRevisionSnapshot, ProposeFileEditWorkspace } from "@ctrl-zebra/builtin-tools";
 import { isBoundedWorkspaceEditText, maxWorkspaceEditTextBytes } from "@ctrl-zebra/core";
 import { FileType, type TextDocument, Uri, workspace } from "vscode";
-
+import { readLocalFilePrefix } from "./read-local-file-prefix.js";
 import type { JoinWorkspacePath } from "./workspace-file-reader.js";
 import type { WorkspaceScope } from "./workspace-scope.js";
 
@@ -117,8 +117,12 @@ export async function readSupportedWorkspaceText(uri: Uri, signal: AbortSignal):
     if ((stat.type & FileType.File) === 0 || stat.size > maxWorkspaceEditTextBytes) {
       throw new UnsupportedWorkspaceTextError();
     }
-    bytes = await workspace.fs.readFile(uri);
+    const prefix = await readLocalFilePrefix(uri.fsPath, maxWorkspaceEditTextBytes, signal);
     signal.throwIfAborted();
+    if (prefix.truncated) {
+      throw new UnsupportedWorkspaceTextError();
+    }
+    bytes = prefix.bytes;
   } catch (error) {
     signal.throwIfAborted();
     if (error instanceof UnsupportedWorkspaceTextError) {
