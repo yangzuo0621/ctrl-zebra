@@ -66,12 +66,12 @@
 **进度摘要**：
 
 - 总任务：148
-- 已完成：133
+- 已完成：134
 - 进行中：1
 - 受阻：0
 - 待开始：14
-- 当前执行：T2003（Issue #236 reopened after T2003 acceptance defect）
-- 下一任务：T2101（仅在 T2003 修复完成后启动）
+- 当前执行：无
+- 下一任务：T2101
 - 最后更新：2026-08-14
 
 | 阶段 | 任务 | 状态 | 完成 PR | 完成日期 |
@@ -207,7 +207,7 @@
 | 19 | T1905 | 已完成 | [#207](https://github.com/yangzuo0621/ctrl-zebra/pull/207) | 2026-08-12 |
 | 20 | T2001 | 已完成 | [#227](https://github.com/yangzuo0621/ctrl-zebra/pull/227) | 2026-08-13 |
 | 20 | T2002 | 已完成 | [#229](https://github.com/yangzuo0621/ctrl-zebra/pull/229) | 2026-08-14 |
-| 20 | T2003 | 进行中 | — | — |
+| 20 | T2003 | 已完成 | [#238](https://github.com/yangzuo0621/ctrl-zebra/pull/238) | 2026-08-14 |
 | 20 | T2004 | 已完成 | [#232](https://github.com/yangzuo0621/ctrl-zebra/pull/232) | 2026-08-14 |
 | 20 | T2005 | 已完成 | [#235](https://github.com/yangzuo0621/ctrl-zebra/pull/235) | 2026-08-14 |
 | 21 | T2101 | 待开始 | — | — |
