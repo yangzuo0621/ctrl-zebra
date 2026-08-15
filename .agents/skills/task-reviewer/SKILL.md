@@ -2,8 +2,14 @@
 
 ## Purpose
 
-Independently review one `Txxxx` implementation at an exact current PR revision. Remain read-only and
-return the sole implementation-quality decision for that revision.
+When explicitly invoked, independently review one `Txxxx` implementation at an exact current PR
+revision. Remain read-only and return the sole implementation-quality decision for that review.
+
+## Invocation boundary
+
+Do not self-trigger. Use Task-Reviewer only when an active `auto-workflow` dispatches it or when the
+user explicitly requests Task-Reviewer / an independent review. Ordinary implementation completion,
+including `MANUAL` completion, does not constitute a Reviewer trigger.
 
 ## Inputs and context
 

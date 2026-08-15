@@ -6,6 +6,14 @@ Coordinate exactly one roadmap task across Root, Executor, Reviewer, and the opt
 orchestrates the work and performs the transactional closure after an independent Reviewer approval;
 Root does not take over implementation or implementation review.
 
+## Invocation boundary
+
+`auto-workflow` is an explicitly selected, opt-in workflow. Enter it only when the user explicitly
+requests `auto-workflow` or explicitly authorizes `AUTO_DRAFT` / `AUTO_FULL` for one exact task.
+Ordinary implementation, roadmap-task, PR, verification, or maintenance requests must not be inferred
+to enable `auto-workflow`. Once an active auto-workflow is established, Task-Reviewer remains mandatory
+and the v3 review-loop and closure rules below continue unchanged.
+
 ## Inputs
 
 - `AGENTS.md`, the active portion of `docs/implementation-plan.md`, and one task ID
@@ -45,7 +53,8 @@ task. The envelope is immutable; changing it requires a profile change and renew
 3. Dispatch Executor for startup, implementation, verification, early PR creation, and a compact
    Review Handoff.
 4. Dispatch the read-only Reviewer with exactly the Review Handoff, exact current PR diff/revision,
-   and task acceptance criteria as base context. Reviewer is the only implementation-quality gate.
+   and task acceptance criteria as base context. Within this active auto-workflow run, Reviewer is the
+   only implementation-quality gate.
 5. Require the first Reviewer pass to inspect the complete current revision and return one
    consolidated set of all identifiable blocking findings. Route that set to Executor. For correction
    #1 and #2, Reviewer uses a delta-focused review of the previous blockers, current revision delta,
@@ -96,7 +105,7 @@ unresolved merge conflict, or required checks that cannot be corrected in scope.
 - Executor implements and handles review-directed fixes; it never reviews, approves, merges, or
   closes the task.
 - Reviewer is read-only, approves only the exact reviewed revision, and is the sole
-  implementation-quality gate.
+  implementation-quality gate within the active auto-workflow run.
 - Planner plans only and never implements, reviews, approves, or performs routine closure.
 
 ## Reuse and evidence

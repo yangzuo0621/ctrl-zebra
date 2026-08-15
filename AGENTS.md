@@ -108,10 +108,13 @@ testkit ───────────────→ core contracts + protoc
 5. Use the compact [task template](docs/roadmap/task-template.md) for transient execution, handoff, and
    PR evidence. Do not copy execution logs or detailed audits into the implementation index.
 
-Reviewers start from the compact Review Handoff, exact current PR diff/revision, and acceptance criteria.
-They open extra documents only for a touched contract, material handoff claim, concrete concern, or
-documented similarity escalation. The Reviewer is read-only and the only implementation-quality gate;
-Root closure is transactional and never reopens implementation review.
+Reviewers start from the compact Review Handoff, exact current PR diff/revision, and acceptance criteria
+when an explicitly selected workflow requires independent review. They open extra documents only for a
+touched contract, material handoff claim, concrete concern, or documented similarity escalation. In an
+active auto-workflow, the read-only Task-Reviewer is that run's sole implementation-quality gate.
+Ordinary implementation / MANUAL completion does not automatically require a Reviewer; a user may still
+explicitly request an independent review. For workflows that use Root closure, closure is transactional
+and never reopens implementation review.
 
 ## 5. Git, authorization, and destructive actions
 
