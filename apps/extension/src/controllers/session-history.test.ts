@@ -393,6 +393,20 @@ describe("projectSessionModelHistory", () => {
     expect(context.targetUserMessage.content).toBe("Third");
   });
 
+  it.each([
+    { replacementStatus: "cancelled" as const, label: "cancelled" },
+    { replacementStatus: "completed" as const, label: "completed" },
+  ])("keeps a live alias bound to its original target after a $label edit", ({
+    replacementStatus,
+  }) => {
+    const context = projectEditContext(
+      record(editBranchEvents("message-2", replacementStatus)),
+      "request-1:user",
+    );
+
+    expect(context.targetUserMessageId).toBe("message-2");
+  });
+
   it("keeps the original branch when an edit Run is cancelled", () => {
     const session = record(editBranchEvents("message-2", "cancelled"));
     expect(projectSessionModelHistory(session)).toEqual([

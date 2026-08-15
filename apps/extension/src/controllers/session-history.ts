@@ -181,8 +181,11 @@ export function projectEditContext(
   if (record.eventLogTailDamaged) {
     throw new SessionHistoryCorruptError();
   }
+  let regenerationRelations: readonly ValidatedRegenerationRelation[];
+  let editRelations: readonly ValidatedEditRelation[];
   try {
-    validateEditRelations(record.events, record.manifest.sessionId);
+    regenerationRelations = validateRegenerationRelations(record.events, record.manifest.sessionId);
+    editRelations = validateEditRelations(record.events, record.manifest.sessionId);
   } catch (error) {
     if (
       error instanceof EditRelationCorruptError ||
@@ -204,7 +207,7 @@ export function projectEditContext(
     return [{ index, message: parsed.data }];
   });
   const resolvedTargetMessageId = isLiveUserProjectionAlias(targetUserMessageId)
-    ? users.at(-1)?.message.messageId
+    ? resolveLiveUserProjectionAlias(users, regenerationRelations, editRelations)
     : targetUserMessageId;
   const targetUsers = users.filter(({ message }) => message.messageId === resolvedTargetMessageId);
   if (targetUsers.length !== 1) {
@@ -252,6 +255,35 @@ export function projectEditContext(
     targetUserMessageId: resolvedTargetMessageId,
     history: projectSessionModelHistory(prefixRecord),
   };
+}
+
+function resolveLiveUserProjectionAlias(
+  users: readonly { readonly index: number; readonly message: UserMessage }[],
+  regenerationRelations: readonly ValidatedRegenerationRelation[],
+  editRelations: readonly ValidatedEditRelation[],
+): string | undefined {
+  const latestUser = users.at(-1);
+  if (latestUser === undefined) {
+    return undefined;
+  }
+  const latestEdit = editRelations
+    .filter(
+      ({ replacementUserMessageId }) => replacementUserMessageId === latestUser.message.messageId,
+    )
+    .at(-1);
+  if (latestEdit !== undefined) {
+    return latestEdit.targetMessageId;
+  }
+  const latestRegeneration = regenerationRelations
+    .filter(
+      ({ replacementUserMessageId }) => replacementUserMessageId === latestUser.message.messageId,
+    )
+    .at(-1);
+  if (latestRegeneration !== undefined) {
+    return users.find(({ index }) => index === latestRegeneration.targetUserIndex)?.message
+      .messageId;
+  }
+  return latestUser.message.messageId;
 }
 
 type HistoryUnit =

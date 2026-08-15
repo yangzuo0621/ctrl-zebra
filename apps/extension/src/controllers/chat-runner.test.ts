@@ -724,7 +724,9 @@ describe("createChatRunner", () => {
                   ? "Second answer"
                   : invocation === 4
                     ? "Third answer"
-                    : "Edited answer",
+                    : invocation === 5
+                      ? "Edited answer"
+                      : "Edited again answer",
           } as const;
           yield { type: "finish", reason: "stop" } as const;
         },
@@ -753,6 +755,7 @@ describe("createChatRunner", () => {
           "message-second",
           "message-third",
           "message-edited",
+          "message-edited-again",
         ];
         return () => ids.shift() ?? "unexpected-id";
       })(),
@@ -770,11 +773,23 @@ describe("createChatRunner", () => {
       new AbortController().signal,
       () => {},
     );
+    await runner.edit?.(
+      "session-edit",
+      "request-1:user",
+      "Edited again",
+      new AbortController().signal,
+      () => {},
+    );
 
     expect(requests[4]?.messages).toEqual([
       { role: "user", content: "First" },
       { role: "assistant", content: "First answer" },
       { role: "user", content: "Edited" },
+    ]);
+    expect(requests[5]?.messages).toEqual([
+      { role: "user", content: "First" },
+      { role: "assistant", content: "First answer" },
+      { role: "user", content: "Edited again" },
     ]);
     const edited = await repository.get("session-edit");
     expect(edited?.events.some(({ event }) => event.type === "session.edit")).toBe(true);
@@ -782,7 +797,8 @@ describe("createChatRunner", () => {
       edited?.events
         .filter(({ event }) => event.type === "session.user-message")
         .map(({ event }) => userMessageSchema.parse(event.data).content),
-    ).toEqual(["First", "Second", "Third", "Edited"]);
+    ).toEqual(["First", "Second", "Third", "Edited", "Edited again"]);
+    expect(edited?.events.filter(({ event }) => event.type === "session.edit")).toHaveLength(2);
     expect(edited?.events.filter(({ event }) => event.type === "agent.tool-state")).toHaveLength(3);
   });
 
