@@ -95,6 +95,23 @@ decide whether a source is current, in scope, trusted, or authorized.
   Composer focus, selection, disclosure state, and scroll position and remain operable at approximately
   300px width, 200% zoom, reduced motion, and all supported VS Code themes.
 
+### T2103 workspace file reference projection
+
+The `workspace-file-reference-store` owns only bounded search suggestions, pending read IDs, and the
+visible `{ referenceId, context }` cards received through Protocol. It never stores a VS Code URI,
+absolute path, Trust state, fingerprint, or host capability. The Composer detects a trailing `@` path
+fragment and asks the narrow Host adapter to search; keyboard selection removes that fragment and asks
+the Host to read the selected relative path. Suggestions are deterministic and bounded, and duplicate
+paths are collapsed before rendering.
+
+Cards render escaped plain-text paths plus stale/truncated status and semantic Refresh, Remove, and
+Use-stale controls. A stale card blocks Send until the user explicitly accepts the snapshot; a pending
+read also blocks Send. New chat and Session restore/switch clear the store synchronously before the Host
+intent, while view disposal discards pending IDs and ignores late responses. Search/read/refresh errors
+are fixed status copy from `strings.ts`, not raw Host exceptions. The store treats the Host projection as
+authoritative, does not infer freshness from response timing, and sends no file text in a Webview
+message; accepted references are taken by the Host only at submit time.
+
 ### T1905 editor entry projection
 
 The Extension contributes `ctrlZebra.askAboutSelection` and `ctrlZebra.askAboutFile` and the

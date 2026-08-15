@@ -3,11 +3,13 @@ import {
   type McpResourceAttachment,
   mcpPromptConfirmationSchema,
   mcpResourceAttachmentSchema,
+  type WorkspaceFileReference,
 } from "@ctrl-zebra/protocol";
 import { defaultModelMessageTokenCounter } from "./heuristic-token-counter.js";
 import type { ModelMessageTokenCounter } from "./history-pruner.js";
 import type { ModelTextMessage } from "./model-gateway.js";
 import { maxModelContextWindowTokens } from "./token-budget.js";
+import { projectWorkspaceFileContextWithinBudget } from "./workspace-file-context.js";
 
 export const maxExternalResourceAttachments = 32;
 
@@ -86,6 +88,41 @@ export function projectExternalMcpContext(
   return messages;
 }
 
+/** Projects all user-selected file and MCP context against one shared Files budget. */
+export function projectExternalContext(
+  workspaceFiles: readonly WorkspaceFileReference[],
+  resources: readonly McpResourceAttachment[],
+  prompts: readonly McpPromptConfirmation[],
+  filesTokenBudget: number,
+  tokenCounter: ModelMessageTokenCounter = defaultModelMessageTokenCounter,
+): readonly ModelTextMessage[] {
+  if (
+    !Number.isSafeInteger(filesTokenBudget) ||
+    filesTokenBudget < 0 ||
+    filesTokenBudget > maxModelContextWindowTokens
+  ) {
+    throw new ExternalResourceContextBudgetError();
+  }
+
+  const mcpMessages = [
+    ...projectExternalResourceContext(resources, filesTokenBudget, tokenCounter),
+    ...projectExternalPromptContext(prompts, filesTokenBudget, tokenCounter),
+  ];
+  const mcpTokens = countMessages(mcpMessages, tokenCounter);
+  if (mcpTokens > filesTokenBudget) {
+    throw new ExternalResourceContextBudgetError();
+  }
+
+  const workspaceMessages = projectWorkspaceFileContextWithinBudget(
+    workspaceFiles,
+    filesTokenBudget - mcpTokens,
+    tokenCounter,
+  );
+  const messages = [...workspaceMessages, ...mcpMessages];
+  assertWithinBudget(messages, filesTokenBudget, tokenCounter);
+  return messages;
+}
+
 function assertWithinBudget(
   messages: readonly ModelTextMessage[],
   filesTokenBudget: number,
@@ -107,4 +144,24 @@ function assertWithinBudget(
       throw new ExternalResourceContextBudgetError();
     }
   }
+}
+
+function countMessages(
+  messages: readonly ModelTextMessage[],
+  tokenCounter: ModelMessageTokenCounter,
+): number {
+  let total = 0;
+  for (const message of messages) {
+    const tokens = tokenCounter.count(message);
+    if (
+      !Number.isSafeInteger(tokens) ||
+      tokens < 0 ||
+      tokens > maxModelContextWindowTokens ||
+      !Number.isSafeInteger(total + tokens)
+    ) {
+      throw new ExternalResourceContextBudgetError();
+    }
+    total += tokens;
+  }
+  return total;
 }

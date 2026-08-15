@@ -18,12 +18,13 @@ import {
   toolCallSchema,
   toolResultSchema,
   type UserMessage,
+  type WorkspaceFileReference,
 } from "@ctrl-zebra/protocol";
 import { agentSystemInstruction, shouldOfferWorkspaceTools } from "./agent-behavior-policy.js";
 import { BasicApprovalPolicy } from "./approval-policy.js";
 import { ContextOverflowRecoveryExhaustedError } from "./context-overflow-recovery.js";
 import type { DomainEvent, EventSink } from "./events.js";
-import { projectExternalMcpContext } from "./external-resource-context.js";
+import { projectExternalContext } from "./external-resource-context.js";
 import { defaultModelMessageTokenCounter } from "./heuristic-token-counter.js";
 import {
   InvalidModelHistoryError,
@@ -177,6 +178,7 @@ export interface AgentRuntimeOptions {
 }
 
 export interface AgentRuntimeRunOptions {
+  readonly workspaceFiles?: readonly WorkspaceFileReference[];
   readonly externalResources?: readonly McpResourceAttachment[];
   readonly externalPrompts?: readonly McpPromptConfirmation[];
 }
@@ -428,7 +430,8 @@ export class AgentRuntime {
       throw new InvalidModelHistoryError();
     }
     const retainedHistory = pruned.messages.slice(0, -1);
-    const externalContext = projectExternalMcpContext(
+    const externalContext = projectExternalContext(
+      runOptions.workspaceFiles ?? [],
       runOptions.externalResources ?? [],
       runOptions.externalPrompts ?? [],
       this.#filesTokenBudget,

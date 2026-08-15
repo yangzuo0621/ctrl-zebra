@@ -17,6 +17,7 @@ import type { SessionRecoveryActions } from "./session-recovery.js";
 import { WebviewCheckpointMessageHandler } from "./webview-checkpoint-message-handler.js";
 import { WebviewRunMessageHandler } from "./webview-run-message-handler.js";
 import { WebviewSessionMessageHandler } from "./webview-session-message-handler.js";
+import type { WorkspaceFileReferenceActions } from "./workspace-file-reference-actions.js";
 
 interface DisposableResource {
   dispose(): void;
@@ -59,6 +60,7 @@ interface BindWebviewMessageControllerOptions {
   readonly providerOnboarding?: ProviderOnboardingController;
   readonly openExternalLink?: (href: string) => void;
   readonly editorContextActions?: EditorContextWebviewActions;
+  readonly workspaceFileActions?: WorkspaceFileReferenceActions;
 }
 
 export function bindWebviewMessageController({
@@ -76,6 +78,7 @@ export function bindWebviewMessageController({
   providerOnboarding,
   openExternalLink,
   editorContextActions,
+  workspaceFileActions,
 }: BindWebviewMessageControllerOptions): void {
   let disposed = false;
   const post = (message: ExtensionToWebviewMessage) => {
@@ -100,6 +103,7 @@ export function bindWebviewMessageController({
   );
   const checkpointMessages = new WebviewCheckpointMessageHandler(post, checkpointActions);
   mcpActions?.bind(post);
+  workspaceFileActions?.bind(post);
 
   const messageSubscription = channel.onDidReceiveMessage((message) => {
     const result = webviewToExtensionMessageSchema.safeParse(message);
@@ -142,6 +146,7 @@ export function bindWebviewMessageController({
             resourceActions?.takeAttachments(),
             promptActions?.takeConfirmations(),
             data.sessionId,
+            workspaceFileActions?.takeReferences(),
           );
         }
         return;
@@ -161,6 +166,7 @@ export function bindWebviewMessageController({
           editorContextActions?.clearForNewChat();
           resourceActions?.clearInput();
           promptActions?.clearInput();
+          workspaceFileActions?.clearInput();
         }
         return;
       case "webview/mcp-connect":
@@ -301,6 +307,7 @@ export function bindWebviewMessageController({
           editorContextActions?.clearForSessionSwitch();
           resourceActions?.clearInput();
           promptActions?.clearInput();
+          workspaceFileActions?.clearInput();
           sessionMessages.restore(data.requestId, data.sessionId);
         }
         return;
@@ -328,6 +335,21 @@ export function bindWebviewMessageController({
       case "webview/editor-context-use-stale":
         editorContextActions?.useStale(data);
         return;
+      case "webview/workspace-file-search":
+        workspaceFileActions?.search(data.requestId, data.query);
+        return;
+      case "webview/workspace-file-read":
+        workspaceFileActions?.read(data.requestId, data.path);
+        return;
+      case "webview/workspace-file-remove":
+        workspaceFileActions?.remove(data.requestId, data.referenceId);
+        return;
+      case "webview/workspace-file-refresh":
+        workspaceFileActions?.refresh(data.requestId, data.referenceId);
+        return;
+      case "webview/workspace-file-use-stale":
+        workspaceFileActions?.useStale(data.requestId, data.referenceId);
+        return;
     }
   });
   let disposalSubscription: DisposableResource | undefined;
@@ -339,6 +361,7 @@ export function bindWebviewMessageController({
     promptActions?.dispose();
     mcpActions?.dispose();
     editorContextActions?.dispose();
+    workspaceFileActions?.dispose();
     providerOnboarding?.dispose();
     messageSubscription.dispose();
     disposalSubscription?.dispose();

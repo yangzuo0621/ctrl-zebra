@@ -293,6 +293,31 @@ authorization, a capability claim, or a write/execute request.
   no-editor unavailable outcomes. Each fixture verifies producer limits before retention and the
   corresponding closed truncation or `failed`/`invalid-output` result.
 
+### `@` workspace file references (T2103)
+
+Workspace file completion is a read-only, user-initiated context path. The Webview sends only a bounded
+query or relative path; the Host resolves it against the current selected root, validates scheme and
+authority, canonicalizes symlinks/junctions with `WorkspaceScope`, and reads through the bounded UTF-8
+adapter. It never trusts a Webview URI, absolute path, root, revision, or Trust value. Search returns
+only bounded relative paths; binary/NUL/invalid UTF-8, missing roots, out-of-scope targets, and
+canonicalization failures return fixed safe errors. Limited untrusted-workspace read capability does
+not grant write, execute, MCP, or Trust authority.
+
+The Host records a bounded file fingerprint before and after each read. A mismatch is surfaced as
+`stale`/`changed-during-read`; a document change or delete event marks an existing snapshot stale and
+retains it only for an explicit `Use stale file` or Remove decision. Refresh revalidates the same
+canonical target and revision. New chat, Session restore/switch, selected-root or Trust-boundary
+change, cancellation, view disposal, and Extension disposal close the operation gate; no late read
+can install or replace a reference. Duplicate canonical targets share one opaque Host reference ID,
+and a submission includes only non-stale or explicitly accepted references.
+
+Accepted file snapshots are ordinary untrusted user context and share the Files token budget with MCP
+context. Core keeps a deterministic bounded prefix plus a token-truncation marker when the remaining
+budget is smaller; it never borrows another category. Pending reference metadata, URI identity,
+fingerprints, stale state, and unsubmitted text are not persisted, logged, restored, or sent to the
+model. Only text the user explicitly sends follows ordinary user-message persistence and provider
+disclosure rules.
+
 ### Explicit editor entry (T1905)
 
 The editor entry setting is `ctrlZebra.editorContext.enabled`, default `false` and scoped to the VS Code

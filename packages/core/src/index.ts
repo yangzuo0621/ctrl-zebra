@@ -145,6 +145,7 @@ export type { DomainEvent, EventSink } from "./events.js";
 export {
   ExternalResourceContextBudgetError,
   maxExternalResourceAttachments,
+  projectExternalContext,
   projectExternalMcpContext,
   projectExternalPromptContext,
   projectExternalResourceContext,
@@ -318,3 +319,8 @@ export {
   OverlappingWorkspaceEditError,
   parseWorkspaceEditPlan,
 } from "./workspace-edit.js";
+export {
+  projectWorkspaceFileContext,
+  projectWorkspaceFileContextWithinBudget,
+  WorkspaceFileContextBudgetError,
+} from "./workspace-file-context.js";

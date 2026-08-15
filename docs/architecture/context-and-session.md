@@ -59,6 +59,24 @@ IDE context uses the same budget authority rather than creating a second quota:
   ellipsis, omitted location, or shorter array without that metadata is invalid and cannot be treated
   as complete source.
 
+### `@` workspace file references (T2103)
+
+The Webview owns only the completion list and visible pending cards. The Extension owns the selected
+root, Workspace Trust/lifecycle boundary, `WorkspaceScope` canonicalization, bounded search/read
+adapters, file fingerprints, and stale transitions. Core receives only the strict
+`WorkspaceFileReference` DTO and never reads a URI or filesystem. A reference is a bounded,
+workspace-relative `IdeTextContextDto`, ordinary untrusted context rather than a Tool result,
+instruction, permission, or write scope.
+
+References remain in Host/Webview memory until the user sends them. Duplicate canonical targets reuse
+one reference; binary/out-of-scope/symlink-escape reads are rejected; and before/after fingerprint
+mismatches are surfaced as stale. Changed/deleted files retain a bounded snapshot only for explicit
+`Use stale file` or Remove. New chat, Session switch/restore, selected-root or Trust-boundary change,
+view disposal, cancellation, and Extension disposal close the read gate and discard pending state, so
+late completions cannot install a card. Core combines accepted files with MCP context under one Files
+budget and emits a deterministic token-truncation marker when necessary. No live file-reference
+record is restored or persisted separately.
+
 ### Multi-turn history projection
 
 - A Session is the durable owner of one ordered transcript and may contain multiple sequential Runs.

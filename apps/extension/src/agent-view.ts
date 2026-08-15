@@ -21,6 +21,7 @@ import {
   type ApprovalUiActions,
   bindWebviewMessageController,
 } from "./controllers/webview-message-controller.js";
+import type { WorkspaceFileReferenceActions } from "./controllers/workspace-file-reference-actions.js";
 
 export const agentViewId = "ctrlZebra.agentView";
 
@@ -110,6 +111,7 @@ class AgentViewProvider implements WebviewViewProvider {
         webviewView.webview,
         webviewView,
       ),
+      workspaceFileActions: this.options.createWorkspaceFileReferenceActions?.(),
     });
     this.options.reportDisplay?.();
   }
@@ -127,6 +129,7 @@ interface AgentViewProviderOptions {
   readonly createResourceActions?: () => McpResourceActions;
   readonly createPromptActions?: () => McpPromptActions;
   readonly createMcpActions?: () => McpWebviewActions;
+  readonly createWorkspaceFileReferenceActions?: () => WorkspaceFileReferenceActions;
   readonly createProviderOnboarding?: () => ProviderOnboardingController;
   readonly openExternalLink?: (href: string) => void;
   readonly editorContext?: EditorContextEntryController;

@@ -142,3 +142,4 @@ history; consult it for audit, regression investigation, or historical traceabil
 | 20 | T2005 | 已完成 | [#235](https://github.com/yangzuo0621/ctrl-zebra/pull/235) | 2026-08-14 |
 | 21 | T2101 | 已完成 | [#240](https://github.com/yangzuo0621/ctrl-zebra/pull/240) | 2026-08-14 |
 | 21 | T2102 | 已完成 | [#242](https://github.com/yangzuo0621/ctrl-zebra/pull/242) | 2026-08-15 |
+| 21 | T2103 | 已完成 | [#244](https://github.com/yangzuo0621/ctrl-zebra/pull/244) | 2026-08-15 |

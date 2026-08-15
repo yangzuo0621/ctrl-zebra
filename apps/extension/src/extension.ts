@@ -119,6 +119,7 @@ import {
 import {
   createWorkspaceToolRegistryProvider,
   selectWorkspaceRoot,
+  WorkspaceRootSelectionError,
 } from "./controllers/readonly-tool-registry.js";
 import {
   getAgentRuntimeDiagnosticLogEntry,
@@ -131,6 +132,7 @@ import {
   WorkspaceCommandExecutor,
 } from "./controllers/workspace-command-executor.js";
 import { WorkspaceEditApprovalWorkflow } from "./controllers/workspace-edit-approval-workflow.js";
+import { WorkspaceFileReferenceActions } from "./controllers/workspace-file-reference-actions.js";
 import { createWorkspaceTrustPolicy } from "./controllers/workspace-trust-policy.js";
 
 export function activate(context: ExtensionContext): void {
@@ -644,6 +646,45 @@ export function activate(context: ExtensionContext): void {
     createId: randomUUID,
     focusView: () => commands.executeCommand("ctrlZebra.agentView.focus"),
   });
+  const workspaceFileReferenceActions = new Set<WorkspaceFileReferenceActions>();
+  const createWorkspaceFileReferenceActions = () => {
+    let actions: WorkspaceFileReferenceActions | undefined;
+    actions = new WorkspaceFileReferenceActions({
+      getSelectedRoot: () => {
+        try {
+          return getSelectedRoot();
+        } catch (error) {
+          if (error instanceof WorkspaceRootSelectionError && error.code === "missing-workspace") {
+            return undefined;
+          }
+          throw error;
+        }
+      },
+      createScope: (root) => new WorkspaceScope(root, canonicalize),
+      joinPath: joinWorkspacePath,
+      findFiles: findWorkspaceFiles,
+      readPrefix: readWorkspaceFilePrefix,
+      getFileFingerprint: async (uri) => {
+        const stat = await workspace.fs.stat(uri);
+        const document = workspace.textDocuments.find(
+          (candidate) => candidate.uri.toString() === uri.toString(),
+        );
+        return `${stat.mtime}:${stat.size}:${document?.version ?? ""}`;
+      },
+      getLanguageId: (uri) =>
+        workspace.textDocuments.find((document) => document.uri.toString() === uri.toString())
+          ?.languageId,
+      getDocumentVersion: (uri) =>
+        workspace.textDocuments.find((document) => document.uri.toString() === uri.toString())
+          ?.version,
+      createId: randomUUID,
+      onDispose: () => {
+        if (actions !== undefined) workspaceFileReferenceActions.delete(actions);
+      },
+    });
+    workspaceFileReferenceActions.add(actions);
+    return actions;
+  };
   let editorTransitionToken = 0;
   const notifyEditorTransition = (
     reason: "editor-changed" | "selection-changed" | "document-changed",
@@ -952,8 +993,16 @@ export function activate(context: ExtensionContext): void {
     workspace.onDidChangeWorkspaceFolders(() => {
       mcpConnection.markConfigurationStale();
       editorContextEntry.invalidate("workspace-changed");
+      for (const actions of workspaceFileReferenceActions) {
+        actions.clearForBoundaryChange("workspace-changed");
+      }
     }),
-    workspace.onDidGrantWorkspaceTrust(() => mcpConnection.handleWorkspaceTrustChange()),
+    workspace.onDidGrantWorkspaceTrust(() => {
+      mcpConnection.handleWorkspaceTrustChange();
+      for (const actions of workspaceFileReferenceActions) {
+        actions.clearForBoundaryChange("trust-lost");
+      }
+    }),
     window.onDidChangeActiveTextEditor((editor) => {
       if (editor === undefined) {
         editorTransitionToken += 1;
@@ -965,9 +1014,17 @@ export function activate(context: ExtensionContext): void {
     window.onDidChangeTextEditorSelection(() =>
       notifyEditorTransition("selection-changed", "selection"),
     ),
-    workspace.onDidChangeTextDocument(() =>
-      notifyEditorTransition("document-changed", "active-editor"),
-    ),
+    workspace.onDidChangeTextDocument((event) => {
+      notifyEditorTransition("document-changed", "active-editor");
+      for (const actions of workspaceFileReferenceActions) {
+        actions.notifyChanged(event.document.uri, "changed");
+      }
+    }),
+    workspace.onDidDeleteFiles((event) => {
+      for (const actions of workspaceFileReferenceActions) {
+        for (const uri of event.files) actions.notifyChanged(uri, "deleted");
+      }
+    }),
     {
       dispose() {
         editorContextEntry.dispose();
@@ -1070,6 +1127,7 @@ export function activate(context: ExtensionContext): void {
         new McpResourceActions({ connection: mcpConnection, createId: randomUUID }),
       createPromptActions: () =>
         new McpPromptActions({ connection: mcpConnection, createId: randomUUID }),
+      createWorkspaceFileReferenceActions,
       createMcpActions: () =>
         new McpWebviewActions({
           connection: mcpConnection,
