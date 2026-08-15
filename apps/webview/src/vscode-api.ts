@@ -60,6 +60,11 @@ export interface WebviewHost {
     cardGeneration: number,
     contextId: string,
   ): void;
+  searchWorkspaceFiles?(requestId: string, query: string): void;
+  readWorkspaceFile?(requestId: string, path: string): void;
+  removeWorkspaceFile?(requestId: string, referenceId: string): void;
+  refreshWorkspaceFile?(requestId: string, referenceId: string): void;
+  useStaleWorkspaceFile?(requestId: string, referenceId: string): void;
   readMcpResource?(
     requestId: string,
     serverId: string,
@@ -289,6 +294,46 @@ const webviewHost: WebviewHost = {
       sessionGeneration,
       cardGeneration,
       contextId,
+    });
+  },
+  searchWorkspaceFiles(requestId, query) {
+    getVsCodeApi().postMessage({
+      protocolVersion,
+      type: "webview/workspace-file-search",
+      requestId,
+      query,
+    });
+  },
+  readWorkspaceFile(requestId, path) {
+    getVsCodeApi().postMessage({
+      protocolVersion,
+      type: "webview/workspace-file-read",
+      requestId,
+      path,
+    });
+  },
+  removeWorkspaceFile(requestId, referenceId) {
+    getVsCodeApi().postMessage({
+      protocolVersion,
+      type: "webview/workspace-file-remove",
+      requestId,
+      referenceId,
+    });
+  },
+  refreshWorkspaceFile(requestId, referenceId) {
+    getVsCodeApi().postMessage({
+      protocolVersion,
+      type: "webview/workspace-file-refresh",
+      requestId,
+      referenceId,
+    });
+  },
+  useStaleWorkspaceFile(requestId, referenceId) {
+    getVsCodeApi().postMessage({
+      protocolVersion,
+      type: "webview/workspace-file-use-stale",
+      requestId,
+      referenceId,
     });
   },
   readMcpResource(requestId, serverId, generation, selection) {

@@ -290,6 +290,19 @@ Webview 同步清卡，Session restore/switch 在新 Session 提交前事务性�
 和结果替换不抢 Composer 焦点、光标、选择或滚动。状态不能只靠颜色表达，来源文本按纯文本显示，
 不解析 Markdown、HTML、链接、命令或 Provider 字段。
 
+### T2103 `@` 工作区文件引用
+
+Composer 在用户输入 `@` 及可选的工作区相对路径片段后显示有界、稳定排序的文件建议。建议列表
+是语义 `listbox`，支持 ArrowUp/ArrowDown、Enter 选择和 Escape 关闭；选择后移除未发送的 `@`
+片段并在 Host 侧读取文件，绝不在 Webview 读取文件或接收原始 URI。相同规范路径只显示一个引用卡。
+
+引用卡在发送前显示工作区相对路径、`Truncated` 和 `Stale` 状态，并提供 `Refresh`、`Remove`；
+文件变化或删除时保留快照但阻止 Send，直到用户刷新或明确选择 `Use stale file`。读取中的建议/卡片
+使用固定状态播报；越界、二进制、缺少工作区或不可用文件显示稳定可操作错误，不显示 Host 异常。
+New chat、Session restore/switch 和工作区边界变化清除未发送引用但不删除已保存 Session；取消或迟到
+读取不会改变 Composer 文本。文件文本作为普通不可信上下文发送，Token 截断在卡片和 Model 投影中
+都保持可见。
+
 ## 5. Tool、审批与进度反馈
 
 - Tool 默认摘要使用面向用户的动作和对象描述，不以内部 Tool 名称作为唯一标题。

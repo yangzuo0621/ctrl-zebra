@@ -20,6 +20,8 @@ import { TokenUsageSummary } from "./token-usage-summary.js";
 import { ToolCallCard } from "./tool-call-card.js";
 import { Button } from "./ui/button.js";
 import { getWebviewHost, type WebviewHost } from "./vscode-api.js";
+import { WorkspaceFileReferenceCard } from "./workspace-file-reference-card.js";
+import { createWorkspaceFileReferenceStore } from "./workspace-file-reference-store.js";
 
 interface AppProps {
   readonly host?: WebviewHost;
@@ -46,6 +48,15 @@ function messageContent(message: DisplayMessage, status: string): string {
   return strings.app.messageFallback.waiting;
 }
 
+function workspaceFileMentionQuery(value: string): string | undefined {
+  const match = /(?:^|\s)@([^\s]*)$/u.exec(value);
+  return match?.[1];
+}
+
+function removeWorkspaceFileMention(value: string): string {
+  return value.replace(/(^|\s)@([^\s]*)$/u, "$1");
+}
+
 export function App({ host: providedHost, createRequestId }: AppProps) {
   const [host] = useState(() => providedHost ?? getWebviewHost());
   const [editorContextStore] = useState(() =>
@@ -54,12 +65,24 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
       createRequestId: createRequestId ?? (() => crypto.randomUUID()),
     }),
   );
+  const [workspaceFileStore] = useState(() =>
+    createWorkspaceFileReferenceStore({
+      host,
+      createRequestId: createRequestId ?? (() => crypto.randomUUID()),
+    }),
+  );
   const [store] = useState(() =>
     createChatStore({
       host,
       createRequestId,
-      beforeNewChat: () => editorContextStore.getState().clearLocal(),
-      beforeRestoreSession: () => editorContextStore.getState().clearForSessionSwitch(),
+      beforeNewChat: () => {
+        editorContextStore.getState().clearLocal();
+        workspaceFileStore.getState().clearLocal();
+      },
+      beforeRestoreSession: () => {
+        editorContextStore.getState().clearForSessionSwitch();
+        workspaceFileStore.getState().clearForSessionSwitch();
+      },
     }),
   );
   const [approvalStore] = useState(() => createApprovalStore(host));
@@ -107,6 +130,12 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
   const editorContextAnnouncement = useStore(editorContextStore, (state) => state.announcement);
   const editorContextCapturePending = useStore(editorContextStore, (state) => state.capturePending);
   const editorContextCanSend = useStore(editorContextStore, (state) => state.canSend());
+  const workspaceFileCards = useStore(workspaceFileStore, (state) => state.cards);
+  const workspaceFileSuggestions = useStore(workspaceFileStore, (state) => state.suggestions);
+  const workspaceFileSearchPending = useStore(workspaceFileStore, (state) => state.searchPending);
+  const workspaceFileAnnouncement = useStore(workspaceFileStore, (state) => state.announcement);
+  const workspaceFileCanSend = useStore(workspaceFileStore, (state) => state.canSend());
+  const [workspaceSuggestionIndex, setWorkspaceSuggestionIndex] = useState(0);
 
   useEffect(() => {
     const unsubscribe = host.subscribe((message) => {
@@ -116,6 +145,7 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
       mcpStore.getState().receive(message);
       onboardingStore.getState().receive(message);
       editorContextStore.getState().receive(message);
+      workspaceFileStore.getState().receive(message);
     });
     host.ping?.(createRequestId?.() ?? crypto.randomUUID());
     onboardingStore.getState().refresh();
@@ -123,6 +153,7 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
       unsubscribe();
       store.getState().dispose();
       editorContextStore.getState().dispose();
+      workspaceFileStore.getState().dispose();
       onboardingStore.getState().dispose();
     };
   }, [
@@ -134,6 +165,7 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
     mcpStore,
     onboardingStore,
     store,
+    workspaceFileStore,
   ]);
 
   // Scroll to bottom when new messages arrive unless user scrolled up
@@ -175,6 +207,25 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
     }
   };
 
+  const handleDraftChange = (value: string) => {
+    editorContextStore.getState().setDraft(value);
+    const query = workspaceFileMentionQuery(value);
+    if (query === undefined) {
+      workspaceFileStore.getState().clearSearch();
+      setWorkspaceSuggestionIndex(0);
+    } else {
+      workspaceFileStore.getState().search(query);
+      setWorkspaceSuggestionIndex(0);
+    }
+  };
+
+  const selectWorkspaceFile = (path: string) => {
+    editorContextStore.getState().setDraft(removeWorkspaceFileMention(draft));
+    workspaceFileStore.getState().clearSearch();
+    workspaceFileStore.getState().read(path);
+    inputRef.current?.focus();
+  };
+
   const beginEditing = (message: DisplayMessage) => {
     if (message.role !== "user") {
       return;
@@ -201,16 +252,53 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!editorContextCapturePending && editorContextCanSend && store.getState().submit(draft)) {
+    if (
+      !editorContextCapturePending &&
+      editorContextCanSend &&
+      workspaceFileCanSend &&
+      store.getState().submit(draft)
+    ) {
       editorContextStore.getState().setDraft("");
       setUserScrolledUp(false);
     }
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (workspaceFileSuggestions.length > 0 && !isComposing) {
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        setWorkspaceSuggestionIndex((index) =>
+          Math.min(index + 1, workspaceFileSuggestions.length - 1),
+        );
+        return;
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setWorkspaceSuggestionIndex((index) => Math.max(index - 1, 0));
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        workspaceFileStore.getState().clearSearch();
+        return;
+      }
+      if (event.key === "Enter" && !event.shiftKey) {
+        const suggestion = workspaceFileSuggestions[workspaceSuggestionIndex];
+        if (suggestion !== undefined) {
+          event.preventDefault();
+          selectWorkspaceFile(suggestion.path);
+          return;
+        }
+      }
+    }
     if (event.key === "Enter" && !event.shiftKey && !isComposing) {
       event.preventDefault();
-      if (draft.trim().length > 0 && activeRequestId === undefined && editorContextCanSend) {
+      if (
+        draft.trim().length > 0 &&
+        activeRequestId === undefined &&
+        editorContextCanSend &&
+        workspaceFileCanSend
+      ) {
         if (store.getState().submit(draft)) {
           editorContextStore.getState().setDraft("");
           setUserScrolledUp(false);
@@ -526,6 +614,7 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
         <TokenUsageSummary usage={usage} status={status} />
 
         <EditorContextCard store={editorContextStore} />
+        <WorkspaceFileReferenceCard store={workspaceFileStore} />
 
         <form className={styles.composer} onSubmit={handleSubmit}>
           <div className={styles.composerBox}>
@@ -538,13 +627,37 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
               id="chat-message"
               placeholder={strings.app.messagePlaceholder}
               value={draft}
-              onChange={(event) => editorContextStore.getState().setDraft(event.target.value)}
+              onChange={(event) => handleDraftChange(event.target.value)}
               onKeyDown={handleKeyDown}
               onCompositionStart={() => setIsComposing(true)}
               onCompositionEnd={() => setIsComposing(false)}
               rows={3}
               disabled={activeRequestId !== undefined || restoring}
             />
+            {workspaceFileSearchPending ? (
+              <p className={styles.composerHint}>{strings.workspaceFiles.reading}</p>
+            ) : null}
+            {workspaceFileSuggestions.length === 0 ? null : (
+              <div
+                className={styles.workspaceFileSuggestions}
+                role="listbox"
+                aria-label={strings.workspaceFiles.suggestionsLabel}
+              >
+                {workspaceFileSuggestions.map((suggestion, index) => (
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={workspaceSuggestionIndex === index}
+                    className={styles.workspaceFileSuggestion}
+                    key={suggestion.path}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => selectWorkspaceFile(suggestion.path)}
+                  >
+                    {suggestion.path}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className={styles.composerFooter}>
               <span className={styles.composerHint}>{strings.app.composerHint}</span>
               <div className={styles.actions}>
@@ -557,7 +670,8 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
                     sessionSwitchPending ||
                     draft.trim().length === 0 ||
                     !editorContextCanSend ||
-                    editorContextCapturePending
+                    editorContextCapturePending ||
+                    !workspaceFileCanSend
                   }
                 >
                   {strings.app.send}
@@ -581,7 +695,11 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
         <p className={styles.srOnly} aria-live="polite" aria-atomic="true">
           {editorContextCard?.status === "stale" && !editorContextCard.staleAccepted
             ? strings.editorContext.sendBlocked
-            : editorContextAnnouncement}
+            : workspaceFileCards.some(
+                  (card) => card.reference.context.source.stale && !card.staleAccepted,
+                )
+              ? strings.workspaceFiles.stale
+              : editorContextAnnouncement || workspaceFileAnnouncement}
         </p>
       </footer>
     </div>

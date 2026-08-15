@@ -252,6 +252,83 @@
   gap: var(--cz-space-2);
 }
 
+.workspaceFiles {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cz-space-2);
+}
+
+.workspaceFileCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cz-space-2);
+  padding: var(--cz-space-2) var(--cz-space-3);
+  border: 1px solid var(--cz-color-border);
+  border-radius: var(--cz-radius-md);
+  background: var(--cz-color-secondary-bg);
+}
+
+.workspaceFileHeading {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--cz-space-2);
+  font-size: var(--cz-font-size-xs);
+  font-weight: var(--cz-font-weight-semibold);
+}
+
+.workspaceFileHeading span:first-child,
+.workspaceFileDetails dd {
+  overflow-wrap: anywhere;
+}
+
+.workspaceFileDetails {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--cz-space-1) var(--cz-space-2);
+  margin: 0;
+  font-size: var(--cz-font-size-xs);
+}
+
+.workspaceFileDetails div {
+  display: contents;
+}
+
+.workspaceFileDetails dt {
+  color: var(--cz-color-muted);
+}
+
+.workspaceFileDetails dd {
+  margin: 0;
+}
+
+.workspaceFileSuggestions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cz-space-1);
+  margin-top: var(--cz-space-1);
+  padding: var(--cz-space-1);
+  border: 1px solid var(--cz-color-border);
+  border-radius: var(--cz-radius-sm);
+  background: var(--cz-color-secondary-bg);
+}
+
+.workspaceFileSuggestion {
+  width: 100%;
+  padding: var(--cz-space-1) var(--cz-space-2);
+  border: 0;
+  border-radius: var(--cz-radius-sm);
+  background: transparent;
+  color: var(--cz-color-fg);
+  text-align: left;
+  cursor: pointer;
+}
+
+.workspaceFileSuggestion:hover,
+.workspaceFileSuggestion:focus-visible {
+  background: var(--cz-color-primary-bg);
+  outline: none;
+}
+
 .composerBox {
   display: flex;
   flex-direction: column;

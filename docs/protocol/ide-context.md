@@ -160,6 +160,31 @@ state.
   URI, document version, stale state, provider object, or an unsubmitted attachment as a separate
   record. T1901 IDE Tool Results remain transient as defined by Persistence.
 
+### Workspace file references (T2103)
+
+`@` file completion is an additive Protocol-v1 surface. The Webview sends only a bounded query or
+workspace-relative path; it never supplies a URI, absolute path, selected root, Trust decision, or
+revision. The Host searches the selected root with the existing bounded workspace lister and reads a
+canonical target through `WorkspaceScope`. Search results contain only `{ path }` and are capped at
+100 entries. A successful read projects `{ referenceId, context: IdeTextContextDto }`, reusing the
+same URI, text, binary, symlink, and truncation limits as IDE context. Binary data, an out-of-scope
+target, a missing root, and an unavailable target produce fixed bounded error codes.
+
+References are ephemeral pending context. The Webview displays each path and its stale/truncated
+state, and can remove or refresh it before Send. A document/filesystem mutation or a changed/deleted
+target marks the source stale and retains the bounded snapshot for an explicit `Use stale file` or
+Remove decision; a changed-during-read result is never silently treated as current. New chat,
+Session restore/switch, selected-root change, Trust-boundary change, view disposal, cancellation,
+and Extension disposal clear pending references and suppress late reads. Duplicate selections of the
+same canonical target reuse one Host reference ID.
+
+At Send, accepted workspace references are projected by Core as ordinary untrusted user context and
+share the existing Files token budget with MCP Resource/Prompt context. If the remaining Files budget
+is smaller than a file projection, Core keeps a deterministic text prefix and an explicit token
+truncation marker; it never borrows System, History, or Tool budget. No reference metadata or source
+text is persisted as a separate live attachment; only text the user explicitly sends follows the
+ordinary user-message persistence contract.
+
 ## Editor-initiated context entry messages (T1905)
 
 T1905 adds one additive Protocol-v1 message family for the explicit editor commands. Every variant is a

@@ -309,6 +309,13 @@ export type {
   TokenUsageMessage,
   ToolStateMessage,
   WebviewToExtensionMessage,
+  WorkspaceFileReadMessage,
+  WorkspaceFileReferenceMessage,
+  WorkspaceFileRefreshMessage,
+  WorkspaceFileRemoveMessage,
+  WorkspaceFileSearchMessage,
+  WorkspaceFileSearchResponse,
+  WorkspaceFileUseStaleMessage,
 } from "./messages.js";
 export {
   approvalDecisionIntentSchema,
@@ -519,3 +526,34 @@ export {
   tokenCountSchema,
   tokenUsageSchema,
 } from "./usage.js";
+export type {
+  WorkspaceFileReference,
+  WorkspaceFileReferenceClearReason,
+  WorkspaceFileReferenceErrorCode,
+  WorkspaceFileReferenceStaleReason,
+  WorkspaceFileSearchResult,
+} from "./workspace-file-reference.js";
+export {
+  maxWorkspaceFilePathBytes,
+  maxWorkspaceFilePathCodePoints,
+  maxWorkspaceFileQueryBytes,
+  maxWorkspaceFileQueryCodePoints,
+  maxWorkspaceFileReferenceIdCodePoints,
+  maxWorkspaceFileReferences,
+  maxWorkspaceFileSearchResults,
+  workspaceFilePathSchema,
+  workspaceFileReadMessageSchema,
+  workspaceFileReferenceClearReasonSchema,
+  workspaceFileReferenceErrorCodeSchema,
+  workspaceFileReferenceIdSchema,
+  workspaceFileReferenceMessageSchema,
+  workspaceFileReferenceSchema,
+  workspaceFileReferenceStaleReasonSchema,
+  workspaceFileRefreshMessageSchema,
+  workspaceFileRemoveMessageSchema,
+  workspaceFileSearchMessageSchema,
+  workspaceFileSearchQuerySchema,
+  workspaceFileSearchResponseSchema,
+  workspaceFileSearchResultSchema,
+  workspaceFileUseStaleMessageSchema,
+} from "./workspace-file-reference.js";

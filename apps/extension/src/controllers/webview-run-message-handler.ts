@@ -5,6 +5,7 @@ import {
   type McpResourceAttachment,
   protocolVersion,
   type RunStatus,
+  type WorkspaceFileReference,
 } from "@ctrl-zebra/protocol";
 
 import type { ChatRunner, ChatRunnerEvent } from "./chat-runner.js";
@@ -45,6 +46,7 @@ export class WebviewRunMessageHandler {
     externalResources: readonly McpResourceAttachment[] = [],
     externalPrompts: readonly McpPromptConfirmation[] = [],
     sessionId?: string,
+    workspaceFiles: readonly WorkspaceFileReference[] = [],
   ): void {
     if (this.#activeRun !== undefined) {
       return;
@@ -73,6 +75,7 @@ export class WebviewRunMessageHandler {
         externalResources,
         externalPrompts,
         sessionId,
+        workspaceFiles,
       ),
     );
   }

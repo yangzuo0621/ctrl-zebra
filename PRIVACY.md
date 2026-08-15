@@ -136,6 +136,15 @@ sends as ordinary user content follows the existing Session storage and deletion
 the live source metadata. A future durable IDE provenance feature requires a separately reviewed
 privacy, persistence, and user-control contract.
 
+The `@` workspace-file picker is also explicit and local to the current Webview. Search returns bounded
+workspace-relative names; the Host performs the canonical, bounded UTF-8 read only after the user selects
+a result. Binary, outside-workspace, missing, or changed files are rejected or shown as stale. Pending
+file cards, fingerprints, URI identity, stale decisions, and unsubmitted file text are discarded on
+removal, New chat, Session switch/restore, workspace-boundary change, cancellation, or disposal. When
+the user sends a file card, the configured model provider receives only its bounded text and redacted
+workspace-relative source label as ordinary untrusted context; the file reference itself is not stored
+as a separate Session record.
+
 ## Workspace access and commands
 
 Read tools access only canonical UTF-8 text inside the single selected workspace. File changes and

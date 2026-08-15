@@ -44,6 +44,15 @@ import { sessionIdSchema, sessionStatusSchema, sessionSummarySchema } from "./se
 import { utf8ByteLength } from "./text-primitives.js";
 import { toolCallSchema, toolErrorResultSchema, toolSuccessResultSchema } from "./tool.js";
 import { tokenUsageSchema } from "./usage.js";
+import {
+  workspaceFileReadMessageSchema,
+  workspaceFileReferenceMessageSchema,
+  workspaceFileRefreshMessageSchema,
+  workspaceFileRemoveMessageSchema,
+  workspaceFileSearchMessageSchema,
+  workspaceFileSearchResponseSchema,
+  workspaceFileUseStaleMessageSchema,
+} from "./workspace-file-reference.js";
 
 export const protocolVersion = 1 as const;
 
@@ -720,6 +729,11 @@ export const webviewToExtensionMessageSchema = z.discriminatedUnion("type", [
   editorContextRefreshMessageSchema,
   editorContextRemoveMessageSchema,
   editorContextUseStaleMessageSchema,
+  workspaceFileSearchMessageSchema,
+  workspaceFileReadMessageSchema,
+  workspaceFileRemoveMessageSchema,
+  workspaceFileRefreshMessageSchema,
+  workspaceFileUseStaleMessageSchema,
   providerStatusRequestMessageSchema,
   providerSaveKeyMessageSchema,
   providerSelectModelMessageSchema,
@@ -766,6 +780,8 @@ export const extensionToWebviewMessageSchema = z.union([
   checkpointRestoredMessageSchema,
   checkpointErrorMessageSchema,
   editorContextMessageSchema,
+  workspaceFileSearchResponseSchema,
+  workspaceFileReferenceMessageSchema,
   mcpConnectionMessageSchema,
   mcpToolsMessageSchema,
   mcpToolCatalogMessageSchema,
@@ -802,6 +818,13 @@ export type EditorContextScope = z.infer<typeof editorContextScopeSchema>;
 export type EditorContextTransitionReason = z.infer<typeof editorContextTransitionReasonSchema>;
 export type EditorContextClearReason = z.infer<typeof editorContextClearReasonSchema>;
 export type EditorContextUnavailableCode = z.infer<typeof editorContextUnavailableCodeSchema>;
+export type WorkspaceFileSearchMessage = z.infer<typeof workspaceFileSearchMessageSchema>;
+export type WorkspaceFileReadMessage = z.infer<typeof workspaceFileReadMessageSchema>;
+export type WorkspaceFileRemoveMessage = z.infer<typeof workspaceFileRemoveMessageSchema>;
+export type WorkspaceFileRefreshMessage = z.infer<typeof workspaceFileRefreshMessageSchema>;
+export type WorkspaceFileUseStaleMessage = z.infer<typeof workspaceFileUseStaleMessageSchema>;
+export type WorkspaceFileSearchResponse = z.infer<typeof workspaceFileSearchResponseSchema>;
+export type WorkspaceFileReferenceMessage = z.infer<typeof workspaceFileReferenceMessageSchema>;
 export type McpConnectMessage = z.infer<typeof mcpConnectMessageSchema>;
 export type McpDisconnectMessage = z.infer<typeof mcpDisconnectMessageSchema>;
 export type McpOpenSettingsMessage = z.infer<typeof mcpOpenSettingsMessageSchema>;

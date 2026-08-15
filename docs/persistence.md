@@ -150,6 +150,17 @@ manifest, JSONL envelope, or existing event meanings:
   future task that wants durable IDE provenance must add a strict version-compatible event, explicit
   deletion behavior, privacy review, and fixtures before implementation.
 
+### Workspace file references (T2103)
+
+`@` workspace file references follow the same ephemeral rule. Pending cards, search results, opaque
+reference IDs, canonical URI identity, file fingerprints, document versions, stale decisions, and
+unsubmitted text are never written to Session files or Webview restoration. New chat, Session switch/
+restore, workspace boundary changes, cancellation, and disposal discard them without an event. At
+submit, accepted file text is projected as ordinary user context for that Run; only the resulting
+ordinary user message and existing Run events follow the current persistence contract. Recovery never
+re-reads, reconstructs, or silently reattaches a historical file reference, and no persistence format
+or migration is added by T2103.
+
 ### Corruption, tail damage, and compatibility
 
 - A duplicate or skipped event sequence, invalid recognized payload, cross-Session identity mismatch,

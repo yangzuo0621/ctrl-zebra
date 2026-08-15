@@ -13,7 +13,7 @@ import {
   type ModelGateway,
   type ModelMessage,
   maxModelContextWindowTokens,
-  projectExternalMcpContext,
+  projectExternalContext,
   SessionNotFoundError,
   type SessionRecord,
   type SessionRepository,
@@ -31,6 +31,7 @@ import {
   sessionIdSchema,
   type ToolStateSourceDto,
   type UserMessage,
+  type WorkspaceFileReference,
 } from "@ctrl-zebra/protocol";
 
 import {
@@ -74,6 +75,7 @@ export interface ChatRunner {
     externalResources?: readonly McpResourceAttachment[],
     externalPrompts?: readonly McpPromptConfirmation[],
     sessionId?: string,
+    workspaceFiles?: readonly WorkspaceFileReference[],
   ): Promise<void>;
   regenerate?(
     sessionId: string,
@@ -140,10 +142,12 @@ export function createChatRunner({
     externalResources: readonly McpResourceAttachment[] = [],
     externalPrompts: readonly McpPromptConfirmation[] = [],
     requestedSessionId: string | undefined,
+    workspaceFiles: readonly WorkspaceFileReference[] = [],
     options: InternalRunOptions = {},
   ): Promise<void> => {
     signal.throwIfAborted();
-    projectExternalMcpContext(
+    projectExternalContext(
+      workspaceFiles,
       externalResources,
       externalPrompts,
       allocateTokenBudget(maxModelContextWindowTokens).filesTokens,
@@ -238,7 +242,11 @@ export function createChatRunner({
       );
       try {
         signal.throwIfAborted();
-        await runtime.run(userMessage, signal, { externalResources, externalPrompts });
+        await runtime.run(userMessage, signal, {
+          workspaceFiles,
+          externalResources,
+          externalPrompts,
+        });
       } finally {
         reasoning.close();
       }
@@ -376,7 +384,11 @@ export function createChatRunner({
 
     try {
       signal.throwIfAborted();
-      await runtime.run(userMessage, signal, { externalResources, externalPrompts });
+      await runtime.run(userMessage, signal, {
+        workspaceFiles,
+        externalResources,
+        externalPrompts,
+      });
     } finally {
       reasoning.close();
       await persistence;
@@ -389,7 +401,7 @@ export function createChatRunner({
       if (sessionRepository === undefined) {
         throw new SessionRecoveryError("unavailable");
       }
-      await runInternal("regenerate", signal, emit, [], [], sessionId, {
+      await runInternal("regenerate", signal, emit, [], [], sessionId, [], {
         regenerationTargetMessageId: targetAssistantMessageId,
       });
     },
@@ -397,7 +409,7 @@ export function createChatRunner({
       if (sessionRepository === undefined) {
         throw new SessionRecoveryError("unavailable");
       }
-      await runInternal(content, signal, emit, [], [], sessionId, {
+      await runInternal(content, signal, emit, [], [], sessionId, [], {
         editTargetUserMessageId: targetUserMessageId,
       });
     },
@@ -459,7 +471,15 @@ export function createSelectingChatRunner({
   selectSessionRepository,
 }: SelectingChatRunnerDependencies): ChatRunner {
   return {
-    async run(content, signal, emit, externalResources = [], externalPrompts = [], sessionId) {
+    async run(
+      content,
+      signal,
+      emit,
+      externalResources = [],
+      externalPrompts = [],
+      sessionId,
+      workspaceFiles = [],
+    ) {
       signal.throwIfAborted();
       const sessionRepository = await selectSessionRepository?.();
       signal.throwIfAborted();
@@ -478,7 +498,7 @@ export function createSelectingChatRunner({
         diagnosticSink,
         sessionRepository,
         mcpToolSources: selection.mcpToolSources,
-      }).run(content, signal, emit, externalResources, externalPrompts, sessionId);
+      }).run(content, signal, emit, externalResources, externalPrompts, sessionId, workspaceFiles);
     },
     async regenerate(sessionId, targetAssistantMessageId, signal, emit) {
       signal.throwIfAborted();

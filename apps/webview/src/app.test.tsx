@@ -1,4 +1,4 @@
-import { protocolVersion } from "@ctrl-zebra/protocol";
+import { protocolVersion, type WorkspaceFileReference } from "@ctrl-zebra/protocol";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -996,6 +996,80 @@ describe("App streaming chat", () => {
 
     expect(screen.getByText("const x = 42;")).toBeVisible();
     expect(screen.getByRole("button", { name: "Copy" })).toBeVisible();
+  });
+
+  it("searches and selects a workspace file with keyboard completion", async () => {
+    const host = createWebviewHostFixture();
+    host.searchWorkspaceFiles = (requestId, query) => {
+      host.sent.push({
+        protocolVersion,
+        type: "webview/workspace-file-search",
+        requestId,
+        query,
+      });
+    };
+    host.readWorkspaceFile = (requestId, path) => {
+      host.sent.push({
+        protocolVersion,
+        type: "webview/workspace-file-read",
+        requestId,
+        path,
+      });
+    };
+    const user = userEvent.setup();
+    render(<App host={host} createRequestId={ids(["search-1", "read-1"])} />);
+
+    const input = screen.getByRole("textbox", { name: "Message" });
+    await user.type(input, "Explain @");
+    expect(host.sent.at(-1)).toEqual({
+      protocolVersion,
+      type: "webview/workspace-file-search",
+      requestId: "search-1",
+      query: "",
+    });
+    act(() =>
+      host.emit({
+        protocolVersion,
+        type: "extension/workspace-file-search",
+        requestId: "search-1",
+        status: "ready",
+        results: [{ path: "src/index.ts" }],
+        truncated: false,
+      }),
+    );
+
+    await user.keyboard("{ArrowDown}{Enter}");
+    expect(host.sent.at(-1)).toEqual({
+      protocolVersion,
+      type: "webview/workspace-file-read",
+      requestId: "read-1",
+      path: "src/index.ts",
+    });
+    expect(input).toHaveValue("Explain ");
+
+    const reference: WorkspaceFileReference = {
+      referenceId: "ref-1",
+      context: {
+        source: {
+          uri: { scheme: "file", authority: "", path: "src/index.ts" },
+          stale: false,
+          truncated: false,
+        },
+        text: "export const value = 1;",
+      },
+    };
+    act(() =>
+      host.emit({
+        protocolVersion,
+        type: "extension/workspace-file-reference",
+        requestId: "read-1",
+        status: "ready",
+        reference,
+      }),
+    );
+    expect(
+      screen.getByRole("article", { name: strings.workspaceFiles.cardLabel }),
+    ).toHaveTextContent("src/index.ts");
   });
 
   it("blocks a form submit while an editor-context Refresh is pending", async () => {
