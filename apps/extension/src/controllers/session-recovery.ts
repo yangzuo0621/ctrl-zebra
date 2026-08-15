@@ -212,7 +212,7 @@ export function createSessionRecoveryActions(
       }
 
       if (failure !== undefined) {
-        throw failure;
+        throw aggregateDeletionFailure(failure, deletedCount);
       }
     },
     async clear() {
@@ -247,6 +247,7 @@ export function createSessionRecoveryActions(
             );
           }
           const report = await store.clear(new AbortController().signal);
+          deletedCount += report.deleted;
           if (report.failed > 0 && failure === undefined) {
             failure = new SessionDeletionError("partial", deletedCount);
           }
@@ -256,7 +257,7 @@ export function createSessionRecoveryActions(
       }
 
       if (failure !== undefined) {
-        throw failure;
+        throw aggregateDeletionFailure(failure, deletedCount);
       }
       return deletedCount;
     },
@@ -605,4 +606,11 @@ function toSessionDeletionError(error: unknown, deletedCount: number): SessionDe
     return error;
   }
   return new SessionDeletionError(deletedCount > 0 ? "partial" : "unavailable", deletedCount);
+}
+
+function aggregateDeletionFailure(
+  failure: SessionDeletionError,
+  deletedCount: number,
+): SessionDeletionError {
+  return deletedCount > 0 ? new SessionDeletionError("partial", deletedCount) : failure;
 }

@@ -162,7 +162,42 @@ describe("Session recovery", () => {
     await expect(partial.delete?.("session-delete")).rejects.toMatchObject({ code: "partial" });
   });
 
-  it("clears all Sessions only after the Checkpoint cleanup succeeds", async () => {
+  it("aggregates Checkpoint deletions after a Session repository failure", async () => {
+    const repository: SessionRepository = {
+      async create() {},
+      async get() {
+        return undefined;
+      },
+      async list() {
+        return [];
+      },
+      async update() {},
+      async appendEvent() {},
+      async delete() {
+        throw new Error("Session repository unavailable");
+      },
+    };
+    const checkpointStore: CheckpointStore = {
+      create: async () => {
+        throw new Error("unused");
+      },
+      read: async () => undefined,
+      list: async () => [],
+      deleteForSession: async () => ({ deleted: 2, failed: 0 }),
+    };
+    const actions = createSessionRecoveryActions(
+      async () => repository,
+      undefined,
+      async () => checkpointStore,
+    );
+
+    await expect(actions.delete?.("session-delete")).rejects.toMatchObject({
+      code: "partial",
+      deletedCount: 2,
+    });
+  });
+
+  it("clears all Sessions and Checkpoints after cleanup succeeds", async () => {
     const repository = new InMemorySessionRepository();
     await repository.create(manifest("session-clear", "2026-07-19T10:00:00.000Z"));
     let checkpointsCleared = false;
@@ -183,7 +218,7 @@ describe("Session recovery", () => {
       async () => checkpointStore,
     );
 
-    await expect(actions.clear?.()).resolves.toBe(1);
+    await expect(actions.clear?.()).resolves.toBe(4);
     expect(checkpointsCleared).toBe(true);
     await expect(repository.list()).resolves.toEqual([]);
   });
@@ -234,6 +269,41 @@ describe("Session recovery", () => {
       deletedCount: 1,
     });
     expect(clearCalls).toEqual(["sessions"]);
+  });
+
+  it("aggregates Checkpoint deletions after a clear-all Session repository failure", async () => {
+    const repository: SessionRepository = {
+      async create() {},
+      async get() {
+        return undefined;
+      },
+      async list() {
+        return [];
+      },
+      async update() {},
+      async appendEvent() {},
+      async clear() {
+        throw new Error("Session repository unavailable");
+      },
+    };
+    const checkpointStore: CheckpointStore = {
+      create: async () => {
+        throw new Error("unused");
+      },
+      read: async () => undefined,
+      list: async () => [],
+      clear: async () => ({ deleted: 3, failed: 0 }),
+    };
+    const actions = createSessionRecoveryActions(
+      async () => repository,
+      undefined,
+      async () => checkpointStore,
+    );
+
+    await expect(actions.clear?.()).rejects.toMatchObject({
+      code: "partial",
+      deletedCount: 3,
+    });
   });
 
   it("reconstructs user and assistant messages from ordered events", async () => {
