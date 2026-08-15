@@ -136,10 +136,10 @@ owned by Biome, EditorConfig, and Git attributes.
 - Prefer a maintained implementation when it materially reduces algorithmic, compatibility, or
   security maintenance without taking ownership of CtrlZebra policy or lifecycle. Do not add a
   dependency merely to replace small, stable utility logic.
-- Record alternatives, maintenance status, license, runtime and toolchain compatibility, packaging
-  or VSIX impact, cancellation and security behavior, required adapter code, the decision, and its
-  rationale in transient task execution, handoff, or PR evidence. If no trigger applies, record that
-  explicitly in the same evidence.
+- When a trigger applies, record alternatives, maintenance status, license, runtime and toolchain
+  compatibility, packaging or VSIX impact, cancellation and security behavior, required adapter code,
+  the decision, and its rationale in transient task execution, handoff, or PR evidence. When no
+  trigger applies, omit the Build-vs-Buy field and evidence.
 - Isolate third-party mechanisms behind CtrlZebra-owned interfaces. Third-party types, failures,
   defaults, lifecycle decisions, and unbounded values must not enter public contracts or bypass
   validation, budgets, cancellation, security, or error normalization.

@@ -111,7 +111,7 @@ testkit ───────────────→ core contracts + protoc
 Reviewers start from the compact Review Handoff, exact current PR diff/revision, and acceptance criteria.
 They open extra documents only for a touched contract, material handoff claim, concrete concern, or
 documented similarity escalation. The Reviewer is read-only and the only implementation-quality gate;
-Finalizer is transactional and never reopens implementation review.
+Root closure is transactional and never reopens implementation review.
 
 ## 5. Git, authorization, and destructive actions
 

@@ -64,7 +64,7 @@ This is a compact review gate. Detailed semantics remain authoritative in
 - [ ] If a trigger applies, evidence evaluates options in the owner-defined order and records
       maintenance, license, compatibility, packaging, cancellation, security, adapter, and rationale
       impacts; the selected mechanism remains behind CtrlZebra-owned interfaces.
-- [ ] If no trigger applies, task evidence states exactly: `Build-vs-Buy: N/A — no trigger.`
+- [ ] If no trigger applies, omit the Build-vs-Buy field and evidence.
 - [ ] A review recommendation does not authorize unrelated dependency adoption or scope expansion.
 
 ## 7. Code Quality

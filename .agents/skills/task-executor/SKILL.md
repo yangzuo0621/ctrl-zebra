@@ -2,7 +2,9 @@
 
 ## Purpose
 
-Execute exactly one assigned `Txxxx` task and own its implementation branch/PR until Finalizer handoff.
+Execute exactly one assigned `Txxxx` task and own its implementation branch/PR through
+implementation, verification, and Reviewer-directed fixes. After approval, return the exact
+revision to Root for transactional closure.
 
 ## Inputs
 
@@ -12,44 +14,43 @@ Execute exactly one assigned `Txxxx` task and own its implementation branch/PR u
 
 ## Workflow
 
-1. Verify the task exists, is not completed, and has no conflicting active work. Create/use its
+1. Verify the task exists, is not completed, and has no conflicting active work. Create or use its
    dedicated feature branch and mark only that task `进行中` according to the roadmap state rules.
 2. Before implementation edits, publish the compact task contract from
-   [`docs/roadmap/task-template.md`](../../../docs/roadmap/task-template.md). Its planned-file list is a
-   hard boundary; stop for an amendment before leaving it.
+   [`docs/roadmap/task-template.md`](../../../docs/roadmap/task-template.md). Its planned-file list is
+   a hard boundary; stop for an amendment before leaving it.
 3. In `MANUAL`, stop for explicit implementation approval. In AUTO, continue only when scope,
    acceptance, contract, architecture/security rules, and exact profile authorization are unambiguous.
 4. Follow [`Reuse Before Build`](../../../docs/development.md#reuse-before-build): use `TARGETED` by
-   default and `FULL` only for an existing Executor trigger; never claim Reviewer-only
-   `ESCALATED FULL`. Apply [`Build vs Buy`](../../../docs/development.md#build-vs-buy) when triggered.
-5. Implement only the contract, verify from narrow to broad, and create/update the same PR early when
-   authorized. In MANUAL request each ungranted Git/PR operation; in AUTO remain inside the immutable
-   profile envelope.
+   default and `FULL` only for an existing Executor trigger; never claim Reviewer-only `ESCALATED FULL`.
+   Apply [`Build vs Buy`](../../../docs/development.md#build-vs-buy) when triggered.
+5. Implement only the contract, verify from narrow to broad, and create or update the same PR early
+   when authorized. In MANUAL request each ungranted Git/PR operation; in AUTO remain inside the
+   immutable profile envelope.
 6. Hand the exact current revision, PR diff, acceptance criteria, and compact Review Handoff to
-   Reviewer. On `REJECTED`, fix only consolidated blocking findings in scope, update the same PR, and
-   request review of the new revision.
-7. Any implementation change after `APPROVED` invalidates approval. After current-revision approval,
-   stop implementation and hand the same PR to Finalizer. Route CI/conflict mechanics back through
-   Executor and re-review any changed revision; route other blockers to their named owner.
+   Reviewer. The first review must return all identifiable blocking findings as one consolidated set.
+   For correction #1 and #2, address the returned blockers in scope and request the delta-focused
+   review of the new exact revision.
+7. Any implementation change after `APPROVED` invalidates approval. After approval of the current
+   revision, stop implementation and return the same PR and revision to Root for closure. Route
+   checks/conflict mechanics through Executor and require re-review whenever their fix changes the
+   implementation revision.
 
 ## Review Handoff output
 
-Use the exact handoff fields in the task template:
-
-- task / PR / exact revision; acceptance criteria; changed areas; contracts touched
-- deduplicated docs actually consulted; verification and unrun checks
-- reuse tier / candidates / conclusion; Build-vs-Buy summary; caveats/deviations
-
-Also report `Executor document count` and `Executor similarity tier: TARGETED | FULL`. Do not include
-whole source documents, raw searches, or tool transcripts.
+Use the non-empty fields in the task template. The handoff must identify the task/PR/exact revision,
+acceptance criteria, changed areas, touched contracts, verification and unrun checks, and any reuse
+or Build-vs-Buy evidence that applies. Do not include whole source documents, raw searches, tool
+transcripts, document counts, or other routine telemetry.
 
 ## Stop/block conditions
 
-Return `BLOCKED` for missing/ambiguous authorization, scope ambiguity or contract expansion,
+Return `BLOCKED` for missing or ambiguous authorization, scope ambiguity or contract expansion,
 architecture/security conflict, required change control, persistent review failure, an in-scope
-mechanical blocker that cannot be resolved safely, or unverifiable repository/PR state.
+mechanical blocker that cannot be resolved safely, or unverifiable repository/PR state. If blockers
+remain after correction #2, stop without starting a fourth Reviewer pass.
 
 ## Role boundary
 
-Do not act as Reviewer, Finalizer, or Planner; self-approve; mark the task complete; merge/close the PR;
-or invent test, CI, Git, review, PR, merge, or cleanup state.
+Do not act as Reviewer, Root closure, or Planner; self-approve; mark the task complete; merge or close
+the PR; or invent test, CI, Git, review, PR, merge, or cleanup state.
