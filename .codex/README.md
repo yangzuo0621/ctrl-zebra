@@ -2,13 +2,36 @@
 
 ## Recommended routine roles
 
-- Root coordinator using `auto-workflow` — authorization, dispatch, waits, revision tracking, circuit
-  breakers, and transactional closure
+- Root coordinator using explicitly selected `auto-workflow` — authorization, dispatch, waits, revision
+  tracking, circuit breakers, and transactional closure
 - `task-executor` — task startup, implementation, verification, early PR, and review fixes
-- `task-reviewer` — the only implementation-quality gate
+- `task-reviewer` — the implementation-quality gate only for an active auto-workflow or an explicitly
+  requested independent review
 - `sol-planner` — optional project/Phase architecture and roadmap escalation before implementation
 
-## Routine lifecycle
+## Lifecycle boundary
+
+Ordinary / MANUAL:
+
+```text
+implement
+→ verify
+→ stop / report
+```
+
+Explicit auto-workflow:
+
+```text
+Task-Executor
+→ Task-Reviewer
+→ Root closure
+```
+
+Ordinary implementation, roadmap tasks, PR requests, verification, and maintenance requests do not
+implicitly select `auto-workflow`. The detailed lifecycle below applies only after the user explicitly
+selects `auto-workflow` or authorizes `AUTO_DRAFT` / `AUTO_FULL` for the exact task.
+
+## Active auto-workflow lifecycle
 
 ```text
 Pending
@@ -42,7 +65,9 @@ loads other documents only for concrete verification.
 
 ## Ownership principle
 
-**Task-Executor opens the PR. Task-Reviewer owns quality approval. Root performs transactional closure.**
+**Task-Executor opens the PR. Task-Reviewer owns quality approval only for an active auto-workflow run
+or an explicitly requested independent review. Root performs transactional closure for the active
+auto-workflow.**
 
 The feature PR and compact handoff packet are the shared surfaces across task-level roles. Approval is
 bound to the exact reviewed implementation revision; any implementation change invalidates it and

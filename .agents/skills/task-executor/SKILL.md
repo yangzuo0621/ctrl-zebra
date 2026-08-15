@@ -3,8 +3,10 @@
 ## Purpose
 
 Execute exactly one assigned `Txxxx` task and own its implementation branch/PR through
-implementation, verification, and Reviewer-directed fixes. After approval, return the exact
-revision to Root for transactional closure.
+implementation and verification. In an active `AUTO_DRAFT` / `AUTO_FULL` run, also handle
+Reviewer-directed fixes and, after approval, return the exact revision to Root for transactional
+closure. In `MANUAL`, stop and report after implementation and verification unless the user separately
+requests an independent review.
 
 ## Inputs
 
@@ -26,17 +28,25 @@ revision to Root for transactional closure.
    Apply [`Build vs Buy`](../../../docs/development.md#build-vs-buy) when triggered.
 5. Implement only the contract, verify from narrow to broad, and create or update the same PR early
    when authorized. In MANUAL request each ungranted Git/PR operation; in AUTO remain inside the
-   immutable profile envelope.
-6. Hand the exact current revision, PR diff, acceptance criteria, and compact Review Handoff to
-   Reviewer. The first review must return all identifiable blocking findings as one consolidated set.
-   For correction #1 and #2, address the returned blockers in scope and request the delta-focused
-   review of the new exact revision.
-7. Any implementation change after `APPROVED` invalidates approval. After approval of the current
-   revision, stop implementation and return the same PR and revision to Root for closure. Route
-   checks/conflict mechanics through Executor and require re-review whenever their fix changes the
-   implementation revision.
+   immutable profile envelope. In MANUAL, implementation completion followed by verification is the
+   default stop/report point and does not dispatch a Reviewer.
+6. In `AUTO_DRAFT` / `AUTO_FULL`, after implementation and verification return the exact current
+   revision, PR diff, acceptance criteria, and compact Review Handoff to Root for Reviewer dispatch;
+   do not self-dispatch. The first review must return all identifiable blocking findings as one
+   consolidated set. For correction #1 and #2, address the returned blockers in scope and request the
+   delta-focused review of the new exact revision. In MANUAL, only a separate explicit user request for
+   independent review permits this Reviewer handoff.
+7. In an active AUTO run, any implementation change after `APPROVED` invalidates approval. After
+   approval of the current revision, stop implementation and return the same PR and revision to Root
+   for transactional closure. If MANUAL includes an explicitly requested independent review, the
+   exact-revision invalidation rule still applies; return that review result to the caller without Root
+   closure. Route checks/conflict mechanics through Executor and require re-review whenever their fix
+   changes the implementation revision.
 
 ## Review Handoff output
+
+Required for an active AUTO run or an explicitly requested independent review; ordinary MANUAL
+completion stops after verification and does not require a Reviewer handoff.
 
 Use the non-empty fields in the task template. The handoff must identify the task/PR/exact revision,
 acceptance criteria, changed areas, touched contracts, verification and unrun checks, and any reuse
