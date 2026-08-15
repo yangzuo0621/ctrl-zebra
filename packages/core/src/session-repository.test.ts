@@ -106,7 +106,7 @@ describe.each(factories)("SessionRepository contract: %s", (_name, createReposit
     await expect(deleteSession.call(repository, "session-1")).resolves.toBe(true);
     await expect(deleteSession.call(repository, "session-1")).resolves.toBe(false);
     await expect(repository.get("session-1")).resolves.toBeUndefined();
-    await expect(clear.call(repository)).resolves.toBe(1);
+    await expect(clear.call(repository)).resolves.toEqual({ deleted: 1, failed: 0 });
     await expect(repository.list()).resolves.toEqual([]);
   });
 
@@ -157,7 +157,7 @@ function createPersistedHarness() {
           storage.files.delete(key);
         }
       }
-      return count;
+      return { deleted: count, failed: 0 };
     },
   };
   return {

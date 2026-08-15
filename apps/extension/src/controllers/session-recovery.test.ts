@@ -188,6 +188,54 @@ describe("Session recovery", () => {
     await expect(repository.list()).resolves.toEqual([]);
   });
 
+  it("propagates a bounded partial Session cleanup report after multiple deletions", async () => {
+    const clearCalls: string[] = [];
+    const repository: SessionRepository = {
+      async create() {},
+      async get() {
+        return undefined;
+      },
+      async list() {
+        return [
+          {
+            sessionId: "session-removed",
+            status: "completed",
+            createdAt: "2026-07-19T10:00:00.000Z",
+          },
+          {
+            sessionId: "session-failed",
+            status: "completed",
+            createdAt: "2026-07-19T09:00:00.000Z",
+          },
+        ];
+      },
+      async update() {},
+      async appendEvent() {},
+      async clear() {
+        clearCalls.push("sessions");
+        return { deleted: 1, failed: 1 };
+      },
+    };
+    const actions = createSessionRecoveryActions(
+      async () => repository,
+      undefined,
+      async () => ({
+        create: async () => {
+          throw new Error("unused");
+        },
+        read: async () => undefined,
+        list: async () => [],
+        clear: async () => ({ deleted: 0, failed: 0 }),
+      }),
+    );
+
+    await expect(actions.clear?.()).rejects.toMatchObject({
+      code: "partial",
+      deletedCount: 1,
+    });
+    expect(clearCalls).toEqual(["sessions"]);
+  });
+
   it("reconstructs user and assistant messages from ordered events", async () => {
     const repository = new InMemorySessionRepository();
     await repository.create(manifest("session-1", "2026-07-19T10:00:00.000Z"));

@@ -106,6 +106,7 @@ export function bindWebviewMessageController({
     () => runMessages.cancelAllSessions(),
     (sessionId) => runMessages.clearOwnedSession(sessionId),
     () => runMessages.clearOwnedSession(),
+    (sessionId) => runMessages.ownsSession(sessionId),
   );
   const checkpointMessages = new WebviewCheckpointMessageHandler(post, checkpointActions);
   mcpActions?.bind(post);
@@ -309,6 +310,9 @@ export function bindWebviewMessageController({
         if (!sessionMessages.isRestoring()) {
           sessionMessages.list(data.requestId);
         }
+        return;
+      case "webview/select-session":
+        sessionMessages.select(data.requestId, data.sessionId);
         return;
       case "webview/restore-session":
         if (runMessages.canStart() && !sessionMessages.isRestoring()) {

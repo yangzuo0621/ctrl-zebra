@@ -56,7 +56,8 @@ Clear-all local history is also explicit and idempotent. It removes every Sessio
 committed or temporary Checkpoint file under the versioned persistence directories, including damaged
 records that cannot be restored. It never removes workspace files, user code, or unrelated VS Code
 storage. Session deletion and clear-all do not change the persisted format version or rewrite any
-remaining record.
+remaining record. Each cleanup category returns bounded successful/failed entry counts; a later
+failure remains a partial result rather than losing the entries already removed.
 
 Before either operation starts, the Host closes the owning Run event gate and deterministically
 cancels and settles an active Run. Storage cleanup then runs to completion for every category it can

@@ -732,4 +732,24 @@ describe("Webview protocol messages", () => {
       }).success,
     ).toBe(false);
   });
+
+  it("accepts only an opaque selected Session intent", () => {
+    const selected = {
+      protocolVersion,
+      type: "webview/select-session",
+      requestId: "select-1",
+      sessionId: "session-1",
+    } as const;
+    const cleared = {
+      protocolVersion,
+      type: "webview/select-session",
+      requestId: "select-2",
+    } as const;
+
+    expect(webviewToExtensionMessageSchema.parse(selected)).toEqual(selected);
+    expect(webviewToExtensionMessageSchema.parse(cleared)).toEqual(cleared);
+    expect(webviewToExtensionMessageSchema.safeParse({ ...selected, sessionId: "" }).success).toBe(
+      false,
+    );
+  });
 });

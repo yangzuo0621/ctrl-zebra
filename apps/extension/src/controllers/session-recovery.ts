@@ -223,7 +223,11 @@ export function createSessionRecoveryActions(
         if (repository.clear === undefined) {
           throw new SessionDeletionError("unavailable");
         }
-        deletedCount += await repository.clear();
+        const report = await repository.clear();
+        deletedCount += report.deleted;
+        if (report.failed > 0) {
+          failure = new SessionDeletionError("partial", deletedCount);
+        }
       } catch (error) {
         failure = toSessionDeletionError(error, deletedCount);
       }

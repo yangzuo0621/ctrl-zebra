@@ -137,8 +137,9 @@ This document defines the Webview security constraints established before T0104.
 
 - Deletion is a user-intended Host operation bound to one validated opaque `sessionId`, or to an
   explicit clear-all-local-history confirmation. The Webview cannot provide a path, storage URI,
-  encoded directory name, Checkpoint target, or wildcard. The Host revalidates the identity and
-  selected/owned Session immediately before cleanup and never falls back to another Session.
+  encoded directory name, Checkpoint target, or wildcard. The Host records selection only after the
+  exact ID appeared in its latest Session list, revalidates the selected/owned Session immediately
+  before cleanup, and never falls back to another Session.
 - A Session delete covers its manifest, messages, events, reasoning projection, atomic-write
   temporary files, and every Checkpoint that the Host can safely attribute to the exact Session.
   Clear-all covers every CtrlZebra Session and Checkpoint file in the versioned persistence root,

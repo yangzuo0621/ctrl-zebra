@@ -6,6 +6,7 @@ import {
   PersistedSessionRepository,
   type PersistencePath,
   type SessionCatalog,
+  type SessionDeletionReport,
   type SessionRepository,
 } from "@ctrl-zebra/core";
 import {
@@ -94,12 +95,11 @@ class VsCodeSessionStorage implements ManifestStorage, EventStorage, SessionCata
     return true;
   }
 
-  async clearSessions(): Promise<number> {
+  async clearSessions(): Promise<SessionDeletionReport> {
     const directory = [persistenceSessionsDirectory, persistenceFormatDirectory] as const;
     const entries = await this.#storage.readDirectory(directory);
     let deleted = 0;
-    let failure: unknown;
-    let hasFailure = false;
+    let failed = 0;
     for (const [name, type] of entries) {
       const path = [...directory, name] as PersistencePath;
       try {
@@ -109,15 +109,11 @@ class VsCodeSessionStorage implements ManifestStorage, EventStorage, SessionCata
           await this.#storage.deleteFile(path);
         }
         deleted += 1;
-      } catch (error) {
-        hasFailure = true;
-        failure ??= error;
+      } catch {
+        failed += 1;
       }
     }
-    if (hasFailure) {
-      throw failure;
-    }
-    return deleted;
+    return { deleted, failed } satisfies SessionDeletionReport;
   }
 
   async appendText(path: PersistencePath, content: string, maxTotalBytes: number): Promise<void> {

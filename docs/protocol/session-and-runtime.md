@@ -47,6 +47,12 @@ new-Session behavior.
   absent Session. Success emits `extension/session-deleted`; a corruption or storage problem emits
   the bounded `extension/session-deletion-error` with `partial` or `unavailable`, never a false
   success. A deleted Session cannot be restored or remain selected in the Webview.
+- `webview/select-session` is the strict selection intent `{ protocolVersion, type:
+  "webview/select-session", requestId, sessionId? }`. The Host accepts a Session ID only after it
+  appeared in the latest Host-owned Session list (or is the Host-owned active Session), records that
+  selection, and clears it when omitted. A deletion request is authorized only for this Host-selected
+  identity or the Host-owned Session; a schema-valid but mismatched identity is rejected before
+  cancellation or storage cleanup.
 - `webview/clear-sessions` is the strict object `{ protocolVersion, type: "webview/clear-sessions",
   requestId, confirm: true }`. It is an explicit clear-all-local-history intent, not `new-chat` and
   not T2106's all-data reset. After active Runs are deterministically cancelled and settled, the Host

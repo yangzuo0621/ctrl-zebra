@@ -1442,6 +1442,80 @@ describe("bindWebviewMessageController", () => {
     expect(opened).toEqual(["https://example.test/docs"]);
   });
 
+  it("rejects deletion for a Session that is not Host-selected or Host-owned", async () => {
+    let messageListener: ((message: unknown) => void) | undefined;
+    const deleted: string[] = [];
+    const postedMessages: unknown[] = [];
+
+    bindWebviewMessageController({
+      channel: {
+        onDidReceiveMessage(listener) {
+          messageListener = listener;
+          return { dispose() {} };
+        },
+        postMessage(message) {
+          postedMessages.push(message);
+          return Promise.resolve(true);
+        },
+      },
+      lifetime: { onDidDispose: () => ({ dispose() {} }) },
+      chatRunner: idleChatRunner,
+      sessionActions: {
+        async list() {
+          return [
+            {
+              sessionId: "session-1",
+              status: "completed",
+              createdAt: "2026-08-15T00:00:00.000Z",
+            },
+          ];
+        },
+        async restore() {
+          throw new Error("unused");
+        },
+        async delete(sessionId) {
+          deleted.push(sessionId);
+        },
+      },
+    });
+
+    messageListener?.({
+      protocolVersion,
+      type: "webview/list-sessions",
+      requestId: "list-1",
+    });
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    messageListener?.({
+      protocolVersion,
+      type: "webview/select-session",
+      requestId: "select-1",
+      sessionId: "session-1",
+    });
+    messageListener?.({
+      protocolVersion,
+      type: "webview/delete-session",
+      requestId: "delete-mismatch",
+      sessionId: "session-2",
+    });
+    expect(deleted).toEqual([]);
+    expect(postedMessages).toContainEqual({
+      protocolVersion,
+      type: "extension/session-deletion-error",
+      requestId: "delete-mismatch",
+      code: "unavailable",
+      message: "Saved Session data is unavailable. Retry the deletion.",
+    });
+
+    messageListener?.({
+      protocolVersion,
+      type: "webview/delete-session",
+      requestId: "delete-selected",
+      sessionId: "session-1",
+    });
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    expect(deleted).toEqual(["session-1"]);
+  });
+
   it("cancels and settles an active Session run before deleting its persistence", async () => {
     let messageListener: ((message: unknown) => void) | undefined;
     let runSettled = false;

@@ -30,8 +30,8 @@ export interface SessionRepository {
   appendEvent(sessionId: unknown, record: unknown): Promise<void>;
   /** Removes one Session's durable directory and returns whether it existed. */
   delete?(sessionId: unknown): Promise<boolean>;
-  /** Removes all durable Session directories and returns the number observed. */
-  clear?(): Promise<number>;
+  /** Removes all durable Session directories and reports successful and failed entries. */
+  clear?(): Promise<SessionDeletionReport>;
 }
 
 export interface SessionCatalog {
@@ -39,7 +39,12 @@ export interface SessionCatalog {
   /** Removes the exact encoded Session directory. */
   deleteSession?(sessionId: unknown): Promise<boolean>;
   /** Removes all Session directories, including directories with damaged manifests. */
-  clearSessions?(): Promise<number>;
+  clearSessions?(): Promise<SessionDeletionReport>;
+}
+
+export interface SessionDeletionReport {
+  readonly deleted: number;
+  readonly failed: number;
 }
 
 export class DuplicateSessionError extends Error {
@@ -125,10 +130,10 @@ export class InMemorySessionRepository implements SessionRepository {
     return this.#records.delete(id);
   }
 
-  async clear(): Promise<number> {
+  async clear(): Promise<SessionDeletionReport> {
     const count = this.#records.size;
     this.#records.clear();
-    return count;
+    return { deleted: count, failed: 0 };
   }
 
   async #require(sessionId: unknown): Promise<SessionRecord> {
@@ -212,7 +217,7 @@ export class PersistedSessionRepository implements SessionRepository {
     return await this.#catalog.deleteSession(id);
   }
 
-  async clear(): Promise<number> {
+  async clear(): Promise<SessionDeletionReport> {
     if (this.#catalog.clearSessions === undefined) {
       throw new SessionDeletionUnavailableError();
     }

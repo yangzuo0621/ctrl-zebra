@@ -243,6 +243,7 @@ export {
 } from "./provider-retry-policy.js";
 export type {
   SessionCatalog,
+  SessionDeletionReport,
   SessionMetadataPatch,
   SessionRecord,
   SessionRepository,

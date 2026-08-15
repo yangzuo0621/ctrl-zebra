@@ -765,6 +765,7 @@ export function createChatStore({
           reasoningAnnouncement: "",
           sessionAnnouncement: strings.chat.newChatReady,
         });
+        host.selectSession?.(requestId, undefined);
         host.newChat?.(requestId);
         return true;
       },
@@ -797,6 +798,7 @@ export function createChatStore({
           sessionSwitchPending: sessionSelectionId !== get().selectedSessionId,
           sessionError: undefined,
         });
+        host.selectSession?.(createRequestId(), sessionSelectionId);
       },
       restoreSelectedSession() {
         const { sessionSelectionId, activeRequestId } = get();
@@ -1009,6 +1011,7 @@ export function createChatStore({
             sessionSwitchPending: sessionSelectionId !== currentSessionId,
             sessionError: undefined,
           });
+          host.selectSession?.(createRequestId(), sessionSelectionId);
           return;
         }
 

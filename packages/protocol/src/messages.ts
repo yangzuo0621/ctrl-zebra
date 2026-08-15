@@ -498,6 +498,12 @@ export const listSessionsMessageSchema = z.strictObject({
   type: z.literal("webview/list-sessions"),
 });
 
+export const selectSessionMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("webview/select-session"),
+  sessionId: sessionIdSchema.optional(),
+});
+
 export const restoreSessionMessageSchema = z.strictObject({
   ...protocolEnvelopeSchema.shape,
   type: z.literal("webview/restore-session"),
@@ -784,6 +790,7 @@ export const webviewToExtensionMessageSchema = z.discriminatedUnion("type", [
   showApprovalDiffMessageSchema,
   approvalDecisionMessageSchema,
   listSessionsMessageSchema,
+  selectSessionMessageSchema,
   restoreSessionMessageSchema,
   deleteSessionMessageSchema,
   clearSessionsMessageSchema,
@@ -881,6 +888,7 @@ export type McpPromptDetachMessage = z.infer<typeof mcpPromptDetachMessageSchema
 export type McpPromptsMessage = z.infer<typeof mcpPromptsMessageSchema>;
 export type McpPromptPreviewMessage = z.infer<typeof mcpPromptPreviewMessageSchema>;
 export type ListSessionsMessage = z.infer<typeof listSessionsMessageSchema>;
+export type SelectSessionMessage = z.infer<typeof selectSessionMessageSchema>;
 export type RestoreSessionMessage = z.infer<typeof restoreSessionMessageSchema>;
 export type DeleteSessionMessage = z.infer<typeof deleteSessionMessageSchema>;
 export type ClearSessionsMessage = z.infer<typeof clearSessionsMessageSchema>;

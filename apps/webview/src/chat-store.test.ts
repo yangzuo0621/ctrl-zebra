@@ -1185,6 +1185,56 @@ describe("chat reasoning store", () => {
     });
   });
 
+  it("fences every known Session projection after a partial clear-all", () => {
+    const harness = createHarness(["request-1", "list-1", "clear-1"]);
+    startRun(harness);
+    harness.receive({
+      protocolVersion,
+      type: "extension/session-started",
+      requestId: "request-1",
+      sessionId: "session-1",
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/text-delta",
+      requestId: "request-1",
+      text: "Current transcript",
+    });
+    harness.flush();
+    harness.receive({
+      protocolVersion,
+      type: "extension/run-status",
+      requestId: "request-1",
+      status: "completed",
+    });
+    harness.store.getState().loadSessions();
+    harness.receive({
+      protocolVersion,
+      type: "extension/session-list",
+      requestId: "list-1",
+      sessions: [
+        { sessionId: "session-1", status: "completed", createdAt: "2026-08-15T00:00:00.000Z" },
+        { sessionId: "session-2", status: "completed", createdAt: "2026-08-14T00:00:00.000Z" },
+      ],
+    });
+    expect(harness.store.getState().clearSessions()).toBe(true);
+    harness.receive({
+      protocolVersion,
+      type: "extension/session-deletion-error",
+      requestId: "clear-1",
+      code: "partial",
+      message: "Some Session data could not be deleted. Retry to finish cleanup.",
+    });
+
+    expect(harness.store.getState()).toMatchObject({
+      sessions: [],
+      messages: [],
+      selectedSessionId: undefined,
+      sessionSelectionId: undefined,
+      sessionMutationPending: false,
+    });
+  });
+
   it("clears a partially deleted Session projection but retains it when storage is unavailable", () => {
     const harness = createHarness(["request-1", "delete-1", "request-2", "delete-2"]);
     startRun(harness);

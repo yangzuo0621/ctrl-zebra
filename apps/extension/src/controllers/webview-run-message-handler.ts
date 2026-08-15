@@ -213,6 +213,10 @@ export class WebviewRunMessageHandler {
     }
   }
 
+  ownsSession(sessionId: string): boolean {
+    return this.#ownedSessionId === sessionId || this.#activeRun?.sessionId === sessionId;
+  }
+
   clearOwnedSession(sessionId?: string): void {
     if (
       this.#activeRun === undefined &&
