@@ -83,6 +83,19 @@ export class WebviewSessionMessageHandler {
   }
 
   restore(requestId: string, sessionId: string): void {
+    if (
+      this.#knownSessionIds.has(sessionId) !== true &&
+      this.isOwnedSession?.(sessionId) !== true
+    ) {
+      this.post({
+        protocolVersion,
+        type: "extension/session-error",
+        requestId,
+        code: "unavailable",
+        message: "The saved Session could not be restored.",
+      });
+      return;
+    }
     this.#restoreRequests.add(requestId);
     const restore =
       this.actions?.restore(sessionId) ?? Promise.reject(new Error("Session storage unavailable."));

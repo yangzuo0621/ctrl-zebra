@@ -459,6 +459,7 @@ describe("bindWebviewMessageController", () => {
     });
 
     messageListener?.({ protocolVersion, type: "webview/list-sessions", requestId: "list-1" });
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
     messageListener?.({
       protocolVersion,
       type: "webview/restore-session",
@@ -499,6 +500,79 @@ describe("bindWebviewMessageController", () => {
     ]);
   });
 
+  it("rejects a stale Session restore before it can become deletable", async () => {
+    let messageListener: ((message: unknown) => void) | undefined;
+    const restored: string[] = [];
+    const deleted: string[] = [];
+    const postedMessages: unknown[] = [];
+
+    bindWebviewMessageController({
+      channel: {
+        onDidReceiveMessage(listener) {
+          messageListener = listener;
+          return { dispose() {} };
+        },
+        postMessage(message) {
+          postedMessages.push(message);
+          return Promise.resolve(true);
+        },
+      },
+      lifetime: { onDidDispose: () => ({ dispose() {} }) },
+      chatRunner: idleChatRunner,
+      sessionActions: {
+        async list() {
+          return [];
+        },
+        async restore(sessionId) {
+          restored.push(sessionId);
+          return {
+            session: {
+              sessionId,
+              status: "completed",
+              messages: [],
+              eventLogTailDamaged: false,
+            },
+            reasoning: { sessionId, blocks: [], runTruncated: false },
+          };
+        },
+        async delete(sessionId) {
+          deleted.push(sessionId);
+        },
+      },
+    });
+
+    messageListener?.({
+      protocolVersion,
+      type: "webview/restore-session",
+      requestId: "restore-stale",
+      sessionId: "session-stale",
+    });
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    messageListener?.({
+      protocolVersion,
+      type: "webview/delete-session",
+      requestId: "delete-stale",
+      sessionId: "session-stale",
+    });
+
+    expect(restored).toEqual([]);
+    expect(deleted).toEqual([]);
+    expect(postedMessages).toContainEqual({
+      protocolVersion,
+      type: "extension/session-error",
+      requestId: "restore-stale",
+      code: "unavailable",
+      message: "The saved Session could not be restored.",
+    });
+    expect(postedMessages).toContainEqual({
+      protocolVersion,
+      type: "extension/session-deletion-error",
+      requestId: "delete-stale",
+      code: "unavailable",
+      message: "Saved Session data is unavailable. Retry the deletion.",
+    });
+  });
+
   it("clears MCP draft context only when New chat is safe", async () => {
     let messageListener: ((message: unknown) => void) | undefined;
     let resolveRestore: ((projection: SessionRestoreProjection) => void) | undefined;
@@ -536,7 +610,9 @@ describe("bindWebviewMessageController", () => {
 
     const sessionActions: SessionRecoveryActions = {
       async list() {
-        return [];
+        return [
+          { sessionId: "session-1", status: "completed", createdAt: "2026-07-19T10:00:00.000Z" },
+        ];
       },
       restore() {
         return new Promise<SessionRestoreProjection>((resolve) => {
@@ -583,6 +659,8 @@ describe("bindWebviewMessageController", () => {
       requestId: "run-1",
     });
 
+    messageListener?.({ protocolVersion, type: "webview/list-sessions", requestId: "list-1" });
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
     messageListener?.({
       protocolVersion,
       type: "webview/restore-session",
