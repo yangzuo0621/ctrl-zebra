@@ -121,10 +121,11 @@ written and how they rebuild repository state.
   executed as part of editing.
 - Recovery and later history projection apply a completed relation as a branch projection: the
   target user content is overlaid by the replacement, the replacement Run is retained, and the old
-  target output and suffix are hidden while remaining durable in the source log. An incomplete,
-  cancelled, failed, or truncated replacement suppresses only its partial projection and preserves
-  the old branch. Duplicate, orphaned, out-of-order, cross-Session, non-completed-target, or
-  malformed relations make the Session corrupt rather than guessed.
+  target output and suffix are hidden while remaining durable in the source log. The stable
+  original target identity permits ordered successive edits; the latest completed relation wins,
+  while an incomplete, cancelled, failed, or truncated latest replacement falls back to the prior
+  completed projection. Duplicate replacement users, orphaned, out-of-order, cross-Session,
+  non-completed-target, or malformed relations make the Session corrupt rather than guessed.
 
 ## IDE context and read-only Tool persistence (T1901)
 

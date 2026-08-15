@@ -129,7 +129,9 @@ This document defines the Webview security constraints established before T0104.
   scope from the prefix before the target. Old suffix messages, Tool Call/Result pairs, attachments,
   Provider requests, approvals, and side effects are never replayed or executed automatically. A
   failed, cancelled, mismatched, or late replacement closes its gate and preserves the old branch;
-  only a completed replacement projects the edited target and new suffix.
+  only a completed replacement projects the edited target and new suffix. The original target
+  identity remains valid for a retry or successive edit; the latest incomplete attempt falls back
+  to the prior completed projection.
 
 ## Tool Input and Output
 

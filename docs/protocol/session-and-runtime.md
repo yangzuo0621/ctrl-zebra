@@ -37,6 +37,8 @@ new-Session behavior.
   messages, Tool Call/Result pairs, attachments, Provider requests, and approvals are not replayed.
   The Webview keeps the old branch visible until accepted replacement output completes; cancellation,
   failure, truncation, duplicate intent, Session mismatch, and late events restore or retain the old
+  branch. The original target identity remains valid for retry and successive edits; the latest
+  completed relation projects, while an incomplete latest attempt falls back to the prior completed
   branch. The relation stores IDs only and cannot rewrite source events.
 - `extension/session-started` is a strict Host-to-Webview event containing `{ protocolVersion,
   type: "extension/session-started", requestId, sessionId }`. The Host emits it once, after the

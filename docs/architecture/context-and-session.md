@@ -87,7 +87,9 @@ IDE context uses the same budget authority rather than creating a second quota:
   user-message IDs; it never rewrites source events or carries Tool/Provider/approval data. A
   completed edit projects the replacement user content and new Run while excluding the target's old
   output and every later old-branch user, assistant, and Tool unit. Until completion, the original
-  branch remains the display and history fallback. The new Run has fresh cancellation, Tool, and
+  branch remains the display and history fallback. The original target identity remains stable for
+  retry and successive edits: the latest completed relation projects, while an incomplete latest
+  attempt falls back to the prior completed branch. The new Run has fresh cancellation, Tool, and
   approval ownership and never executes old Tools automatically.
 
 ## Session State Machine

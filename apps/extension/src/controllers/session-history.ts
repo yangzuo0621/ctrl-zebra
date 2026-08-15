@@ -171,7 +171,8 @@ export function projectRegenerationContext(
 /**
  * Builds the model input for an edited historical user message. Only the validated history prefix
  * before the target user is retained; the target's old Run, all later old-branch messages, and
- * every old Tool pair are excluded from the new Run's model context.
+ * every old Tool pair are excluded from the new Run's model context. The stable original target
+ * identity also permits a retry after cancellation or a successive edit after completion.
  */
 export function projectEditContext(
   record: SessionRecord,
@@ -180,9 +181,8 @@ export function projectEditContext(
   if (record.eventLogTailDamaged) {
     throw new SessionHistoryCorruptError();
   }
-  let relations: readonly ValidatedEditRelation[];
   try {
-    relations = validateEditRelations(record.events, record.manifest.sessionId);
+    validateEditRelations(record.events, record.manifest.sessionId);
   } catch (error) {
     if (
       error instanceof EditRelationCorruptError ||
@@ -211,11 +211,7 @@ export function projectEditContext(
     throw new SessionHistoryCorruptError();
   }
   const target = targetUsers[0];
-  if (
-    target === undefined ||
-    resolvedTargetMessageId === undefined ||
-    relations.some((relation) => relation.targetMessageId === resolvedTargetMessageId)
-  ) {
+  if (target === undefined || resolvedTargetMessageId === undefined) {
     throw new SessionHistoryCorruptError();
   }
 
@@ -454,13 +450,16 @@ function hideSupersededRunOutput(
       if (persisted === undefined) {
         continue;
       }
-      hiddenSequences.add(persisted.sequence);
+      // Keep user/status events so a later retry can validate its terminal-state transition;
+      // suppress the hidden branch's user projections and model-owned output only.
       if (persisted.event.type === "session.user-message") {
         const parsed = userMessageSchema.safeParse(persisted.event.data);
         if (!parsed.success || parsed.data.sessionId !== sessionId) {
           throw new SessionHistoryCorruptError();
         }
         suppressedUserMessageIds.add(parsed.data.messageId);
+      } else {
+        hideRunOutput([persisted], hiddenSequences);
       }
     }
   }

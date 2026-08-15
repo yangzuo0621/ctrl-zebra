@@ -418,6 +418,55 @@ describe("projectSessionModelHistory", () => {
       { role: "assistant", content: "Third answer" },
     ]);
   });
+
+  it("allows retrying the same target after a cancelled edit", () => {
+    const context = projectEditContext(
+      record(editBranchEvents("message-2", "cancelled")),
+      "message-2",
+    );
+
+    expect(context.history).toEqual([
+      { role: "user", content: "First" },
+      { role: "assistant", content: "First answer" },
+    ]);
+  });
+
+  it("allows successive edits of the same target after a completed edit", () => {
+    const context = projectEditContext(
+      record(editBranchEvents("message-2", "completed")),
+      "message-2",
+    );
+
+    expect(context.history).toEqual([
+      { role: "user", content: "First" },
+      { role: "assistant", content: "First answer" },
+    ]);
+  });
+
+  it.each([
+    { firstStatus: "cancelled" as const, label: "cancelled" },
+    { firstStatus: "completed" as const, label: "completed" },
+  ])("projects the latest replacement after a $label edit", ({ firstStatus }) => {
+    const session = record([
+      ...editBranchEvents("message-2", firstStatus),
+      userEvent("message-edited-again", "Edited again question"),
+      event("session.edit", {
+        targetMessageId: "message-2",
+        replacementUserMessageId: "message-edited-again",
+      }),
+      statusEvent(firstStatus, "preparing"),
+      statusEvent("preparing", "streaming"),
+      textEvent("Edited again answer"),
+      statusEvent("streaming", "completed"),
+    ]);
+
+    expect(projectSessionModelHistory(session)).toEqual([
+      { role: "user", content: "First" },
+      { role: "assistant", content: "First answer" },
+      { role: "user", content: "Edited again question" },
+      { role: "assistant", content: "Edited again answer" },
+    ]);
+  });
 });
 
 function record(

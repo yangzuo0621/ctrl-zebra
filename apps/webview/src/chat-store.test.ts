@@ -614,7 +614,7 @@ describe("chat reasoning store", () => {
   });
 
   it("projects an edited historical user message only after replacement output starts", () => {
-    const harness = createHarness(["request-1", "edit-1"]);
+    const harness = createHarness(["request-1", "edit-1", "edit-2"]);
     expect(harness.store.getState().submit("Original question")).toBe(true);
     harness.receive({
       protocolVersion,
@@ -666,10 +666,32 @@ describe("chat reasoning store", () => {
       status: "completed",
     });
     expect(harness.store.getState().editingMessageId).toBeUndefined();
+
+    expect(harness.store.getState().editMessage(targetId, "Edited again question")).toBe(true);
+    expect(harness.host.editMessage).toHaveBeenLastCalledWith(
+      "edit-2",
+      "session-1",
+      targetId,
+      "Edited again question",
+    );
+    expect(harness.store.getState().messages[0]?.content).toBe("Edited question");
+    harness.receive({
+      protocolVersion,
+      type: "extension/text-delta",
+      requestId: "edit-2",
+      text: "Edited again answer",
+    });
+    harness.flush();
+    expect(
+      harness.store.getState().messages.map(({ role, content }) => ({ role, content })),
+    ).toEqual([
+      { role: "user", content: "Edited again question" },
+      { role: "assistant", content: "Edited again answer" },
+    ]);
   });
 
   it("restores the old branch and rejects invalid edit submissions", () => {
-    const harness = createHarness(["request-1", "edit-1"]);
+    const harness = createHarness(["request-1", "edit-1", "edit-2"]);
     expect(harness.store.getState().submit("Original question")).toBe(true);
     harness.receive({
       protocolVersion,
@@ -706,6 +728,33 @@ describe("chat reasoning store", () => {
     });
     expect(harness.store.getState().messages).toEqual(original);
     expect(harness.store.getState().editingMessageId).toBeUndefined();
+
+    expect(harness.store.getState().editMessage("request-1:user", "Retry question")).toBe(true);
+    expect(harness.host.editMessage).toHaveBeenLastCalledWith(
+      "edit-2",
+      "session-1",
+      "request-1:user",
+      "Retry question",
+    );
+    harness.receive({
+      protocolVersion,
+      type: "extension/text-delta",
+      requestId: "edit-2",
+      text: "Retry answer",
+    });
+    harness.flush();
+    harness.receive({
+      protocolVersion,
+      type: "extension/run-status",
+      requestId: "edit-2",
+      status: "completed",
+    });
+    expect(
+      harness.store.getState().messages.map(({ role, content }) => ({ role, content })),
+    ).toEqual([
+      { role: "user", content: "Retry question" },
+      { role: "assistant", content: "Retry answer" },
+    ]);
   });
 
   it("fences late edit events after a Session mismatch", () => {

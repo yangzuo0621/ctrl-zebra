@@ -316,7 +316,7 @@ describe("App streaming chat", () => {
 
   it("edits a completed user message and sends the target-bound replacement", async () => {
     const host = createWebviewHostFixture();
-    const ids = ["request-1", "request-edit"];
+    const ids = ["request-1", "request-edit", "request-edit-again"];
     const user = userEvent.setup();
     render(<App host={host} createRequestId={() => ids.shift() ?? "unexpected"} />);
 
@@ -371,6 +371,28 @@ describe("App streaming chat", () => {
     expect(screen.getByText("Edited question")).toBeVisible();
     expect(screen.getByText("Edited answer")).toBeVisible();
     expect(screen.queryByText("Original answer")).not.toBeInTheDocument();
+
+    act(() => {
+      host.emit({
+        protocolVersion,
+        type: "extension/run-status",
+        requestId: "request-edit",
+        status: "completed",
+      });
+    });
+    await user.click(screen.getByRole("button", { name: strings.chat.editScope }));
+    const secondEditor = screen.getByRole("textbox", { name: "Edit message" });
+    await user.clear(secondEditor);
+    await user.type(secondEditor, "Edited again question");
+    await user.click(screen.getByRole("button", { name: "Send edited message" }));
+    expect(host.sent.at(-1)).toEqual({
+      protocolVersion,
+      type: "webview/edit-message",
+      requestId: "request-edit-again",
+      sessionId: "session-1",
+      messageId: "request-1:user",
+      content: "Edited again question",
+    });
   });
 
   it("batches ordered deltas and flushes the final response on completion", async () => {

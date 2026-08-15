@@ -239,7 +239,9 @@ focus, selection, disclosure state, and transcript scroll position.
   store sends the exact Session and user message identity, keeps the old branch until accepted
   replacement output completes, then projects the edited target and fresh assistant result while
   removing the old suffix. Cancellation, failure, truncation, Session mismatch, disposal, and late
-  events restore or retain the old branch; the Webview never executes or replays a persisted Tool.
+  events restore or retain the old branch; the stable target action remains available for retry after
+  cancellation/failure and for successive edits after completion. The Webview never executes or
+  replays a persisted Tool.
 
 ## Answer Markdown Rendering (T1702)
 

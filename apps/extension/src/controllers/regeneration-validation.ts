@@ -44,6 +44,14 @@ const legalTransitions: Readonly<Record<SessionStatus, readonly SessionStatus[]>
   interrupted: ["preparing"],
 };
 
+const terminalStatuses = new Set<SessionStatus>([
+  "completed",
+  "truncated",
+  "cancelled",
+  "failed",
+  "interrupted",
+]);
+
 export interface ValidatedRegenerationRelation {
   readonly relationIndex: number;
   readonly targetMessageId: string;
@@ -193,7 +201,9 @@ export function validateRegenerationRelations(
 /**
  * Owns the ordering and branch-fencing rules for edited user messages. An edit is an additive
  * relation: the original user event and every old suffix event remain durable, while a completed
- * replacement projects the edited prompt and its fresh Run as the active branch.
+ * replacement projects the edited prompt and its fresh Run as the active branch. Multiple
+ * ordered relations may target the same original user projection; the latest completed one wins,
+ * while an incomplete latest attempt falls back to the prior completed projection.
  */
 export function validateEditRelations(
   events: readonly PersistedEventRecord[],
@@ -203,7 +213,6 @@ export function validateEditRelations(
   // malformed Session before either projection consumes it.
   const regenerationRelations = validateRegenerationRelations(events, sessionId);
   const users = parseUsers(events, sessionId);
-  const seenTargets = new Set<string>();
   const seenReplacementUsers = new Set<string>();
   const hiddenUsers = new Set<string>();
   for (const relation of regenerationRelations) {
@@ -217,10 +226,9 @@ export function validateEditRelations(
       throw new EditRelationCorruptError();
     }
     const { targetMessageId, replacementUserMessageId } = parsed.data.data;
-    if (seenTargets.has(targetMessageId) || seenReplacementUsers.has(replacementUserMessageId)) {
+    if (seenReplacementUsers.has(replacementUserMessageId)) {
       throw new EditRelationCorruptError();
     }
-    seenTargets.add(targetMessageId);
     seenReplacementUsers.add(replacementUserMessageId);
 
     const replacementUsers = users.filter(
@@ -277,7 +285,10 @@ export function validateEditRelations(
       replacementRunEvents,
       replacementRunStartIndex,
     );
-    const replacementCompleted = isCompletedRun(replacementRunEvents, "completed");
+    const replacementCompleted = isCompletedRun(
+      replacementRunEvents,
+      firstRunPreviousStatus(replacementRunEvents),
+    );
     if (replacementCompleted && replacementFirstTextIndex === undefined) {
       throw new EditRelationCorruptError();
     }
@@ -432,6 +443,30 @@ function isCompletedRun(
     }
   }
   return sawStatus && currentStatus === "completed";
+}
+
+function firstRunPreviousStatus(
+  events: readonly PersistedEventRecord[],
+): SessionStatus | undefined {
+  for (const persisted of events) {
+    if (persisted.event.type !== "session.status-changed") {
+      continue;
+    }
+    const data = persisted.event.data;
+    if (
+      !isRecord(data) ||
+      typeof data.previousStatus !== "string" ||
+      typeof data.status !== "string"
+    ) {
+      throw new RegenerationRelationCorruptError();
+    }
+    const previousStatus = sessionStatusSchema.safeParse(data.previousStatus);
+    if (!previousStatus.success || !terminalStatuses.has(previousStatus.data)) {
+      throw new RegenerationRelationCorruptError();
+    }
+    return previousStatus.data;
+  }
+  return undefined;
 }
 
 function isRunOwnedEvent(type: string): boolean {
