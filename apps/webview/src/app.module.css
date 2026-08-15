@@ -127,6 +127,13 @@
   font-size: var(--cz-font-size-xs);
 }
 
+.sessionMutationControls {
+  display: flex;
+  gap: var(--cz-space-2);
+  margin-top: var(--cz-space-2);
+  flex-wrap: wrap;
+}
+
 .sessionError {
   margin: var(--cz-space-2) 0 0;
   font-size: var(--cz-font-size-xs);

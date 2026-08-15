@@ -26,12 +26,15 @@ interface ActiveRun {
   eventsClosed: boolean;
   terminalSent: boolean;
   readonly regenerationTargetMessageId?: string;
+  readonly settled: Promise<void>;
+  readonly settledResolver: () => void;
 }
 
 export class WebviewRunMessageHandler {
   #activeRun: ActiveRun | undefined;
   #disposed = false;
   #ownedSessionId: string | undefined;
+  readonly #settlingRuns = new Set<ActiveRun>();
 
   constructor(
     private readonly post: PostWebviewMessage,
@@ -66,6 +69,7 @@ export class WebviewRunMessageHandler {
       sessionStartedSent: false,
       eventsClosed: false,
       terminalSent: false,
+      ...createSettlement(),
     };
     this.#launch(run, (signal) =>
       this.chatRunner.run(
@@ -102,6 +106,7 @@ export class WebviewRunMessageHandler {
       eventsClosed: false,
       terminalSent: false,
       regenerationTargetMessageId: targetAssistantMessageId,
+      ...createSettlement(),
     };
     this.#launch(run, (signal) =>
       regenerate(sessionId, targetAssistantMessageId, signal, (event) =>
@@ -131,6 +136,7 @@ export class WebviewRunMessageHandler {
       sessionStartedSent: false,
       eventsClosed: false,
       terminalSent: false,
+      ...createSettlement(),
     };
     this.#launch(run, (signal) =>
       edit(sessionId, targetUserMessageId, content, signal, (event) =>
@@ -141,6 +147,7 @@ export class WebviewRunMessageHandler {
 
   #launch(run: ActiveRun, execute: (signal: AbortSignal) => Promise<void>): void {
     this.#activeRun = run;
+    this.#settlingRuns.add(run);
     this.#postStatus(run.requestId, "preparing");
 
     void execute(run.abortController.signal)
@@ -166,14 +173,38 @@ export class WebviewRunMessageHandler {
         },
       )
       .finally(() => {
+        this.#settlingRuns.delete(run);
         if (this.#activeRun === run) {
           this.#activeRun = undefined;
         }
+        run.settledResolver();
       });
   }
 
   canStart(): boolean {
     return !this.#disposed && this.#activeRun === undefined;
+  }
+
+  async cancelSession(sessionId: string): Promise<void> {
+    const active = this.#activeRun;
+    if (active !== undefined && this.#runOwnsSession(active, sessionId)) {
+      active.abortController.abort(new Error("Session deleted while the chat run was active."));
+      this.#finish(active, "cancelled");
+    }
+
+    const settling = [...this.#settlingRuns].filter((run) => this.#runOwnsSession(run, sessionId));
+    await Promise.all(settling.map((run) => run.settled));
+  }
+
+  async cancelAllSessions(): Promise<void> {
+    const active = this.#activeRun;
+    if (active !== undefined) {
+      active.abortController.abort(
+        new Error("All Sessions were deleted while the chat was active."),
+      );
+      this.#finish(active, "cancelled");
+    }
+    await Promise.all([...this.#settlingRuns].map((run) => run.settled));
   }
 
   setOwnedSession(sessionId: string): void {
@@ -182,8 +213,11 @@ export class WebviewRunMessageHandler {
     }
   }
 
-  clearOwnedSession(): void {
-    if (this.#activeRun === undefined) {
+  clearOwnedSession(sessionId?: string): void {
+    if (
+      this.#activeRun === undefined &&
+      (sessionId === undefined || this.#ownedSessionId === sessionId)
+    ) {
       this.#ownedSessionId = undefined;
     }
   }
@@ -215,6 +249,10 @@ export class WebviewRunMessageHandler {
     this.#activeRun?.abortController.abort(new Error("Webview disposed during chat run."));
     this.#activeRun = undefined;
     this.#ownedSessionId = undefined;
+  }
+
+  #runOwnsSession(run: ActiveRun, sessionId: string): boolean {
+    return (run.sessionId ?? this.#ownedSessionId) === sessionId;
   }
 
   #postStatus(requestId: string, status: RunStatus): void {
@@ -254,6 +292,7 @@ export class WebviewRunMessageHandler {
     }
 
     run.terminalSent = true;
+    this.#settlingRuns.add(run);
     this.#activeRun = undefined;
     this.#postStatus(run.requestId, status);
   }
@@ -418,4 +457,15 @@ export class WebviewRunMessageHandler {
       this.#finish(run, event.status);
     }
   }
+}
+
+function createSettlement(): {
+  readonly settled: Promise<void>;
+  readonly settledResolver: () => void;
+} {
+  let settledResolver!: () => void;
+  const settled = new Promise<void>((resolve) => {
+    settledResolver = resolve;
+  });
+  return { settled, settledResolver };
 }

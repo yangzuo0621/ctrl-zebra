@@ -36,6 +36,34 @@ segments and never access a filesystem directly.
   limit as a persisted Session ID. The `.json` suffix is part of the Checkpoint file name, not the
   encoded identifier.
 
+## Session deletion and local-history clearing (T2104)
+
+Deletion is an explicit Host-owned data-control operation. Core supplies only validated opaque
+identities and portable relative path segments; it never joins a user-provided value to a filesystem
+path. The Extension validates the exact Session ID, encodes it with `getSessionPersistencePaths`,
+and removes that Session directory recursively. The operation covers `manifest.json`,
+`messages.jsonl`, `events.jsonl`, atomic-write siblings such as `manifest.json.tmp` and
+`events.jsonl.append.tmp`, and any other temporary file owned by that Session directory. A missing
+Session directory is an idempotent no-op; an invalid ID is rejected before a storage call.
+
+Checkpoints are independent files, so deleting one Session scans the bounded `checkpoints/v1`
+directory and removes only validated or safely attributable records whose `sessionId` is exactly the
+requested Session, together with the matching atomic-write temporary file. A malformed or
+unattributable Checkpoint is not guessed to belong to a Session: it remains and the operation reports
+a partial failure that can be retried. The scan is bounded by the existing Checkpoint file ceiling.
+
+Clear-all local history is also explicit and idempotent. It removes every Session directory and every
+committed or temporary Checkpoint file under the versioned persistence directories, including damaged
+records that cannot be restored. It never removes workspace files, user code, or unrelated VS Code
+storage. Session deletion and clear-all do not change the persisted format version or rewrite any
+remaining record.
+
+Before either operation starts, the Host closes the owning Run event gate and deterministically
+cancels and settles an active Run. Storage cleanup then runs to completion for every category it can
+attempt. A storage error is never reported as full success: the result identifies a partial cleanup
+and leaves the operation safe to retry. Recovery/list readers must not expose a Session after its
+directory has been removed, and a stale restore result must not recreate its Webview projection.
+
 ## File responsibilities
 
 ### `manifest.json`

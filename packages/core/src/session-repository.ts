@@ -28,10 +28,18 @@ export interface SessionRepository {
   list(): Promise<readonly SessionSummary[]>;
   update(sessionId: unknown, patch: SessionMetadataPatch): Promise<void>;
   appendEvent(sessionId: unknown, record: unknown): Promise<void>;
+  /** Removes one Session's durable directory and returns whether it existed. */
+  delete?(sessionId: unknown): Promise<boolean>;
+  /** Removes all durable Session directories and returns the number observed. */
+  clear?(): Promise<number>;
 }
 
 export interface SessionCatalog {
   listSessionIds(): Promise<readonly string[]>;
+  /** Removes the exact encoded Session directory. */
+  deleteSession?(sessionId: unknown): Promise<boolean>;
+  /** Removes all Session directories, including directories with damaged manifests. */
+  clearSessions?(): Promise<number>;
 }
 
 export class DuplicateSessionError extends Error {
@@ -45,6 +53,13 @@ export class SessionNotFoundError extends Error {
   constructor(readonly sessionId: string) {
     super(`Session "${sessionId}" does not exist.`);
     this.name = "SessionNotFoundError";
+  }
+}
+
+export class SessionDeletionUnavailableError extends Error {
+  constructor() {
+    super("Session deletion storage is unavailable.");
+    this.name = "SessionDeletionUnavailableError";
   }
 }
 
@@ -103,6 +118,17 @@ export class InMemorySessionRepository implements SessionRepository {
       events: [...current.events, event],
       eventLogTailDamaged: false,
     });
+  }
+
+  async delete(sessionId: unknown): Promise<boolean> {
+    const id = parseSessionId(sessionId);
+    return this.#records.delete(id);
+  }
+
+  async clear(): Promise<number> {
+    const count = this.#records.size;
+    this.#records.clear();
+    return count;
   }
 
   async #require(sessionId: unknown): Promise<SessionRecord> {
@@ -176,6 +202,21 @@ export class PersistedSessionRepository implements SessionRepository {
       updatedAt: event.recordedAt,
       lastEventSequence: event.sequence,
     });
+  }
+
+  async delete(sessionId: unknown): Promise<boolean> {
+    const id = parseSessionId(sessionId);
+    if (this.#catalog.deleteSession === undefined) {
+      throw new SessionDeletionUnavailableError();
+    }
+    return await this.#catalog.deleteSession(id);
+  }
+
+  async clear(): Promise<number> {
+    if (this.#catalog.clearSessions === undefined) {
+      throw new SessionDeletionUnavailableError();
+    }
+    return await this.#catalog.clearSessions();
   }
 
   async #require(sessionId: unknown): Promise<SessionRecord> {

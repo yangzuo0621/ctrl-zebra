@@ -9,6 +9,7 @@ import {
   type SessionRepository,
 } from "@ctrl-zebra/core";
 import {
+  getSessionPersistencePaths,
   persistenceFormatDirectory,
   persistenceSessionsDirectory,
   sessionManifestFileName,
@@ -25,7 +26,7 @@ export const maxManifestBytes = 65_536;
 
 type SessionFileSystem = Pick<
   VscodeBoundedTextFileSystem,
-  "createDirectory" | "delete" | "readDirectory" | "readFile" | "rename" | "writeFile"
+  "createDirectory" | "delete" | "readDirectory" | "readFile" | "rename" | "stat" | "writeFile"
 >;
 
 export class WorkspaceSessionStorageUnavailableError extends Error {
@@ -82,6 +83,41 @@ class VsCodeSessionStorage implements ManifestStorage, EventStorage, SessionCata
 
   async deleteFile(path: PersistencePath): Promise<void> {
     await this.#storage.deleteFile(path);
+  }
+
+  async deleteSession(sessionId: unknown): Promise<boolean> {
+    const paths = getSessionPersistencePaths(sessionId);
+    if (!(await this.#storage.exists(paths.directory))) {
+      return false;
+    }
+    await this.#storage.deleteDirectory(paths.directory);
+    return true;
+  }
+
+  async clearSessions(): Promise<number> {
+    const directory = [persistenceSessionsDirectory, persistenceFormatDirectory] as const;
+    const entries = await this.#storage.readDirectory(directory);
+    let deleted = 0;
+    let failure: unknown;
+    let hasFailure = false;
+    for (const [name, type] of entries) {
+      const path = [...directory, name] as PersistencePath;
+      try {
+        if ((type & FileType.Directory) !== 0) {
+          await this.#storage.deleteDirectory(path);
+        } else {
+          await this.#storage.deleteFile(path);
+        }
+        deleted += 1;
+      } catch (error) {
+        hasFailure = true;
+        failure ??= error;
+      }
+    }
+    if (hasFailure) {
+      throw failure;
+    }
+    return deleted;
   }
 
   async appendText(path: PersistencePath, content: string, maxTotalBytes: number): Promise<void> {

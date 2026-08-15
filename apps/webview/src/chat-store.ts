@@ -73,6 +73,8 @@ interface ChatState {
   readonly sessionSelectionId?: string;
   readonly sessionSwitchPending: boolean;
   readonly restoring: boolean;
+  readonly sessionMutationPending: boolean;
+  readonly deletingSessionId?: string;
   readonly sessionError?: string;
   readonly runError?: string;
   readonly reasoningAnnouncement: string;
@@ -86,6 +88,8 @@ interface ChatState {
   loadSessions(): void;
   selectSession(sessionId: string): void;
   restoreSelectedSession(): boolean;
+  deleteSession(sessionId: string): boolean;
+  clearSessions(): boolean;
   toggleReasoningBlock(messageId: string, blockId: string): void;
   announceReasoning(message: string): void;
   receive(message: ExtensionToWebviewMessage): void;
@@ -100,6 +104,10 @@ export interface ChatStoreOptions {
   readonly scheduleFlush?: ScheduleFlush;
   readonly beforeNewChat?: () => void;
   readonly beforeRestoreSession?: () => void;
+  readonly beforeSessionMutation?: () => void;
+  readonly afterSessionDeleted?: (sessionId: string) => void;
+  readonly afterSessionsCleared?: () => void;
+  readonly afterSessionMutationFailed?: () => void;
 }
 
 interface LiveReasoningBlock {
@@ -144,12 +152,19 @@ export function createChatStore({
   scheduleFlush = defaultScheduleFlush,
   beforeNewChat,
   beforeRestoreSession,
+  beforeSessionMutation,
+  afterSessionDeleted,
+  afterSessionsCleared,
+  afterSessionMutationFailed,
 }: ChatStoreOptions): StoreApi<ChatState> {
   let pendingTextDelta = "";
   let cancelScheduledFlush: (() => void) | undefined;
   let listRequestId: string | undefined;
   let restoreRequestId: string | undefined;
   let restoreTargetSessionId: string | undefined;
+  let deleteRequestId: string | undefined;
+  let deleteTargetSessionId: string | undefined;
+  let clearRequestId: string | undefined;
   const mismatchedSessionRequests = new Set<string>();
   let stagedReasoningRestore: ReasoningRestoredMessage | undefined;
   let activeAssistantMessageId: string | undefined;
@@ -490,6 +505,57 @@ export function createChatStore({
       return restoredMessages;
     };
 
+    const resetSessionProjection = (deletedSessionId?: string) => {
+      const current = get();
+      const clearsCurrent =
+        deletedSessionId === undefined || current.selectedSessionId === deletedSessionId;
+      const clearsSelection =
+        deletedSessionId === undefined || current.sessionSelectionId === deletedSessionId;
+      if (clearsCurrent) {
+        cancelFlush();
+        pendingTextDelta = "";
+        stagedReasoningRestore = undefined;
+        restoreRequestId = undefined;
+        restoreTargetSessionId = undefined;
+        resetLiveReasoning();
+        activeAssistantMessageId = undefined;
+        regenerationBackup = undefined;
+        regenerationProjectionStarted = false;
+        editBackup = undefined;
+        editProjectionStarted = false;
+        editTargetMessageId = undefined;
+        editContent = undefined;
+        usageOverflowed = false;
+      }
+      set({
+        sessions:
+          deletedSessionId === undefined
+            ? []
+            : current.sessions.filter(({ sessionId }) => sessionId !== deletedSessionId),
+        ...(clearsCurrent
+          ? {
+              messages: [],
+              status: "idle" as const,
+              activeRequestId: undefined,
+              selectedSessionId: undefined,
+              sessionSelectionId: undefined,
+              sessionSwitchPending: false,
+              usage: undefined,
+              runError: undefined,
+              regeneratingMessageId: undefined,
+              editingMessageId: undefined,
+            }
+          : {}),
+        ...(clearsSelection && !clearsCurrent
+          ? {
+              sessionSelectionId: current.selectedSessionId,
+              sessionSwitchPending: false,
+            }
+          : {}),
+        restoring: false,
+      });
+    };
+
     return {
       messages: [],
       status: "idle",
@@ -499,6 +565,7 @@ export function createChatStore({
       sessions: [],
       sessionSwitchPending: false,
       restoring: false,
+      sessionMutationPending: false,
       reasoningAnnouncement: "",
       sessionAnnouncement: "",
       submit(content) {
@@ -506,6 +573,7 @@ export function createChatStore({
         if (
           state.activeRequestId !== undefined ||
           restoreRequestId !== undefined ||
+          state.sessionMutationPending ||
           state.sessionSwitchPending ||
           content.trim().length === 0
         ) {
@@ -556,6 +624,7 @@ export function createChatStore({
         if (
           state.activeRequestId !== undefined ||
           restoreRequestId !== undefined ||
+          state.sessionMutationPending ||
           state.sessionSwitchPending ||
           state.selectedSessionId === undefined
         ) {
@@ -597,6 +666,7 @@ export function createChatStore({
         if (
           state.activeRequestId !== undefined ||
           restoreRequestId !== undefined ||
+          state.sessionMutationPending ||
           state.sessionSwitchPending ||
           state.selectedSessionId === undefined ||
           content.trim().length === 0 ||
@@ -649,6 +719,7 @@ export function createChatStore({
         if (
           state.activeRequestId !== undefined ||
           restoreRequestId !== undefined ||
+          state.sessionMutationPending ||
           state.sessionSwitchPending
         ) {
           return false;
@@ -661,6 +732,9 @@ export function createChatStore({
         listRequestId = undefined;
         restoreRequestId = undefined;
         restoreTargetSessionId = undefined;
+        deleteRequestId = undefined;
+        deleteTargetSessionId = undefined;
+        clearRequestId = undefined;
         mismatchedSessionRequests.clear();
         stagedReasoningRestore = undefined;
         activeAssistantMessageId = undefined;
@@ -683,6 +757,8 @@ export function createChatStore({
           sessionSelectionId: undefined,
           sessionSwitchPending: false,
           restoring: false,
+          sessionMutationPending: false,
+          deletingSessionId: undefined,
           sessionError: undefined,
           runError: undefined,
           usage: undefined,
@@ -693,7 +769,11 @@ export function createChatStore({
         return true;
       },
       loadSessions() {
-        if (get().activeRequestId !== undefined || restoreRequestId !== undefined) {
+        if (
+          get().activeRequestId !== undefined ||
+          restoreRequestId !== undefined ||
+          get().sessionMutationPending
+        ) {
           return;
         }
         listRequestId = createRequestId();
@@ -701,7 +781,7 @@ export function createChatStore({
         host.listSessions(listRequestId);
       },
       selectSession(sessionId) {
-        if (get().activeRequestId !== undefined) {
+        if (get().activeRequestId !== undefined || get().sessionMutationPending) {
           return;
         }
         stagedReasoningRestore = undefined;
@@ -723,7 +803,8 @@ export function createChatStore({
         if (
           sessionSelectionId === undefined ||
           activeRequestId !== undefined ||
-          restoreRequestId !== undefined
+          restoreRequestId !== undefined ||
+          get().sessionMutationPending
         ) {
           return false;
         }
@@ -740,6 +821,49 @@ export function createChatStore({
           sessionAnnouncement: strings.chat.restoringSession,
         });
         host.restoreSession(restoreRequestId, sessionSelectionId);
+        return true;
+      },
+      deleteSession(sessionId) {
+        const state = get();
+        if (
+          state.sessionMutationPending ||
+          restoreRequestId !== undefined ||
+          host.deleteSession === undefined
+        ) {
+          return false;
+        }
+        listRequestId = undefined;
+        deleteRequestId = createRequestId();
+        deleteTargetSessionId = sessionId;
+        set({
+          sessionMutationPending: true,
+          deletingSessionId: sessionId,
+          sessionError: undefined,
+          sessionAnnouncement: strings.chat.deletingSession,
+        });
+        beforeSessionMutation?.();
+        host.deleteSession(deleteRequestId, sessionId);
+        return true;
+      },
+      clearSessions() {
+        const state = get();
+        if (
+          state.sessionMutationPending ||
+          restoreRequestId !== undefined ||
+          host.clearSessions === undefined
+        ) {
+          return false;
+        }
+        listRequestId = undefined;
+        clearRequestId = createRequestId();
+        set({
+          sessionMutationPending: true,
+          deletingSessionId: undefined,
+          sessionError: undefined,
+          sessionAnnouncement: strings.chat.clearingSessions,
+        });
+        beforeSessionMutation?.();
+        host.clearSessions(clearRequestId);
         return true;
       },
       toggleReasoningBlock(messageId, blockId) {
@@ -804,6 +928,70 @@ export function createChatStore({
             sessionError: undefined,
             sessionAnnouncement: strings.chat.currentSessionConfirmed,
           });
+          return;
+        }
+
+        if (
+          message.type === "extension/session-deleted" &&
+          message.requestId === deleteRequestId &&
+          message.sessionId === deleteTargetSessionId
+        ) {
+          const deletedSessionId = deleteTargetSessionId;
+          deleteRequestId = undefined;
+          deleteTargetSessionId = undefined;
+          listRequestId = undefined;
+          resetSessionProjection(deletedSessionId);
+          set({
+            sessionMutationPending: false,
+            deletingSessionId: undefined,
+            sessionError: undefined,
+            sessionAnnouncement: strings.chat.sessionDeleted,
+          });
+          afterSessionDeleted?.(deletedSessionId);
+          return;
+        }
+
+        if (message.type === "extension/sessions-cleared" && message.requestId === clearRequestId) {
+          clearRequestId = undefined;
+          deleteRequestId = undefined;
+          deleteTargetSessionId = undefined;
+          listRequestId = undefined;
+          restoreRequestId = undefined;
+          restoreTargetSessionId = undefined;
+          resetSessionProjection();
+          set({
+            sessionMutationPending: false,
+            deletingSessionId: undefined,
+            regeneratingMessageId: undefined,
+            editingMessageId: undefined,
+            sessionError: undefined,
+            runError: undefined,
+            usage: undefined,
+            sessionAnnouncement: strings.chat.sessionsCleared,
+          });
+          afterSessionsCleared?.();
+          return;
+        }
+
+        if (
+          message.type === "extension/session-deletion-error" &&
+          (message.requestId === deleteRequestId || message.requestId === clearRequestId)
+        ) {
+          const failedDeleteSessionId = deleteTargetSessionId;
+          const failedClear = clearRequestId !== undefined;
+          deleteRequestId = undefined;
+          deleteTargetSessionId = undefined;
+          clearRequestId = undefined;
+          if (message.code === "partial" || message.code === "not-found") {
+            resetSessionProjection(failedClear ? undefined : failedDeleteSessionId);
+          }
+          set({
+            sessionMutationPending: false,
+            deletingSessionId: undefined,
+            sessionError: message.message,
+            sessionAnnouncement: strings.chat.sessionDeletionFailed,
+          });
+          afterSessionMutationFailed?.();
           return;
         }
 
@@ -1101,6 +1289,7 @@ export function createChatStore({
         editContent = undefined;
         set({ regeneratingMessageId: undefined });
         set({ editingMessageId: undefined });
+        set({ sessionMutationPending: false, deletingSessionId: undefined });
         resetLiveReasoning();
       },
     };

@@ -353,6 +353,17 @@ Diff 查看完整的有界 before/after 内容：创建是空文件到完整内�
   竞态时，保留当前投影和草稿，丢弃陈旧恢复结果。
 - 删除、归档、重命名或自动标题若需要新增协议或持久化字段，必须作为独立任务走变更控制。
 - Checkpoint 展示目标文件、所属操作、创建时间和当前是否可安全恢复。
+- Session history controls provide an explicit `Delete` action for the selected saved Session and a
+  clearly scoped `Clear all saved Sessions` action. Delete removes only CtrlZebra's local Session
+  history, its attributable Checkpoints, and its persistence temporary files; it never removes
+  workspace files or Provider/MCP settings. Clear-all requires an explicit confirmation explaining
+  that every local conversation and recovery record will be removed.
+- The Host cancels and settles an active Run before either deletion. During deletion, controls are
+  disabled, the current transcript is not replaced optimistically, and a late restore or stream
+  cannot repopulate the deleted Session. On success the selected Session, transcript, reasoning,
+  usage, pending approvals, Checkpoint list, and session selector are cleared or refreshed together.
+  A partial or unavailable cleanup shows a stable retry action and never claims that all data was
+  deleted; already removed records stay removed on retry.
 - 最新一条已完成助手回复提供带作用范围说明的“重新生成”按钮，明确使用原用户问题和此前
   已完成历史；旧回复在新 Run 成功前保持可见。按钮在运行、恢复、会话切换或目标不再是最新
   回复时禁用。重新生成创建新的 Run，不重复旧 Tool 副作用或审批；取消、失败、截断和迟到

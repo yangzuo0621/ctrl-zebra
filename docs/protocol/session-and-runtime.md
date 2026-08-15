@@ -40,12 +40,30 @@ new-Session behavior.
   branch. The original target identity remains valid for retry and successive edits; the latest
   completed relation projects, while an incomplete latest attempt falls back to the prior completed
   branch. The relation stores IDs only and cannot rewrite source events.
+- `webview/delete-session` is the strict object `{ protocolVersion, type: "webview/delete-session",
+  requestId, sessionId }`. The Host validates the exact Session identity and, when it owns an active
+  Run for that Session, closes the Run gate, cancels once, and waits for settlement before deleting
+  the Session directory and its attributable Checkpoints. The operation is idempotent for an already
+  absent Session. Success emits `extension/session-deleted`; a corruption or storage problem emits
+  the bounded `extension/session-deletion-error` with `partial` or `unavailable`, never a false
+  success. A deleted Session cannot be restored or remain selected in the Webview.
+- `webview/clear-sessions` is the strict object `{ protocolVersion, type: "webview/clear-sessions",
+  requestId, confirm: true }`. It is an explicit clear-all-local-history intent, not `new-chat` and
+  not T2106's all-data reset. After active Runs are deterministically cancelled and settled, the Host
+  removes every Session directory and committed/temporary Checkpoint record under the CtrlZebra
+  persistence root. It emits `extension/sessions-cleared` only when all categories finish; otherwise
+  it emits `extension/session-deletion-error` with a retryable `partial` or `unavailable` outcome.
 - `extension/session-started` is a strict Host-to-Webview event containing `{ protocolVersion,
   type: "extension/session-started", requestId, sessionId }`. The Host emits it once, after the
   requested Session has been validated or a new Session has been allocated and the Run has produced
   its first accepted event. The Webview accepts it only for the active request and stores the
   confirmed Session identity; it never derives an identity from `requestId`, display state, or model
   output. A stale, duplicate, or mismatched event has no UI or ownership effect.
+- `extension/session-deleted` contains the envelope and the exact deleted `sessionId`.
+  `extension/sessions-cleared` contains the envelope and a bounded `deletedCount`. The correlated
+  `extension/session-deletion-error` contains `code: "not-found" | "partial" | "unavailable"`
+  and fixed safe text. The Webview clears the deleted projection and invalidates pending list/restore
+  state before accepting a success; stale restore, reasoning, or run messages cannot recreate it.
 - A Session accepts one active Run at a time. The Host allocates a fresh opaque Run identity for each
   submit, distinct from `sessionId`, message IDs, and `requestId`; Webview and model data never choose
   this identity. Run identity is required for Core ownership, exact approvals, checkpoints, diagnostics,

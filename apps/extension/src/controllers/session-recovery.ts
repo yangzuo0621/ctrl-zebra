@@ -1,3 +1,4 @@
+import type { CheckpointStore } from "@ctrl-zebra/core";
 import {
   CorruptEventLogError,
   EventLogLimitExceededError,
@@ -40,6 +41,8 @@ import {
 export interface SessionRecoveryActions {
   list(): Promise<readonly SessionSummary[]>;
   restore(sessionId: string): Promise<SessionRestoreProjection>;
+  delete?(sessionId: string): Promise<void>;
+  clear?(): Promise<number>;
 }
 
 export interface SessionRestoreProjection {
@@ -56,9 +59,22 @@ export class SessionRecoveryError extends Error {
   }
 }
 
+export type SessionDeletionErrorCode = "not-found" | "partial" | "unavailable";
+
+export class SessionDeletionError extends Error {
+  constructor(
+    readonly code: SessionDeletionErrorCode,
+    readonly deletedCount = 0,
+  ) {
+    super("The saved Session data could not be fully deleted.");
+    this.name = "SessionDeletionError";
+  }
+}
+
 export function createSessionRecoveryActions(
   selectRepository: () => Promise<SessionRepository>,
   now: () => Date = () => new Date(),
+  selectCheckpointStore?: () => Promise<CheckpointStore>,
 ): SessionRecoveryActions {
   return {
     async list() {
@@ -157,6 +173,88 @@ export function createSessionRecoveryActions(
         }),
         reasoning: recoverReasoning(record),
       };
+    },
+    async delete(sessionId) {
+      let deletedCount = 0;
+      let failure: SessionDeletionError | undefined;
+      try {
+        const repository = await selectRepository();
+        if (repository.delete === undefined) {
+          throw new SessionDeletionError("unavailable");
+        }
+        deletedCount += (await repository.delete(sessionId)) ? 1 : 0;
+      } catch (error) {
+        failure = toSessionDeletionError(error, deletedCount);
+      }
+
+      if (selectCheckpointStore === undefined) {
+        failure ??= new SessionDeletionError(
+          deletedCount > 0 ? "partial" : "unavailable",
+          deletedCount,
+        );
+      } else {
+        try {
+          const store = await selectCheckpointStore();
+          if (store.deleteForSession === undefined) {
+            throw new SessionDeletionError(
+              deletedCount > 0 ? "partial" : "unavailable",
+              deletedCount,
+            );
+          }
+          const report = await store.deleteForSession(sessionId, new AbortController().signal);
+          deletedCount += report.deleted;
+          if (report.failed > 0 && failure === undefined) {
+            failure = new SessionDeletionError("partial", deletedCount);
+          }
+        } catch (error) {
+          failure ??= toSessionDeletionError(error, deletedCount);
+        }
+      }
+
+      if (failure !== undefined) {
+        throw failure;
+      }
+    },
+    async clear() {
+      let deletedCount = 0;
+      let failure: SessionDeletionError | undefined;
+      try {
+        const repository = await selectRepository();
+        if (repository.clear === undefined) {
+          throw new SessionDeletionError("unavailable");
+        }
+        deletedCount += await repository.clear();
+      } catch (error) {
+        failure = toSessionDeletionError(error, deletedCount);
+      }
+
+      if (selectCheckpointStore === undefined) {
+        failure ??= new SessionDeletionError(
+          deletedCount > 0 ? "partial" : "unavailable",
+          deletedCount,
+        );
+      } else {
+        try {
+          const store = await selectCheckpointStore();
+          if (store.clear === undefined) {
+            throw new SessionDeletionError(
+              deletedCount > 0 ? "partial" : "unavailable",
+              deletedCount,
+            );
+          }
+          const report = await store.clear(new AbortController().signal);
+          if (report.failed > 0 && failure === undefined) {
+            failure = new SessionDeletionError("partial", deletedCount);
+          }
+        } catch (error) {
+          failure ??= toSessionDeletionError(error, deletedCount);
+        }
+      }
+
+      if (failure !== undefined) {
+        throw failure;
+      }
+      return deletedCount;
     },
   };
 }
@@ -496,4 +594,11 @@ function toSessionRecoveryError(error: unknown): SessionRecoveryError {
     return new SessionRecoveryError("corrupt");
   }
   return new SessionRecoveryError("unavailable");
+}
+
+function toSessionDeletionError(error: unknown, deletedCount: number): SessionDeletionError {
+  if (error instanceof SessionDeletionError) {
+    return error;
+  }
+  return new SessionDeletionError(deletedCount > 0 ? "partial" : "unavailable", deletedCount);
 }

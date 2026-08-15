@@ -27,6 +27,8 @@ export interface WebviewHost {
   decideApproval(requestId: string, approvalId: string, decision: ApprovalDecisionIntent): void;
   listSessions(requestId: string): void;
   restoreSession(requestId: string, sessionId: string): void;
+  deleteSession?(requestId: string, sessionId: string): void;
+  clearSessions?(requestId: string): void;
   listCheckpoints(requestId: string): void;
   restoreCheckpoint(requestId: string, checkpointId: string): void;
   connectMcp?(requestId: string): void;
@@ -188,6 +190,22 @@ const webviewHost: WebviewHost = {
       type: "webview/restore-session",
       requestId,
       sessionId,
+    });
+  },
+  deleteSession(requestId, sessionId) {
+    getVsCodeApi().postMessage({
+      protocolVersion,
+      type: "webview/delete-session",
+      requestId,
+      sessionId,
+    });
+  },
+  clearSessions(requestId) {
+    getVsCodeApi().postMessage({
+      protocolVersion,
+      type: "webview/clear-sessions",
+      requestId,
+      confirm: true,
     });
   },
   listCheckpoints(requestId) {

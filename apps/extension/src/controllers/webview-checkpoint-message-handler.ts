@@ -67,11 +67,15 @@ export class WebviewCheckpointMessageHandler {
       .finally(() => this.#requests.delete(controller));
   }
 
-  dispose(): void {
+  cancel(): void {
     for (const controller of this.#requests) {
-      controller.abort(new Error("Webview disposed during Checkpoint operation."));
+      controller.abort(new Error("Checkpoint operation cancelled by Session deletion."));
     }
     this.#requests.clear();
+  }
+
+  dispose(): void {
+    this.cancel();
   }
 
   #trackRequest(): AbortController {

@@ -21,6 +21,8 @@ function createHarness(ids: string[] = ["request-1"]) {
     decideApproval: vi.fn(),
     listSessions: vi.fn(),
     restoreSession: vi.fn(),
+    deleteSession: vi.fn(),
+    clearSessions: vi.fn(),
     listCheckpoints: vi.fn(),
     restoreCheckpoint: vi.fn(),
     subscribe: () => () => {},
@@ -1048,5 +1050,201 @@ describe("chat reasoning store", () => {
 
     expect(harness.cancelledFlushes).toHaveLength(1);
     expect(harness.store.getState().messages[1]?.reasoningBlocks).toEqual([]);
+  });
+
+  it("clears a deleted Session projection and fences late restore data", () => {
+    const harness = createHarness(["request-1", "delete-1"]);
+    startRun(harness);
+    harness.receive({
+      protocolVersion,
+      type: "extension/session-started",
+      requestId: "request-1",
+      sessionId: "session-1",
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/text-delta",
+      requestId: "request-1",
+      text: "Saved answer",
+    });
+    harness.flush();
+    harness.receive({
+      protocolVersion,
+      type: "extension/run-status",
+      requestId: "request-1",
+      status: "completed",
+    });
+
+    expect(harness.store.getState().deleteSession("session-1")).toBe(true);
+    expect(harness.host.deleteSession).toHaveBeenCalledWith("delete-1", "session-1");
+    expect(harness.store.getState().sessionMutationPending).toBe(true);
+    harness.receive({
+      protocolVersion,
+      type: "extension/session-deleted",
+      requestId: "delete-1",
+      sessionId: "session-1",
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/text-delta",
+      requestId: "request-1",
+      text: "Late deleted answer",
+    });
+
+    expect(harness.store.getState()).toMatchObject({
+      messages: [],
+      selectedSessionId: undefined,
+      sessionSelectionId: undefined,
+      sessionMutationPending: false,
+      sessionAnnouncement: "Session deleted.",
+    });
+  });
+
+  it("keeps the current projection when deleting only a pending Session selection", () => {
+    const harness = createHarness(["request-1", "list-1", "delete-1"]);
+    startRun(harness);
+    harness.receive({
+      protocolVersion,
+      type: "extension/session-started",
+      requestId: "request-1",
+      sessionId: "session-1",
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/text-delta",
+      requestId: "request-1",
+      text: "Current answer",
+    });
+    harness.flush();
+    harness.receive({
+      protocolVersion,
+      type: "extension/run-status",
+      requestId: "request-1",
+      status: "completed",
+    });
+    harness.store.getState().loadSessions();
+    harness.receive({
+      protocolVersion,
+      type: "extension/session-list",
+      requestId: "list-1",
+      sessions: [
+        { sessionId: "session-1", status: "completed", createdAt: "2026-08-15T00:00:00.000Z" },
+        { sessionId: "session-2", status: "completed", createdAt: "2026-08-14T00:00:00.000Z" },
+      ],
+    });
+    harness.store.getState().selectSession("session-2");
+    expect(harness.store.getState().deleteSession("session-2")).toBe(true);
+    harness.receive({
+      protocolVersion,
+      type: "extension/session-deleted",
+      requestId: "delete-1",
+      sessionId: "session-2",
+    });
+
+    expect(harness.store.getState().messages.at(-1)).toMatchObject({ content: "Current answer" });
+    expect(harness.store.getState()).toMatchObject({
+      selectedSessionId: "session-1",
+      sessionSelectionId: "session-1",
+      sessionSwitchPending: false,
+    });
+    expect(harness.store.getState().sessions).toHaveLength(1);
+  });
+
+  it("allows clear-all during a run, waits for the Host result, and fences late output", () => {
+    const harness = createHarness(["request-1", "clear-1"]);
+    startRun(harness);
+    harness.receive({
+      protocolVersion,
+      type: "extension/session-started",
+      requestId: "request-1",
+      sessionId: "session-1",
+    });
+    expect(harness.store.getState().clearSessions()).toBe(true);
+    expect(harness.host.clearSessions).toHaveBeenCalledWith("clear-1");
+    expect(harness.store.getState().sessionMutationPending).toBe(true);
+
+    harness.receive({
+      protocolVersion,
+      type: "extension/sessions-cleared",
+      requestId: "clear-1",
+      deletedCount: 1,
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/text-delta",
+      requestId: "request-1",
+      text: "Late output",
+    });
+
+    expect(harness.store.getState()).toMatchObject({
+      messages: [],
+      sessions: [],
+      selectedSessionId: undefined,
+      sessionMutationPending: false,
+      sessionAnnouncement: "All saved Sessions cleared.",
+    });
+  });
+
+  it("clears a partially deleted Session projection but retains it when storage is unavailable", () => {
+    const harness = createHarness(["request-1", "delete-1", "request-2", "delete-2"]);
+    startRun(harness);
+    harness.receive({
+      protocolVersion,
+      type: "extension/session-started",
+      requestId: "request-1",
+      sessionId: "session-1",
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/text-delta",
+      requestId: "request-1",
+      text: "Retain only when unavailable",
+    });
+    harness.flush();
+    harness.receive({
+      protocolVersion,
+      type: "extension/run-status",
+      requestId: "request-1",
+      status: "completed",
+    });
+
+    expect(harness.store.getState().deleteSession("session-1")).toBe(true);
+    harness.receive({
+      protocolVersion,
+      type: "extension/session-deletion-error",
+      requestId: "delete-1",
+      code: "partial",
+      message: "Some Session data could not be deleted. Retry to finish cleanup.",
+    });
+    expect(harness.store.getState()).toMatchObject({
+      messages: [],
+      selectedSessionId: undefined,
+      sessionMutationPending: false,
+      sessionError: "Some Session data could not be deleted. Retry to finish cleanup.",
+    });
+
+    expect(harness.store.getState().submit("Recreate projection for unavailable case.")).toBe(true);
+    harness.receive({
+      protocolVersion,
+      type: "extension/session-started",
+      requestId: "request-2",
+      sessionId: "session-1",
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/run-status",
+      requestId: "request-2",
+      status: "completed",
+    });
+    expect(harness.store.getState().deleteSession("session-1")).toBe(true);
+    harness.receive({
+      protocolVersion,
+      type: "extension/session-deletion-error",
+      requestId: "delete-2",
+      code: "unavailable",
+      message: "Saved Session data is unavailable. Retry the deletion.",
+    });
+    expect(harness.store.getState().messages).not.toEqual([]);
+    expect(harness.store.getState().selectedSessionId).toBe("session-1");
   });
 });

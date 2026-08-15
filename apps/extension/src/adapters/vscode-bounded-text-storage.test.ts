@@ -42,6 +42,22 @@ describe("VscodeBoundedTextStorage", () => {
     expect(await storage.readText(["sessions", "v1", "events.final.jsonl"], 32)).toBeUndefined();
   });
 
+  it("deletes a bounded recursive directory while retaining neighboring data", async () => {
+    const { storage, fileSystem } = createStorage();
+    await storage.writeText(["sessions", "v1", "session-1", "manifest.json"], "one", 32);
+    await storage.writeText(["sessions", "v1", "session-2", "manifest.json"], "two", 32);
+
+    await storage.deleteDirectory(["sessions", "v1", "session-1"]);
+
+    expect(await storage.readText(["sessions", "v1", "session-1", "manifest.json"], 32)).toBe(
+      undefined,
+    );
+    expect(await storage.readText(["sessions", "v1", "session-2", "manifest.json"], 32)).toBe(
+      "two",
+    );
+    expect(fileSystem.directories.has("file:///storage/sessions/v1/session-1")).toBe(false);
+  });
+
   it("enforces UTF-8 byte ceilings before writes and reads", async () => {
     const { storage, fileSystem } = createStorage();
     const path = ["sessions", "v1", "bounded.txt"] as const;
@@ -173,11 +189,25 @@ class FakeFileSystem implements VscodeBoundedTextFileSystem {
     this.directories.add(uriKey(uri));
   }
 
-  async delete(uri: Uri): Promise<void> {
+  async delete(uri: Uri, options?: Parameters<FileSystem["delete"]>[1]): Promise<void> {
     if (this.deleteError !== undefined) {
       throw this.deleteError;
     }
     const key = uriKey(uri);
+    if (options?.recursive === true) {
+      const prefix = `${key}/`;
+      for (const file of this.files.keys()) {
+        if (file.startsWith(prefix)) {
+          this.files.delete(file);
+        }
+      }
+      for (const directory of this.directories) {
+        if (directory === key || directory.startsWith(prefix)) {
+          this.directories.delete(directory);
+        }
+      }
+      return;
+    }
     if (!this.files.delete(key)) {
       throw new FileNotFoundError();
     }

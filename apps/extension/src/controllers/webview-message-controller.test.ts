@@ -3,7 +3,7 @@ import { protocolVersion } from "@ctrl-zebra/protocol";
 import { describe, expect, it, vi } from "vitest";
 
 import { ProviderConfigurationError } from "../adapters/provider-configuration.js";
-import type { ChatRunnerEvent } from "./chat-runner.js";
+import type { ChatRunner, ChatRunnerEvent } from "./chat-runner.js";
 import { McpPromptActions } from "./mcp-prompt-actions.js";
 import { McpResourceActions } from "./mcp-resource-actions.js";
 import type { McpWebviewActions } from "./mcp-webview-actions.js";
@@ -1440,5 +1440,111 @@ describe("bindWebviewMessageController", () => {
     });
 
     expect(opened).toEqual(["https://example.test/docs"]);
+  });
+
+  it("cancels and settles an active Session run before deleting its persistence", async () => {
+    let messageListener: ((message: unknown) => void) | undefined;
+    let runSettled = false;
+    let runCount = 0;
+    let releaseDelete!: () => void;
+    const deleteGate = new Promise<void>((resolve) => {
+      releaseDelete = resolve;
+    });
+    const deleteSession = vi.fn(async () => {
+      expect(runSettled).toBe(true);
+      await deleteGate;
+    });
+    const postedMessages: unknown[] = [];
+    const chatRunner: ChatRunner = {
+      async run(_content, signal, emit) {
+        runCount += 1;
+        emit({
+          type: "session.status-changed",
+          sessionId: "session-1",
+          previousStatus: "idle",
+          status: "streaming",
+        });
+        await new Promise<void>((resolve) => {
+          signal.addEventListener(
+            "abort",
+            () => {
+              runSettled = true;
+              resolve();
+            },
+            { once: true },
+          );
+        });
+      },
+    };
+
+    bindWebviewMessageController({
+      channel: {
+        onDidReceiveMessage(listener) {
+          messageListener = listener;
+          return { dispose() {} };
+        },
+        postMessage(message) {
+          postedMessages.push(message);
+          return Promise.resolve(true);
+        },
+      },
+      lifetime: { onDidDispose: () => ({ dispose() {} }) },
+      chatRunner,
+      sessionActions: {
+        async list() {
+          return [];
+        },
+        async restore() {
+          throw new Error("unused");
+        },
+        delete: deleteSession,
+      },
+    });
+
+    messageListener?.({
+      protocolVersion,
+      type: "webview/submit",
+      requestId: "run-1",
+      content: "Keep running",
+    });
+    await Promise.resolve();
+    messageListener?.({
+      protocolVersion,
+      type: "webview/delete-session",
+      requestId: "delete-1",
+      sessionId: "session-1",
+    });
+    expect(deleteSession).not.toHaveBeenCalled();
+    messageListener?.({
+      protocolVersion,
+      type: "webview/submit",
+      requestId: "run-2",
+      content: "Must remain blocked",
+    });
+    await Promise.resolve();
+    expect(runCount).toBe(1);
+    releaseDelete();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+    expect(deleteSession).toHaveBeenCalledWith("session-1");
+    expect(postedMessages).toContainEqual({
+      protocolVersion,
+      type: "extension/session-deleted",
+      requestId: "delete-1",
+      sessionId: "session-1",
+    });
+    expect(
+      postedMessages.findIndex(
+        (message) => (message as { type?: string }).type === "extension/run-status",
+      ),
+    ).toBeLessThan(
+      postedMessages.findIndex(
+        (message) => (message as { type?: string }).type === "extension/session-deleted",
+      ),
+    );
   });
 });

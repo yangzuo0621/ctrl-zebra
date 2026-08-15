@@ -1,4 +1,4 @@
-import type { Checkpoint } from "@ctrl-zebra/protocol";
+import { type Checkpoint, getCheckpointPersistencePaths } from "@ctrl-zebra/protocol";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -148,6 +148,40 @@ describe("AtomicCheckpointStore", () => {
     storage.files.set("checkpoints/v1/stale.json.tmp", "partial");
 
     await expect(store.list(new AbortController().signal)).resolves.toEqual([checkpoint, older]);
+  });
+
+  it("deletes attributable committed and temporary records without touching another Session", async () => {
+    const storage = new FakeCheckpointStorage();
+    const store = createStore(storage);
+    const ownerPath = getCheckpointPersistencePaths(checkpoint.id).checkpoint.join("/");
+    const other = { ...checkpoint, id: "checkpoint-other", sessionId: "session-2" };
+    const otherPath = getCheckpointPersistencePaths(other.id).checkpoint.join("/");
+    storage.files.set(ownerPath, JSON.stringify(checkpoint));
+    storage.files.set(`${ownerPath}.tmp`, JSON.stringify(checkpoint));
+    storage.files.set(otherPath, JSON.stringify(other));
+    storage.files.set("checkpoints/v1/corrupt.json", "not-json");
+    storage.files.set("checkpoints/v1/malformed.json", JSON.stringify({ sessionId: "session-1" }));
+
+    expect(store.deleteForSession).toBeDefined();
+    expect(store.clear).toBeDefined();
+    const deleteForSession = store.deleteForSession;
+    const clear = store.clear;
+    if (deleteForSession === undefined || clear === undefined) {
+      throw new Error("Deletion methods are required for this store.");
+    }
+    await expect(
+      deleteForSession.call(store, "session-1", new AbortController().signal),
+    ).resolves.toEqual({ deleted: 2, failed: 2 });
+    expect(storage.files.has(ownerPath)).toBe(false);
+    expect(storage.files.has(`${ownerPath}.tmp`)).toBe(false);
+    expect(storage.files.has(otherPath)).toBe(true);
+    expect(storage.files.has("checkpoints/v1/malformed.json")).toBe(true);
+
+    await expect(clear.call(store, new AbortController().signal)).resolves.toEqual({
+      deleted: 3,
+      failed: 0,
+    });
+    expect(storage.files).toEqual(new Map());
   });
 });
 

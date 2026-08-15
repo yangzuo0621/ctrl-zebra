@@ -98,8 +98,14 @@ export function bindWebviewMessageController({
     approvalActions,
     reportRunFailure,
   );
-  const sessionMessages = new WebviewSessionMessageHandler(post, sessionActions, (sessionId) =>
-    runMessages.setOwnedSession(sessionId),
+  const sessionMessages = new WebviewSessionMessageHandler(
+    post,
+    sessionActions,
+    (sessionId) => runMessages.setOwnedSession(sessionId),
+    (sessionId) => runMessages.cancelSession(sessionId),
+    () => runMessages.cancelAllSessions(),
+    (sessionId) => runMessages.clearOwnedSession(sessionId),
+    () => runMessages.clearOwnedSession(),
   );
   const checkpointMessages = new WebviewCheckpointMessageHandler(post, checkpointActions);
   mcpActions?.bind(post);
@@ -139,7 +145,7 @@ export function bindWebviewMessageController({
         }
         return;
       case "webview/submit":
-        if (runMessages.canStart()) {
+        if (runMessages.canStart() && !sessionMessages.isRestoring()) {
           runMessages.start(
             data.requestId,
             data.content,
@@ -300,7 +306,9 @@ export function bindWebviewMessageController({
         }
         return;
       case "webview/list-sessions":
-        sessionMessages.list(data.requestId);
+        if (!sessionMessages.isRestoring()) {
+          sessionMessages.list(data.requestId);
+        }
         return;
       case "webview/restore-session":
         if (runMessages.canStart() && !sessionMessages.isRestoring()) {
@@ -311,11 +319,35 @@ export function bindWebviewMessageController({
           sessionMessages.restore(data.requestId, data.sessionId);
         }
         return;
+      case "webview/delete-session":
+        if (!sessionMessages.isRestoring()) {
+          editorContextActions?.clearForSessionSwitch();
+          resourceActions?.clearInput();
+          promptActions?.clearInput();
+          workspaceFileActions?.clearInput();
+          checkpointMessages.cancel();
+          sessionMessages.delete(data.requestId, data.sessionId);
+        }
+        return;
+      case "webview/clear-sessions":
+        if (!sessionMessages.isRestoring()) {
+          editorContextActions?.clearForSessionSwitch();
+          resourceActions?.clearInput();
+          promptActions?.clearInput();
+          workspaceFileActions?.clearInput();
+          checkpointMessages.cancel();
+          sessionMessages.clear(data.requestId);
+        }
+        return;
       case "webview/list-checkpoints":
-        checkpointMessages.list(data.requestId);
+        if (!sessionMessages.isRestoring()) {
+          checkpointMessages.list(data.requestId);
+        }
         return;
       case "webview/restore-checkpoint":
-        checkpointMessages.restore(data.requestId, data.checkpointId);
+        if (!sessionMessages.isRestoring()) {
+          checkpointMessages.restore(data.requestId, data.checkpointId);
+        }
         return;
       case "webview/show-approval-diff":
         runMessages.showApprovalDiff(data.requestId, data.approvalId);

@@ -1,3 +1,4 @@
+import type { CheckpointStore } from "@ctrl-zebra/core";
 import {
   InconsistentSessionRecordError,
   InMemorySessionRepository,
@@ -118,6 +119,73 @@ describe("Session recovery", () => {
       name: "SessionRecoveryError",
       code: "unavailable",
     });
+  });
+
+  it("deletes a Session and its Checkpoints, and reports partial cleanup for retry", async () => {
+    const repository = new InMemorySessionRepository();
+    await repository.create(manifest("session-delete", "2026-07-19T10:00:00.000Z"));
+    const checkpointDeletes: string[] = [];
+    const checkpointStore: CheckpointStore = {
+      create: async () => {
+        throw new Error("unused");
+      },
+      read: async () => undefined,
+      list: async () => [],
+      deleteForSession: async (sessionId: string) => {
+        checkpointDeletes.push(sessionId);
+        return { deleted: 2, failed: 0 };
+      },
+    };
+    const actions = createSessionRecoveryActions(
+      async () => repository,
+      undefined,
+      async () => checkpointStore,
+    );
+
+    await expect(actions.delete?.("session-delete")).resolves.toBeUndefined();
+    expect(checkpointDeletes).toEqual(["session-delete"]);
+    await expect(repository.get("session-delete")).resolves.toBeUndefined();
+
+    const partialStore: CheckpointStore = {
+      create: async () => {
+        throw new Error("unused");
+      },
+      read: async () => undefined,
+      list: async () => [],
+      deleteForSession: async () => ({ deleted: 0, failed: 1 }),
+    };
+    const partial = createSessionRecoveryActions(
+      async () => repository,
+      undefined,
+      async () => partialStore,
+    );
+    await expect(partial.delete?.("session-delete")).rejects.toMatchObject({ code: "partial" });
+  });
+
+  it("clears all Sessions only after the Checkpoint cleanup succeeds", async () => {
+    const repository = new InMemorySessionRepository();
+    await repository.create(manifest("session-clear", "2026-07-19T10:00:00.000Z"));
+    let checkpointsCleared = false;
+    const checkpointStore: CheckpointStore = {
+      create: async () => {
+        throw new Error("unused");
+      },
+      read: async () => undefined,
+      list: async () => [],
+      clear: async () => {
+        checkpointsCleared = true;
+        return { deleted: 3, failed: 0 };
+      },
+    };
+    const actions = createSessionRecoveryActions(
+      async () => repository,
+      undefined,
+      async () => checkpointStore,
+    );
+
+    await expect(actions.clear?.()).resolves.toBe(1);
+    expect(checkpointsCleared).toBe(true);
+    await expect(repository.list()).resolves.toEqual([]);
   });
 
   it("reconstructs user and assistant messages from ordered events", async () => {
