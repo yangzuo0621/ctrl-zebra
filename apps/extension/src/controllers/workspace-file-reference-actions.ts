@@ -84,6 +84,8 @@ export class WorkspaceFileReferenceActions implements WorkspaceFileReferenceView
   readonly #createId: () => string;
   readonly #states = new Map<string, ReferenceState>();
   readonly #reads = new Set<AbortController>();
+  readonly #referenceReads = new Map<string, Set<AbortController>>();
+  readonly #removedReferenceIds = new Set<string>();
   #post: ((message: ExtensionToWebviewMessage) => void) | undefined;
   #disposed = false;
 
@@ -109,7 +111,7 @@ export class WorkspaceFileReferenceActions implements WorkspaceFileReferenceView
         if (isAbort(error, controller.signal)) return;
         this.#postSearchError(requestId, toErrorCode(error));
       })
-      .finally(() => this.#reads.delete(controller));
+      .finally(() => this.#finishRead(controller));
   }
 
   read(requestId: string, path: string): void {
@@ -145,12 +147,14 @@ export class WorkspaceFileReferenceActions implements WorkspaceFileReferenceView
         if (isAbort(error, controller.signal)) return;
         this.#postReferenceError(requestId, undefined, toErrorCode(error));
       })
-      .finally(() => this.#reads.delete(controller));
+      .finally(() => this.#finishRead(controller));
   }
 
   remove(requestId: string, referenceId: string): void {
     const state = this.#states.get(referenceId);
     if (state === undefined) return;
+    this.#removedReferenceIds.add(referenceId);
+    this.#cancelReferenceReads(referenceId);
     this.#states.delete(referenceId);
     this.#postReference({
       protocolVersion: 1,
@@ -169,7 +173,7 @@ export class WorkspaceFileReferenceActions implements WorkspaceFileReferenceView
       return;
     }
 
-    const controller = this.#startRead();
+    const controller = this.#startRead(referenceId);
     void this.#readPath(state.path, controller.signal, referenceId)
       .then((result) => {
         if (result.stale) {
@@ -195,7 +199,7 @@ export class WorkspaceFileReferenceActions implements WorkspaceFileReferenceView
         if (isAbort(error, controller.signal)) return;
         this.#postReferenceError(requestId, referenceId, toErrorCode(error));
       })
-      .finally(() => this.#reads.delete(controller));
+      .finally(() => this.#finishRead(controller, referenceId));
   }
 
   useStale(requestId: string, referenceId: string): void {
@@ -221,6 +225,7 @@ export class WorkspaceFileReferenceActions implements WorkspaceFileReferenceView
 
   clearInput(): void {
     this.#states.clear();
+    this.#removedReferenceIds.clear();
     this.invalidateLiveState();
   }
 
@@ -228,6 +233,7 @@ export class WorkspaceFileReferenceActions implements WorkspaceFileReferenceView
     for (const controller of this.#reads)
       controller.abort(new Error("Workspace file state changed."));
     this.#reads.clear();
+    this.#referenceReads.clear();
   }
 
   /** Marks matching snapshots stale after a Host-side document/filesystem event. */
@@ -242,6 +248,7 @@ export class WorkspaceFileReferenceActions implements WorkspaceFileReferenceView
   clearForBoundaryChange(reason: Exclude<WorkspaceFileReferenceClearReason, "removed">): void {
     const ids = [...this.#states.keys()];
     this.#states.clear();
+    this.#removedReferenceIds.clear();
     this.invalidateLiveState();
     for (const referenceId of ids) {
       this.#postReference({
@@ -324,7 +331,12 @@ export class WorkspaceFileReferenceActions implements WorkspaceFileReferenceView
         (requestedReferenceId === undefined || id === requestedReferenceId) &&
         state.canonicalUri.toString() === identity,
     );
-    if (existing !== undefined && !existing[1].reference.context.source.stale) {
+    if (
+      requestedReferenceId === undefined &&
+      existing !== undefined &&
+      !existing[1].reference.context.source.stale
+    ) {
+      this.#assertReferenceLive(requestedReferenceId);
       return { reference: existing[1].reference, stale: false };
     }
 
@@ -367,6 +379,7 @@ export class WorkspaceFileReferenceActions implements WorkspaceFileReferenceView
     };
     const context = ideTextContextSchema.parse({ text: textProjection.text, source });
     const referenceId = existing?.[0] ?? requestedReferenceId ?? this.#createId();
+    this.#assertReferenceLive(requestedReferenceId);
     const reference = workspaceFileReferenceSchema.parse({ referenceId, context });
     const state: ReferenceState = {
       requestedUri,
@@ -398,10 +411,41 @@ export class WorkspaceFileReferenceActions implements WorkspaceFileReferenceView
     }
   }
 
-  #startRead(): AbortController {
+  #startRead(referenceId?: string): AbortController {
     const controller = new AbortController();
     this.#reads.add(controller);
+    if (referenceId !== undefined) {
+      const reads = this.#referenceReads.get(referenceId) ?? new Set<AbortController>();
+      reads.add(controller);
+      this.#referenceReads.set(referenceId, reads);
+    }
     return controller;
+  }
+
+  #finishRead(controller: AbortController, referenceId?: string): void {
+    this.#reads.delete(controller);
+    if (referenceId === undefined) return;
+    const reads = this.#referenceReads.get(referenceId);
+    if (reads === undefined) return;
+    reads.delete(controller);
+    if (reads.size === 0) this.#referenceReads.delete(referenceId);
+  }
+
+  #cancelReferenceReads(referenceId: string): void {
+    const reads = this.#referenceReads.get(referenceId);
+    if (reads === undefined) return;
+    for (const controller of reads)
+      controller.abort(new Error("Workspace file reference was removed."));
+    this.#referenceReads.delete(referenceId);
+  }
+
+  #assertReferenceLive(referenceId: string | undefined): void {
+    if (
+      referenceId !== undefined &&
+      (this.#removedReferenceIds.has(referenceId) || !this.#states.has(referenceId))
+    ) {
+      throw new WorkspaceFileReferenceError("unavailable");
+    }
   }
 
   #markStale(state: ReferenceState, reason: WorkspaceFileReferenceStaleReason): void {

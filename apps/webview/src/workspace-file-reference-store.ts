@@ -44,7 +44,15 @@ export function createWorkspaceFileReferenceStore({
   let disposed = false;
   let searchRequestId: string | undefined;
   const readRequestIds = new Set<string>();
+  const readRequestReferences = new Map<string, string | undefined>();
   const closedReferenceIds = new Set<string>();
+  const settleReferenceReads = (referenceId: string) => {
+    for (const [requestId, pendingReferenceId] of readRequestReferences) {
+      if (pendingReferenceId !== referenceId) continue;
+      readRequestIds.delete(requestId);
+      readRequestReferences.delete(requestId);
+    }
+  };
 
   return createStore<WorkspaceFileReferenceState>()((set, get) => ({
     cards: [],
@@ -71,9 +79,11 @@ export function createWorkspaceFileReferenceStore({
       if (disposed) return;
       const requestId = createRequestId();
       readRequestIds.add(requestId);
+      readRequestReferences.set(requestId, undefined);
       set({ readPending: true, announcement: strings.workspaceFiles.reading });
       if (host.readWorkspaceFile === undefined) {
         readRequestIds.delete(requestId);
+        readRequestReferences.delete(requestId);
         set({
           readPending: false,
           announcement: strings.workspaceFiles.unavailable("unavailable"),
@@ -87,8 +97,10 @@ export function createWorkspaceFileReferenceStore({
       const card = get().cards.find((item) => item.reference.referenceId === referenceId);
       if (card === undefined) return false;
       closedReferenceIds.add(referenceId);
+      settleReferenceReads(referenceId);
       set((state) => ({
         cards: state.cards.filter((item) => item.reference.referenceId !== referenceId),
+        readPending: readRequestIds.size > 0,
         announcement: strings.workspaceFiles.removed,
       }));
       host.removeWorkspaceFile?.(createRequestId(), referenceId);
@@ -99,9 +111,11 @@ export function createWorkspaceFileReferenceStore({
       if (!get().cards.some((item) => item.reference.referenceId === referenceId)) return false;
       const requestId = createRequestId();
       readRequestIds.add(requestId);
+      readRequestReferences.set(requestId, referenceId);
       set({ readPending: true, announcement: strings.workspaceFiles.refreshing });
       if (host.refreshWorkspaceFile === undefined) {
         readRequestIds.delete(requestId);
+        readRequestReferences.delete(requestId);
         set({
           readPending: false,
           announcement: strings.workspaceFiles.unavailable("unavailable"),
@@ -131,6 +145,7 @@ export function createWorkspaceFileReferenceStore({
       if (disposed) return;
       searchRequestId = undefined;
       readRequestIds.clear();
+      readRequestReferences.clear();
       closedReferenceIds.clear();
       set({
         cards: [],
@@ -144,6 +159,7 @@ export function createWorkspaceFileReferenceStore({
       if (disposed) return;
       searchRequestId = undefined;
       readRequestIds.clear();
+      readRequestReferences.clear();
       closedReferenceIds.clear();
       set({
         cards: [],
@@ -177,14 +193,25 @@ export function createWorkspaceFileReferenceStore({
         return;
       }
       if (message.type !== "extension/workspace-file-reference") return;
-      if (
-        message.status !== "error" &&
-        message.status !== "removed" &&
-        closedReferenceIds.has(message.reference.referenceId)
-      ) {
+      const pendingReferenceId = readRequestReferences.get(message.requestId);
+      const messageReferenceId =
+        message.status === "error"
+          ? message.referenceId
+          : message.status === "removed"
+            ? message.referenceId
+            : message.reference.referenceId;
+      const isClosedReference = [pendingReferenceId, messageReferenceId].some(
+        (referenceId) => referenceId !== undefined && closedReferenceIds.has(referenceId),
+      );
+      const isPendingRead = readRequestIds.has(message.requestId);
+      readRequestIds.delete(message.requestId);
+      readRequestReferences.delete(message.requestId);
+      if (message.status === "removed") settleReferenceReads(message.referenceId);
+      const readPending = readRequestIds.size > 0;
+      if (isClosedReference) {
+        set({ readPending });
         return;
       }
-      const isPendingRead = readRequestIds.has(message.requestId);
       const hasExistingCard =
         message.status !== "error" &&
         message.status !== "removed" &&
@@ -192,8 +219,6 @@ export function createWorkspaceFileReferenceStore({
       if (!isPendingRead && !hasExistingCard && message.status !== "removed") {
         return;
       }
-      readRequestIds.delete(message.requestId);
-      const readPending = readRequestIds.size > 0;
       if (message.status === "error") {
         set({ readPending, announcement: strings.workspaceFiles.unavailable(message.code) });
         return;
@@ -225,6 +250,7 @@ export function createWorkspaceFileReferenceStore({
       disposed = true;
       searchRequestId = undefined;
       readRequestIds.clear();
+      readRequestReferences.clear();
     },
   }));
 }

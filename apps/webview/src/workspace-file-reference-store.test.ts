@@ -86,6 +86,42 @@ describe("workspace file reference Webview store", () => {
     expect(store.getState().cards).toHaveLength(1);
   });
 
+  it("settles a pending refresh when removed and ignores its late result", () => {
+    const calls: WebviewToExtensionMessage[] = [];
+    const store = createWorkspaceFileReferenceStore({
+      host: createHost(calls),
+      createRequestId: (() => {
+        let next = 0;
+        return () => `request-${++next}`;
+      })(),
+    });
+    const reference = context("README.md");
+    store.getState().read("README.md");
+    store.getState().receive({
+      protocolVersion: 1,
+      type: "extension/workspace-file-reference",
+      requestId: "request-1",
+      status: "ready",
+      reference,
+    });
+
+    expect(store.getState().refresh(reference.referenceId)).toBe(true);
+    expect(store.getState().readPending).toBe(true);
+    expect(store.getState().remove(reference.referenceId)).toBe(true);
+    expect(store.getState().cards).toEqual([]);
+    expect(store.getState().readPending).toBe(false);
+
+    store.getState().receive({
+      protocolVersion: 1,
+      type: "extension/workspace-file-reference",
+      requestId: "request-2",
+      status: "ready",
+      reference,
+    });
+    expect(store.getState().cards).toEqual([]);
+    expect(store.getState().readPending).toBe(false);
+  });
+
   it("clears local cards before a new Session and accepts removal", () => {
     const calls: WebviewToExtensionMessage[] = [];
     const store = createWorkspaceFileReferenceStore({
@@ -145,6 +181,14 @@ function createHost(calls: WebviewToExtensionMessage[]): WebviewHost {
     },
     readWorkspaceFile(requestId, path) {
       calls.push({ protocolVersion: 1, type: "webview/workspace-file-read", requestId, path });
+    },
+    refreshWorkspaceFile(requestId, referenceId) {
+      calls.push({
+        protocolVersion: 1,
+        type: "webview/workspace-file-refresh",
+        requestId,
+        referenceId,
+      });
     },
     removeWorkspaceFile(requestId, referenceId) {
       calls.push({

@@ -11,6 +11,7 @@ interface WorkspaceFileReferenceCardProps {
 
 export function WorkspaceFileReferenceCard({ store }: WorkspaceFileReferenceCardProps) {
   const cards = useStore(store, (state) => state.cards);
+  const readPending = useStore(store, (state) => state.readPending);
   const acceptStale = useStore(store, (state) => state.useStale);
   if (cards.length === 0) return null;
 
@@ -43,6 +44,7 @@ export function WorkspaceFileReferenceCard({ store }: WorkspaceFileReferenceCard
               <Button
                 variant="secondary"
                 size="sm"
+                disabled={readPending}
                 onClick={() => store.getState().refresh(card.reference.referenceId)}
               >
                 {strings.workspaceFiles.refresh}

@@ -58,6 +58,51 @@ describe("WorkspaceFileReferenceActions", () => {
     expect(posts[2]).toMatchObject({ status: "error", code: "binary" });
   });
 
+  it("cancels a refresh when its reference is removed and ignores the late read", async () => {
+    const root = uri("/workspace/root");
+    const posts: ExtensionToWebviewMessage[] = [];
+    let readCount = 0;
+    let releaseRefresh: (() => void) | undefined;
+    let refreshReadCompleted = false;
+    const actions = createActions({
+      root,
+      readPrefix: async () => {
+        readCount += 1;
+        if (readCount === 2) {
+          const result = await new Promise<{ bytes: Uint8Array; truncated: boolean }>((resolve) => {
+            releaseRefresh = () =>
+              resolve({ bytes: new TextEncoder().encode("late refresh"), truncated: false });
+          });
+          refreshReadCompleted = true;
+          return result;
+        }
+        return { bytes: new TextEncoder().encode("initial"), truncated: false };
+      },
+    });
+    actions.bind((message) => posts.push(message));
+
+    actions.read("initial", "src/a.ts");
+    await vi.waitFor(() => expect(posts).toHaveLength(1));
+    const referenceId = (
+      posts[0] as Extract<
+        ExtensionToWebviewMessage,
+        { type: "extension/workspace-file-reference"; status: "ready" }
+      >
+    ).reference.referenceId;
+
+    actions.refresh("refresh", referenceId);
+    await vi.waitFor(() => expect(readCount).toBe(2));
+    actions.remove("remove", referenceId);
+    expect(posts.at(-1)).toMatchObject({ status: "removed", referenceId });
+
+    releaseRefresh?.();
+    await vi.waitFor(() => expect(refreshReadCompleted).toBe(true));
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(actions.takeReferences()).toEqual([]);
+    expect(posts).toHaveLength(2);
+  });
+
   it("marks a snapshot stale on mutation races and filters it until Use stale", async () => {
     const root = uri("/workspace/root");
     const posts: ExtensionToWebviewMessage[] = [];
