@@ -122,6 +122,14 @@ This document defines the Webview security constraints established before T0104.
   approval are never replayed. The Webview keeps the old answer visible until the replacement reaches
   `completed`; cancellation, failure, truncation, duplicate intent, and late events close the new
   gate without changing the old projection.
+- Historical editing is accepted only for the selected idle/restored Session and an exact completed
+  user projection. The request is bounded by `sessionId`, target `messageId`, and submitted content;
+  the Host revalidates all three against the immutable event log before appending a new user event and
+  `session.edit` relation. It creates a fresh Run, AbortSignal, Tool lifecycle, and one-time approval
+  scope from the prefix before the target. Old suffix messages, Tool Call/Result pairs, attachments,
+  Provider requests, approvals, and side effects are never replayed or executed automatically. A
+  failed, cancelled, mismatched, or late replacement closes its gate and preserves the old branch;
+  only a completed replacement projects the edited target and new suffix.
 
 ## Tool Input and Output
 

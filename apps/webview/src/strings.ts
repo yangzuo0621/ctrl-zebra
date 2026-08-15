@@ -366,9 +366,16 @@ export const strings = {
     startNewSession: "Starting a new Session.",
     continueSession: "Continuing the current Session.",
     regenerationStarted: "Regenerating this response using the same user prompt and prior history.",
+    editingStarted: "Resending this edited message with only the earlier history.",
     regenerate: "Regenerate response",
     regenerateScope:
       "Regenerates this response with its user prompt and prior completed history. The existing response stays visible until replacement succeeds.",
+    edit: "Edit and resend",
+    editScope:
+      "Edits this user message and resends it from the earlier history. Later messages are replaced only after the new response succeeds.",
+    saveEdit: "Send edited message",
+    cancelEdit: "Cancel editing",
+    editMessageLabel: "Edit message",
     newChatReady: "New chat ready.",
     restoringSession: "Restoring Session.",
     currentSessionConfirmed: "Current Session confirmed.",

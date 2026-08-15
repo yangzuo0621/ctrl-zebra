@@ -12,9 +12,12 @@ import { hasExactKeys, isPlainRecord } from "../adapters/record-validation.js";
 import { jsonValuesEqual } from "./json-values.js";
 import {
   canonicalAssistantProjectionId,
+  EditRelationCorruptError,
   isCompletedRegenerationRun,
   RegenerationRelationCorruptError,
+  type ValidatedEditRelation,
   type ValidatedRegenerationRelation,
+  validateEditRelations,
   validateRegenerationRelations,
 } from "./regeneration-validation.js";
 
@@ -67,6 +70,12 @@ export class SessionHistoryCorruptError extends Error {
 export interface RegenerationContext {
   readonly targetUserMessage: UserMessage;
   readonly targetAssistantMessageId: string;
+  readonly history: readonly ModelMessage[];
+}
+
+export interface EditContext {
+  readonly targetUserMessage: UserMessage;
+  readonly targetUserMessageId: string;
   readonly history: readonly ModelMessage[];
 }
 
@@ -134,10 +143,12 @@ export function projectRegenerationContext(
   }
 
   const suppressedUserMessageIds = new Set<string>();
+  const editedUserContents = new Map<string, string>();
   const projectedEvents = hideSupersededRunOutput(
     record.events,
     record.manifest.sessionId,
     suppressedUserMessageIds,
+    editedUserContents,
   );
   const targetUserSequence = record.events[targetUserIndex]?.sequence;
   if (targetUserSequence === undefined) {
@@ -153,6 +164,96 @@ export function projectRegenerationContext(
     // Restored messages use this canonical sequence identity. A live Webview may still hold its
     // request-scoped `<requestId>:assistant` alias; persistence always records the canonical ID.
     targetAssistantMessageId: expectedAssistantMessageId,
+    history: projectSessionModelHistory(prefixRecord),
+  };
+}
+
+/**
+ * Builds the model input for an edited historical user message. Only the validated history prefix
+ * before the target user is retained; the target's old Run, all later old-branch messages, and
+ * every old Tool pair are excluded from the new Run's model context.
+ */
+export function projectEditContext(
+  record: SessionRecord,
+  targetUserMessageId: string,
+): EditContext {
+  if (record.eventLogTailDamaged) {
+    throw new SessionHistoryCorruptError();
+  }
+  let relations: readonly ValidatedEditRelation[];
+  try {
+    relations = validateEditRelations(record.events, record.manifest.sessionId);
+  } catch (error) {
+    if (
+      error instanceof EditRelationCorruptError ||
+      error instanceof RegenerationRelationCorruptError
+    ) {
+      throw new SessionHistoryCorruptError();
+    }
+    throw error;
+  }
+
+  const users = record.events.flatMap((persisted, index) => {
+    if (persisted.event.type !== "session.user-message") {
+      return [];
+    }
+    const parsed = userMessageSchema.safeParse(persisted.event.data);
+    if (!parsed.success || parsed.data.sessionId !== record.manifest.sessionId) {
+      throw new SessionHistoryCorruptError();
+    }
+    return [{ index, message: parsed.data }];
+  });
+  const resolvedTargetMessageId = isLiveUserProjectionAlias(targetUserMessageId)
+    ? users.at(-1)?.message.messageId
+    : targetUserMessageId;
+  const targetUsers = users.filter(({ message }) => message.messageId === resolvedTargetMessageId);
+  if (targetUsers.length !== 1) {
+    throw new SessionHistoryCorruptError();
+  }
+  const target = targetUsers[0];
+  if (
+    target === undefined ||
+    resolvedTargetMessageId === undefined ||
+    relations.some((relation) => relation.targetMessageId === resolvedTargetMessageId)
+  ) {
+    throw new SessionHistoryCorruptError();
+  }
+
+  const suppressedUserMessageIds = new Set<string>();
+  const editedUserContents = new Map<string, string>();
+  const projectedEvents = hideSupersededRunOutput(
+    record.events,
+    record.manifest.sessionId,
+    suppressedUserMessageIds,
+    editedUserContents,
+  );
+  if (suppressedUserMessageIds.has(resolvedTargetMessageId)) {
+    throw new SessionHistoryCorruptError();
+  }
+  const nextUserIndex = record.events.findIndex(
+    (persisted, index) => index > target.index && persisted.event.type === "session.user-message",
+  );
+  const targetRunEndIndex = nextUserIndex < 0 ? record.events.length : nextUserIndex;
+  const targetRunEvents = record.events.slice(target.index + 1, targetRunEndIndex);
+  if (
+    findFirstTextDeltaIndexForHistory(targetRunEvents) === undefined ||
+    !isCompletedRegenerationRun(targetRunEvents)
+  ) {
+    throw new SessionHistoryCorruptError();
+  }
+  const targetSequence = record.events[target.index]?.sequence;
+  if (targetSequence === undefined) {
+    throw new SessionHistoryCorruptError();
+  }
+
+  const prefixRecord: SessionRecord = {
+    manifest: { ...record.manifest, status: "completed" },
+    events: projectedEvents.filter(({ sequence }) => sequence < targetSequence),
+    eventLogTailDamaged: false,
+  };
+  return {
+    targetUserMessage: target.message,
+    targetUserMessageId: resolvedTargetMessageId,
     history: projectSessionModelHistory(prefixRecord),
   };
 }
@@ -189,10 +290,12 @@ type TerminalRunStatus = Extract<
  */
 export function projectSessionModelHistory(record: SessionRecord): readonly ModelMessage[] {
   const suppressedUserMessageIds = new Set<string>();
+  const editedUserContents = new Map<string, string>();
   const sourceEvents = hideSupersededRunOutput(
     record.events,
     record.manifest.sessionId,
     suppressedUserMessageIds,
+    editedUserContents,
   );
   const history: ModelMessage[] = [];
   const seenToolCallIds = new Set<string>();
@@ -210,7 +313,10 @@ export function projectSessionModelHistory(record: SessionRecord): readonly Mode
         currentRun = undefined;
       }
       currentRun = {
-        user,
+        user:
+          editedUserContents.get(user.messageId) === undefined
+            ? user
+            : { ...user, content: editedUserContents.get(user.messageId) ?? user.content },
         suppressUser: suppressedUserMessageIds.has(user.messageId),
         units: [],
         pendingToolCalls: new Map(),
@@ -276,6 +382,7 @@ function hideSupersededRunOutput(
   events: readonly PersistedEventRecord[],
   sessionId: string,
   suppressedUserMessageIds: Set<string>,
+  editedUserContents: Map<string, string>,
 ): readonly PersistedEventRecord[] {
   const hiddenSequences = new Set<number>();
   let relations: readonly ValidatedRegenerationRelation[];
@@ -283,6 +390,19 @@ function hideSupersededRunOutput(
     relations = validateRegenerationRelations(events, sessionId);
   } catch (error) {
     if (error instanceof RegenerationRelationCorruptError) {
+      throw new SessionHistoryCorruptError();
+    }
+    throw error;
+  }
+
+  let editRelations: readonly ValidatedEditRelation[];
+  try {
+    editRelations = validateEditRelations(events, sessionId);
+  } catch (error) {
+    if (
+      error instanceof EditRelationCorruptError ||
+      error instanceof RegenerationRelationCorruptError
+    ) {
       throw new SessionHistoryCorruptError();
     }
     throw error;
@@ -307,7 +427,59 @@ function hideSupersededRunOutput(
     );
   }
 
+  for (const relation of editRelations) {
+    if (suppressedUserMessageIds.has(relation.replacementUserMessageId)) {
+      throw new SessionHistoryCorruptError();
+    }
+    suppressedUserMessageIds.add(relation.replacementUserMessageId);
+    const replacementEvents = events.slice(
+      relation.replacementRunStartIndex,
+      relation.replacementRunEndIndex,
+    );
+    if (!relation.replacementCompleted) {
+      hideRunOutput(replacementEvents, hiddenSequences);
+      continue;
+    }
+    editedUserContents.set(relation.targetMessageId, relation.replacementContent);
+    hideRunOutput(
+      events.slice(relation.targetUserIndex + 1, relation.targetRunEndIndex),
+      hiddenSequences,
+    );
+    for (
+      let index = relation.targetRunEndIndex;
+      index < relation.replacementUserIndex;
+      index += 1
+    ) {
+      const persisted = events[index];
+      if (persisted === undefined) {
+        continue;
+      }
+      hiddenSequences.add(persisted.sequence);
+      if (persisted.event.type === "session.user-message") {
+        const parsed = userMessageSchema.safeParse(persisted.event.data);
+        if (!parsed.success || parsed.data.sessionId !== sessionId) {
+          throw new SessionHistoryCorruptError();
+        }
+        suppressedUserMessageIds.add(parsed.data.messageId);
+      }
+    }
+  }
+
   return events.filter((event) => !hiddenSequences.has(event.sequence));
+}
+
+function findFirstTextDeltaIndexForHistory(
+  events: readonly PersistedEventRecord[],
+): number | undefined {
+  return events.findIndex((persisted) => {
+    if (persisted.event.type !== "agent.text-delta") {
+      return false;
+    }
+    const data = persisted.event.data;
+    return isPlainRecord(data) && typeof data.text === "string" && data.text.length > 0;
+  }) < 0
+    ? undefined
+    : 0;
 }
 
 function hideRunOutput(
@@ -323,6 +495,10 @@ function hideRunOutput(
 
 function isLiveAssistantProjectionAlias(messageId: string): boolean {
   return /^.+:assistant$/.test(messageId);
+}
+
+function isLiveUserProjectionAlias(messageId: string): boolean {
+  return /^.+:user$/.test(messageId);
 }
 
 function closeRun(

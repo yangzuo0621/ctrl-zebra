@@ -196,8 +196,16 @@
 
 .messageActions {
   display: flex;
+  align-items: center;
+  gap: var(--cz-space-2);
   justify-content: flex-start;
   margin-top: var(--cz-space-2);
+}
+
+.editForm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cz-space-2);
 }
 
 .footer {

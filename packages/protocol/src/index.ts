@@ -241,6 +241,7 @@ export type {
   CheckpointErrorMessage,
   CheckpointListMessage,
   CheckpointRestoredMessage,
+  EditMessage,
   EditorContextClearReason,
   EditorContextMessage,
   EditorContextRefreshMessage,
@@ -317,6 +318,7 @@ export {
   checkpointErrorMessageSchema,
   checkpointListMessageSchema,
   checkpointRestoredMessageSchema,
+  editMessageSchema,
   editorContextClearReasonSchema,
   editorContextMessageSchema,
   editorContextRefreshMessageSchema,
@@ -395,6 +397,7 @@ export {
 } from "./messages.js";
 export type {
   CheckpointPersistencePaths,
+  PersistedEditEventPayload,
   PersistedEventPayload,
   PersistedEventRecord,
   PersistedMcpPromptEventPayload,
@@ -415,6 +418,7 @@ export {
   maxPersistedCheckpointIdBytes,
   maxPersistedSessionIdBytes,
   persistedCheckpointIdSchema,
+  persistedEditEventPayloadSchema,
   persistedEventPayloadSchema,
   persistedEventRecordSchema,
   persistedMcpPromptEventPayloadSchema,

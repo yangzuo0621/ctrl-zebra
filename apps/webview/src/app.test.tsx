@@ -314,6 +314,65 @@ describe("App streaming chat", () => {
     expect(screen.getByRole("textbox", { name: "Message" })).toBeDisabled();
   });
 
+  it("edits a completed user message and sends the target-bound replacement", async () => {
+    const host = createWebviewHostFixture();
+    const ids = ["request-1", "request-edit"];
+    const user = userEvent.setup();
+    render(<App host={host} createRequestId={() => ids.shift() ?? "unexpected"} />);
+
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "Original question");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    act(() => {
+      host.emit({
+        protocolVersion,
+        type: "extension/session-started",
+        requestId: "request-1",
+        sessionId: "session-1",
+      });
+      host.emit({
+        protocolVersion,
+        type: "extension/text-delta",
+        requestId: "request-1",
+        text: "Original answer",
+      });
+      animationFrames[0]?.(0);
+      host.emit({
+        protocolVersion,
+        type: "extension/run-status",
+        requestId: "request-1",
+        status: "completed",
+      });
+    });
+
+    await user.click(screen.getByRole("button", { name: strings.chat.editScope }));
+    const editor = screen.getByRole("textbox", { name: "Edit message" });
+    await user.clear(editor);
+    await user.type(editor, "Edited question");
+    await user.click(screen.getByRole("button", { name: "Send edited message" }));
+    expect(host.sent.at(-1)).toEqual({
+      protocolVersion,
+      type: "webview/edit-message",
+      requestId: "request-edit",
+      sessionId: "session-1",
+      messageId: "request-1:user",
+      content: "Edited question",
+    });
+    expect(screen.getByText("Original answer")).toBeVisible();
+
+    act(() => {
+      host.emit({
+        protocolVersion,
+        type: "extension/text-delta",
+        requestId: "request-edit",
+        text: "Edited answer",
+      });
+      animationFrames[1]?.(0);
+    });
+    expect(screen.getByText("Edited question")).toBeVisible();
+    expect(screen.getByText("Edited answer")).toBeVisible();
+    expect(screen.queryByText("Original answer")).not.toBeInTheDocument();
+  });
+
   it("batches ordered deltas and flushes the final response on completion", async () => {
     const host = createWebviewHostFixture();
     const user = userEvent.setup();

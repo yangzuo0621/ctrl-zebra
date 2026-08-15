@@ -233,6 +233,13 @@ focus, selection, disclosure state, and transcript scroll position.
   answer remains visible while the Host prepares the replacement. The store stages the replacement
   against the same stable message key, commits it only after `completed`, restores the previous
   projection on cancellation/failure/truncation, and ignores late or mismatched events.
+- Each completed user projection exposes a keyboard-operable, scope-labelled `Edit and resend`
+  action. The inline editor keeps the original text visible until the user explicitly sends or
+  cancels; blank/over-limit content and active Run/restore/Session-switch states are blocked. The
+  store sends the exact Session and user message identity, keeps the old branch until accepted
+  replacement output completes, then projects the edited target and fresh assistant result while
+  removing the old suffix. Cancellation, failure, truncation, Session mismatch, disposal, and late
+  events restore or retain the old branch; the Webview never executes or replays a persisted Tool.
 
 ## Answer Markdown Rendering (T1702)
 

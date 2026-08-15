@@ -14,6 +14,7 @@ function createHarness(ids: string[] = ["request-1"]) {
   const host: WebviewHost = {
     submit: vi.fn(),
     regenerate: vi.fn(),
+    editMessage: vi.fn(),
     newChat: vi.fn(),
     cancel: vi.fn(),
     showApprovalDiff: vi.fn(),
@@ -610,6 +611,155 @@ describe("chat reasoning store", () => {
       status: "cancelled",
     });
     expect(harness.store.getState().messages.at(-1)?.content).toBe("Original answer");
+  });
+
+  it("projects an edited historical user message only after replacement output starts", () => {
+    const harness = createHarness(["request-1", "edit-1"]);
+    expect(harness.store.getState().submit("Original question")).toBe(true);
+    harness.receive({
+      protocolVersion,
+      type: "extension/session-started",
+      requestId: "request-1",
+      sessionId: "session-1",
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/text-delta",
+      requestId: "request-1",
+      text: "Original answer",
+    });
+    harness.flush();
+    harness.receive({
+      protocolVersion,
+      type: "extension/run-status",
+      requestId: "request-1",
+      status: "completed",
+    });
+
+    const targetId = "request-1:user";
+    expect(harness.store.getState().editMessage(targetId, "Edited question")).toBe(true);
+    expect(harness.host.editMessage).toHaveBeenCalledWith(
+      "edit-1",
+      "session-1",
+      targetId,
+      "Edited question",
+    );
+    expect(harness.store.getState().messages[0]?.content).toBe("Original question");
+
+    harness.receive({
+      protocolVersion,
+      type: "extension/text-delta",
+      requestId: "edit-1",
+      text: "Edited answer",
+    });
+    harness.flush();
+    expect(
+      harness.store.getState().messages.map(({ role, content }) => ({ role, content })),
+    ).toEqual([
+      { role: "user", content: "Edited question" },
+      { role: "assistant", content: "Edited answer" },
+    ]);
+    harness.receive({
+      protocolVersion,
+      type: "extension/run-status",
+      requestId: "edit-1",
+      status: "completed",
+    });
+    expect(harness.store.getState().editingMessageId).toBeUndefined();
+  });
+
+  it("restores the old branch and rejects invalid edit submissions", () => {
+    const harness = createHarness(["request-1", "edit-1"]);
+    expect(harness.store.getState().submit("Original question")).toBe(true);
+    harness.receive({
+      protocolVersion,
+      type: "extension/session-started",
+      requestId: "request-1",
+      sessionId: "session-1",
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/text-delta",
+      requestId: "request-1",
+      text: "Original answer",
+    });
+    harness.flush();
+    harness.receive({
+      protocolVersion,
+      type: "extension/run-status",
+      requestId: "request-1",
+      status: "completed",
+    });
+
+    const original = harness.store.getState().messages;
+    expect(harness.store.getState().editMessage("request-1:assistant", "No")).toBe(false);
+    expect(harness.store.getState().editMessage("request-1:user", " ")).toBe(false);
+    expect(harness.store.getState().editMessage("request-1:user", "x".repeat(1_000_001))).toBe(
+      false,
+    );
+    expect(harness.store.getState().editMessage("request-1:user", "Edited question")).toBe(true);
+    harness.receive({
+      protocolVersion,
+      type: "extension/run-status",
+      requestId: "edit-1",
+      status: "cancelled",
+    });
+    expect(harness.store.getState().messages).toEqual(original);
+    expect(harness.store.getState().editingMessageId).toBeUndefined();
+  });
+
+  it("fences late edit events after a Session mismatch", () => {
+    const harness = createHarness(["request-1", "edit-1"]);
+    expect(harness.store.getState().submit("Original question")).toBe(true);
+    harness.receive({
+      protocolVersion,
+      type: "extension/session-started",
+      requestId: "request-1",
+      sessionId: "session-1",
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/text-delta",
+      requestId: "request-1",
+      text: "Original answer",
+    });
+    harness.flush();
+    harness.receive({
+      protocolVersion,
+      type: "extension/run-status",
+      requestId: "request-1",
+      status: "completed",
+    });
+
+    expect(harness.store.getState().editMessage("request-1:user", "Edited question")).toBe(true);
+    harness.receive({
+      protocolVersion,
+      type: "extension/session-started",
+      requestId: "edit-1",
+      sessionId: "session-other",
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/text-delta",
+      requestId: "edit-1",
+      text: "Wrong branch",
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/run-status",
+      requestId: "edit-1",
+      status: "failed",
+    });
+
+    expect(
+      harness.store.getState().messages.map(({ role, content }) => ({ role, content })),
+    ).toEqual([
+      { role: "user", content: "Original question" },
+      { role: "assistant", content: "Original answer" },
+    ]);
+    expect(harness.store.getState().sessionError).toBe(
+      "The response belonged to a different Session.",
+    );
   });
 
   it("keeps usage cumulative for a continuation within the same Session", () => {

@@ -160,6 +160,13 @@ export const persistedRegenerationEventPayloadSchema = z.strictObject({
     replacementUserMessageId: messageIdSchema,
   }),
 });
+export const persistedEditEventPayloadSchema = z.strictObject({
+  type: z.literal("session.edit"),
+  data: z.strictObject({
+    targetMessageId: messageIdSchema,
+    replacementUserMessageId: messageIdSchema,
+  }),
+});
 
 const persistedReasoningEventTypes = new Set([
   "session.reasoning-start",
@@ -172,6 +179,7 @@ const persistedMcpResourceEventTypes = new Set(["session.mcp-resource-attached"]
 const persistedMcpPromptEventTypes = new Set(["session.mcp-prompt-confirmed"]);
 const persistedUsageEventTypes = new Set(["session.usage"]);
 const persistedRegenerationEventTypes = new Set(["session.regeneration"]);
+const persistedEditEventTypes = new Set(["session.edit"]);
 
 export const persistedEventPayloadSchema = genericPersistedEventPayloadSchema.superRefine(
   (payload, context) => {
@@ -229,6 +237,15 @@ export const persistedEventPayloadSchema = genericPersistedEventPayloadSchema.su
         message: "Persisted regeneration events must match their strict version 1 schema.",
       });
     }
+    if (
+      persistedEditEventTypes.has(payload.type) &&
+      !persistedEditEventPayloadSchema.safeParse(payload).success
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Persisted edit events must match their strict version 1 schema.",
+      });
+    }
   },
 );
 
@@ -253,6 +270,7 @@ export type PersistedUsageEventPayload = z.infer<typeof persistedUsageEventPaylo
 export type PersistedRegenerationEventPayload = z.infer<
   typeof persistedRegenerationEventPayloadSchema
 >;
+export type PersistedEditEventPayload = z.infer<typeof persistedEditEventPayloadSchema>;
 export type PersistedEventRecord = z.infer<typeof persistedEventRecordSchema>;
 
 export interface SessionPersistencePaths {

@@ -1,6 +1,7 @@
 import {
   messageIdSchema,
   type PersistedEventRecord,
+  persistedEditEventPayloadSchema,
   persistedRegenerationEventPayloadSchema,
   type SessionStatus,
   sessionStatusSchema,
@@ -12,6 +13,13 @@ export class RegenerationRelationCorruptError extends Error {
   constructor() {
     super("The saved regeneration relation is corrupt.");
     this.name = "RegenerationRelationCorruptError";
+  }
+}
+
+export class EditRelationCorruptError extends Error {
+  constructor() {
+    super("The saved edit relation is corrupt.");
+    this.name = "EditRelationCorruptError";
   }
 }
 
@@ -47,6 +55,21 @@ export interface ValidatedRegenerationRelation {
   readonly replacementRunEndIndex: number;
   readonly replacementFirstTextIndex?: number;
   readonly replacementCompleted: boolean;
+}
+
+export interface ValidatedEditRelation {
+  readonly relationIndex: number;
+  readonly targetMessageId: string;
+  readonly replacementUserMessageId: string;
+  readonly targetUserIndex: number;
+  readonly targetRunEndIndex: number;
+  readonly targetFirstTextIndex: number;
+  readonly replacementUserIndex: number;
+  readonly replacementRunStartIndex: number;
+  readonly replacementRunEndIndex: number;
+  readonly replacementFirstTextIndex?: number;
+  readonly replacementCompleted: boolean;
+  readonly replacementContent: string;
 }
 
 /**
@@ -165,6 +188,152 @@ export function validateRegenerationRelations(
   }
 
   return relations;
+}
+
+/**
+ * Owns the ordering and branch-fencing rules for edited user messages. An edit is an additive
+ * relation: the original user event and every old suffix event remain durable, while a completed
+ * replacement projects the edited prompt and its fresh Run as the active branch.
+ */
+export function validateEditRelations(
+  events: readonly PersistedEventRecord[],
+  sessionId: string,
+): readonly ValidatedEditRelation[] {
+  // Validate the existing regeneration relations first so both branch kinds reject the same
+  // malformed Session before either projection consumes it.
+  const regenerationRelations = validateRegenerationRelations(events, sessionId);
+  const users = parseUsers(events, sessionId);
+  const seenTargets = new Set<string>();
+  const seenReplacementUsers = new Set<string>();
+  const hiddenUsers = new Set<string>();
+  for (const relation of regenerationRelations) {
+    hiddenUsers.add(relation.replacementUserMessageId);
+  }
+  const relations: ValidatedEditRelation[] = [];
+
+  for (const relation of validateEditEventIndexes(events)) {
+    const parsed = persistedEditEventPayloadSchema.safeParse(events[relation].event);
+    if (!parsed.success) {
+      throw new EditRelationCorruptError();
+    }
+    const { targetMessageId, replacementUserMessageId } = parsed.data.data;
+    if (seenTargets.has(targetMessageId) || seenReplacementUsers.has(replacementUserMessageId)) {
+      throw new EditRelationCorruptError();
+    }
+    seenTargets.add(targetMessageId);
+    seenReplacementUsers.add(replacementUserMessageId);
+
+    const replacementUsers = users.filter(
+      ({ messageId }) => messageId === replacementUserMessageId,
+    );
+    if (replacementUsers.length !== 1) {
+      throw new EditRelationCorruptError();
+    }
+    const replacementUser = replacementUsers[0];
+    if (replacementUser === undefined || replacementUser.index >= relation) {
+      throw new EditRelationCorruptError();
+    }
+
+    // The relation follows the replacement user and optional explicit MCP context, then owns
+    // every event after it. This is the same fence used by regeneration.
+    for (let index = replacementUser.index + 1; index < relation; index += 1) {
+      const eventType = events[index]?.event.type;
+      if (
+        eventType !== "session.mcp-resource-attached" &&
+        eventType !== "session.mcp-prompt-confirmed"
+      ) {
+        throw new EditRelationCorruptError();
+      }
+    }
+
+    const targetUsers = users.filter(({ messageId }) => messageId === targetMessageId);
+    if (targetUsers.length !== 1) {
+      throw new EditRelationCorruptError();
+    }
+    const targetUser = targetUsers[0];
+    if (
+      targetUser === undefined ||
+      targetUser.index >= replacementUser.index ||
+      hiddenUsers.has(targetMessageId)
+    ) {
+      throw new EditRelationCorruptError();
+    }
+    const targetRunEndIndex =
+      users.find(({ index }) => index > targetUser.index)?.index ?? replacementUser.index;
+    if (targetRunEndIndex > replacementUser.index) {
+      throw new EditRelationCorruptError();
+    }
+    const targetRunEvents = events.slice(targetUser.index + 1, targetRunEndIndex);
+    const targetFirstTextIndex = findFirstTextDeltaIndex(targetRunEvents, targetUser.index + 1);
+    if (targetFirstTextIndex === undefined || !isCompletedRun(targetRunEvents)) {
+      throw new EditRelationCorruptError();
+    }
+
+    const replacementRunStartIndex = relation + 1;
+    const replacementRunEndIndex =
+      users.find(({ index }) => index > replacementUser.index)?.index ?? events.length;
+    const replacementRunEvents = events.slice(replacementRunStartIndex, replacementRunEndIndex);
+    const replacementFirstTextIndex = findFirstTextDeltaIndex(
+      replacementRunEvents,
+      replacementRunStartIndex,
+    );
+    const replacementCompleted = isCompletedRun(replacementRunEvents, "completed");
+    if (replacementCompleted && replacementFirstTextIndex === undefined) {
+      throw new EditRelationCorruptError();
+    }
+
+    relations.push({
+      relationIndex: relation,
+      targetMessageId,
+      replacementUserMessageId,
+      targetUserIndex: targetUser.index,
+      targetRunEndIndex,
+      targetFirstTextIndex,
+      replacementUserIndex: replacementUser.index,
+      replacementRunStartIndex,
+      replacementRunEndIndex,
+      ...(replacementFirstTextIndex === undefined ? {} : { replacementFirstTextIndex }),
+      replacementCompleted,
+      replacementContent: replacementUser.content,
+    });
+
+    hiddenUsers.add(replacementUserMessageId);
+    if (replacementCompleted) {
+      for (const user of users) {
+        if (user.index >= targetRunEndIndex && user.index < replacementUser.index) {
+          hiddenUsers.add(user.messageId);
+        }
+      }
+    }
+  }
+
+  return relations;
+}
+
+function parseUsers(
+  events: readonly PersistedEventRecord[],
+  sessionId: string,
+): readonly { readonly index: number; readonly messageId: string; readonly content: string }[] {
+  return events.flatMap((persisted, index) => {
+    if (persisted.event.type !== "session.user-message") {
+      return [];
+    }
+    const parsed = userMessageSchema.safeParse(persisted.event.data);
+    if (!parsed.success || parsed.data.sessionId !== sessionId) {
+      throw new EditRelationCorruptError();
+    }
+    return [{ index, messageId: parsed.data.messageId, content: parsed.data.content }];
+  });
+}
+
+function validateEditEventIndexes(events: readonly PersistedEventRecord[]): readonly number[] {
+  const indexes: number[] = [];
+  for (let index = 0; index < events.length; index += 1) {
+    if (events[index]?.event.type === "session.edit") {
+      indexes.push(index);
+    }
+  }
+  return indexes;
 }
 
 export function canonicalAssistantProjectionId(

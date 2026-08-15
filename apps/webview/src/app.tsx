@@ -75,6 +75,8 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
   const [showSessionsDrawer, setShowSessionsDrawer] = useState(false);
   const [isComposing, setIsComposing] = useState(false);
   const [userScrolledUp, setUserScrolledUp] = useState(false);
+  const [editingMessageId, setEditingMessageId] = useState<string>();
+  const [editingDraft, setEditingDraft] = useState("");
 
   const mainRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -170,6 +172,30 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
       setUserScrolledUp(false);
       mcpStore.getState().clearDraft();
       inputRef.current?.focus();
+    }
+  };
+
+  const beginEditing = (message: DisplayMessage) => {
+    if (message.role !== "user") {
+      return;
+    }
+    setEditingMessageId(message.id);
+    setEditingDraft(message.content);
+  };
+
+  const cancelEditing = () => {
+    setEditingMessageId(undefined);
+    setEditingDraft("");
+  };
+
+  const submitEditing = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (
+      editingMessageId !== undefined &&
+      store.getState().editMessage(editingMessageId, editingDraft)
+    ) {
+      cancelEditing();
+      setUserScrolledUp(false);
     }
   };
 
@@ -360,10 +386,69 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
                     onReject={() => approvalStore.getState().decide("denied")}
                   />
                 ))}
-                <MarkdownMessage
-                  content={messageContent(message, status)}
-                  onOpenLink={handleOpenLink}
-                />
+                {editingMessageId === message.id && message.role === "user" ? (
+                  <form className={styles.editForm} onSubmit={submitEditing}>
+                    <label className={styles.srOnly} htmlFor={`edit-message-${message.id}`}>
+                      {strings.chat.editMessageLabel}
+                    </label>
+                    <textarea
+                      className={styles.input}
+                      id={`edit-message-${message.id}`}
+                      value={editingDraft}
+                      onChange={(event) => setEditingDraft(event.target.value)}
+                      rows={3}
+                      disabled={activeRequestId !== undefined || restoring}
+                    />
+                    <div className={styles.messageActions}>
+                      <Button
+                        type="submit"
+                        size="sm"
+                        disabled={
+                          activeRequestId !== undefined ||
+                          restoring ||
+                          sessionSwitchPending ||
+                          editingDraft.trim().length === 0
+                        }
+                      >
+                        {strings.chat.saveEdit}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={cancelEditing}
+                        disabled={activeRequestId !== undefined || restoring}
+                      >
+                        {strings.chat.cancelEdit}
+                      </Button>
+                    </div>
+                  </form>
+                ) : (
+                  <MarkdownMessage
+                    content={messageContent(message, status)}
+                    onOpenLink={handleOpenLink}
+                  />
+                )}
+                {message.role === "user" && editingMessageId !== message.id ? (
+                  <div className={styles.messageActions}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => beginEditing(message)}
+                      disabled={
+                        activeRequestId !== undefined ||
+                        restoring ||
+                        sessionSwitchPending ||
+                        selectedSessionId === undefined ||
+                        editingMessageId !== undefined
+                      }
+                      aria-label={strings.chat.editScope}
+                      title={strings.chat.editScope}
+                    >
+                      {strings.chat.edit}
+                    </Button>
+                  </div>
+                ) : null}
                 {message.role === "assistant" &&
                 index === messages.length - 1 &&
                 message.content.length > 0 ? (

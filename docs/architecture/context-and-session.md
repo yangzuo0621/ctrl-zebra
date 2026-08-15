@@ -82,6 +82,13 @@ IDE context uses the same budget authority rather than creating a second quota:
   pairs. Until normal completion, the old answer remains the display and history fallback. A fresh
   Run ID, AbortSignal, Tool lifecycle, and approval scope are mandatory; no prior approval or Tool
   side effect is eligible for reuse.
+- Editing a historical user message is a fresh Run over the validated history prefix before the
+  selected completed user Run. The additive `session.edit` relation records only the target and new
+  user-message IDs; it never rewrites source events or carries Tool/Provider/approval data. A
+  completed edit projects the replacement user content and new Run while excluding the target's old
+  output and every later old-branch user, assistant, and Tool unit. Until completion, the original
+  branch remains the display and history fallback. The new Run has fresh cancellation, Tool, and
+  approval ownership and never executes old Tools automatically.
 
 ## Session State Machine
 

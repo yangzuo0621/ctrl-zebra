@@ -29,8 +29,11 @@ import {
 } from "@ctrl-zebra/protocol";
 import { isRecord } from "../adapters/record-validation.js";
 import {
+  EditRelationCorruptError,
   RegenerationRelationCorruptError,
+  type ValidatedEditRelation,
   type ValidatedRegenerationRelation,
+  validateEditRelations,
   validateRegenerationRelations,
 } from "./regeneration-validation.js";
 
@@ -174,6 +177,19 @@ function applyRegenerationProjection(
     throw error;
   }
 
+  let editRelations: readonly ValidatedEditRelation[];
+  try {
+    editRelations = validateEditRelations(record.events, record.manifest.sessionId);
+  } catch (error) {
+    if (
+      error instanceof EditRelationCorruptError ||
+      error instanceof RegenerationRelationCorruptError
+    ) {
+      throw new SessionRecoveryError("corrupt");
+    }
+    throw error;
+  }
+
   for (const relation of relations) {
     if (
       !messages.some((message) => message.messageId === relation.targetMessageId) ||
@@ -191,10 +207,51 @@ function applyRegenerationProjection(
     }
   }
 
-  return messages.filter(
-    (message) =>
-      !replacedMessageIds.has(message.messageId) && !suppressedMessageIds.has(message.messageId),
-  );
+  const editedUserContents = new Map<string, string>();
+  for (const relation of editRelations) {
+    if (
+      !messages.some((message) => message.messageId === relation.targetMessageId) ||
+      suppressedMessageIds.has(relation.replacementUserMessageId)
+    ) {
+      throw new SessionRecoveryError("corrupt");
+    }
+    suppressedMessageIds.add(relation.replacementUserMessageId);
+    if (!relation.replacementCompleted) {
+      if (relation.replacementFirstTextIndex !== undefined) {
+        suppressedMessageIds.add(
+          `assistant-${record.events[relation.replacementFirstTextIndex]?.sequence}`,
+        );
+      }
+      continue;
+    }
+
+    editedUserContents.set(relation.targetMessageId, relation.replacementContent);
+    for (const persisted of record.events.slice(
+      relation.targetUserIndex + 1,
+      relation.replacementUserIndex,
+    )) {
+      if (persisted.event.type === "session.user-message") {
+        const user = userMessageSchema.safeParse(persisted.event.data);
+        if (!user.success || user.data.sessionId !== record.manifest.sessionId) {
+          throw new SessionRecoveryError("corrupt");
+        }
+        suppressedMessageIds.add(user.data.messageId);
+      }
+      if (persisted.event.type === "agent.text-delta") {
+        suppressedMessageIds.add(`assistant-${persisted.sequence}`);
+      }
+    }
+  }
+
+  return messages
+    .filter(
+      (message) =>
+        !replacedMessageIds.has(message.messageId) && !suppressedMessageIds.has(message.messageId),
+    )
+    .map((message) => {
+      const replacement = editedUserContents.get(message.messageId);
+      return replacement === undefined ? message : { ...message, content: replacement };
+    });
 }
 
 function recoverUsage(record: SessionRecord): TokenUsage | undefined {
