@@ -689,4 +689,67 @@ describe("Webview protocol messages", () => {
       }).success,
     ).toBe(false);
   });
+
+  it("round-trips strict Session deletion intents and bounded outcomes", () => {
+    const deleteMessage = {
+      protocolVersion,
+      type: "webview/delete-session",
+      requestId: "delete-1",
+      sessionId: "session-1",
+    } as const;
+    const clearMessage = {
+      protocolVersion,
+      type: "webview/clear-sessions",
+      requestId: "clear-1",
+      confirm: true,
+    } as const;
+    const deleted = {
+      protocolVersion,
+      type: "extension/session-deleted",
+      requestId: deleteMessage.requestId,
+      sessionId: deleteMessage.sessionId,
+    } as const;
+    const cleared = {
+      protocolVersion,
+      type: "extension/sessions-cleared",
+      requestId: clearMessage.requestId,
+      deletedCount: 2,
+    } as const;
+
+    expect(webviewToExtensionMessageSchema.parse(deleteMessage)).toEqual(deleteMessage);
+    expect(webviewToExtensionMessageSchema.parse(clearMessage)).toEqual(clearMessage);
+    expect(extensionToWebviewMessageSchema.parse(deleted)).toEqual(deleted);
+    expect(extensionToWebviewMessageSchema.parse(cleared)).toEqual(cleared);
+    expect(
+      webviewToExtensionMessageSchema.safeParse({ ...clearMessage, confirm: false }).success,
+    ).toBe(false);
+    expect(
+      extensionToWebviewMessageSchema.safeParse({
+        protocolVersion,
+        type: "extension/sessions-cleared",
+        requestId: "clear-1",
+        deletedCount: -1,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("accepts only an opaque selected Session intent", () => {
+    const selected = {
+      protocolVersion,
+      type: "webview/select-session",
+      requestId: "select-1",
+      sessionId: "session-1",
+    } as const;
+    const cleared = {
+      protocolVersion,
+      type: "webview/select-session",
+      requestId: "select-2",
+    } as const;
+
+    expect(webviewToExtensionMessageSchema.parse(selected)).toEqual(selected);
+    expect(webviewToExtensionMessageSchema.parse(cleared)).toEqual(cleared);
+    expect(webviewToExtensionMessageSchema.safeParse({ ...selected, sessionId: "" }).success).toBe(
+      false,
+    );
+  });
 });

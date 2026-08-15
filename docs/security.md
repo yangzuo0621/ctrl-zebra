@@ -133,6 +133,31 @@ This document defines the Webview security constraints established before T0104.
   identity remains valid for a retry or successive edit; the latest incomplete attempt falls back
   to the prior completed projection.
 
+### Session deletion and local-history clearing (T2104)
+
+- Deletion is a user-intended Host operation bound to one validated opaque `sessionId`, or to an
+  explicit clear-all-local-history confirmation. The Webview cannot provide a path, storage URI,
+  encoded directory name, Checkpoint target, or wildcard. The Host records selection only after the
+  exact ID appeared in its latest Session list, revalidates the selected/owned Session immediately
+  before cleanup, and never falls back to another Session.
+- A Session delete covers its manifest, messages, events, reasoning projection, atomic-write
+  temporary files, and every Checkpoint that the Host can safely attribute to the exact Session.
+  Clear-all covers every CtrlZebra Session and Checkpoint file in the versioned persistence root,
+  including damaged or unattributable records. Neither action touches workspace files, source code,
+  VS Code global storage outside the CtrlZebra persistence root, Provider secrets, MCP settings, or
+  another Extension's data; those categories belong to T2106.
+- If a target Session owns an active Run, the Host closes that Run's delivery/event gate first,
+  issues exactly one cancellation, and waits for its owned async work and cleanup to settle before
+  deleting persisted data. Cancellation is not converted into a failure. After the gate closes,
+  no delta, reasoning event, Tool Result, retry, approval response, persistence append, or stale
+  restore result may reach the deleted Session or Webview.
+- Persistence deletion is idempotent and retryable. A missing target is a safe no-op only when the
+  Host can establish that no target data remains. File-system, corruption, or attribution failures
+  are reported as `partial`/`unavailable` and never as full success; successful categories remain
+  deleted and a later retry may finish the remainder. Error surfaces contain stable bounded text and
+  diagnostic correlation only, never paths, file names derived from content, message text, source,
+  or raw storage exceptions.
+
 ## Tool Input and Output
 
 - Model-supplied Tool Call IDs, names, and input are untrusted. The generic protocol Schema rejects

@@ -1,4 +1,8 @@
-import { persistenceFormatVersion, type SessionManifest } from "@ctrl-zebra/protocol";
+import {
+  getSessionPersistencePaths,
+  persistenceFormatVersion,
+  type SessionManifest,
+} from "@ctrl-zebra/protocol";
 import { describe, expect, it } from "vitest";
 
 import { type EventStorage, JsonlEventStore, maxEventLogBytes } from "./event-store.js";
@@ -87,6 +91,25 @@ describe.each(factories)("SessionRepository contract: %s", (_name, createReposit
     );
   });
 
+  it("deletes one Session idempotently and clears the remaining Sessions", async () => {
+    const repository = createRepository();
+    await repository.create(manifest);
+    await repository.create({ ...manifest, sessionId: "session-2" });
+
+    expect(repository.delete).toBeDefined();
+    expect(repository.clear).toBeDefined();
+    const deleteSession = repository.delete;
+    const clear = repository.clear;
+    if (deleteSession === undefined || clear === undefined) {
+      throw new Error("Deletion methods are required for this repository.");
+    }
+    await expect(deleteSession.call(repository, "session-1")).resolves.toBe(true);
+    await expect(deleteSession.call(repository, "session-1")).resolves.toBe(false);
+    await expect(repository.get("session-1")).resolves.toBeUndefined();
+    await expect(clear.call(repository)).resolves.toEqual({ deleted: 1, failed: 0 });
+    await expect(repository.list()).resolves.toEqual([]);
+  });
+
   it("rejects a new Session whose manifest claims existing events", async () => {
     const repository = createRepository();
 
@@ -113,7 +136,30 @@ function createPersistedHarness() {
   const storage = new FakeSessionStorage();
   const manifests = new AtomicManifestStore(storage);
   const events = new JsonlEventStore(storage);
-  const catalog: SessionCatalog = { listSessionIds: async () => [...storage.sessionIds] };
+  const catalog: SessionCatalog = {
+    listSessionIds: async () => [...storage.sessionIds],
+    deleteSession: async (sessionId) => {
+      const prefix = `${getSessionPersistencePaths(sessionId).directory.join("/")}/`;
+      const existed = storage.sessionIds.delete(String(sessionId));
+      for (const key of storage.files.keys()) {
+        if (key.startsWith(prefix)) {
+          storage.files.delete(key);
+        }
+      }
+      return existed;
+    },
+    clearSessions: async () => {
+      const count = storage.sessionIds.size;
+      storage.sessionIds.clear();
+      const prefix = `${getSessionPersistencePaths("index").directory.join("/")}/`;
+      for (const key of storage.files.keys()) {
+        if (key.startsWith(prefix)) {
+          storage.files.delete(key);
+        }
+      }
+      return { deleted: count, failed: 0 };
+    },
+  };
   return {
     manifests,
     repository: new PersistedSessionRepository(manifests, events, catalog),

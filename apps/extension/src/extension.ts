@@ -1109,7 +1109,11 @@ export function activate(context: ExtensionContext): void {
         showDiff: (_requestId, approvalId) => approvalWorkflow.showDiff(approvalId),
         decide: (_requestId, approvalId, decision) => approvalWorkflow.decide(approvalId, decision),
       },
-      sessionActions: createSessionRecoveryActions(selectSessionRepository),
+      sessionActions: createSessionRecoveryActions(
+        selectSessionRepository,
+        undefined,
+        selectCheckpointStore,
+      ),
       checkpointActions,
       reportDeliveryFailure: () => {
         logger.error({

@@ -18,6 +18,7 @@ export interface DisplayApproval {
 interface ApprovalState {
   readonly current?: DisplayApproval;
   readonly pendingDecision?: ApprovalDecisionIntent;
+  clear(): void;
   receive(message: ExtensionToWebviewMessage): void;
   showDiff(): void;
   decide(decision: ApprovalDecisionIntent): boolean;
@@ -25,6 +26,9 @@ interface ApprovalState {
 
 export function createApprovalStore(host: WebviewHost): StoreApi<ApprovalState> {
   return createStore<ApprovalState>()((set, get) => ({
+    clear() {
+      set({ current: undefined, pendingDecision: undefined });
+    },
     receive(message) {
       if (message.type !== "extension/approval-state") {
         return;

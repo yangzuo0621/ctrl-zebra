@@ -71,6 +71,10 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
       createRequestId: createRequestId ?? (() => crypto.randomUUID()),
     }),
   );
+  const [approvalStore] = useState(() => createApprovalStore(host));
+  const [checkpointStore] = useState(() =>
+    createCheckpointStore(host, createRequestId ?? (() => crypto.randomUUID())),
+  );
   const [store] = useState(() =>
     createChatStore({
       host,
@@ -83,11 +87,21 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
         editorContextStore.getState().clearForSessionSwitch();
         workspaceFileStore.getState().clearForSessionSwitch();
       },
+      beforeSessionMutation: () => {
+        approvalStore.getState().clear();
+        checkpointStore.getState().clear();
+      },
+      afterSessionDeleted: () => {
+        checkpointStore.getState().load();
+      },
+      afterSessionsCleared: () => {
+        checkpointStore.getState().clear();
+      },
+      afterSessionMutationFailed: () => {
+        checkpointStore.getState().load();
+        store.getState().loadSessions();
+      },
     }),
-  );
-  const [approvalStore] = useState(() => createApprovalStore(host));
-  const [checkpointStore] = useState(() =>
-    createCheckpointStore(host, createRequestId ?? (() => crypto.randomUUID())),
   );
   const [mcpStore] = useState(() =>
     createMcpStore(host, createRequestId ?? (() => crypto.randomUUID())),
@@ -113,6 +127,8 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
   const sessionSelectionId = useStore(store, (state) => state.sessionSelectionId);
   const sessionSwitchPending = useStore(store, (state) => state.sessionSwitchPending);
   const restoring = useStore(store, (state) => state.restoring);
+  const sessionMutationPending = useStore(store, (state) => state.sessionMutationPending);
+  const deletingSessionId = useStore(store, (state) => state.deletingSessionId);
   const sessionError = useStore(store, (state) => state.sessionError);
   const runError = useStore(store, (state) => state.runError);
   const reasoningAnnouncement = useStore(store, (state) => state.reasoningAnnouncement);
@@ -204,6 +220,18 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
       setUserScrolledUp(false);
       mcpStore.getState().clearDraft();
       inputRef.current?.focus();
+    }
+  };
+
+  const handleDeleteSession = () => {
+    if (sessionSelectionId !== undefined && window.confirm(strings.chat.deleteSessionConfirm)) {
+      store.getState().deleteSession(sessionSelectionId);
+    }
+  };
+
+  const handleClearSessions = () => {
+    if (window.confirm(strings.chat.clearSessionsConfirm)) {
+      store.getState().clearSessions();
     }
   };
 
@@ -339,7 +367,12 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
             variant="secondary"
             size="sm"
             onClick={handleNewChat}
-            disabled={activeRequestId !== undefined || restoring || sessionSwitchPending}
+            disabled={
+              activeRequestId !== undefined ||
+              restoring ||
+              sessionSwitchPending ||
+              sessionMutationPending
+            }
             aria-describedby="session-action-hint"
           >
             {strings.app.newChat}
@@ -360,9 +393,11 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
           ? strings.app.sessionActionHint.running
           : restoring
             ? strings.app.sessionActionHint.restoring
-            : sessionSwitchPending
-              ? strings.app.sessionActionHint.switching
-              : strings.app.sessionActionHint.ready}
+            : sessionMutationPending
+              ? strings.chat.deletingSession
+              : sessionSwitchPending
+                ? strings.app.sessionActionHint.switching
+                : strings.app.sessionActionHint.ready}
       </p>
 
       {showSessionsDrawer ? (
@@ -374,7 +409,12 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
                 aria-label={strings.app.savedSessionLabel}
                 value={sessionSelectionId ?? ""}
                 onChange={(event) => store.getState().selectSession(event.target.value)}
-                disabled={sessions.length === 0 || activeRequestId !== undefined || restoring}
+                disabled={
+                  sessions.length === 0 ||
+                  activeRequestId !== undefined ||
+                  restoring ||
+                  sessionMutationPending
+                }
               >
                 {sessions.length === 0 ? (
                   <option value="">{strings.app.noSavedSessions}</option>
@@ -390,7 +430,7 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
                 variant="secondary"
                 size="sm"
                 onClick={() => store.getState().loadSessions()}
-                disabled={activeRequestId !== undefined || restoring}
+                disabled={activeRequestId !== undefined || restoring || sessionMutationPending}
               >
                 {strings.app.refresh}
               </Button>
@@ -399,10 +439,35 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
                 size="sm"
                 onClick={() => store.getState().restoreSelectedSession()}
                 disabled={
-                  sessionSelectionId === undefined || activeRequestId !== undefined || restoring
+                  sessionSelectionId === undefined ||
+                  activeRequestId !== undefined ||
+                  restoring ||
+                  sessionMutationPending
                 }
               >
                 {strings.app.restore}
+              </Button>
+            </div>
+            <div className={styles.sessionMutationControls}>
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={handleDeleteSession}
+                disabled={sessionSelectionId === undefined || restoring || sessionMutationPending}
+              >
+                {deletingSessionId === sessionSelectionId
+                  ? strings.chat.deletingSession
+                  : strings.chat.deleteSession}
+              </Button>
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={handleClearSessions}
+                disabled={restoring || sessionMutationPending}
+              >
+                {sessionMutationPending && deletingSessionId === undefined
+                  ? strings.chat.clearingSessions
+                  : strings.chat.clearSessions}
               </Button>
             </div>
             {sessionError === undefined ? null : (
@@ -485,7 +550,9 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
                       value={editingDraft}
                       onChange={(event) => setEditingDraft(event.target.value)}
                       rows={3}
-                      disabled={activeRequestId !== undefined || restoring}
+                      disabled={
+                        activeRequestId !== undefined || restoring || sessionMutationPending
+                      }
                     />
                     <div className={styles.messageActions}>
                       <Button
@@ -494,6 +561,7 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
                         disabled={
                           activeRequestId !== undefined ||
                           restoring ||
+                          sessionMutationPending ||
                           sessionSwitchPending ||
                           editingDraft.trim().length === 0
                         }
@@ -505,7 +573,9 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
                         variant="secondary"
                         size="sm"
                         onClick={cancelEditing}
-                        disabled={activeRequestId !== undefined || restoring}
+                        disabled={
+                          activeRequestId !== undefined || restoring || sessionMutationPending
+                        }
                       >
                         {strings.chat.cancelEdit}
                       </Button>
@@ -526,6 +596,7 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
                       disabled={
                         activeRequestId !== undefined ||
                         restoring ||
+                        sessionMutationPending ||
                         sessionSwitchPending ||
                         selectedSessionId === undefined ||
                         editingMessageId !== undefined
@@ -548,6 +619,7 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
                       disabled={
                         activeRequestId !== undefined ||
                         restoring ||
+                        sessionMutationPending ||
                         regeneratingMessageId !== undefined ||
                         selectedSessionId === undefined
                       }
@@ -632,7 +704,7 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
               onCompositionStart={() => setIsComposing(true)}
               onCompositionEnd={() => setIsComposing(false)}
               rows={3}
-              disabled={activeRequestId !== undefined || restoring}
+              disabled={activeRequestId !== undefined || restoring || sessionMutationPending}
             />
             {workspaceFileSearchPending ? (
               <p className={styles.composerHint}>{strings.workspaceFiles.reading}</p>
@@ -667,6 +739,7 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
                   disabled={
                     activeRequestId !== undefined ||
                     restoring ||
+                    sessionMutationPending ||
                     sessionSwitchPending ||
                     draft.trim().length === 0 ||
                     !editorContextCanSend ||

@@ -9,6 +9,8 @@ export interface CheckpointState {
   readonly selectedCheckpointId?: string;
   readonly status: "idle" | "loading" | "restoring" | "restored" | "error";
   readonly message?: string;
+  clear(): void;
+  cancel(): void;
   load(): void;
   select(checkpointId: string): void;
   restoreSelected(): boolean;
@@ -21,9 +23,26 @@ export function createCheckpointStore(
 ): StoreApi<CheckpointState> {
   let listRequestId: string | undefined;
   let restoreRequestId: string | undefined;
+  const cancelRequests = () => {
+    listRequestId = undefined;
+    restoreRequestId = undefined;
+  };
   return createStore<CheckpointState>()((set, get) => ({
     checkpoints: [],
     status: "idle",
+    clear() {
+      cancelRequests();
+      set({
+        checkpoints: [],
+        selectedCheckpointId: undefined,
+        status: "idle",
+        message: undefined,
+      });
+    },
+    cancel() {
+      cancelRequests();
+      set({ status: "idle", message: undefined });
+    },
     load() {
       listRequestId = createRequestId();
       set({ status: "loading", message: undefined });

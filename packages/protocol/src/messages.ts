@@ -498,10 +498,28 @@ export const listSessionsMessageSchema = z.strictObject({
   type: z.literal("webview/list-sessions"),
 });
 
+export const selectSessionMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("webview/select-session"),
+  sessionId: sessionIdSchema.optional(),
+});
+
 export const restoreSessionMessageSchema = z.strictObject({
   ...protocolEnvelopeSchema.shape,
   type: z.literal("webview/restore-session"),
   sessionId: sessionIdSchema,
+});
+
+export const deleteSessionMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("webview/delete-session"),
+  sessionId: sessionIdSchema,
+});
+
+export const clearSessionsMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("webview/clear-sessions"),
+  confirm: z.literal(true),
 });
 
 export const listCheckpointsMessageSchema = z.strictObject({
@@ -700,6 +718,25 @@ export const sessionErrorMessageSchema = z.strictObject({
   message: z.string().min(1).max(256),
 });
 
+export const sessionDeletedMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("extension/session-deleted"),
+  sessionId: sessionIdSchema,
+});
+
+export const sessionsClearedMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("extension/sessions-cleared"),
+  deletedCount: z.number().int().nonnegative().max(10_000),
+});
+
+export const sessionDeletionErrorMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("extension/session-deletion-error"),
+  code: z.enum(["not-found", "partial", "unavailable"]),
+  message: z.string().min(1).max(256),
+});
+
 export const checkpointListMessageSchema = z.strictObject({
   ...protocolEnvelopeSchema.shape,
   type: z.literal("extension/checkpoint-list"),
@@ -753,7 +790,10 @@ export const webviewToExtensionMessageSchema = z.discriminatedUnion("type", [
   showApprovalDiffMessageSchema,
   approvalDecisionMessageSchema,
   listSessionsMessageSchema,
+  selectSessionMessageSchema,
   restoreSessionMessageSchema,
+  deleteSessionMessageSchema,
+  clearSessionsMessageSchema,
   listCheckpointsMessageSchema,
   restoreCheckpointMessageSchema,
 ]);
@@ -776,6 +816,9 @@ export const extensionToWebviewMessageSchema = z.union([
   sessionListMessageSchema,
   sessionRestoredMessageSchema,
   sessionErrorMessageSchema,
+  sessionDeletedMessageSchema,
+  sessionsClearedMessageSchema,
+  sessionDeletionErrorMessageSchema,
   checkpointListMessageSchema,
   checkpointRestoredMessageSchema,
   checkpointErrorMessageSchema,
@@ -845,7 +888,10 @@ export type McpPromptDetachMessage = z.infer<typeof mcpPromptDetachMessageSchema
 export type McpPromptsMessage = z.infer<typeof mcpPromptsMessageSchema>;
 export type McpPromptPreviewMessage = z.infer<typeof mcpPromptPreviewMessageSchema>;
 export type ListSessionsMessage = z.infer<typeof listSessionsMessageSchema>;
+export type SelectSessionMessage = z.infer<typeof selectSessionMessageSchema>;
 export type RestoreSessionMessage = z.infer<typeof restoreSessionMessageSchema>;
+export type DeleteSessionMessage = z.infer<typeof deleteSessionMessageSchema>;
+export type ClearSessionsMessage = z.infer<typeof clearSessionsMessageSchema>;
 export type ListCheckpointsMessage = z.infer<typeof listCheckpointsMessageSchema>;
 export type RestoreCheckpointMessage = z.infer<typeof restoreCheckpointMessageSchema>;
 export type ShowApprovalDiffMessage = z.infer<typeof showApprovalDiffMessageSchema>;
@@ -869,6 +915,9 @@ export type SessionListMessage = z.infer<typeof sessionListMessageSchema>;
 export type RestoredSession = z.infer<typeof restoredSessionSchema>;
 export type SessionRestoredMessage = z.infer<typeof sessionRestoredMessageSchema>;
 export type SessionErrorMessage = z.infer<typeof sessionErrorMessageSchema>;
+export type SessionDeletedMessage = z.infer<typeof sessionDeletedMessageSchema>;
+export type SessionsClearedMessage = z.infer<typeof sessionsClearedMessageSchema>;
+export type SessionDeletionErrorMessage = z.infer<typeof sessionDeletionErrorMessageSchema>;
 export type CheckpointListMessage = z.infer<typeof checkpointListMessageSchema>;
 export type CheckpointRestoredMessage = z.infer<typeof checkpointRestoredMessageSchema>;
 export type CheckpointErrorMessage = z.infer<typeof checkpointErrorMessageSchema>;

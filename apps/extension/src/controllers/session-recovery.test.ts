@@ -1,3 +1,4 @@
+import type { CheckpointStore } from "@ctrl-zebra/core";
 import {
   InconsistentSessionRecordError,
   InMemorySessionRepository,
@@ -117,6 +118,191 @@ describe("Session recovery", () => {
     await expect(actions.list()).rejects.toMatchObject({
       name: "SessionRecoveryError",
       code: "unavailable",
+    });
+  });
+
+  it("deletes a Session and its Checkpoints, and reports partial cleanup for retry", async () => {
+    const repository = new InMemorySessionRepository();
+    await repository.create(manifest("session-delete", "2026-07-19T10:00:00.000Z"));
+    const checkpointDeletes: string[] = [];
+    const checkpointStore: CheckpointStore = {
+      create: async () => {
+        throw new Error("unused");
+      },
+      read: async () => undefined,
+      list: async () => [],
+      deleteForSession: async (sessionId: string) => {
+        checkpointDeletes.push(sessionId);
+        return { deleted: 2, failed: 0 };
+      },
+    };
+    const actions = createSessionRecoveryActions(
+      async () => repository,
+      undefined,
+      async () => checkpointStore,
+    );
+
+    await expect(actions.delete?.("session-delete")).resolves.toBeUndefined();
+    expect(checkpointDeletes).toEqual(["session-delete"]);
+    await expect(repository.get("session-delete")).resolves.toBeUndefined();
+
+    const partialStore: CheckpointStore = {
+      create: async () => {
+        throw new Error("unused");
+      },
+      read: async () => undefined,
+      list: async () => [],
+      deleteForSession: async () => ({ deleted: 0, failed: 1 }),
+    };
+    const partial = createSessionRecoveryActions(
+      async () => repository,
+      undefined,
+      async () => partialStore,
+    );
+    await expect(partial.delete?.("session-delete")).rejects.toMatchObject({ code: "partial" });
+  });
+
+  it("aggregates Checkpoint deletions after a Session repository failure", async () => {
+    const repository: SessionRepository = {
+      async create() {},
+      async get() {
+        return undefined;
+      },
+      async list() {
+        return [];
+      },
+      async update() {},
+      async appendEvent() {},
+      async delete() {
+        throw new Error("Session repository unavailable");
+      },
+    };
+    const checkpointStore: CheckpointStore = {
+      create: async () => {
+        throw new Error("unused");
+      },
+      read: async () => undefined,
+      list: async () => [],
+      deleteForSession: async () => ({ deleted: 2, failed: 0 }),
+    };
+    const actions = createSessionRecoveryActions(
+      async () => repository,
+      undefined,
+      async () => checkpointStore,
+    );
+
+    await expect(actions.delete?.("session-delete")).rejects.toMatchObject({
+      code: "partial",
+      deletedCount: 2,
+    });
+  });
+
+  it("clears all Sessions and Checkpoints after cleanup succeeds", async () => {
+    const repository = new InMemorySessionRepository();
+    await repository.create(manifest("session-clear", "2026-07-19T10:00:00.000Z"));
+    let checkpointsCleared = false;
+    const checkpointStore: CheckpointStore = {
+      create: async () => {
+        throw new Error("unused");
+      },
+      read: async () => undefined,
+      list: async () => [],
+      clear: async () => {
+        checkpointsCleared = true;
+        return { deleted: 3, failed: 0 };
+      },
+    };
+    const actions = createSessionRecoveryActions(
+      async () => repository,
+      undefined,
+      async () => checkpointStore,
+    );
+
+    await expect(actions.clear?.()).resolves.toBe(4);
+    expect(checkpointsCleared).toBe(true);
+    await expect(repository.list()).resolves.toEqual([]);
+  });
+
+  it("propagates a bounded partial Session cleanup report after multiple deletions", async () => {
+    const clearCalls: string[] = [];
+    const repository: SessionRepository = {
+      async create() {},
+      async get() {
+        return undefined;
+      },
+      async list() {
+        return [
+          {
+            sessionId: "session-removed",
+            status: "completed",
+            createdAt: "2026-07-19T10:00:00.000Z",
+          },
+          {
+            sessionId: "session-failed",
+            status: "completed",
+            createdAt: "2026-07-19T09:00:00.000Z",
+          },
+        ];
+      },
+      async update() {},
+      async appendEvent() {},
+      async clear() {
+        clearCalls.push("sessions");
+        return { deleted: 1, failed: 1 };
+      },
+    };
+    const actions = createSessionRecoveryActions(
+      async () => repository,
+      undefined,
+      async () => ({
+        create: async () => {
+          throw new Error("unused");
+        },
+        read: async () => undefined,
+        list: async () => [],
+        clear: async () => ({ deleted: 0, failed: 0 }),
+      }),
+    );
+
+    await expect(actions.clear?.()).rejects.toMatchObject({
+      code: "partial",
+      deletedCount: 1,
+    });
+    expect(clearCalls).toEqual(["sessions"]);
+  });
+
+  it("aggregates Checkpoint deletions after a clear-all Session repository failure", async () => {
+    const repository: SessionRepository = {
+      async create() {},
+      async get() {
+        return undefined;
+      },
+      async list() {
+        return [];
+      },
+      async update() {},
+      async appendEvent() {},
+      async clear() {
+        throw new Error("Session repository unavailable");
+      },
+    };
+    const checkpointStore: CheckpointStore = {
+      create: async () => {
+        throw new Error("unused");
+      },
+      read: async () => undefined,
+      list: async () => [],
+      clear: async () => ({ deleted: 3, failed: 0 }),
+    };
+    const actions = createSessionRecoveryActions(
+      async () => repository,
+      undefined,
+      async () => checkpointStore,
+    );
+
+    await expect(actions.clear?.()).rejects.toMatchObject({
+      code: "partial",
+      deletedCount: 3,
     });
   });
 

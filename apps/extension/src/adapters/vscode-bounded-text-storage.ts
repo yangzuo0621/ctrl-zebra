@@ -112,6 +112,16 @@ export class VscodeBoundedTextStorage {
     }
   }
 
+  async deleteDirectory(path: PersistencePath): Promise<void> {
+    try {
+      await this.#fileSystem.delete(this.#resolve(path), { recursive: true, useTrash: false });
+    } catch (error) {
+      if (!this.#isFileNotFound(error)) {
+        throw error;
+      }
+    }
+  }
+
   async appendText(path: PersistencePath, content: string, maxTotalBytes: number): Promise<void> {
     const existing = (await this.readText(path, maxTotalBytes)) ?? "";
     const combined = `${existing}${content}`;

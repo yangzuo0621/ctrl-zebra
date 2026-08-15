@@ -3,6 +3,7 @@ import {
   getCheckpointPersistencePaths,
   InvalidCheckpointIntegrityError,
   parseCheckpoint,
+  sessionIdSchema,
 } from "@ctrl-zebra/protocol";
 
 import type { PersistencePath } from "./manifest-store.js";
@@ -25,6 +26,15 @@ export interface CheckpointStore {
   create(checkpoint: unknown, signal: AbortSignal): Promise<Checkpoint>;
   read(checkpointId: unknown, signal: AbortSignal): Promise<Checkpoint | undefined>;
   list(signal: AbortSignal): Promise<readonly Checkpoint[]>;
+  /** Removes Checkpoints safely attributable to one Session. */
+  deleteForSession?(sessionId: unknown, signal: AbortSignal): Promise<CheckpointDeletionReport>;
+  /** Removes every committed and temporary Checkpoint file. */
+  clear?(signal: AbortSignal): Promise<CheckpointDeletionReport>;
+}
+
+export interface CheckpointDeletionReport {
+  readonly deleted: number;
+  readonly failed: number;
 }
 
 export type InvalidCheckpointReason = "invalid-schema" | "integrity" | "too-large" | "id-mismatch";
@@ -122,6 +132,85 @@ export class AtomicCheckpointStore implements CheckpointStore {
     );
   }
 
+  async deleteForSession(
+    sessionId: unknown,
+    signal: AbortSignal,
+  ): Promise<CheckpointDeletionReport> {
+    const parsedSessionId = sessionIdSchema.parse(sessionId);
+    signal.throwIfAborted();
+    const directory = getCheckpointPersistencePaths("index").directory;
+    const names = await this.#storage.listFiles(directory, maxCheckpointRecords);
+    let deleted = 0;
+    let failed = 0;
+    for (const name of names) {
+      signal.throwIfAborted();
+      if (!name.endsWith(".json") && !name.endsWith(".json.tmp")) {
+        continue;
+      }
+      const path = [...directory, name] as PersistencePath;
+      let content: string | undefined;
+      try {
+        content = await this.#storage.readText(path, maxCheckpointRecordBytes);
+        signal.throwIfAborted();
+      } catch {
+        signal.throwIfAborted();
+        failed += 1;
+        continue;
+      }
+      if (content === undefined) {
+        continue;
+      }
+      const owner = this.#readCheckpointOwner(content);
+      if (owner === undefined) {
+        failed += 1;
+        continue;
+      }
+      if (owner !== parsedSessionId) {
+        continue;
+      }
+      try {
+        await this.#storage.deleteFile(path);
+        signal.throwIfAborted();
+        deleted += 1;
+        if (name.endsWith(".json")) {
+          const temporaryPath = [...directory, `${name}.tmp`] as PersistencePath;
+          if (await this.#storage.exists(temporaryPath)) {
+            await this.#storage.deleteFile(temporaryPath);
+            signal.throwIfAborted();
+            deleted += 1;
+          }
+        }
+      } catch {
+        signal.throwIfAborted();
+        failed += 1;
+      }
+    }
+    return { deleted, failed };
+  }
+
+  async clear(signal: AbortSignal): Promise<CheckpointDeletionReport> {
+    signal.throwIfAborted();
+    const directory = getCheckpointPersistencePaths("index").directory;
+    const names = await this.#storage.listFiles(directory, maxCheckpointRecords);
+    let deleted = 0;
+    let failed = 0;
+    for (const name of names) {
+      signal.throwIfAborted();
+      if (!name.endsWith(".json") && !name.endsWith(".json.tmp")) {
+        continue;
+      }
+      try {
+        await this.#storage.deleteFile([...directory, name] as PersistencePath);
+        signal.throwIfAborted();
+        deleted += 1;
+      } catch {
+        signal.throwIfAborted();
+        failed += 1;
+      }
+    }
+    return { deleted, failed };
+  }
+
   #parse(value: unknown): Checkpoint {
     try {
       return parseCheckpoint(value, this.#hashText);
@@ -140,6 +229,14 @@ export class AtomicCheckpointStore implements CheckpointStore {
       throw new InvalidCheckpointError("invalid-schema");
     }
     return this.#parse(value);
+  }
+
+  #readCheckpointOwner(content: string): string | undefined {
+    try {
+      return this.#parseJson(content).sessionId;
+    } catch {
+      return undefined;
+    }
   }
 
   async #deleteTemporaryFile(path: PersistencePath): Promise<void> {

@@ -85,6 +85,7 @@ export {
   InvalidApprovalStatusTransitionError,
 } from "./approval-state-machine.js";
 export type {
+  CheckpointDeletionReport,
   CheckpointStorage,
   CheckpointStore,
   InvalidCheckpointReason,
@@ -242,6 +243,7 @@ export {
 } from "./provider-retry-policy.js";
 export type {
   SessionCatalog,
+  SessionDeletionReport,
   SessionMetadataPatch,
   SessionRecord,
   SessionRepository,
@@ -251,6 +253,7 @@ export {
   InconsistentSessionRecordError,
   InMemorySessionRepository,
   PersistedSessionRepository,
+  SessionDeletionUnavailableError,
   SessionNotFoundError,
 } from "./session-repository.js";
 export type { SessionStatusChangedEvent } from "./session-state-machine.js";
