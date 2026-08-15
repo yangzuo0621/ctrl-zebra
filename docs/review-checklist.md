@@ -1,83 +1,92 @@
 # Implementation Review Checklist
 
-This checklist supports implementation review by the primary agent and review subagents. It verifies
-the rules in [`AGENTS.md`](../AGENTS.md) and the operational criteria in
-[`Development Guidelines`](development.md#reuse-before-build); it does not redefine their authority.
-Any agent reviewing the implementation reads only the task-relevant documents and changes required by
-the progressive-loading rules.
+This is a compact review gate. Detailed semantics remain authoritative in
+[Reuse Before Build](development.md#reuse-before-build) and
+[Build vs Buy](development.md#build-vs-buy); repository ownership and security rules remain in
+[AGENTS.md](../AGENTS.md). Execution evidence belongs in the handoff, conversation, or PR, not in
+`docs/implementation-plan.md`.
 
-Task execution evidence referenced below is transient conversation, handoff, or PR evidence;
-`docs/implementation-plan.md` remains an index and must not be treated as an execution evidence log.
+## 1. Scope
 
-## 1. Scope and Evidence
+- [ ] The change is within the authorized roadmap task or standalone maintenance scope.
+- [ ] Acceptance criteria, planned files, exclusions, public-contract impact, and changed areas match
+      the actual diff; no opportunistic work or dependency was added.
+- [ ] The compact Review Handoff names the task, PR, exact revision, contracts, consulted docs,
+      verification, reuse tier/candidates/conclusion, and caveats.
+- [ ] Base context was the Review Handoff, exact current PR diff/revision, and acceptance criteria.
+      Extra documents were opened only for a touched contract, material handoff claim, concrete
+      concern, or similarity escalation, and are listed in the review report.
 
-- [ ] The change belongs to the authorized roadmap task or standalone maintenance scope.
-- [ ] Planned files, exclusions, public-contract impact, and verification match the implementation.
-- [ ] The compact Review Handoff satisfies the Task-Executor contract.
-- [ ] The Reviewer starts from the Review Handoff, current PR diff, and acceptance criteria. Additional
-      documents are opened only for a touched contract, independent verification of a material handoff
-      claim, or a concrete concern; only those additional documents are reported.
-- [ ] Required transient task execution, handoff, or PR evidence is present and updated when
-      implementation findings changed the design.
-- [ ] Non-blocking discoveries are recorded instead of being implemented opportunistically.
+## 2. Correctness
 
-## 2. Reuse Before Build
+- [ ] Acceptance criteria are satisfied on the reviewed revision.
+- [ ] Normal behavior, edge cases, expected failures, regressions, cancellation, and stale or
+      repeated operations are handled consistently with the owning contracts.
+- [ ] Public DTOs/Schemas, persisted fields, commands, Tool contracts, and stable errors remain
+      compatible unless an authorized change-control decision explicitly permits otherwise.
+- [ ] Scope does not hide an unresolved design, architecture, or security change.
 
-- [ ] The selected audit tier is justified: `TARGETED` by default; `FULL` only for a trigger in
-      `docs/development.md`; `ESCALATED FULL` only when the Reviewer records one of its escalation
-      conditions.
-- [ ] The implementer's search covered the relevant concepts, public entry points, owning and adjacent
-      modules, tests/test support, and applicable architecture or domain documents.
-- [ ] Existing candidates and non-reuse reasons are recorded and consistent with the implementation.
-- [ ] Reviewer verification matches the tier semantics in `docs/development.md`; only `ESCALATED FULL`
-      repeats the repository-wide inventory and records material differences.
-- [ ] The implementation identifies the existing functions, modules, Schemas, Fakes, or mechanisms it
-      calls directly or deepens; reuse is visible in the code rather than deferred as reviewer cleanup.
-- [ ] A second implementation includes a direct-reuse or module-deepening assessment. A third equivalent
-      implementation has demonstrated distinct ownership or semantics; otherwise it blocks approval.
-- [ ] The change does not duplicate security, budget, cancellation, ordering, stale-fencing, serialization,
-      or stable-error rules merely to produce a different caller-facing error.
-- [ ] Any extracted module has a clear owner and a smaller interface than the complexity it hides; it is
-      not a repository-wide utilities collection or a pass-through layer.
-- [ ] Superseded implementations and implementation-specific tests are removed once equivalent behavioral
-      coverage exists; the change does not leave both paths active or add a pass-through layer.
-- [ ] Different caller-facing errors use a narrow error-translation boundary rather than repeated
-      operation-specific forwarding wrappers, unless each retained wrapper has documented additional
-      host integration, validation, composition, or policy semantics.
-- [ ] The completion report includes a tier-appropriate Similarity Audit based on the actual implementation.
+## 3. Architecture & Security
 
-## 3. Build vs Buy
+- [ ] Dependency direction, public entry points, host/vendor isolation, lifecycle ownership, and
+      package/module boundaries remain compliant.
+- [ ] Untrusted input is validated before dispatch, persistence, or execution; workspace containment,
+      bounded I/O/results, exact single-use approvals, direct command spawning, trust/cwd checks,
+      SecretStorage, cancellation, and cleanup rules are preserved where touched.
+- [ ] Core state/session ownership, MCP ownership, checkpoint/restore safety, and protocol boundaries
+      are not bypassed.
+- [ ] No secret, authorization data, unbounded value, SDK failure/type, or host detail crosses an
+      unowned boundary.
 
-- [ ] The reviewer identified whether the change implements a parser, tokenizer, regular-expression
-      engine, diff or patch algorithm, serializer, retry/backoff mechanism, queue, mutex,
-      concurrency primitive, encoding algorithm, protocol primitive, or similar general-purpose
-      mechanism.
-- [ ] The reviewer checked the additional triggers: roughly 100 lines of general-purpose logic,
-      implementation in two or more places, or substantial algorithm-specific boundary tests.
-- [ ] When a trigger applies, transient task execution, handoff, or PR evidence records an evaluation of
-      the standard library or VS Code API, existing dependencies, official SDKs, maintained third-party
-      libraries, and self-implementation in the order required by `docs/development.md`.
-- [ ] The chosen option has concrete evidence covering maintenance status, license, runtime and
-      toolchain compatibility, packaging or VSIX impact, cancellation behavior, security behavior,
-      and the amount of project-owned adapter code still required.
-- [ ] Self-implementation is justified by product semantics, boundary requirements, inadequate
-      candidates, or lower total maintenance cost rather than a preference for zero dependencies.
-- [ ] A new dependency materially removes algorithmic, compatibility, or security maintenance; it
-      does not merely replace small, stable utility logic.
-- [ ] Third-party mechanisms remain behind CtrlZebra-owned interfaces, and third-party types,
-      failures, defaults, lifecycle decisions, and unbounded values do not cross public boundaries.
-- [ ] CtrlZebra still owns product policy, authorization, lifecycle, state transitions, budgets,
-      cancellation semantics, persistence compatibility, security gates, and stable errors.
-- [ ] Repeated infrastructure has one justified owner or an explicit follow-up disposition.
+## 4. Tests & Verification
 
-## 4. Review Outcomes
+- [ ] Verification covers the normal path, an important boundary, and an expected failure; defects
+      include a regression test where practical.
+- [ ] Affected package checks, required repository checks, and smoke tests are run and reported.
+- [ ] Unrun checks, environment limitations, and remaining caveats are explicit; no check is inferred.
+- [ ] `git diff --check` and final scope/status checks are clean.
 
-- Missing tier-appropriate reuse or Build vs Buy evidence in the transient execution, handoff, or PR
-  record is an actionable review finding; reviewers do not infer a justification from the implementation.
-  Reviewers use the `ESCALATED FULL` conditions in `docs/development.md`.
-- A better library discovered during review does not authorize unrelated adoption. The reviewer
-  reports the candidate, expected benefit, and best task or maintenance scope.
-- Review agents do not add, remove, or upgrade dependencies while performing a read-only review.
-- Approval of the mechanism does not approve a product-scope, module-boundary, public-contract,
-  persisted-format, security-model, or technical-baseline change; those changes still follow the
-  change-control process in `AGENTS.md`.
+## 5. Reuse
+
+- [ ] The tier is justified: `TARGETED` by default; `FULL` only for an existing Executor trigger;
+      `ESCALATED FULL` only for a documented Reviewer escalation.
+- [ ] Search focus, relevant candidates/owners, reuse or non-reuse decision, and actual symbols
+      reused/deepened are recorded; the tier-appropriate completion audit is present.
+- [ ] A second implementation has an explicit direct-reuse/module-deepening assessment; a third
+      equivalent implementation has distinct ownership or semantics. Superseded paths and tests are
+      removed when replacement coverage is equivalent.
+- [ ] Review verification matches the selected tier; repository-wide inventory is repeated only for
+      `ESCALATED FULL` and its reason/differences are recorded.
+
+## 6. Build vs Buy
+
+- [ ] The reviewer identifies whether a documented general-purpose trigger applies.
+- [ ] If a trigger applies, evidence evaluates options in the owner-defined order and records
+      maintenance, license, compatibility, packaging, cancellation, security, adapter, and rationale
+      impacts; the selected mechanism remains behind CtrlZebra-owned interfaces.
+- [ ] If no trigger applies, task evidence states exactly: `Build-vs-Buy: N/A — no trigger.`
+- [ ] A review recommendation does not authorize unrelated dependency adoption or scope expansion.
+
+## 7. Code Quality
+
+- [ ] The change is understandable, proportionate, and cohesive, with no material duplication,
+      unnecessary abstraction, deep nesting, excessive coupling, SRP violation, or maintenance debt.
+- [ ] Errors, resources, timers, listeners, streams, processes, and promises have explicit ownership
+      and cleanup where relevant.
+- [ ] Non-blocking discoveries are recorded for a future task; the read-only Reviewer does not edit
+      code, plans, PR state, or task status.
+
+## 8. Decision
+
+### Review Decision: APPROVED | REJECTED
+
+`APPROVED` applies only to the exact reviewed revision. Any implementation change invalidates the
+approval and requires re-review. `REJECTED` must consolidate all blocking findings.
+
+### Blocking Findings
+
+- issue, evidence, and required fix; use `none` for an approval.
+
+### Non-Blocking Suggestions
+
+- optional improvement; use `none` when empty.
