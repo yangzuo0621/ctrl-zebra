@@ -28,6 +28,18 @@ new-Session behavior.
   approval. The old answer remains visible until a replacement emits an accepted event and reaches
   `completed`; cancellation, failure, truncation, rapid duplicate intents, and late events leave it
   unchanged. Every accepted request receives a fresh Run identity and cancellation gate.
+- `webview/edit-message` is the strict object `{ protocolVersion, type: "webview/edit-message",
+  requestId, sessionId, messageId, content }`. `sessionId` must be the selected, idle/restored
+  Session, `messageId` must identify a completed user projection, and `content` uses the existing
+  non-empty, one-million-character bound. The Host validates the exact target and appends the new
+  user event plus additive `session.edit` relation before allocating a fresh Run. The model input
+  contains only the validated prefix before the target and the edited content; later old-branch
+  messages, Tool Call/Result pairs, attachments, Provider requests, and approvals are not replayed.
+  The Webview keeps the old branch visible until accepted replacement output completes; cancellation,
+  failure, truncation, duplicate intent, Session mismatch, and late events restore or retain the old
+  branch. The original target identity remains valid for retry and successive edits; the latest
+  completed relation projects, while an incomplete latest attempt falls back to the prior completed
+  branch. The relation stores IDs only and cannot rewrite source events.
 - `extension/session-started` is a strict Host-to-Webview event containing `{ protocolVersion,
   type: "extension/session-started", requestId, sessionId }`. The Host emits it once, after the
   requested Session has been validated or a new Session has been allocated and the Run has produced

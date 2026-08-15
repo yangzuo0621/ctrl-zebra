@@ -6,6 +6,7 @@ import {
   type SessionRepository,
   ToolRegistry,
 } from "@ctrl-zebra/core";
+import { userMessageSchema } from "@ctrl-zebra/protocol";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -695,6 +696,110 @@ describe("createChatRunner", () => {
     expect(
       regenerated?.events.filter(({ event }) => event.type === "agent.tool-state"),
     ).toHaveLength(3);
+  });
+
+  it("edits a historical user message from its prefix without replaying the old suffix or Tools", async () => {
+    const repository = new InMemorySessionRepository();
+    const requests: ModelRequest[] = [];
+    let invocation = 0;
+    const runner = createChatRunner({
+      modelGateway: {
+        async *stream(request) {
+          requests.push(request);
+          invocation += 1;
+          if (invocation === 2) {
+            yield {
+              type: "tool.call",
+              call: { id: "call-edit", name: "list_files", input: {} },
+            } as const;
+            yield { type: "finish", reason: "tool-calls" } as const;
+            return;
+          }
+          yield {
+            type: "text.delta",
+            text:
+              invocation === 1
+                ? "First answer"
+                : invocation === 3
+                  ? "Second answer"
+                  : invocation === 4
+                    ? "Third answer"
+                    : invocation === 5
+                      ? "Edited answer"
+                      : "Edited again answer",
+          } as const;
+          yield { type: "finish", reason: "stop" } as const;
+        },
+      },
+      toolRegistry: (() => {
+        const registry = new ToolRegistry();
+        registry.register({
+          name: "list_files",
+          description: "List files.",
+          inputSchema: {
+            type: "object",
+            properties: {},
+            required: [],
+            additionalProperties: false,
+          },
+          risk: "read",
+          parseInput: () => null,
+          execute: async () => ({ output: { files: ["README.md"] }, truncated: false }),
+        });
+        return registry;
+      })(),
+      createId: (() => {
+        const ids = [
+          "session-edit",
+          "message-first",
+          "message-second",
+          "message-third",
+          "message-edited",
+          "message-edited-again",
+        ];
+        return () => ids.shift() ?? "unexpected-id";
+      })(),
+      now: () => new Date("2026-08-12T00:00:00.000Z"),
+      sessionRepository: repository,
+    });
+
+    await runner.run("First", new AbortController().signal, () => {});
+    await runner.run("Second", new AbortController().signal, () => {}, [], [], "session-edit");
+    await runner.run("Third", new AbortController().signal, () => {}, [], [], "session-edit");
+    await runner.edit?.(
+      "session-edit",
+      "message-second",
+      "Edited",
+      new AbortController().signal,
+      () => {},
+    );
+    await runner.edit?.(
+      "session-edit",
+      "request-1:user",
+      "Edited again",
+      new AbortController().signal,
+      () => {},
+    );
+
+    expect(requests[4]?.messages).toEqual([
+      { role: "user", content: "First" },
+      { role: "assistant", content: "First answer" },
+      { role: "user", content: "Edited" },
+    ]);
+    expect(requests[5]?.messages).toEqual([
+      { role: "user", content: "First" },
+      { role: "assistant", content: "First answer" },
+      { role: "user", content: "Edited again" },
+    ]);
+    const edited = await repository.get("session-edit");
+    expect(edited?.events.some(({ event }) => event.type === "session.edit")).toBe(true);
+    expect(
+      edited?.events
+        .filter(({ event }) => event.type === "session.user-message")
+        .map(({ event }) => userMessageSchema.parse(event.data).content),
+    ).toEqual(["First", "Second", "Third", "Edited", "Edited again"]);
+    expect(edited?.events.filter(({ event }) => event.type === "session.edit")).toHaveLength(2);
+    expect(edited?.events.filter(({ event }) => event.type === "agent.tool-state")).toHaveLength(3);
   });
 
   it("does not append or start the gateway when continuation loading is cancelled", async () => {

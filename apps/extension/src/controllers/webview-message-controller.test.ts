@@ -16,6 +16,73 @@ const idleChatRunner = {
 };
 
 describe("bindWebviewMessageController", () => {
+  it("routes a target-bound edit through the owned Session", async () => {
+    let messageListener: ((message: unknown) => void) | undefined;
+    let editArguments: unknown[] | undefined;
+    const postedMessages: unknown[] = [];
+    bindWebviewMessageController({
+      channel: {
+        onDidReceiveMessage(listener) {
+          messageListener = listener;
+          return { dispose() {} };
+        },
+        postMessage(message) {
+          postedMessages.push(message);
+          return Promise.resolve(true);
+        },
+      },
+      lifetime: { onDidDispose: () => ({ dispose() {} }) },
+      chatRunner: {
+        async run(_content, _signal, emit) {
+          emit({
+            type: "session.status-changed",
+            sessionId: "session-1",
+            previousStatus: "preparing",
+            status: "streaming",
+          });
+        },
+        async edit(...args) {
+          editArguments = args;
+        },
+      },
+      reportRunFailure: () => {},
+    });
+
+    messageListener?.({
+      protocolVersion,
+      type: "webview/submit",
+      requestId: "request-1",
+      content: "Original",
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    messageListener?.({
+      protocolVersion,
+      type: "webview/edit-message",
+      requestId: "request-edit",
+      sessionId: "session-1",
+      messageId: "message-1",
+      content: "Edited",
+    });
+    await Promise.resolve();
+
+    expect(editArguments).toEqual([
+      "session-1",
+      "message-1",
+      "Edited",
+      expect.any(AbortSignal),
+      expect.any(Function),
+    ]);
+    expect(postedMessages).toContainEqual({
+      protocolVersion,
+      type: "extension/run-status",
+      requestId: "request-edit",
+      status: "preparing",
+    });
+  });
+
   it("does not report or publish refresh cancellation, but reports unexpected failures", async () => {
     let messageListener: ((message: unknown) => void) | undefined;
     const postedMessages: unknown[] = [];

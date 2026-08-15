@@ -108,6 +108,25 @@ written and how they rebuild repository state.
   and omits partial replacement output. A malformed or orphaned relation makes the Session corrupt
   rather than guessed.
 
+### Historical edit projection (T2102)
+
+- An edit appends a fresh `session.user-message` with the replacement content and a strict additive
+  `session.edit` relation `{ targetMessageId, replacementUserMessageId }`. The relation contains
+  identifiers only; it never stores the edited content, Tool data, Provider request, or approval.
+  Existing user, assistant, Tool, and status events remain immutable in the version `1` log.
+- Before allocating the new Run, the Host validates that the target is an exact selected user
+  projection with a completed text-bearing Run. The model input is the validated history prefix
+  before that target plus the new edited user content. The target's old Run and all later old-branch
+  messages, Tool pairs, attachments, Provider requests, and approvals are excluded; no old Tool is
+  executed as part of editing.
+- Recovery and later history projection apply a completed relation as a branch projection: the
+  target user content is overlaid by the replacement, the replacement Run is retained, and the old
+  target output and suffix are hidden while remaining durable in the source log. The stable
+  original target identity permits ordered successive edits; the latest completed relation wins,
+  while an incomplete, cancelled, failed, or truncated latest replacement falls back to the prior
+  completed projection. Duplicate replacement users, orphaned, out-of-order, cross-Session,
+  non-completed-target, or malformed relations make the Session corrupt rather than guessed.
+
 ## IDE context and read-only Tool persistence (T1901)
 
 IDE observations are ephemeral by default and do not change the version `1` directory layout,

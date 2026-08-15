@@ -67,6 +67,7 @@ interface ChatState {
   readonly status: "idle" | "interrupted" | RunStatus;
   readonly activeRequestId?: string;
   readonly regeneratingMessageId?: string;
+  readonly editingMessageId?: string;
   readonly sessions: readonly SessionSummary[];
   readonly selectedSessionId?: string;
   readonly sessionSelectionId?: string;
@@ -79,6 +80,7 @@ interface ChatState {
   readonly usage?: DisplayTokenUsage;
   submit(content: string): boolean;
   regenerate(messageId: string): boolean;
+  editMessage(messageId: string, content: string): boolean;
   cancel(): void;
   newChat(): boolean;
   loadSessions(): void;
@@ -155,6 +157,10 @@ export function createChatStore({
     | { readonly messageId: string; readonly message: DisplayMessage }
     | undefined;
   let regenerationProjectionStarted = false;
+  let editBackup: readonly DisplayMessage[] | undefined;
+  let editProjectionStarted = false;
+  let editTargetMessageId: string | undefined;
+  let editContent: string | undefined;
   let openReasoningBlockId: string | undefined;
   let reasoningRunCodePoints = 0;
   let reasoningRunUtf8Bytes = 0;
@@ -223,6 +229,62 @@ export function createChatStore({
       }));
       regenerationBackup = undefined;
       regenerationProjectionStarted = false;
+    };
+
+    const beginEditProjection = () => {
+      if (editBackup === undefined || editProjectionStarted || editTargetMessageId === undefined) {
+        return;
+      }
+      const targetIndex = get().messages.findIndex((message) => message.id === editTargetMessageId);
+      const target = get().messages[targetIndex];
+      if (targetIndex < 0 || target === undefined || editContent === undefined) {
+        return;
+      }
+      const replacementContent = editContent;
+      editProjectionStarted = true;
+      cancelFlush();
+      pendingTextDelta = "";
+      resetLiveReasoning();
+      const assistantMessageId = `${get().activeRequestId ?? "edit"}:assistant`;
+      activeAssistantMessageId = assistantMessageId;
+      set((state) => ({
+        messages: [
+          ...state.messages.slice(0, targetIndex),
+          {
+            ...target,
+            content: replacementContent,
+            toolCalls: [],
+            reasoningBlocks: [],
+            reasoningRunTruncated: false,
+          },
+          {
+            id: assistantMessageId,
+            role: "assistant",
+            content: "",
+            toolCalls: [],
+            reasoningBlocks: [],
+            reasoningRunTruncated: false,
+          },
+        ],
+      }));
+    };
+
+    const restoreEditProjection = () => {
+      if (editBackup === undefined) {
+        return;
+      }
+      cancelFlush();
+      pendingTextDelta = "";
+      resetLiveReasoning();
+      activeAssistantMessageId = undefined;
+      set({
+        messages: editBackup,
+        editingMessageId: undefined,
+      });
+      editBackup = undefined;
+      editProjectionStarted = false;
+      editTargetMessageId = undefined;
+      editContent = undefined;
     };
 
     const reasoningSnapshots = (): readonly DisplayReasoningBlock[] =>
@@ -432,6 +494,7 @@ export function createChatStore({
       messages: [],
       status: "idle",
       regeneratingMessageId: undefined,
+      editingMessageId: undefined,
       usage: undefined,
       sessions: [],
       sessionSwitchPending: false,
@@ -529,6 +592,52 @@ export function createChatStore({
         host.regenerate(requestId, state.selectedSessionId, messageId);
         return true;
       },
+      editMessage(messageId, content) {
+        const state = get();
+        if (
+          state.activeRequestId !== undefined ||
+          restoreRequestId !== undefined ||
+          state.sessionSwitchPending ||
+          state.selectedSessionId === undefined ||
+          content.trim().length === 0 ||
+          content.length > 1_000_000 ||
+          host.editMessage === undefined
+        ) {
+          return false;
+        }
+        const targetIndex = state.messages.findIndex((message) => message.id === messageId);
+        const target = state.messages[targetIndex];
+        const targetAssistant = state.messages[targetIndex + 1];
+        if (
+          target === undefined ||
+          target.role !== "user" ||
+          targetAssistant?.role !== "assistant" ||
+          targetAssistant.content.length === 0
+        ) {
+          return false;
+        }
+
+        cancelFlush();
+        pendingTextDelta = "";
+        stagedReasoningRestore = undefined;
+        resetLiveReasoning();
+        const requestId = createRequestId();
+        editBackup = state.messages;
+        editProjectionStarted = false;
+        editTargetMessageId = messageId;
+        editContent = content;
+        activeAssistantMessageId = undefined;
+        set({
+          status: "preparing",
+          activeRequestId: requestId,
+          editingMessageId: messageId,
+          runError: undefined,
+          reasoningAnnouncement: "",
+          sessionAnnouncement: strings.chat.editingStarted,
+        });
+        host.editMessage(requestId, state.selectedSessionId, messageId, content);
+        return true;
+      },
       cancel() {
         const { activeRequestId } = get();
         if (activeRequestId !== undefined) {
@@ -557,6 +666,10 @@ export function createChatStore({
         activeAssistantMessageId = undefined;
         regenerationBackup = undefined;
         regenerationProjectionStarted = false;
+        editBackup = undefined;
+        editProjectionStarted = false;
+        editTargetMessageId = undefined;
+        editContent = undefined;
         resetLiveReasoning();
         usageOverflowed = false;
         const requestId = createRequestId();
@@ -564,6 +677,7 @@ export function createChatStore({
           messages: [],
           status: "idle",
           regeneratingMessageId: undefined,
+          editingMessageId: undefined,
           activeRequestId: undefined,
           selectedSessionId: undefined,
           sessionSelectionId: undefined,
@@ -593,6 +707,10 @@ export function createChatStore({
         stagedReasoningRestore = undefined;
         regenerationBackup = undefined;
         regenerationProjectionStarted = false;
+        editBackup = undefined;
+        editProjectionStarted = false;
+        editTargetMessageId = undefined;
+        editContent = undefined;
         const sessionSelectionId = sessionId.length === 0 ? undefined : sessionId;
         set({
           sessionSelectionId,
@@ -749,6 +867,7 @@ export function createChatStore({
               message.session.status === "truncated" ? strings.chat.truncatedFollowUp : undefined,
             sessionAnnouncement: strings.chat.sessionRestored,
             regeneratingMessageId: undefined,
+            editingMessageId: undefined,
           });
           return;
         }
@@ -788,6 +907,9 @@ export function createChatStore({
               message.status === "failed")
           ) {
             mismatchedSessionRequests.delete(message.requestId);
+            if (message.status !== "completed" && editBackup !== undefined) {
+              restoreEditProjection();
+            }
             applyPendingStreams(message.status);
             set({
               sessionError: strings.chat.responseDifferentSession,
@@ -800,6 +922,7 @@ export function createChatStore({
         if (message.type === "extension/text-delta") {
           if (state.status === "preparing" || state.status === "streaming") {
             beginRegenerationProjection();
+            beginEditProjection();
             queueTextDelta(message.text);
           }
           return;
@@ -822,6 +945,7 @@ export function createChatStore({
             return;
           }
           beginRegenerationProjection();
+          beginEditProjection();
           if (liveReasoningBlocks.size >= maxReasoningBlocksPerRun) {
             reasoningBlockCountLimited = true;
             reasoningRunTruncated = true;
@@ -901,6 +1025,7 @@ export function createChatStore({
         if (message.type === "extension/tool-state") {
           if (state.status === "preparing" || state.status === "streaming") {
             beginRegenerationProjection();
+            beginEditProjection();
             applyToolState(message);
           }
           return;
@@ -921,6 +1046,9 @@ export function createChatStore({
             if (message.status !== "completed" && regenerationBackup !== undefined) {
               restoreRegenerationProjection();
             }
+            if (message.status !== "completed" && editBackup !== undefined) {
+              restoreEditProjection();
+            }
             const openBlock =
               openReasoningBlockId === undefined
                 ? undefined
@@ -939,6 +1067,11 @@ export function createChatStore({
               regenerationBackup = undefined;
               regenerationProjectionStarted = false;
               set({ regeneratingMessageId: undefined });
+              editBackup = undefined;
+              editProjectionStarted = false;
+              editTargetMessageId = undefined;
+              editContent = undefined;
+              set({ editingMessageId: undefined });
             }
             if (message.status === "truncated") {
               set({
@@ -962,7 +1095,12 @@ export function createChatStore({
         activeAssistantMessageId = undefined;
         regenerationBackup = undefined;
         regenerationProjectionStarted = false;
+        editBackup = undefined;
+        editProjectionStarted = false;
+        editTargetMessageId = undefined;
+        editContent = undefined;
         set({ regeneratingMessageId: undefined });
+        set({ editingMessageId: undefined });
         resetLiveReasoning();
       },
     };

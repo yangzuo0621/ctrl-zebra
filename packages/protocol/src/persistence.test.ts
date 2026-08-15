@@ -115,6 +115,23 @@ describe("persistence format", () => {
     ).toBe(false);
   });
 
+  it("strictly validates edit relations without storing replacement text", () => {
+    const relation = {
+      type: "session.edit",
+      data: {
+        targetMessageId: "message-1",
+        replacementUserMessageId: "message-2",
+      },
+    } as const;
+    expect(persistedEventPayloadSchema.parse(relation)).toEqual(relation);
+    expect(
+      persistedEventPayloadSchema.safeParse({
+        ...relation,
+        data: { ...relation.data, content: "not persisted" },
+      }).success,
+    ).toBe(false);
+  });
+
   it("parses the current manifest and JSONL record structures", () => {
     expect(sessionManifestSchema.parse(manifest)).toEqual(manifest);
     expect(

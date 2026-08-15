@@ -226,6 +226,101 @@ describe("Session recovery", () => {
     });
   });
 
+  it("restores a completed edit as the edited branch and removes the old suffix", async () => {
+    const repository = new InMemorySessionRepository();
+    await repository.create(manifest("session-edit", "2026-07-19T10:00:00.000Z"));
+    const events = [
+      {
+        type: "session.user-message",
+        data: {
+          messageId: "message-1",
+          sessionId: "session-edit",
+          createdAt: "2026-07-19T10:00:00.000Z",
+          role: "user",
+          content: "Original question",
+        },
+      },
+      { type: "session.status-changed", data: { previousStatus: "idle", status: "preparing" } },
+      {
+        type: "session.status-changed",
+        data: { previousStatus: "preparing", status: "streaming" },
+      },
+      { type: "agent.text-delta", data: { text: "Original answer" } },
+      {
+        type: "session.status-changed",
+        data: { previousStatus: "streaming", status: "completed" },
+      },
+      {
+        type: "session.user-message",
+        data: {
+          messageId: "message-2",
+          sessionId: "session-edit",
+          createdAt: "2026-07-19T10:00:01.000Z",
+          role: "user",
+          content: "Later question",
+        },
+      },
+      {
+        type: "session.status-changed",
+        data: { previousStatus: "completed", status: "preparing" },
+      },
+      {
+        type: "session.status-changed",
+        data: { previousStatus: "preparing", status: "streaming" },
+      },
+      { type: "agent.text-delta", data: { text: "Later answer" } },
+      {
+        type: "session.status-changed",
+        data: { previousStatus: "streaming", status: "completed" },
+      },
+      {
+        type: "session.user-message",
+        data: {
+          messageId: "message-edited",
+          sessionId: "session-edit",
+          createdAt: "2026-07-19T10:00:02.000Z",
+          role: "user",
+          content: "Edited question",
+        },
+      },
+      {
+        type: "session.edit",
+        data: { targetMessageId: "message-1", replacementUserMessageId: "message-edited" },
+      },
+      {
+        type: "session.status-changed",
+        data: { previousStatus: "completed", status: "preparing" },
+      },
+      {
+        type: "session.status-changed",
+        data: { previousStatus: "preparing", status: "streaming" },
+      },
+      { type: "agent.text-delta", data: { text: "Edited answer" } },
+      {
+        type: "session.status-changed",
+        data: { previousStatus: "streaming", status: "completed" },
+      },
+    ] as const;
+    for (const [index, event] of events.entries()) {
+      await repository.appendEvent("session-edit", {
+        sequence: index + 1,
+        recordedAt: `2026-07-19T10:00:${String(index).padStart(2, "0")}.000Z`,
+        event,
+      });
+    }
+
+    await expect(
+      createSessionRecoveryActions(async () => repository).restore("session-edit"),
+    ).resolves.toMatchObject({
+      session: {
+        messages: [
+          { messageId: "message-1", role: "user", content: "Edited question" },
+          { role: "assistant", content: "Edited answer" },
+        ],
+      },
+    });
+  });
+
   it("recovers cumulative and partial Provider Usage without treating it as model history", async () => {
     const repository = new InMemorySessionRepository();
     await repository.create(manifest("session-usage", "2026-08-10T00:00:00.000Z"));

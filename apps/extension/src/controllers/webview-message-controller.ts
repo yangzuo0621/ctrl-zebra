@@ -150,6 +150,11 @@ export function bindWebviewMessageController({
           runMessages.regenerate(data.requestId, data.sessionId, data.messageId);
         }
         return;
+      case "webview/edit-message":
+        if (runMessages.canStart() && !sessionMessages.isRestoring()) {
+          runMessages.edit(data.requestId, data.sessionId, data.messageId, data.content);
+        }
+        return;
       case "webview/new-chat":
         if (runMessages.canStart() && !sessionMessages.isRestoring()) {
           runMessages.clearOwnedSession();

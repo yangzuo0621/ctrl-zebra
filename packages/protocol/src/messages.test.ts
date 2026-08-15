@@ -314,6 +314,32 @@ describe("Webview protocol messages", () => {
     expect(extensionToWebviewMessageSchema.safeParse(regenerate).success).toBe(false);
   });
 
+  it("round-trips a strictly target-bound edit command", () => {
+    const edit = {
+      protocolVersion,
+      type: "webview/edit-message",
+      requestId: "request-edit",
+      sessionId: "session-1",
+      messageId: "message-42",
+      content: "Use the revised question.",
+    } as const;
+
+    expect(
+      webviewToExtensionMessageSchema.parse(JSON.parse(JSON.stringify(edit)) as unknown),
+    ).toEqual(edit);
+    expect(webviewToExtensionMessageSchema.safeParse({ ...edit, content: "   " }).success).toBe(
+      false,
+    );
+    expect(
+      webviewToExtensionMessageSchema.safeParse({ ...edit, content: "x".repeat(1_000_001) })
+        .success,
+    ).toBe(false);
+    expect(webviewToExtensionMessageSchema.safeParse({ ...edit, unexpected: true }).success).toBe(
+      false,
+    );
+    expect(extensionToWebviewMessageSchema.safeParse(edit).success).toBe(false);
+  });
+
   describe("multi-turn Session commands", () => {
     const legacySubmit = {
       protocolVersion,

@@ -7,6 +7,7 @@ import {
 import { describe, expect, it } from "vitest";
 
 import {
+  projectEditContext,
   projectRegenerationContext,
   projectSessionModelHistory,
   SessionHistoryCorruptError,
@@ -334,6 +335,152 @@ describe("projectSessionModelHistory", () => {
       { role: "assistant", content: "Original answer" },
     ]);
   });
+
+  it.each([
+    { target: "message-1", expectedPrefix: [] },
+    {
+      target: "message-2",
+      expectedPrefix: [
+        { role: "user", content: "First" },
+        { role: "assistant", content: "First answer" },
+      ],
+    },
+    {
+      target: "message-3",
+      expectedPrefix: [
+        { role: "user", content: "First" },
+        { role: "assistant", content: "First answer" },
+        { role: "user", content: "Second" },
+        {
+          role: "assistant",
+          toolCall: { id: "call-edit", name: "list_files", input: {} },
+        },
+        {
+          role: "tool",
+          result: {
+            callId: "call-edit",
+            name: "list_files",
+            status: "success",
+            output: { files: [] },
+            truncated: false,
+          },
+        },
+        { role: "assistant", content: "Second answer" },
+      ],
+    },
+  ] as const)("projects an edited $target from its earlier branch", ({
+    target,
+    expectedPrefix,
+  }) => {
+    const session = record(editBranchEvents(target));
+
+    expect(projectSessionModelHistory(session)).toEqual([
+      ...expectedPrefix,
+      { role: "user", content: "Edited question" },
+      { role: "assistant", content: "Edited answer" },
+    ]);
+    const source = record(editBranchEvents(target).slice(0, 20));
+    expect(projectEditContext(source, target).history).toEqual(expectedPrefix);
+    expect(projectEditContext(source, target).targetUserMessageId).toBe(target);
+  });
+
+  it("accepts the latest live user projection alias for editing", () => {
+    const context = projectEditContext(
+      record(editBranchEvents("message-3").slice(0, 20)),
+      "request-1:user",
+    );
+    expect(context.targetUserMessageId).toBe("message-3");
+    expect(context.targetUserMessage.content).toBe("Third");
+  });
+
+  it.each([
+    { replacementStatus: "cancelled" as const, label: "cancelled" },
+    { replacementStatus: "completed" as const, label: "completed" },
+  ])("keeps a live alias bound to its original target after a $label edit", ({
+    replacementStatus,
+  }) => {
+    const context = projectEditContext(
+      record(editBranchEvents("message-2", replacementStatus)),
+      "request-1:user",
+    );
+
+    expect(context.targetUserMessageId).toBe("message-2");
+  });
+
+  it("keeps the original branch when an edit Run is cancelled", () => {
+    const session = record(editBranchEvents("message-2", "cancelled"));
+    expect(projectSessionModelHistory(session)).toEqual([
+      { role: "user", content: "First" },
+      { role: "assistant", content: "First answer" },
+      { role: "user", content: "Second" },
+      {
+        role: "assistant",
+        toolCall: { id: "call-edit", name: "list_files", input: {} },
+      },
+      {
+        role: "tool",
+        result: {
+          callId: "call-edit",
+          name: "list_files",
+          status: "success",
+          output: { files: [] },
+          truncated: false,
+        },
+      },
+      { role: "assistant", content: "Second answer" },
+      { role: "user", content: "Third" },
+      { role: "assistant", content: "Third answer" },
+    ]);
+  });
+
+  it("allows retrying the same target after a cancelled edit", () => {
+    const context = projectEditContext(
+      record(editBranchEvents("message-2", "cancelled")),
+      "message-2",
+    );
+
+    expect(context.history).toEqual([
+      { role: "user", content: "First" },
+      { role: "assistant", content: "First answer" },
+    ]);
+  });
+
+  it("allows successive edits of the same target after a completed edit", () => {
+    const context = projectEditContext(
+      record(editBranchEvents("message-2", "completed")),
+      "message-2",
+    );
+
+    expect(context.history).toEqual([
+      { role: "user", content: "First" },
+      { role: "assistant", content: "First answer" },
+    ]);
+  });
+
+  it.each([
+    { firstStatus: "cancelled" as const, label: "cancelled" },
+    { firstStatus: "completed" as const, label: "completed" },
+  ])("projects the latest replacement after a $label edit", ({ firstStatus }) => {
+    const session = record([
+      ...editBranchEvents("message-2", firstStatus),
+      userEvent("message-edited-again", "Edited again question"),
+      event("session.edit", {
+        targetMessageId: "message-2",
+        replacementUserMessageId: "message-edited-again",
+      }),
+      statusEvent(firstStatus, "preparing"),
+      statusEvent("preparing", "streaming"),
+      textEvent("Edited again answer"),
+      statusEvent("streaming", "completed"),
+    ]);
+
+    expect(projectSessionModelHistory(session)).toEqual([
+      { role: "user", content: "First" },
+      { role: "assistant", content: "First answer" },
+      { role: "user", content: "Edited again question" },
+      { role: "assistant", content: "Edited again answer" },
+    ]);
+  });
 });
 
 function record(
@@ -401,4 +548,49 @@ function toolEvent(
     "agent.tool-state",
     result === undefined ? { status, call } : { status, call, result },
   );
+}
+
+function editBranchEvents(
+  targetMessageId: string,
+  replacementStatus: "completed" | "cancelled" = "completed",
+): PersistedEventRecord[] {
+  const call = { id: "call-edit", name: "list_files", input: {} } as const;
+  const result = {
+    callId: call.id,
+    name: call.name,
+    status: "success",
+    output: { files: [] },
+    truncated: false,
+  } as const;
+  return [
+    userEvent("message-1", "First"),
+    statusEvent("idle", "preparing"),
+    statusEvent("preparing", "streaming"),
+    textEvent("First answer"),
+    statusEvent("streaming", "completed"),
+    userEvent("message-2", "Second"),
+    statusEvent("completed", "preparing"),
+    statusEvent("preparing", "streaming"),
+    toolEvent("pending", call),
+    statusEvent("streaming", "executing_tool"),
+    toolEvent("running", call),
+    toolEvent("success", call, result),
+    statusEvent("executing_tool", "streaming"),
+    textEvent("Second answer"),
+    statusEvent("streaming", "completed"),
+    userEvent("message-3", "Third"),
+    statusEvent("completed", "preparing"),
+    statusEvent("preparing", "streaming"),
+    textEvent("Third answer"),
+    statusEvent("streaming", "completed"),
+    userEvent("message-edited", "Edited question"),
+    event("session.edit", {
+      targetMessageId,
+      replacementUserMessageId: "message-edited",
+    }),
+    statusEvent("completed", "preparing"),
+    statusEvent("preparing", "streaming"),
+    textEvent("Edited answer"),
+    statusEvent("streaming", replacementStatus),
+  ];
 }

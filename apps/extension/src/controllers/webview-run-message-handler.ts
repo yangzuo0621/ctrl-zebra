@@ -107,6 +107,35 @@ export class WebviewRunMessageHandler {
     );
   }
 
+  edit(requestId: string, sessionId: string, targetUserMessageId: string, content: string): void {
+    const edit = this.chatRunner.edit;
+    if (this.#activeRun !== undefined) {
+      return;
+    }
+    if (edit === undefined) {
+      this.#rejectEdit(requestId, new Error("Editing is unavailable."));
+      return;
+    }
+    if (this.#ownedSessionId !== sessionId) {
+      this.#rejectEdit(requestId, new Error("Editing Session ownership changed."));
+      return;
+    }
+
+    const run: ActiveRun = {
+      requestId,
+      abortController: new AbortController(),
+      sessionId,
+      sessionStartedSent: false,
+      eventsClosed: false,
+      terminalSent: false,
+    };
+    this.#launch(run, (signal) =>
+      edit(sessionId, targetUserMessageId, content, signal, (event) =>
+        this.#handleRuntimeEvent(run, event),
+      ),
+    );
+  }
+
   #launch(run: ActiveRun, execute: (signal: AbortSignal) => Promise<void>): void {
     this.#activeRun = run;
     this.#postStatus(run.requestId, "preparing");
@@ -195,6 +224,14 @@ export class WebviewRunMessageHandler {
   }
 
   #rejectRegeneration(requestId: string, error: unknown): void {
+    this.#rejectRunIntent(requestId, error);
+  }
+
+  #rejectEdit(requestId: string, error: unknown): void {
+    this.#rejectRunIntent(requestId, error);
+  }
+
+  #rejectRunIntent(requestId: string, error: unknown): void {
     if (this.#disposed) {
       return;
     }

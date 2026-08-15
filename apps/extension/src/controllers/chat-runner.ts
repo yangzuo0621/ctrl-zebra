@@ -39,6 +39,7 @@ import {
   ReasoningCollector,
 } from "./reasoning-collector.js";
 import {
+  projectEditContext,
   projectRegenerationContext,
   projectSessionModelHistory,
   SessionHistoryCorruptError,
@@ -80,6 +81,13 @@ export interface ChatRunner {
     signal: AbortSignal,
     emit: (event: ChatRunnerEvent) => void,
   ): Promise<void>;
+  edit?(
+    sessionId: string,
+    targetUserMessageId: string,
+    content: string,
+    signal: AbortSignal,
+    emit: (event: ChatRunnerEvent) => void,
+  ): Promise<void>;
 }
 
 interface ChatRunnerDependencies {
@@ -112,6 +120,7 @@ interface SelectingChatRunnerDependencies {
 
 interface InternalRunOptions {
   readonly regenerationTargetMessageId?: string;
+  readonly editTargetUserMessageId?: string;
 }
 
 export function createChatRunner({
@@ -145,6 +154,7 @@ export function createChatRunner({
     let history: readonly ModelMessage[] = [];
     let initialSessionStatus: SessionStatus = "idle";
     let persistedRegenerationTargetMessageId: string | undefined;
+    let persistedEditTargetUserMessageId: string | undefined;
     if (normalizedRequestedSessionId !== undefined) {
       if (sessionRepository === undefined) {
         throw new SessionRecoveryError("unavailable");
@@ -168,9 +178,7 @@ export function createChatRunner({
         throw new SessionRecoveryError("unavailable");
       }
       try {
-        if (options.regenerationTargetMessageId === undefined) {
-          history = projectSessionModelHistory(existingRecord);
-        } else {
+        if (options.regenerationTargetMessageId !== undefined) {
           const regeneration = projectRegenerationContext(
             existingRecord,
             options.regenerationTargetMessageId,
@@ -178,6 +186,12 @@ export function createChatRunner({
           history = regeneration.history;
           content = regeneration.targetUserMessage.content;
           persistedRegenerationTargetMessageId = regeneration.targetAssistantMessageId;
+        } else if (options.editTargetUserMessageId !== undefined) {
+          const edit = projectEditContext(existingRecord, options.editTargetUserMessageId);
+          history = edit.history;
+          persistedEditTargetUserMessageId = edit.targetUserMessageId;
+        } else {
+          history = projectSessionModelHistory(existingRecord);
         }
       } catch (error) {
         if (error instanceof SessionHistoryCorruptError) {
@@ -296,6 +310,21 @@ export function createChatRunner({
         },
       });
     }
+    if (persistedEditTargetUserMessageId !== undefined) {
+      signal.throwIfAborted();
+      sequence += 1;
+      await sessionRepository.appendEvent(sessionId, {
+        sequence,
+        recordedAt: userMessage.createdAt,
+        event: {
+          type: "session.edit",
+          data: jsonValueSchema.parse({
+            targetMessageId: persistedEditTargetUserMessageId,
+            replacementUserMessageId: userMessage.messageId,
+          }),
+        },
+      });
+    }
     let persistence = Promise.resolve();
     const persist = (event: ChatRunnerEvent) => {
       emit(event);
@@ -362,6 +391,14 @@ export function createChatRunner({
       }
       await runInternal("regenerate", signal, emit, [], [], sessionId, {
         regenerationTargetMessageId: targetAssistantMessageId,
+      });
+    },
+    async edit(sessionId, targetUserMessageId, content, signal, emit) {
+      if (sessionRepository === undefined) {
+        throw new SessionRecoveryError("unavailable");
+      }
+      await runInternal(content, signal, emit, [], [], sessionId, {
+        editTargetUserMessageId: targetUserMessageId,
       });
     },
   };
@@ -467,6 +504,31 @@ export function createSelectingChatRunner({
         throw new SessionRecoveryError("unavailable");
       }
       await runner.regenerate(sessionId, targetAssistantMessageId, signal, emit);
+    },
+    async edit(sessionId, targetUserMessageId, content, signal, emit) {
+      signal.throwIfAborted();
+      const sessionRepository = await selectSessionRepository?.();
+      signal.throwIfAborted();
+      const selected = await selectToolRegistry(signal);
+      const selection = selected instanceof ToolRegistry ? { registry: selected } : selected;
+      signal.throwIfAborted();
+      const modelGateway = await selectModelGateway();
+      signal.throwIfAborted();
+
+      const runner = createChatRunner({
+        modelGateway,
+        toolRegistry: selection.registry,
+        createId,
+        now,
+        approvalWorkflow,
+        diagnosticSink,
+        sessionRepository,
+        mcpToolSources: selection.mcpToolSources,
+      });
+      if (runner.edit === undefined) {
+        throw new SessionRecoveryError("unavailable");
+      }
+      await runner.edit(sessionId, targetUserMessageId, content, signal, emit);
     },
   };
 }

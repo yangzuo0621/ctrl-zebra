@@ -216,6 +216,18 @@ export const regenerateMessageSchema = z.strictObject({
   messageId: messageIdSchema,
 });
 
+/**
+ * Editing is bound to the exact persisted user projection the user reviewed. The Host
+ * revalidates the Session, target, and edited content before allocating a fresh Run.
+ */
+export const editMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("webview/edit-message"),
+  sessionId: sessionIdSchema,
+  messageId: messageIdSchema,
+  content: submittedContentSchema,
+});
+
 export const editorContextRefreshMessageSchema = z.strictObject({
   ...protocolEnvelopeSchema.shape,
   type: z.literal("webview/editor-context-refresh"),
@@ -704,6 +716,7 @@ export const webviewToExtensionMessageSchema = z.discriminatedUnion("type", [
   newChatMessageSchema,
   cancelMessageSchema,
   regenerateMessageSchema,
+  editMessageSchema,
   editorContextRefreshMessageSchema,
   editorContextRemoveMessageSchema,
   editorContextUseStaleMessageSchema,
@@ -780,6 +793,7 @@ export type SubmitMessage = z.infer<typeof submitMessageSchema>;
 export type NewChatMessage = z.infer<typeof newChatMessageSchema>;
 export type CancelMessage = z.infer<typeof cancelMessageSchema>;
 export type RegenerateMessage = z.infer<typeof regenerateMessageSchema>;
+export type EditMessage = z.infer<typeof editMessageSchema>;
 export type EditorContextRefreshMessage = z.infer<typeof editorContextRefreshMessageSchema>;
 export type EditorContextRemoveMessage = z.infer<typeof editorContextRemoveMessageSchema>;
 export type EditorContextUseStaleMessage = z.infer<typeof editorContextUseStaleMessageSchema>;
