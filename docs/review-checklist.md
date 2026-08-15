@@ -78,10 +78,11 @@ This is a compact review gate. Detailed semantics remain authoritative in
 
 ## 8. Decision
 
-### Review Decision: APPROVED | REJECTED
+### Review Decision: APPROVED | REJECTED | BLOCKED
 
 `APPROVED` applies only to the exact reviewed revision. Any implementation change invalidates the
-approval and requires re-review. `REJECTED` must consolidate all blocking findings.
+approval and requires re-review. `REJECTED` must consolidate all blocking findings. `BLOCKED` is
+terminal only when blockers remain after correction #2; do not start a fourth Reviewer pass.
 
 ### Blocking Findings
 

@@ -28,8 +28,9 @@ Pending
 
 The first Reviewer pass returns one consolidated set of blocking findings. Later correction passes
 are delta-focused unless scope, architecture, security, or implementation strategy materially
-changes. If blockers remain after correction #2, Root returns `BLOCKED` and does not start a fourth
-Reviewer pass. Root closure is mechanical and never repeats acceptance, architecture, scope,
+changes. If blockers remain after correction #2, Reviewer returns terminal `BLOCKED`; Root only
+propagates that result and stops, without owning or reinterpreting the quality decision. No fourth
+Reviewer pass starts. Root closure is mechanical and never repeats acceptance, architecture, scope,
 test-sufficiency, or similarity review.
 
 ## Reuse evidence
