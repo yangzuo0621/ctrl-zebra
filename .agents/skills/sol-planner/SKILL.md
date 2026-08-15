@@ -13,14 +13,14 @@ Invoke for:
 - reconciling the plan with major codebase changes;
 - architecture-level analysis/conflicts;
 - auditing groups of completed tasks and restructuring remaining roadmap;
-- resolving `PLANNING_ESCALATION` from Task-Finalizer.
+- resolving `PLANNING_ESCALATION` from the Root coordinator.
 
 ## Inputs
 Use:
 - `AGENTS.md`
 - `docs/implementation-plan.md`
 - relevant architecture/codebase context
-- task/reviewer/finalizer evidence when applicable
+- task/reviewer evidence when applicable
 
 ## Responsibilities
 - maintain clear task boundaries and dependencies;
@@ -34,6 +34,6 @@ Do not implement feature code.
 Do not perform routine task closure.
 Do not approve implementation code.
 Do not merge PRs.
-Do not invent implementation, review, finalization, or repository state.
+Do not invent implementation, review, closure, or repository state.
 
-After resolving a Task-Finalizer escalation, return control to the normal task workflow.
+After resolving a Root-coordinator planning escalation, return control to the normal task workflow.

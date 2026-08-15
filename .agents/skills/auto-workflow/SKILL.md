@@ -2,31 +2,33 @@
 
 ## Purpose
 
-Coordinate exactly one roadmap task across Executor, Reviewer, Finalizer, and optional Planner roles.
-The root agent orchestrates but does not take over implementation, review, planning, or finalization.
+Coordinate exactly one roadmap task across Root, Executor, Reviewer, and the optional Planner. Root
+orchestrates the work and performs the transactional closure after an independent Reviewer approval;
+Root does not take over implementation or implementation review.
 
 ## Inputs
 
 - `AGENTS.md`, the active portion of `docs/implementation-plan.md`, and one task ID
 - authorization profile: `AUTO_DRAFT` or `AUTO_FULL`
 - explicit task-scoped authorization for every Git/PR operation in that profile
-- base revision, branch, acceptance criteria, and Executor reuse tier
+- base revision, branch, acceptance criteria, and the Executor reuse tier
 
 ## Authorization profiles
 
 `AUTO_DRAFT` authorizes, for the assigned task only:
 
-- create/switch to its dedicated `codex/...` branch;
+- create or switch to its dedicated `codex/...` branch;
 - stage only task-scoped changes;
 - commit and push that branch; and
 - create and update its draft PR.
 
-After current-revision Reviewer approval and required checks, stop at `READY_FOR_MERGE`. It does not
-authorize merge, branch deletion, or destructive cleanup.
+After Reviewer approval of the current implementation revision and required checks are green, Root
+closure stops at `READY_FOR_MERGE`. `AUTO_DRAFT` never authorizes merge, branch deletion, cleanup, or
+marking the task completed.
 
 `AUTO_FULL` includes `AUTO_DRAFT` and additionally authorizes, for the assigned task only:
 
-- Finalizer plan/status commits and pushes;
+- task-scoped plan/status updates and their required commit/push;
 - squash merge of the approved PR; and
 - safe deletion of the merged feature branch and task-owned temporary resources.
 
@@ -42,52 +44,85 @@ task. The envelope is immutable; changing it requires a profile change and renew
    ambiguity; it is not part of routine closure.
 3. Dispatch Executor for startup, implementation, verification, early PR creation, and a compact
    Review Handoff.
-4. Dispatch the read-only Reviewer with exactly the handoff, exact current PR diff/revision, and task
-   acceptance criteria as base context. Reviewer is the only implementation-quality gate.
-5. Route one consolidated `REJECTED` finding set to Executor. Review every changed implementation
-   revision; no role may self-approve.
-6. After `APPROVED`, dispatch Finalizer for that exact revision. Finalizer checks only freshness,
-   required CI, mergeability, task-state transition, and authorization; it never reopens review.
-7. Route stale approval to Reviewer and CI/conflict mechanics to Executor. Require re-review whenever
-   the approved implementation revision changes.
-8. Stop at `READY_FOR_MERGE` for `AUTO_DRAFT`; for `AUTO_FULL`, continue through authorized status,
-   merge, and cleanup operations only after all transactional gates pass.
+4. Dispatch the read-only Reviewer with exactly the Review Handoff, exact current PR diff/revision,
+   and task acceptance criteria as base context. Reviewer is the only implementation-quality gate.
+5. Require the first Reviewer pass to inspect the complete current revision and return one
+   consolidated set of all identifiable blocking findings. Route that set to Executor. For correction
+   #1 and #2, Reviewer uses a delta-focused review of the previous blockers, current revision delta,
+   fix-induced regressions, and directly affected contracts. A substantive scope, architecture,
+   security, or implementation-strategy change is the only reason to broaden that review.
+6. After `APPROVED`, Root performs transactional closure for that exact revision. Root checks only:
+   revision and approval freshness, required CI/checks, PR mergeability/conflicts, the permitted
+   task-state transition, and exact authorization. Root does not reopen review, reinterpret the
+   quality decision, or add implementation findings.
+7. Route a stale approval to Reviewer and CI/conflict mechanics to Executor. Require review of the
+   exact new revision whenever a fix changes implementation. Route authorization or unverifiable
+   state blockers to Root/user; do not guess or route closure to another role.
 
-Wait for each role result, record the revision actually reviewed, and never repeat a completed side
-effect.
+Root reports one mechanical blocker route when a closure gate fails:
 
-## Retry and stop conditions
+| Failure | Status | Owner | Re-review |
+|---|---|---|---|
+| approved revision is stale or HEAD differs | `APPROVAL_STALE` | Reviewer | yes |
+| required CI/checks are missing or failing | `CHECKS_NOT_GREEN` | Executor | only if the revision changes |
+| PR has a merge conflict | `MERGE_CONFLICT` | Executor | if the resolution changes the revision |
+| operation is not authorized | `AUTHORIZATION_REQUIRED` | Root/user | no |
+| repository or PR state cannot be verified | `STATE_UNVERIFIABLE` | Root/user | no |
 
-Allow at most two Reviewer rejection/correction cycles, resetting a route count only after material
-progress. Stop for missing/ambiguous authorization, persistent review failure, stale/contradictory or
-unverifiable state, unexpected scope, architecture/security conflict, change-control need, unresolved
-merge conflict, or required checks that cannot be corrected in scope.
+Each route returns `BLOCKED` until its owner supplies verifiable state; closure never invents a
+quality decision.
+
+8. For `AUTO_DRAFT`, return `READY_FOR_MERGE` after the closure gates pass. For `AUTO_FULL`, perform
+   only the explicitly authorized status, merge, and cleanup operations, then verify their actual
+   result.
+
+Wait for each role result, record the exact revision actually reviewed, and never repeat a completed
+side effect.
+
+## Review-loop and stop conditions
+
+The normal loop has at most two correction cycles: initial review, correction #1, and correction #2
+(at most three Reviewer passes). If blockers remain after correction #2, return `BLOCKED` and do not
+start a fourth pass. Any implementation revision change after approval invalidates that approval and
+requires review of the new exact revision, subject to the same limit.
+
+Stop for missing or ambiguous authorization, persistent review failure, stale/contradictory or
+unverifiable state, unexpected scope, architecture/security conflict, change-control need, an
+unresolved merge conflict, or required checks that cannot be corrected in scope.
 
 ## Role boundaries
 
-- Coordinator orchestrates only.
-- Executor implements and handles review-directed fixes; it never reviews, approves, merges, or closes.
-- Reviewer is read-only, approves only the exact reviewed revision, and is the sole quality gate.
-- Finalizer is transactional, performs only profile-authorized closure, and does not review code.
-- Planner plans only and never implements or approves.
+- Root coordinates and performs only the mechanical, profile-authorized closure described above.
+- Executor implements and handles review-directed fixes; it never reviews, approves, merges, or
+  closes the task.
+- Reviewer is read-only, approves only the exact reviewed revision, and is the sole
+  implementation-quality gate.
+- Planner plans only and never implements, reviews, approves, or performs routine closure.
+
+## Reuse and evidence
+
+`TARGETED` is the default Executor reuse path. Select `FULL` only for an existing trigger in
+[`Reuse Before Build`](../../../docs/development.md#reuse-before-build); ordinary uncertainty does not
+justify a repository-wide audit. Reviewer uses evidence/spot checks for `TARGETED`, independently
+verifies material `FULL` claims, and repeats a full audit only for an existing `ESCALATED FULL` trigger.
+
+Keep the Review Handoff and PR diff as the shared evidence surface. Do not emit routine document
+counts, additional-document counts, repeated-audit counts, or similar telemetry. Add bounded `FULL`
+or `ESCALATED FULL` trigger/evidence only when that tier was actually used.
 
 ## Output contract
 
-Report task, profile, branch, PR, reviewed/merged revisions as applicable, checks/CI, review cycles,
-final state, and cleanup actually performed. Include:
+The default final result contains only:
 
 ```text
-Executor document count: <n>
-Executor audit tier: TARGETED | FULL
-Reviewer base context: Review Handoff + current PR diff + task acceptance criteria
-Reviewer additional docs count: <n>
-Reviewer similarity verification: evidence check/spot-check | independent targeted verification | independent full audit
-Reviewer full audit repeated: yes | no
-Finalizer implementation docs loaded: <n>
-Full-repo similarity audit count: <n>
-Review-loop count: <n>
+Task: <task>
+PR: <PR or none>
+Revision: <reviewed/current revision>
+Checks: <required check result>
+Review: <APPROVED | REJECTED | BLOCKED>
+Review cycles: <initial + correction count>
+Final state: <READY_FOR_MERGE | COMPLETED | BLOCKED>
 ```
 
-Count deduplicated documents actually read and role reports that explicitly mark a full-repository
-audit; `Reviewer full audit repeated` is `yes` only for `ESCALATED FULL`. Never infer missing state or
-replace bounded summaries with raw transcripts.
+When `FULL` or `ESCALATED FULL` was genuinely triggered, append only its tier, trigger, and bounded
+verification result. Never replace these fields with raw transcripts or unbounded audit output.
