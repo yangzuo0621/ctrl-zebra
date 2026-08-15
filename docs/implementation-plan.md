@@ -2,7 +2,7 @@
 
 ## 1. 文档目标与读取顺序
 
-本文档是 roadmap 的权威入口，只维护任务顺序、任务状态、完成 PR/日期引用、进度摘要、当前/下一执行点以及详细规格链接。它是索引而不是执行日志：不得在此持久化任务特定的实现摘要、复用/相似性审计、Build-vs-Buy、测试/CI 细节、Reviewer findings、symbol inventories 或 design rationale。普通任务执行证据保留在会话、handoff 或 PR 中；只有持久的架构或审计结论才进入所属领域文档、ADR 或例外 maintenance 记录。
+本文档是 roadmap 的权威热索引，只维护任务顺序、活跃/待开始状态、进度摘要、当前/下一执行点、活动规格链接以及已完成历史入口。完成任务的状态、PR 和日期记录归档在[已完成任务历史](roadmap/archive/completed-tasks.md)。本文档不是执行日志：不得在此持久化任务特定的实现摘要、复用/相似性审计、Build-vs-Buy、测试/CI 细节、Reviewer findings、symbol inventories 或 design rationale。普通任务执行证据保留在会话、handoff 或 PR 中；只有持久的架构或审计结论才进入所属领域文档、ADR 或例外 maintenance 记录。
 
 开始 roadmap 工作时按以下顺序读取：
 
@@ -15,7 +15,8 @@
 
 | 信息 | 唯一权威位置 |
 |---|---|
-| 任务顺序、状态、完成 PR、完成日期、进度摘要、当前/下一执行点、规格链接 | 本文档 |
+| 任务顺序、活跃/待开始状态、进度摘要、当前/下一执行点、活动规格链接 | 本文档 |
+| 已完成任务状态、完成 PR 和完成日期 | [已完成任务历史](roadmap/archive/completed-tasks.md) |
 | 活动或计划中任务的目标、产物、测试、排除项、前置条件和阶段门禁 | 对应的 `docs/roadmap/phases/phase-xx.md` |
 | 已完成任务的历史规格和阶段门禁 | 对应的 `docs/roadmap/archive/phase-xx.md` |
 | 当前授权产品范围、技术基线、模块边界、跨模块契约地图、产品级验证要求和完成定义 | [产品与技术基础规格](roadmap/product-foundation.md) |
@@ -44,7 +45,8 @@
 
 ### 任务状态管理
 
-本节是全部任务状态的唯一台账。任务正文不重复维护状态，避免同一任务出现两个不同结论。
+本节与[已完成任务历史](roadmap/archive/completed-tasks.md)共同构成全部任务状态的唯一台账：本节
+维护活跃和待开始任务，归档维护已完成任务。任务正文不重复维护状态，避免同一任务出现两个不同结论。
 
 状态只允许使用以下四个值：
 
@@ -58,7 +60,8 @@
 1. 默认转换为 `待开始 → 进行中 → 已完成`；出现真实阻塞时可以在 `进行中` 与 `受阻` 之间转换。
 2. 同一时间最多有一个 `进行中` 任务；约束门禁和实现共享同一个任务状态。
 3. 创建任务分支后，先在该分支把任务标记为 `进行中`。主干保存最后一个已合入基线，活动状态以当前任务分支或其 PR 中的本表为准。
-4. 任务通过全部验证后，在最终 PR 中将状态改为 `已完成`，填写完成 PR 和完成日期；PR 未合入前，主干中的任务仍不算完成。
+4. 任务通过全部验证后，在最终 PR 中将该任务移入已完成历史，标记为 `已完成`并填写完成 PR
+   和完成日期；PR 未合入前，主干中的任务仍不算完成。
 5. 约束 PR 不能把任务标记为 `已完成`。如果任务长期受阻且工作分支不会合入，应通过独立状态 PR 将 `受阻` 状态同步到主干。
 6. `已完成` 任务只有在发现验收记录错误或实施规格被正式修订时才能重新打开，并必须说明原因。
 7. 每次状态变化同时更新下方进度摘要；完成引用使用 GitHub PR 编号或链接，不记录无法在 squash 前确定的最终 commit SHA。
@@ -73,191 +76,38 @@
 - 当前执行：T2103（实现 `@` 工作区文件引用）
 - 下一任务：T2104
 - 最后更新：2026-08-15
+- 已完成历史：[已完成任务历史](roadmap/archive/completed-tasks.md)（常规执行无需读取）
 
-| 阶段 | 任务 | 状态 | 完成 PR | 完成日期 |
-|---|---|---|---|---|
-| 0 | T0001 | 已完成 | [#4](https://github.com/yangzuo0621/ctrl-zebra/pull/4) | 2026-07-14 |
-| 0 | T0002 | 已完成 | [#6](https://github.com/yangzuo0621/ctrl-zebra/pull/6) | 2026-07-14 |
-| 0 | T0003 | 已完成 | [#7](https://github.com/yangzuo0621/ctrl-zebra/pull/7) | 2026-07-14 |
-| 0 | T0004 | 已完成 | [#9](https://github.com/yangzuo0621/ctrl-zebra/pull/9) | 2026-07-14 |
-| 1 | T0101 | 已完成 | [#11](https://github.com/yangzuo0621/ctrl-zebra/pull/11) | 2026-07-14 |
-| 1 | T0102 | 已完成 | [#12](https://github.com/yangzuo0621/ctrl-zebra/pull/12) | 2026-07-15 |
-| 1 | T0103 | 已完成 | [#13](https://github.com/yangzuo0621/ctrl-zebra/pull/13) | 2026-07-15 |
-| 1 | T0104 | 已完成 | [#14](https://github.com/yangzuo0621/ctrl-zebra/pull/14) | 2026-07-15 |
-| 1 | T0105 | 已完成 | [#15](https://github.com/yangzuo0621/ctrl-zebra/pull/15) | 2026-07-15 |
-| 2 | T0201 | 已完成 | [#16](https://github.com/yangzuo0621/ctrl-zebra/pull/16) | 2026-07-15 |
-| 2 | T0202 | 已完成 | [#17](https://github.com/yangzuo0621/ctrl-zebra/pull/17) | 2026-07-15 |
-| 2 | T0203 | 已完成 | [#18](https://github.com/yangzuo0621/ctrl-zebra/pull/18) | 2026-07-15 |
-| 2 | T0204 | 已完成 | [#19](https://github.com/yangzuo0621/ctrl-zebra/pull/19) | 2026-07-15 |
-| 2 | T0205 | 已完成 | [#20](https://github.com/yangzuo0621/ctrl-zebra/pull/20) | 2026-07-15 |
-| 3 | T0301 | 已完成 | [#22](https://github.com/yangzuo0621/ctrl-zebra/pull/22) | 2026-07-15 |
-| 3 | T0302 | 已完成 | [#23](https://github.com/yangzuo0621/ctrl-zebra/pull/23) | 2026-07-16 |
-| 3 | T0303 | 已完成 | [#24](https://github.com/yangzuo0621/ctrl-zebra/pull/24) | 2026-07-16 |
-| 3 | T0304 | 已完成 | [#25](https://github.com/yangzuo0621/ctrl-zebra/pull/25) | 2026-07-16 |
-| 3 | T0305 | 已完成 | [#26](https://github.com/yangzuo0621/ctrl-zebra/pull/26) | 2026-07-16 |
-| 3 | T0306 | 已完成 | [#28](https://github.com/yangzuo0621/ctrl-zebra/pull/28) | 2026-07-16 |
-| 3 | T0307 | 已完成 | [#30](https://github.com/yangzuo0621/ctrl-zebra/pull/30) | 2026-07-17 |
-| 3 | T0308 | 已完成 | [#31](https://github.com/yangzuo0621/ctrl-zebra/pull/31) | 2026-07-17 |
-| 3 | T0309 | 已完成 | [#32](https://github.com/yangzuo0621/ctrl-zebra/pull/32) | 2026-07-17 |
-| 3 | T0310 | 已完成 | [#35](https://github.com/yangzuo0621/ctrl-zebra/pull/35) | 2026-07-17 |
-| 4 | T0401 | 已完成 | [#39](https://github.com/yangzuo0621/ctrl-zebra/pull/39) | 2026-07-17 |
-| 4 | T0402 | 已完成 | [#40](https://github.com/yangzuo0621/ctrl-zebra/pull/40) | 2026-07-17 |
-| 4 | T0403 | 已完成 | [#41](https://github.com/yangzuo0621/ctrl-zebra/pull/41) | 2026-07-17 |
-| 4 | T0404 | 已完成 | [#42](https://github.com/yangzuo0621/ctrl-zebra/pull/42) | 2026-07-17 |
-| 4 | T0405 | 已完成 | [#43](https://github.com/yangzuo0621/ctrl-zebra/pull/43) | 2026-07-17 |
-| 4 | T0406 | 已完成 | [#44](https://github.com/yangzuo0621/ctrl-zebra/pull/44) | 2026-07-17 |
-| 4 | T0407 | 已完成 | [#45](https://github.com/yangzuo0621/ctrl-zebra/pull/45) | 2026-07-17 |
-| 4 | T0408 | 已完成 | [#46](https://github.com/yangzuo0621/ctrl-zebra/pull/46) | 2026-07-17 |
-| 4 | T0409 | 已完成 | [#47](https://github.com/yangzuo0621/ctrl-zebra/pull/47) | 2026-07-17 |
-| 4 | T0410 | 已完成 | [#48](https://github.com/yangzuo0621/ctrl-zebra/pull/48) | 2026-07-17 |
-| 4 | T0411 | 已完成 | [#50](https://github.com/yangzuo0621/ctrl-zebra/pull/50) | 2026-07-18 |
-| 5 | T0501 | 已完成 | [#53](https://github.com/yangzuo0621/ctrl-zebra/pull/53) | 2026-07-19 |
-| 5 | T0502 | 已完成 | [#54](https://github.com/yangzuo0621/ctrl-zebra/pull/54) | 2026-07-19 |
-| 5 | T0503 | 已完成 | [#55](https://github.com/yangzuo0621/ctrl-zebra/pull/55) | 2026-07-19 |
-| 5 | T0504 | 已完成 | [#56](https://github.com/yangzuo0621/ctrl-zebra/pull/56) | 2026-07-19 |
-| 5 | T0505 | 已完成 | [#57](https://github.com/yangzuo0621/ctrl-zebra/pull/57) | 2026-07-19 |
-| 5 | T0506 | 已完成 | [#58](https://github.com/yangzuo0621/ctrl-zebra/pull/58) | 2026-07-19 |
-| 5 | T0507 | 已完成 | [#59](https://github.com/yangzuo0621/ctrl-zebra/pull/59) | 2026-07-19 |
-| 5 | T0508 | 已完成 | [#60](https://github.com/yangzuo0621/ctrl-zebra/pull/60) | 2026-07-19 |
-| 5 | T0509 | 已完成 | [#61](https://github.com/yangzuo0621/ctrl-zebra/pull/61) | 2026-07-19 |
-| 6 | T0601 | 已完成 | [#63](https://github.com/yangzuo0621/ctrl-zebra/pull/63) | 2026-07-19 |
-| 6 | T0602 | 已完成 | [#64](https://github.com/yangzuo0621/ctrl-zebra/pull/64) | 2026-07-19 |
-| 6 | T0603 | 已完成 | [#65](https://github.com/yangzuo0621/ctrl-zebra/pull/65) | 2026-07-19 |
-| 6 | T0604 | 已完成 | [#66](https://github.com/yangzuo0621/ctrl-zebra/pull/66) | 2026-07-19 |
-| 6 | T0605 | 已完成 | [#67](https://github.com/yangzuo0621/ctrl-zebra/pull/67) | 2026-07-19 |
-| 6 | T0606 | 已完成 | [#68](https://github.com/yangzuo0621/ctrl-zebra/pull/68) | 2026-07-19 |
-| 6 | T0607 | 已完成 | [#69](https://github.com/yangzuo0621/ctrl-zebra/pull/69) | 2026-07-19 |
-| 7 | T0701 | 已完成 | [#71](https://github.com/yangzuo0621/ctrl-zebra/pull/71) | 2026-07-19 |
-| 7 | T0702 | 已完成 | [#72](https://github.com/yangzuo0621/ctrl-zebra/pull/72) | 2026-07-19 |
-| 7 | T0703 | 已完成 | [#73](https://github.com/yangzuo0621/ctrl-zebra/pull/73) | 2026-07-19 |
-| 7 | T0704 | 已完成 | [#74](https://github.com/yangzuo0621/ctrl-zebra/pull/74) | 2026-07-19 |
-| 7 | T0705 | 已完成 | [#75](https://github.com/yangzuo0621/ctrl-zebra/pull/75) | 2026-07-19 |
-| 7 | T0706 | 已完成 | [#76](https://github.com/yangzuo0621/ctrl-zebra/pull/76) | 2026-07-19 |
-| 7 | T0707 | 已完成 | [#77](https://github.com/yangzuo0621/ctrl-zebra/pull/77) | 2026-07-19 |
-| 8 | T0801 | 已完成 | [#79](https://github.com/yangzuo0621/ctrl-zebra/pull/79) | 2026-07-19 |
-| 8 | T0802 | 已完成 | [#80](https://github.com/yangzuo0621/ctrl-zebra/pull/80) | 2026-07-19 |
-| 8 | T0803 | 已完成 | [#81](https://github.com/yangzuo0621/ctrl-zebra/pull/81) | 2026-07-19 |
-| 8 | T0804 | 已完成 | [#82](https://github.com/yangzuo0621/ctrl-zebra/pull/82) | 2026-07-19 |
-| 9 | T0901 | 已完成 | [#84](https://github.com/yangzuo0621/ctrl-zebra/pull/84) | 2026-07-19 |
-| 9 | T0902 | 已完成 | [#85](https://github.com/yangzuo0621/ctrl-zebra/pull/85) | 2026-07-19 |
-| 9 | T0903 | 已完成 | [#86](https://github.com/yangzuo0621/ctrl-zebra/pull/86) | 2026-07-19 |
-| 9 | T0904 | 已完成 | [#87](https://github.com/yangzuo0621/ctrl-zebra/pull/87) | 2026-07-19 |
-| 9 | T0905 | 已完成 | [#88](https://github.com/yangzuo0621/ctrl-zebra/pull/88) | 2026-07-22 |
-| 9 | T0906 | 已完成 | [#89](https://github.com/yangzuo0621/ctrl-zebra/pull/89) | 2026-07-22 |
-| 10 | T1001 | 已完成 | [#91](https://github.com/yangzuo0621/ctrl-zebra/pull/91) | 2026-07-22 |
-| 10 | T1002 | 已完成 | [#92](https://github.com/yangzuo0621/ctrl-zebra/pull/92) | 2026-07-22 |
-| 10 | T1003 | 已完成 | [#93](https://github.com/yangzuo0621/ctrl-zebra/pull/93) | 2026-07-22 |
-| 10 | T1004 | 已完成 | [#95](https://github.com/yangzuo0621/ctrl-zebra/pull/95) | 2026-07-22 |
-| 10 | T1005 | 已完成 | [#96](https://github.com/yangzuo0621/ctrl-zebra/pull/96) | 2026-07-22 |
-| 10 | T1006 | 已完成 | [#104](https://github.com/yangzuo0621/ctrl-zebra/pull/104) | 2026-07-23 |
-| 10 | T1007 | 已完成 | [#105](https://github.com/yangzuo0621/ctrl-zebra/pull/105) | 2026-07-23 |
-| 10 | T1008 | 已完成 | [#106](https://github.com/yangzuo0621/ctrl-zebra/pull/106) | 2026-07-23 |
-| 11 | T1101 | 已完成 | [#114](https://github.com/yangzuo0621/ctrl-zebra/pull/114) | 2026-07-27 |
-| 11 | T1102 | 已完成 | [#115](https://github.com/yangzuo0621/ctrl-zebra/pull/115) | 2026-07-27 |
-| 11 | T1103 | 已完成 | [#116](https://github.com/yangzuo0621/ctrl-zebra/pull/116) | 2026-07-27 |
-| 11 | T1104 | 已完成 | [#117](https://github.com/yangzuo0621/ctrl-zebra/pull/117) | 2026-07-27 |
-| 11 | T1105 | 已完成 | [#118](https://github.com/yangzuo0621/ctrl-zebra/pull/118) | 2026-07-27 |
-| 11 | T1106 | 已完成 | [#119](https://github.com/yangzuo0621/ctrl-zebra/pull/119) | 2026-07-27 |
-| 11 | T1107 | 已完成 | [#120](https://github.com/yangzuo0621/ctrl-zebra/pull/120) | 2026-07-27 |
-| 11 | T1108 | 已完成 | [#121](https://github.com/yangzuo0621/ctrl-zebra/pull/121) | 2026-07-27 |
-| 12 | T1201 | 已完成 | [#129](https://github.com/yangzuo0621/ctrl-zebra/pull/129) | 2026-07-29 |
-| 13 | T1301 | 已完成 | [#131](https://github.com/yangzuo0621/ctrl-zebra/pull/131) | 2026-07-31 |
-| 13 | T1302 | 已完成 | [#132](https://github.com/yangzuo0621/ctrl-zebra/pull/132) | 2026-07-31 |
-| 13 | T1303 | 已完成 | [#133](https://github.com/yangzuo0621/ctrl-zebra/pull/133) | 2026-07-31 |
-| 13 | T1304 | 已完成 | [#135](https://github.com/yangzuo0621/ctrl-zebra/pull/135) | 2026-07-31 |
-| 14 | T1401 | 已完成 | [#141](https://github.com/yangzuo0621/ctrl-zebra/pull/141) | 2026-08-03 |
-| 14 | T1402 | 已完成 | [#143](https://github.com/yangzuo0621/ctrl-zebra/pull/143) | 2026-08-03 |
-| 14 | T1403 | 已完成 | [#144](https://github.com/yangzuo0621/ctrl-zebra/pull/144) | 2026-08-03 |
-| 14 | T1404 | 已完成 | [#145](https://github.com/yangzuo0621/ctrl-zebra/pull/145) | 2026-08-03 |
-| 14 | T1405 | 已完成 | [#146](https://github.com/yangzuo0621/ctrl-zebra/pull/146) | 2026-08-03 |
-| 14 | T1406 | 已完成 | [#147](https://github.com/yangzuo0621/ctrl-zebra/pull/147) | 2026-08-03 |
-| 14 | T1407 | 已完成 | [#148](https://github.com/yangzuo0621/ctrl-zebra/pull/148) | 2026-08-03 |
-| 14 | T1408 | 已完成 | [#149](https://github.com/yangzuo0621/ctrl-zebra/pull/149) | 2026-08-03 |
-| 14 | T1409 | 已完成 | [#150](https://github.com/yangzuo0621/ctrl-zebra/pull/150) | 2026-08-03 |
-| 15 | T1501 | 已完成 | [#153](https://github.com/yangzuo0621/ctrl-zebra/pull/153) | 2026-08-09 |
-| 15 | T1502 | 已完成 | [#155](https://github.com/yangzuo0621/ctrl-zebra/pull/155) | 2026-08-09 |
-| 15 | T1503 | 已完成 | [#156](https://github.com/yangzuo0621/ctrl-zebra/pull/156) | 2026-08-09 |
-| 15 | T1504 | 已完成 | [#158](https://github.com/yangzuo0621/ctrl-zebra/pull/158) | 2026-08-10 |
-| 15 | T1505 | 已完成 | [#159](https://github.com/yangzuo0621/ctrl-zebra/pull/159) | 2026-08-10 |
-| 15 | T1506 | 已完成 | [#160](https://github.com/yangzuo0621/ctrl-zebra/pull/160) | 2026-08-10 |
-| 15 | T1507 | 已完成 | [#161](https://github.com/yangzuo0621/ctrl-zebra/pull/161) | 2026-08-10 |
-| 15 | T1508 | 已完成 | [#162](https://github.com/yangzuo0621/ctrl-zebra/pull/162) | 2026-08-10 |
-| 15 | T1509 | 已完成 | [#163](https://github.com/yangzuo0621/ctrl-zebra/pull/163) | 2026-08-10 |
-| 15 | T1510 | 已完成 | [#164](https://github.com/yangzuo0621/ctrl-zebra/pull/164) | 2026-08-10 |
-| 15 | T1511 | 已完成 | [#165](https://github.com/yangzuo0621/ctrl-zebra/pull/165) | 2026-08-10 |
-| 16 | T1601 | 已完成 | [#172](https://github.com/yangzuo0621/ctrl-zebra/pull/172) | 2026-08-11 |
-| 16 | T1602 | 已完成 | [#175](https://github.com/yangzuo0621/ctrl-zebra/pull/175) | 2026-08-11 |
-| 16 | T1603 | 已完成 | [#177](https://github.com/yangzuo0621/ctrl-zebra/pull/177) | 2026-08-11 |
-| 16 | T1604 | 已完成 | [#179](https://github.com/yangzuo0621/ctrl-zebra/pull/179) | 2026-08-11 |
-| 16 | T1605 | 已完成 | [#181](https://github.com/yangzuo0621/ctrl-zebra/pull/181) | 2026-08-11 |
-| 17 | T1701 | 已完成 | [#183](https://github.com/yangzuo0621/ctrl-zebra/pull/183) | 2026-08-11 |
-| 17 | T1702 | 已完成 | [#184](https://github.com/yangzuo0621/ctrl-zebra/pull/184) | 2026-08-11 |
-| 17 | T1703 | 已完成 | [#185](https://github.com/yangzuo0621/ctrl-zebra/pull/185) | 2026-08-11 |
-| 18 | T1801 | 已完成 | [#188](https://github.com/yangzuo0621/ctrl-zebra/pull/188) | 2026-08-11 |
-| 18 | T1802 | 已完成 | [#191](https://github.com/yangzuo0621/ctrl-zebra/pull/191) | 2026-08-12 |
-| 18 | T1803 | 已完成 | [#193](https://github.com/yangzuo0621/ctrl-zebra/pull/193) | 2026-08-12 |
-| 18 | T1804 | 已完成 | [#195](https://github.com/yangzuo0621/ctrl-zebra/pull/195) | 2026-08-12 |
-| 18 | T1805 | 已完成 | [#197](https://github.com/yangzuo0621/ctrl-zebra/pull/197) | 2026-08-12 |
-| 18 | T1806 | 已完成 | [#198](https://github.com/yangzuo0621/ctrl-zebra/pull/198) | 2026-08-12 |
-| 18 | T1807 | 已完成 | [#199](https://github.com/yangzuo0621/ctrl-zebra/pull/199) | 2026-08-12 |
-| 19 | T1901 | 已完成 | [#201](https://github.com/yangzuo0621/ctrl-zebra/pull/201) | 2026-08-12 |
-| 19 | T1902 | 已完成 | [#203](https://github.com/yangzuo0621/ctrl-zebra/pull/203) | 2026-08-12 |
-| 19 | T1903 | 已完成 | [#204](https://github.com/yangzuo0621/ctrl-zebra/pull/204) | 2026-08-12 |
-| 19 | T1904 | 已完成 | [#205](https://github.com/yangzuo0621/ctrl-zebra/pull/205) | 2026-08-12 |
-| 19 | T1905 | 已完成 | [#207](https://github.com/yangzuo0621/ctrl-zebra/pull/207) | 2026-08-12 |
-| 20 | T2001 | 已完成 | [#227](https://github.com/yangzuo0621/ctrl-zebra/pull/227) | 2026-08-13 |
-| 20 | T2002 | 已完成 | [#229](https://github.com/yangzuo0621/ctrl-zebra/pull/229) | 2026-08-14 |
-| 20 | T2003 | 已完成 | [#238](https://github.com/yangzuo0621/ctrl-zebra/pull/238) | 2026-08-14 |
-| 20 | T2004 | 已完成 | [#232](https://github.com/yangzuo0621/ctrl-zebra/pull/232) | 2026-08-14 |
-| 20 | T2005 | 已完成 | [#235](https://github.com/yangzuo0621/ctrl-zebra/pull/235) | 2026-08-14 |
-| 21 | T2101 | 已完成 | [#240](https://github.com/yangzuo0621/ctrl-zebra/pull/240) | 2026-08-14 |
-| 21 | T2102 | 已完成 | [#242](https://github.com/yangzuo0621/ctrl-zebra/pull/242) | 2026-08-15 |
-| 21 | T2103 | 待开始 | — | — |
-| 21 | T2104 | 待开始 | — | — |
-| 21 | T2105 | 待开始 | — | — |
-| 21 | T2106 | 待开始 | — | — |
-| 22 | T2201 | 待开始 | — | — |
-| 22 | T2202 | 待开始 | — | — |
-| 22 | T2203 | 待开始 | — | — |
-| 22 | T2204 | 待开始 | — | — |
-| 22 | T2205 | 待开始 | — | — |
-| 22 | T2206 | 待开始 | — | — |
-| 22 | T2207 | 待开始 | — | — |
-| 22 | T2208 | 待开始 | — | — |
+### 活跃与待开始任务
+
+| 阶段 | 任务 | 状态 |
+|---|---|---|
+| 21 | T2103 | 待开始 |
+| 21 | T2104 | 待开始 |
+| 21 | T2105 | 待开始 |
+| 21 | T2106 | 待开始 |
+| 22 | T2201 | 待开始 |
+| 22 | T2202 | 待开始 |
+| 22 | T2203 | 待开始 |
+| 22 | T2204 | 待开始 |
+| 22 | T2205 | 待开始 |
+| 22 | T2206 | 待开始 |
+| 22 | T2207 | 待开始 |
+| 22 | T2208 | 待开始 |
 
 ### 当前任务
 
 - ID：T2103
 - 状态：待开始
-- 规格：[阶段 21：T2102](roadmap/phases/phase-21.md)
+- 规格：[阶段 21：T2103](roadmap/phases/phase-21.md)
 
 ## 5. 阶段规格索引
 
-阶段 0–20 已完成，完整任务正文均已按阶段归档。阶段 21–22 已规划，等待依次开始。
+阶段 0–20 已完成，任务/PR/日期见[已完成任务历史](roadmap/archive/completed-tasks.md)，完整任务正文
+均已按阶段归档。常规执行不读取这些归档。阶段 21–22 已规划，等待依次开始。
 
 | 阶段 | 状态 | 详细规格 |
 |---|---|---|
-| 0 | 已完成 | [阶段 0 归档](roadmap/archive/phase-00.md) |
-| 1 | 已完成 | [阶段 1 归档](roadmap/archive/phase-01.md) |
-| 2 | 已完成 | [阶段 2 归档](roadmap/archive/phase-02.md) |
-| 3 | 已完成 | [阶段 3 归档](roadmap/archive/phase-03.md) |
-| 4 | 已完成 | [阶段 4 归档](roadmap/archive/phase-04.md) |
-| 5 | 已完成 | [阶段 5 归档](roadmap/archive/phase-05.md) |
-| 6 | 已完成 | [阶段 6 归档](roadmap/archive/phase-06.md) |
-| 7 | 已完成 | [阶段 7 归档](roadmap/archive/phase-07.md) |
-| 8 | 已完成 | [阶段 8 归档](roadmap/archive/phase-08.md) |
-| 9 | 已完成 | [阶段 9 归档](roadmap/archive/phase-09.md) |
-| 10 | 已完成 | [阶段 10 归档](roadmap/archive/phase-10.md) |
-| 11 | 已完成 | [阶段 11 归档](roadmap/archive/phase-11.md) |
-| 12 | 已完成 | [阶段 12 归档](roadmap/archive/phase-12.md) |
-| 13 | 已完成 | [阶段 13 归档](roadmap/archive/phase-13.md) |
-| 14 | 已完成 | [阶段 14 归档](roadmap/archive/phase-14.md) |
-| 15 | 已完成 | [阶段 15 归档](roadmap/archive/phase-15.md) |
-| 16 | 已完成 | [阶段 16 归档](roadmap/archive/phase-16.md) |
-| 17 | 已完成 | [阶段 17 归档](roadmap/archive/phase-17.md) |
-| 18 | 已完成 | [阶段 18 归档](roadmap/archive/phase-18.md) |
-| 19 | 已完成 | [阶段 19 归档](roadmap/archive/phase-19.md) |
-| 20 | 已完成 | [阶段 20 归档](roadmap/archive/phase-20.md) |
 | 21 | 已规划 | [阶段 21：对话交互与会话数据控制](roadmap/phases/phase-21.md) |
 | 22 | 已规划 | [阶段 22：Preview 与 GA 工程就绪](roadmap/phases/phase-22.md) |
 
