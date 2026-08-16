@@ -32,15 +32,13 @@ describe("propose_file_delete", () => {
     );
   });
 
-  it.each([
-    "../outside.txt",
-    "/outside.txt",
-    "src\\old.txt",
-    "src/./old.txt",
-  ])("rejects an unsafe path %s", (path) => {
-    const tool = createProposeFileDeleteTool(createWorkspace().values);
-    expect(() => tool.parseInput({ path })).toThrow(TypeError);
-  });
+  it.each(["../outside.txt", "/outside.txt", "src\\old.txt", "src/./old.txt"])(
+    "rejects an unsafe path %s",
+    (path) => {
+      const tool = createProposeFileDeleteTool(createWorkspace().values);
+      expect(() => tool.parseInput({ path })).toThrow(TypeError);
+    },
+  );
 
   it("rejects a target that changed during preparation", async () => {
     const tool = createProposeFileDeleteTool(createWorkspace({ current: false }).values);

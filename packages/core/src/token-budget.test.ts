@@ -24,40 +24,37 @@ describe("Token Budget", () => {
     [3, [1, 1, 0, 1]],
     [4, [1, 2, 1, 0]],
     [19, [2, 10, 4, 3]],
-  ] as const)("assigns the remainder deterministically for a %i-token window", (window, expected) => {
-    const budget = allocateTokenBudget(window);
+  ] as const)(
+    "assigns the remainder deterministically for a %i-token window",
+    (window, expected) => {
+      const budget = allocateTokenBudget(window);
 
-    expect([
-      budget.systemTokens,
-      budget.historyTokens,
-      budget.filesTokens,
-      budget.toolsTokens,
-    ]).toEqual(expected);
-    expect(defaultTokenBudgetAllocator.allocate(window)).toEqual(budget);
-  });
+      expect([
+        budget.systemTokens,
+        budget.historyTokens,
+        budget.filesTokens,
+        budget.toolsTokens,
+      ]).toEqual(expected);
+      expect(defaultTokenBudgetAllocator.allocate(window)).toEqual(budget);
+    },
+  );
 
-  it.each([
-    1,
-    2,
-    3,
-    4,
-    99,
-    101,
-    16_385,
-    maxModelContextWindowTokens,
-  ])("keeps every allocation within the declared %i-token window", (window) => {
-    const budget = allocateTokenBudget(window);
-    const allocated =
-      budget.systemTokens + budget.historyTokens + budget.filesTokens + budget.toolsTokens;
+  it.each([1, 2, 3, 4, 99, 101, 16_385, maxModelContextWindowTokens])(
+    "keeps every allocation within the declared %i-token window",
+    (window) => {
+      const budget = allocateTokenBudget(window);
+      const allocated =
+        budget.systemTokens + budget.historyTokens + budget.filesTokens + budget.toolsTokens;
 
-    expect(allocated).toBe(window);
-    expect(Object.values(budget).every(Number.isSafeInteger)).toBe(true);
-    expect(
-      [budget.systemTokens, budget.historyTokens, budget.filesTokens, budget.toolsTokens].every(
-        (tokens) => tokens >= 0,
-      ),
-    ).toBe(true);
-  });
+      expect(allocated).toBe(window);
+      expect(Object.values(budget).every(Number.isSafeInteger)).toBe(true);
+      expect(
+        [budget.systemTokens, budget.historyTokens, budget.filesTokens, budget.toolsTokens].every(
+          (tokens) => tokens >= 0,
+        ),
+      ).toBe(true);
+    },
+  );
 
   it("accepts the maximum context window", () => {
     expect(allocateTokenBudget(maxModelContextWindowTokens)).toEqual({

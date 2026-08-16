@@ -34,17 +34,17 @@ describe("MCP Prompt projection", () => {
     expect(validateMcpPromptArguments(catalog, "review", { code: "x" })).toEqual({ code: "x" });
   });
 
-  it.each<Readonly<Record<string, string>>>([
-    { focus: "security" },
-    { code: "x", extra: "no" },
-  ])("rejects missing required or extra arguments", (argumentsValue) => {
-    const catalog = createMcpPromptCatalog(context, [
-      { name: "review", arguments: [{ name: "code", required: true }, { name: "focus" }] },
-    ]);
-    expect(() => validateMcpPromptArguments(catalog, "review", argumentsValue)).toThrow(
-      McpPromptError,
-    );
-  });
+  it.each<Readonly<Record<string, string>>>([{ focus: "security" }, { code: "x", extra: "no" }])(
+    "rejects missing required or extra arguments",
+    (argumentsValue) => {
+      const catalog = createMcpPromptCatalog(context, [
+        { name: "review", arguments: [{ name: "code", required: true }, { name: "focus" }] },
+      ]);
+      expect(() => validateMcpPromptArguments(catalog, "review", argumentsValue)).toThrow(
+        McpPromptError,
+      );
+    },
+  );
 
   it("rejects duplicate arguments and oversized values", () => {
     expect(() =>

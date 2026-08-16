@@ -33,18 +33,18 @@ describe("MCP Server configuration", () => {
     expect(Object.isFrozen(configuration.args)).toBe(true);
   });
 
-  it.each([
-    "modern-only",
-    "dual",
-  ] as const)("accepts explicit version 2 %s mode", (protocolMode) => {
-    const configuration = parseMcpServerConfiguration({
-      ...validDualConfiguration,
-      protocolMode,
-    });
+  it.each(["modern-only", "dual"] as const)(
+    "accepts explicit version 2 %s mode",
+    (protocolMode) => {
+      const configuration = parseMcpServerConfiguration({
+        ...validDualConfiguration,
+        protocolMode,
+      });
 
-    expect(configuration).toEqual({ ...validDualConfiguration, protocolMode });
-    expect(configuration.version).toBe(2);
-  });
+      expect(configuration).toEqual({ ...validDualConfiguration, protocolMode });
+      expect(configuration.version).toBe(2);
+    },
+  );
 
   it("requires an explicitly configured global value", () => {
     expect(() => readMcpServerConfiguration({ inspect: () => undefined })).toThrowError(

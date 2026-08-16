@@ -197,14 +197,17 @@ describe("OpenAI-Compatible ModelGateway", () => {
   it.each([
     [new LoadAPIKeyError({ message: "missing key" }), "authentication"],
     [new InvalidResponseDataError({ data: null }), "malformed-response"],
-  ] as const)("maps typed SDK failures without inspecting their messages", async (failure, expectedCode) => {
-    setStreamParts([{ type: "error", error: failure }]);
-    const gateway = createGateway();
+  ] as const)(
+    "maps typed SDK failures without inspecting their messages",
+    async (failure, expectedCode) => {
+      setStreamParts([{ type: "error", error: failure }]);
+      const gateway = createGateway();
 
-    await expect(
-      collectEvents(gateway.stream(request, new AbortController().signal)),
-    ).rejects.toMatchObject({ code: expectedCode satisfies ModelGatewayErrorCode });
-  });
+      await expect(
+        collectEvents(gateway.stream(request, new AbortController().signal)),
+      ).rejects.toMatchObject({ code: expectedCode satisfies ModelGatewayErrorCode });
+    },
+  );
 
   it("rejects malformed SDK parts at the Provider boundary", async () => {
     setStreamParts([

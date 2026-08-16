@@ -91,26 +91,27 @@ describe("T1805 modern-first stdio negotiation", () => {
     expect(port.messages.map((message) => message.method)).toEqual(["server/discover"]);
   });
 
-  it.each([
-    -32_700, -32_600, -32_601, -32_602, -32_603,
-  ])("falls back once after the defined non-modern JSON-RPC error %s", async (probeErrorCode) => {
-    const port = legacyPort({ probeErrorCode });
-    const client = new ControlledMcpClient(port, { protocolMode: "dual" });
+  it.each([-32_700, -32_600, -32_601, -32_602, -32_603])(
+    "falls back once after the defined non-modern JSON-RPC error %s",
+    async (probeErrorCode) => {
+      const port = legacyPort({ probeErrorCode });
+      const client = new ControlledMcpClient(port, { protocolMode: "dual" });
 
-    await expect(client.connect()).resolves.toMatchObject({
-      kind: "connected",
-      connection: {
-        protocolVersion: mcpLegacyProtocolVersion,
-        negotiated: { era: "legacy", version: mcpLegacyProtocolVersion },
-      },
-    });
-    expect(port.messages.map((message) => message.method)).toEqual([
-      "server/discover",
-      "initialize",
-      "notifications/initialized",
-    ]);
-    await client.disconnect();
-  });
+      await expect(client.connect()).resolves.toMatchObject({
+        kind: "connected",
+        connection: {
+          protocolVersion: mcpLegacyProtocolVersion,
+          negotiated: { era: "legacy", version: mcpLegacyProtocolVersion },
+        },
+      });
+      expect(port.messages.map((message) => message.method)).toEqual([
+        "server/discover",
+        "initialize",
+        "notifications/initialized",
+      ]);
+      await client.disconnect();
+    },
+  );
 
   it("does not downgrade for an unknown implementation-defined error code", async () => {
     const port = legacyPort({ probeErrorCode: -32_000 });

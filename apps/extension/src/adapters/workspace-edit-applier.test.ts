@@ -83,16 +83,19 @@ describe("WorkspaceEditApplier", () => {
       } as const,
     },
     { ...plan, uri: "file:///workspace/other.ts" },
-  ])("rejects a revision or canonical URI conflict before constructing an edit %#", async (value) => {
-    const dependencies = createDependencies();
-    const applier = new WorkspaceEditApplier(dependencies.values);
+  ])(
+    "rejects a revision or canonical URI conflict before constructing an edit %#",
+    async (value) => {
+      const dependencies = createDependencies();
+      const applier = new WorkspaceEditApplier(dependencies.values);
 
-    await expect(
-      applier.apply(value, ownership, new AbortController().signal),
-    ).rejects.toBeInstanceOf(WorkspaceEditConflictError);
-    expect(dependencies.createWorkspaceEdit).not.toHaveBeenCalled();
-    expect(dependencies.applyWorkspaceEdit).not.toHaveBeenCalled();
-  });
+      await expect(
+        applier.apply(value, ownership, new AbortController().signal),
+      ).rejects.toBeInstanceOf(WorkspaceEditConflictError);
+      expect(dependencies.createWorkspaceEdit).not.toHaveBeenCalled();
+      expect(dependencies.applyWorkspaceEdit).not.toHaveBeenCalled();
+    },
+  );
 
   it("accepts an exact SHA-256 revision", async () => {
     const dependencies = createDependencies();

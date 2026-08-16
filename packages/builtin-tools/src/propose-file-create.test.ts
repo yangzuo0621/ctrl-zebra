@@ -39,15 +39,13 @@ describe("propose_file_create", () => {
     );
   });
 
-  it.each([
-    "../outside.txt",
-    "/outside.txt",
-    "src\\outside.txt",
-    "src/./outside.txt",
-  ])("rejects an unsafe path %s", (path) => {
-    const tool = createProposeFileCreateTool(createWorkspace().values);
-    expect(() => tool.parseInput({ ...input, path })).toThrow(TypeError);
-  });
+  it.each(["../outside.txt", "/outside.txt", "src\\outside.txt", "src/./outside.txt"])(
+    "rejects an unsafe path %s",
+    (path) => {
+      const tool = createProposeFileCreateTool(createWorkspace().values);
+      expect(() => tool.parseInput({ ...input, path })).toThrow(TypeError);
+    },
+  );
 
   it("rejects oversized and line-heavy content before retaining a proposal", () => {
     const tool = createProposeFileCreateTool(createWorkspace().values);

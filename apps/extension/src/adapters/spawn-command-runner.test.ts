@@ -7,6 +7,7 @@ import {
   CommandSpawnError,
   CommandTerminationError,
   CommandTimeoutError,
+  InvalidCommandRunRequestError,
   NodeCommandProcessTreeTerminator,
   type SpawnCommandRequest,
   SpawnCommandRunner,
@@ -17,6 +18,50 @@ const fixturePath = fileURLToPath(
 );
 
 describe("SpawnCommandRunner", () => {
+  it("rejects invalid requests before spawning", async () => {
+    const spawnProcess = vi.fn();
+
+    await expect(
+      new SpawnCommandRunner({ spawnProcess }).run(
+        { ...fixtureRequest("stream"), command: "" },
+        new AbortController().signal,
+        vi.fn(),
+      ),
+    ).rejects.toBeInstanceOf(InvalidCommandRunRequestError);
+    expect(spawnProcess).not.toHaveBeenCalled();
+  });
+
+  it("returns an already-aborted signal reason before spawning", async () => {
+    const reason = new Error("already cancelled");
+    const controller = new AbortController();
+    controller.abort(reason);
+    const spawnProcess = vi.fn();
+
+    await expect(
+      new SpawnCommandRunner({ spawnProcess }).run(
+        fixtureRequest("stream"),
+        controller.signal,
+        vi.fn(),
+      ),
+    ).rejects.toBe(reason);
+    expect(spawnProcess).not.toHaveBeenCalled();
+  });
+
+  it("maps a synchronous spawn failure", async () => {
+    const cause = new Error("spawn failed");
+    const spawnProcess = vi.fn(() => {
+      throw cause;
+    });
+
+    await expect(
+      new SpawnCommandRunner({ spawnProcess }).run(
+        fixtureRequest("stream"),
+        new AbortController().signal,
+        vi.fn(),
+      ),
+    ).rejects.toMatchObject({ name: "CommandSpawnError", cause });
+  });
+
   it("streams stdout and stderr and returns a zero exit", async () => {
     const events: CommandOutputEvent[] = [];
     const result = await new SpawnCommandRunner().run(
@@ -88,23 +133,32 @@ describe("SpawnCommandRunner", () => {
 });
 
 describe("NodeCommandProcessTreeTerminator", () => {
-  it.each([
-    "linux",
-    "darwin",
-  ] as const)("kills the detached %s process group by negative pid", async (platform) => {
+  it("does not terminate a process that is already closed", async () => {
     const killProcess = vi.fn();
-    const startTaskkill = vi.fn(() => createHelper(0));
-    const terminator = new NodeCommandProcessTreeTerminator({
-      platform,
-      killProcess,
-      startTaskkill,
-    });
+    const terminator = new NodeCommandProcessTreeTerminator({ killProcess });
 
-    await terminator.terminate({ pid: 42, isClosed: () => false });
+    await terminator.terminate({ pid: 42, isClosed: () => true });
 
-    expect(killProcess).toHaveBeenCalledWith(-42, "SIGKILL");
-    expect(startTaskkill).not.toHaveBeenCalled();
+    expect(killProcess).not.toHaveBeenCalled();
   });
+
+  it.each(["linux", "darwin"] as const)(
+    "kills the detached %s process group by negative pid",
+    async (platform) => {
+      const killProcess = vi.fn();
+      const startTaskkill = vi.fn(() => createHelper(0));
+      const terminator = new NodeCommandProcessTreeTerminator({
+        platform,
+        killProcess,
+        startTaskkill,
+      });
+
+      await terminator.terminate({ pid: 42, isClosed: () => false });
+
+      expect(killProcess).toHaveBeenCalledWith(-42, "SIGKILL");
+      expect(startTaskkill).not.toHaveBeenCalled();
+    },
+  );
 
   it("uses taskkill directly with the Windows tree and force flags", async () => {
     const startTaskkill = vi.fn(() => createHelper(0));
@@ -129,6 +183,21 @@ describe("NodeCommandProcessTreeTerminator", () => {
     await expect(terminator.terminate({ pid: 73, isClosed: () => false })).rejects.toBeInstanceOf(
       CommandTerminationError,
     );
+  });
+
+  it("maps an active process-group kill failure", async () => {
+    const cause = new Error("kill failed");
+    const terminator = new NodeCommandProcessTreeTerminator({
+      platform: "linux",
+      killProcess: () => {
+        throw cause;
+      },
+    });
+
+    await expect(terminator.terminate({ pid: 73, isClosed: () => false })).rejects.toMatchObject({
+      name: "CommandTerminationError",
+      cause,
+    });
   });
 
   it("bounds a stuck taskkill helper", async () => {

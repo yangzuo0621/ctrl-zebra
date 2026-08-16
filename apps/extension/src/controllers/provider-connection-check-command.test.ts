@@ -83,47 +83,44 @@ describe("Provider connection check", () => {
       expectedUrl: "https://models.example.test/v1/models/compatible-test",
       expectedHeaders: { Accept: "application/json", Authorization: "Bearer test-compatible-key" },
     },
-  ])("checks the $provider metadata route without model context", async ({
-    configuration,
-    body,
-    expectedUrl,
-    expectedHeaders,
-    provider,
-  }) => {
-    const configurationBefore = structuredClone(configuration);
-    const fetch = createFetch(jsonResponse(body));
-    const secrets = createSecrets({
-      openai: "test-openai-key",
-      gemini: "test-gemini-key",
-      "openai-compatible": "test-compatible-key",
-    });
+  ])(
+    "checks the $provider metadata route without model context",
+    async ({ configuration, body, expectedUrl, expectedHeaders, provider }) => {
+      const configurationBefore = structuredClone(configuration);
+      const fetch = createFetch(jsonResponse(body));
+      const secrets = createSecrets({
+        openai: "test-openai-key",
+        gemini: "test-gemini-key",
+        "openai-compatible": "test-compatible-key",
+      });
 
-    const report = await checkProviderConnection({
-      configuration,
-      secrets,
-      fetch,
-      signal: new AbortController().signal,
-    });
+      const report = await checkProviderConnection({
+        configuration,
+        secrets,
+        fetch,
+        signal: new AbortController().signal,
+      });
 
-    expect(report).toMatchObject({
-      provider,
-      modelId: configuration.modelId,
-      authentication: "supported",
-      modelExistence: "supported",
-      outcome: "completed",
-    });
-    expect(fetch).toHaveBeenCalledOnce();
-    const [url, init] = fetch.mock.calls[0] ?? [];
-    expect(url).toBe(expectedUrl);
-    expect(init).toMatchObject({
-      method: "GET",
-      headers: expectedHeaders,
-      redirect: "error",
-    });
-    expect(init).not.toHaveProperty("body");
-    expect(secrets.read).toHaveBeenCalledWith(provider);
-    expect(configuration).toEqual(configurationBefore);
-  });
+      expect(report).toMatchObject({
+        provider,
+        modelId: configuration.modelId,
+        authentication: "supported",
+        modelExistence: "supported",
+        outcome: "completed",
+      });
+      expect(fetch).toHaveBeenCalledOnce();
+      const [url, init] = fetch.mock.calls[0] ?? [];
+      expect(url).toBe(expectedUrl);
+      expect(init).toMatchObject({
+        method: "GET",
+        headers: expectedHeaders,
+        redirect: "error",
+      });
+      expect(init).not.toHaveProperty("body");
+      expect(secrets.read).toHaveBeenCalledWith(provider);
+      expect(configuration).toEqual(configurationBefore);
+    },
+  );
 
   it("reports Gemini streaming support only from the documented complete method list", async () => {
     const configuration = geminiConfiguration();
@@ -145,28 +142,27 @@ describe("Provider connection check", () => {
     });
   });
 
-  it.each([
-    undefined,
-    7,
-    ["generateContent", 7],
-  ])("keeps Gemini capability facts unknown when metadata is not a valid method list (%s)", async (methods) => {
-    const fetch = createFetch(
-      jsonResponse({ name: "models/gemini-test", supportedGenerationMethods: methods }),
-    );
+  it.each([undefined, 7, ["generateContent", 7]])(
+    "keeps Gemini capability facts unknown when metadata is not a valid method list (%s)",
+    async (methods) => {
+      const fetch = createFetch(
+        jsonResponse({ name: "models/gemini-test", supportedGenerationMethods: methods }),
+      );
 
-    const report = await checkProviderConnection({
-      configuration: geminiConfiguration(),
-      secrets: createSecrets({ gemini: "test-gemini-key" }),
-      fetch,
-      signal: new AbortController().signal,
-    });
+      const report = await checkProviderConnection({
+        configuration: geminiConfiguration(),
+        secrets: createSecrets({ gemini: "test-gemini-key" }),
+        fetch,
+        signal: new AbortController().signal,
+      });
 
-    expect(report.capabilities).toEqual({
-      textStreaming: "unknown",
-      toolCalling: "unknown",
-      required: "unknown",
-    });
-  });
+      expect(report.capabilities).toEqual({
+        textStreaming: "unknown",
+        toolCalling: "unknown",
+        required: "unknown",
+      });
+    },
+  );
 
   it("never infers OpenAI capabilities from a successful model response", async () => {
     const report = await checkProviderConnection({
@@ -243,34 +239,37 @@ describe("Provider connection check", () => {
   it.each([
     ["openai", openAIConfiguration(), "openai"],
     ["gemini", geminiConfiguration(), "gemini"],
-  ] as const)("does not probe a dedicated Provider custom endpoint", async (_name, configuration, provider) => {
-    const fetch = createFetch(jsonResponse({ id: configuration.modelId }));
-    const secrets = createSecrets({ [provider]: "test-key" } as Partial<
-      Record<ProviderId, string>
-    >);
+  ] as const)(
+    "does not probe a dedicated Provider custom endpoint",
+    async (_name, configuration, provider) => {
+      const fetch = createFetch(jsonResponse({ id: configuration.modelId }));
+      const secrets = createSecrets({ [provider]: "test-key" } as Partial<
+        Record<ProviderId, string>
+      >);
 
-    const report = await checkProviderConnection({
-      configuration: { ...configuration, endpoint: "https://custom.example.test/v1" },
-      secrets,
-      fetch,
-      signal: new AbortController().signal,
-    });
+      const report = await checkProviderConnection({
+        configuration: { ...configuration, endpoint: "https://custom.example.test/v1" },
+        secrets,
+        fetch,
+        signal: new AbortController().signal,
+      });
 
-    expect(report).toMatchObject({
-      authentication: "unknown",
-      modelExistence: "unknown",
-      capabilities: {
-        textStreaming: "unknown",
-        toolCalling: "unknown",
-        required: "unknown",
-      },
-      outcome: "completed",
-      errorCode: "unknown",
-      guidance: "provider-documentation",
-    });
-    expect(fetch).not.toHaveBeenCalled();
-    expect(secrets.read).not.toHaveBeenCalled();
-  });
+      expect(report).toMatchObject({
+        authentication: "unknown",
+        modelExistence: "unknown",
+        capabilities: {
+          textStreaming: "unknown",
+          toolCalling: "unknown",
+          required: "unknown",
+        },
+        outcome: "completed",
+        errorCode: "unknown",
+        guidance: "provider-documentation",
+      });
+      expect(fetch).not.toHaveBeenCalled();
+      expect(secrets.read).not.toHaveBeenCalled();
+    },
+  );
 
   it("maps a missing required key to authentication failure without contacting the endpoint", async () => {
     const fetch = createFetch(jsonResponse({ id: "gpt-test" }));
@@ -295,22 +294,25 @@ describe("Provider connection check", () => {
     [403, "authentication", "unsupported", "unknown"],
     [404, "model-not-found", "unknown", "unsupported"],
     [429, "rate-limit", "unknown", "unknown"],
-  ] as const)("classifies HTTP %s using status only", async (status, errorCode, authentication, modelExistence) => {
-    const fetch = createFetch(new Response("sensitive provider body", { status }));
-    const report = await checkProviderConnection({
-      configuration: openAIConfiguration(),
-      secrets: createSecrets({ openai: "test-key" }),
-      fetch,
-      signal: new AbortController().signal,
-    });
+  ] as const)(
+    "classifies HTTP %s using status only",
+    async (status, errorCode, authentication, modelExistence) => {
+      const fetch = createFetch(new Response("sensitive provider body", { status }));
+      const report = await checkProviderConnection({
+        configuration: openAIConfiguration(),
+        secrets: createSecrets({ openai: "test-key" }),
+        fetch,
+        signal: new AbortController().signal,
+      });
 
-    expect(report).toMatchObject({
-      authentication,
-      modelExistence,
-      outcome: "failed",
-      errorCode,
-    });
-  });
+      expect(report).toMatchObject({
+        authentication,
+        modelExistence,
+        outcome: "failed",
+        errorCode,
+      });
+    },
+  );
 
   it("rejects an unusable response without exposing its contents", async () => {
     const secret = "sk-test-sensitive-response-value";

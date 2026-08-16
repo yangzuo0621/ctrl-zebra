@@ -89,14 +89,17 @@ describe("Provider configuration", () => {
       true,
       true,
     ],
-  ] as const)("projects bounded onboarding facts for %s", (_name, values, apiKeyRequired, modelConfigured) => {
-    expect(readProviderOnboardingConfiguration(configuration(values))).toMatchObject({
-      provider: values.id,
-      apiKeyRequired,
-      modelConfigured,
-      endpointValid: values.id !== "openai-compatible" || "endpoint" in values,
-    });
-  });
+  ] as const)(
+    "projects bounded onboarding facts for %s",
+    (_name, values, apiKeyRequired, modelConfigured) => {
+      expect(readProviderOnboardingConfiguration(configuration(values))).toMatchObject({
+        provider: values.id,
+        apiKeyRequired,
+        modelConfigured,
+        endpointValid: values.id !== "openai-compatible" || "endpoint" in values,
+      });
+    },
+  );
 
   it("tolerates malformed optional endpoints without returning their value", () => {
     expect(

@@ -89,22 +89,25 @@ describe("mapRunErrorToUi", () => {
       "capabilities",
       "Capabilities must be a unique list containing only text-streaming or tool-calling.",
     ],
-  ] as const)("provides a fixed safe configuration prompt for %s", (code: ProviderConfigurationErrorCode, setting, message) => {
-    const error = new ProviderConfigurationError(code, setting, "secret-token");
+  ] as const)(
+    "provides a fixed safe configuration prompt for %s",
+    (code: ProviderConfigurationErrorCode, setting, message) => {
+      const error = new ProviderConfigurationError(code, setting, "secret-token");
 
-    expect(mapRunErrorToUi(error)).toEqual({
-      code: "configuration",
-      message,
-    });
-    expect(getRunFailureLogEntry(error)).toEqual({
-      event: "run_failed",
-      component: "agent_run",
-      outcome: "failure",
-      errorCode: `provider-${code}`,
-    });
-    expect(JSON.stringify(mapRunErrorToUi(error))).not.toContain("secret-token");
-    expect(JSON.stringify(getRunFailureLogEntry(error))).not.toContain("secret-token");
-  });
+      expect(mapRunErrorToUi(error)).toEqual({
+        code: "configuration",
+        message,
+      });
+      expect(getRunFailureLogEntry(error)).toEqual({
+        event: "run_failed",
+        component: "agent_run",
+        outcome: "failure",
+        errorCode: `provider-${code}`,
+      });
+      expect(JSON.stringify(mapRunErrorToUi(error))).not.toContain("secret-token");
+      expect(JSON.stringify(getRunFailureLogEntry(error))).not.toContain("secret-token");
+    },
+  );
 
   it.each([
     [

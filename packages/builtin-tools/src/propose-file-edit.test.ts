@@ -70,16 +70,14 @@ describe("propose_file_edit", () => {
     expect(workspace.isFileRevisionCurrent).toHaveBeenCalledWith(snapshot, signal);
   });
 
-  it.each([
-    "../outside.ts",
-    "/outside.ts",
-    "src\\outside.ts",
-    "src/./outside.ts",
-  ])("rejects an unsafe workspace path %s", (path) => {
-    const tool = createProposeFileEditTool(createWorkspace().values);
+  it.each(["../outside.ts", "/outside.ts", "src\\outside.ts", "src/./outside.ts"])(
+    "rejects an unsafe workspace path %s",
+    (path) => {
+      const tool = createProposeFileEditTool(createWorkspace().values);
 
-    expect(() => tool.parseInput({ ...input, path })).toThrow(TypeError);
-  });
+      expect(() => tool.parseInput({ ...input, path })).toThrow(TypeError);
+    },
+  );
 
   it("propagates a canonical workspace-scope rejection without checking a revision", async () => {
     const outsideWorkspace = new Error("outside selected workspace");

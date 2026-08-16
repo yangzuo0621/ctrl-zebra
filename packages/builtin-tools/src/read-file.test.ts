@@ -142,19 +142,18 @@ describe("read_file", () => {
     ).rejects.toEqual(new ReadFileRangeError());
   });
 
-  it.each([
-    null,
-    { bytes: "text", truncated: false },
-    { bytes: new Uint8Array(), truncated: 1 },
-  ])("rejects invalid host output %#", async (source) => {
-    const tool = createReadFileTool(createWorkspace(source));
+  it.each([null, { bytes: "text", truncated: false }, { bytes: new Uint8Array(), truncated: 1 }])(
+    "rejects invalid host output %#",
+    async (source) => {
+      const tool = createReadFileTool(createWorkspace(source));
 
-    await expect(
-      tool.execute(tool.parseInput({ path: "file.txt" }), {
-        signal: new AbortController().signal,
-      }),
-    ).rejects.toEqual(new InvalidWorkspaceFileReadError());
-  });
+      await expect(
+        tool.execute(tool.parseInput({ path: "file.txt" }), {
+          signal: new AbortController().signal,
+        }),
+      ).rejects.toEqual(new InvalidWorkspaceFileReadError());
+    },
+  );
 
   it("does not call the workspace after cancellation", async () => {
     const controller = new AbortController();

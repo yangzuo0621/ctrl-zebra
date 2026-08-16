@@ -61,23 +61,21 @@ describe("Provider API key commands", () => {
     }
   });
 
-  it.each(
-    providerApiKeyCommandDefinitions,
-  )("$provider save cancels without writing or reporting success", async ({
-    commandId,
-    provider,
-  }) => {
-    const harness = createHarness(undefined);
-    const disposable = registerProviderApiKeyCommands(harness.options);
+  it.each(providerApiKeyCommandDefinitions)(
+    "$provider save cancels without writing or reporting success",
+    async ({ commandId, provider }) => {
+      const harness = createHarness(undefined);
+      const disposable = registerProviderApiKeyCommands(harness.options);
 
-    await harness.run(commandId);
+      await harness.run(commandId);
 
-    expect(harness.storages[provider].save).not.toHaveBeenCalled();
-    expect(harness.showWarningMessage).not.toHaveBeenCalled();
-    expect(harness.showInformationMessage).not.toHaveBeenCalled();
-    expect(harness.showErrorMessage).not.toHaveBeenCalled();
-    disposable.dispose();
-  });
+      expect(harness.storages[provider].save).not.toHaveBeenCalled();
+      expect(harness.showWarningMessage).not.toHaveBeenCalled();
+      expect(harness.showInformationMessage).not.toHaveBeenCalled();
+      expect(harness.showErrorMessage).not.toHaveBeenCalled();
+      disposable.dispose();
+    },
+  );
 
   it("rejects an empty result even when the host bypasses input validation", async () => {
     const harness = createHarness("");

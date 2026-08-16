@@ -92,15 +92,14 @@ describe("MCP Resource projection", () => {
     ).toThrow(McpResourceError);
   });
 
-  it.each([
-    "javascript:alert(1)",
-    "data:text/plain,secret",
-    "not a uri",
-  ])("rejects a dangerous or malformed URI: %s", (uri) => {
-    expect(() => createMcpResourceCatalog(context, [{ uri, name: "Bad" }], [])).toThrow(
-      McpResourceError,
-    );
-  });
+  it.each(["javascript:alert(1)", "data:text/plain,secret", "not a uri"])(
+    "rejects a dangerous or malformed URI: %s",
+    (uri) => {
+      expect(() => createMcpResourceCatalog(context, [{ uri, name: "Bad" }], [])).toThrow(
+        McpResourceError,
+      );
+    },
+  );
 
   it("normalizes multiple same-MIME text items without granting URI authority", () => {
     expect(
