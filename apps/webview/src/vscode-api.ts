@@ -30,6 +30,7 @@ export interface WebviewHost {
   restoreSession(requestId: string, sessionId: string): void;
   deleteSession?(requestId: string, sessionId: string): void;
   clearSessions?(requestId: string): void;
+  clearLocalData?(requestId: string): void;
   listCheckpoints(requestId: string): void;
   restoreCheckpoint(requestId: string, checkpointId: string): void;
   connectMcp?(requestId: string): void;
@@ -213,6 +214,14 @@ const webviewHost: WebviewHost = {
     getVsCodeApi().postMessage({
       protocolVersion,
       type: "webview/clear-sessions",
+      requestId,
+      confirm: true,
+    });
+  },
+  clearLocalData(requestId) {
+    getVsCodeApi().postMessage({
+      protocolVersion,
+      type: "webview/clear-local-data",
       requestId,
       confirm: true,
     });

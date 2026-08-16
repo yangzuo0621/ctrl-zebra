@@ -182,6 +182,30 @@ This document defines the Webview security constraints established before T0104.
   Storage and parse failures produce bounded counts and fixed user-safe feedback without raw paths,
   content, exception text, or identifiers derived from persisted data.
 
+### Complete local-data clearing (T2106)
+
+- `ctrlZebra.clearLocalData` and the Agent view's `Clear all CtrlZebra local data` action share one
+  Host controller. The Host presents a modal warning that names the permanent scope before any
+  cancellation or storage call. The Webview's `confirm: true` is only an intent marker; it is never
+  treated as confirmation authority. Dismissal emits a correlated `cancelled` result and performs no
+  mutation.
+- The controller is single-flight and acquires every registered operation lock before cleanup. The
+  Run lock closes the event gate, cancels once, and waits for all active/settling work. The MCP lock
+  aborts connection work and holds an exclusive disconnect gate; a termination-unconfirmed result
+  fails closed before durable cleanup. Provider Secret operations are excluded until all categories
+  settle. Resource, Prompt, editor, workspace-reference, Checkpoint, and transient MCP projections
+  are invalidated before the first durable category.
+- The Host deletes only the exact three Provider Secret names owned by the current Provider adapters,
+  exact registered CtrlZebra configuration leaves, the current Extension's Mementos, and the two
+  Extension-owned storage roots. The workspace storage scan excludes the Session/Checkpoint roots
+  because their stores own those directories. No workspace URI, user-code path, VS Code global data
+  outside CtrlZebra, or other Extension storage enters the operation.
+- Categories run in fixed order and continue after a category error. Reports contain only bounded
+  category names, deleted/failed counts, and fixed text; raw SecretStorage, filesystem, configuration,
+  or process errors never cross Protocol. A partial result is never success, retains a retry path, and
+  successful categories remain idempotently cleared. Late Run, restore, MCP, or projection messages
+  are fenced after the clear result, and a restart never resumes the interrupted clear implicitly.
+
 ## Tool Input and Output
 
 - Model-supplied Tool Call IDs, names, and input are untrusted. The generic protocol Schema rejects

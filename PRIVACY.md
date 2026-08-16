@@ -186,6 +186,16 @@ Webview as unrestricted content. A create/delete/rename restore is explicit and 
 there is no automatic rollback. T2105 separately provides settings-controlled local retention for
 expired Sessions and safely attributable Checkpoints.
 
+Before uninstalling or handing a device to another user, users can explicitly invoke `CtrlZebra:
+Clear All Local Data` or the Agent view's equivalent action. After a modal high-risk confirmation,
+CtrlZebra clears its local Sessions, Checkpoints, temporary/cache artifacts, the three Provider API
+keys held in VS Code SecretStorage, its Provider/MCP/retention/editor settings, Extension Mementos,
+and transient Webview/MCP state. This is local-only: no data is uploaded, and the action never deletes
+workspace files, user code, VS Code data outside CtrlZebra, or another Extension's state. Active Runs
+and MCP work are cancelled and settled first. The Host reports partial failures by category and leaves
+the action safe to retry; cancellation leaves data unchanged. A restart does not resume clearing
+silently, so remaining data can be handled by an explicit retry.
+
 `search_files` remains literal substring search by default. A user/model must explicitly select
 `mode: "regex"` to request the bounded RE2-compatible dialect. Patterns and scanned text stay
 within the existing file/result limits; unsupported syntax, complexity, cancellation, or engine

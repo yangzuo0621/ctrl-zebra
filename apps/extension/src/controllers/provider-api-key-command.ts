@@ -109,12 +109,16 @@ export interface ProviderApiKeyOperationContext {
 export class ProviderApiKeyOperationCoordinator {
   readonly #tails = new Map<ProviderId, Promise<void>>();
   #generation = 0;
+  #exclusive = false;
   #disposed = false;
 
   run<T>(
     provider: ProviderId,
     operation: (context: ProviderApiKeyOperationContext) => Promise<T>,
   ): Promise<T | undefined> {
+    if (this.#exclusive) {
+      return Promise.resolve(undefined);
+    }
     const generation = this.#generation;
     const previous = this.#tails.get(provider) ?? Promise.resolve();
     const current = previous
@@ -142,6 +146,20 @@ export class ProviderApiKeyOperationCoordinator {
       }
     });
     return current;
+  }
+
+  /** Blocks new Provider Secret operations until the returned release is called. */
+  async acquireExclusive(): Promise<() => void> {
+    this.#exclusive = true;
+    this.invalidate();
+    await Promise.all([...this.#tails.values()]);
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      this.#exclusive = false;
+      this.invalidate();
+    };
   }
 
   invalidate(): void {

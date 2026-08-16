@@ -19,6 +19,7 @@ export interface ProviderOnboardingState {
   readonly pendingAction?: PendingProviderAction;
   readonly actionOutcome?: ProviderActionMessage;
   readonly announcement: string;
+  clearLocal(): void;
   refresh(): boolean;
   runAction(action: ProviderAction): boolean;
   receive(message: ExtensionToWebviewMessage): void;
@@ -35,6 +36,16 @@ export function createOnboardingStore(
 
   return createStore<ProviderOnboardingState>()((set, get) => ({
     announcement: strings.provider.checking,
+    clearLocal() {
+      statusRequestId = undefined;
+      postActionStatusRequestId = undefined;
+      set({
+        status: undefined,
+        pendingAction: undefined,
+        actionOutcome: undefined,
+        announcement: strings.provider.cleared,
+      });
+    },
     refresh() {
       if (
         disposed ||

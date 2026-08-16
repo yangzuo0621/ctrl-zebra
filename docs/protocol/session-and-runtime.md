@@ -59,6 +59,23 @@ new-Session behavior.
   removes every Session directory and committed/temporary Checkpoint record under the CtrlZebra
   persistence root. It emits `extension/sessions-cleared` only when all categories finish; otherwise
   it emits `extension/session-deletion-error` with a retryable `partial` or `unavailable` outcome.
+- `webview/clear-local-data` is the strict high-risk intent `{ protocolVersion, type:
+  "webview/clear-local-data", requestId, confirm: true }`. The Host must show its own modal warning
+  before accepting the intent; `confirm` is not Webview authority. It is distinct from
+  `webview/clear-sessions` and covers these fixed categories in order: `running-operations`,
+  `sessions`, `checkpoints`, `temporary-files`, `caches`, `provider-secret`,
+  `provider-configuration`, `mcp-configuration`, and `other-local-state`. The Host cancels and settles
+  live work before the first durable category and ignores other Webview intents while this request is
+  running. Concurrent clear requests share the in-flight result.
+- The correlated `extension/local-data-clear-result` is the strict object `{ protocolVersion, type:
+  "extension/local-data-clear-result", requestId, outcome, categories, message }`. `outcome` is
+  `completed`, `partial`, or `cancelled`; cancellation has no category entries. A non-cancelled result
+  contains at most one bounded entry for each category, with `outcome: "cleared" | "failed"` and
+  non-negative bounded `deleted`/`failed` counts. Fixed safe text describes completion or retry; raw
+  paths, configuration values, SecretStorage values, process output, and exception text are excluded.
+  `partial` is retryable and is never converted into success. The Webview clears/fences its local
+  projection after `completed` or `partial`, retains it on `cancelled`, and ignores a result for any
+  other request ID.
 - `webview/list-sessions` remains the strict existing list intent and `extension/session-list` keeps its
   existing Session summary shape. On that explicit history request, the Host may perform T2105's
   bounded local retention pass before emitting the list; removed Sessions are omitted from that

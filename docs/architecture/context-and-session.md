@@ -130,6 +130,27 @@ record is restored or persisted separately.
   the retention loop without changing Run or Session state, and storage errors become bounded report
   counts for fixed Host feedback rather than raw exceptions.
 
+## Complete local-data clear lifecycle (T2106)
+
+- The Extension-owned `LocalDataClearController` is the single lifecycle owner for the uninstall-
+  before/device-handoff operation. It is single-flight and registers operation locks from each live
+  Webview, the MCP connection, and Provider Secret operations. Locks are acquired before any
+  category runs and released only after every category settles.
+- The fixed sequence is running-operation gate, Session repository clear, Checkpoint store clear,
+  Extension storage temporary/cache roots, transient cache reset, Provider Secret deletion, explicit
+  CtrlZebra configuration leaves, MCP configuration, and Extension Mementos. Core's Session and
+  Checkpoint contracts are reused; no Core state transition or persisted format is added. The Host
+  storage adapter owns VS Code URI/path safety and excludes workspace roots and persistence roots
+  from broad scans.
+- Cancelling a Run closes its event gate and waits for active and settling work. Resource/Prompt,
+  editor, workspace-reference, and Checkpoint view owners invalidate their local state before
+  cleanup. MCP must be confirmed disconnected; otherwise the controller fails closed and leaves
+  durable data for retry. A partial category does not block later categories, and a retry only
+  repeats safe idempotent operations.
+- A restart never resumes an old model Run or clear operation. Recovery may show remaining Sessions
+  as `interrupted`; the next explicit clear operation reports the remaining categories. Successful or
+  partial completion fences the Webview projection so removed local data cannot be displayed again.
+
 ## Session State Machine
 
 - Session status changes go through the Core state machine; callers and tools do not mutate or

@@ -9,7 +9,13 @@ import type {
   WorkspaceEditPlan,
 } from "@ctrl-zebra/core";
 import { ControlledMcpClient } from "@ctrl-zebra/mcp-client";
-import { isApprovedExternalLink } from "@ctrl-zebra/protocol";
+import {
+  type ExtensionToWebviewMessage,
+  isApprovedExternalLink,
+  persistenceCheckpointsDirectory,
+  persistenceSessionsDirectory,
+  protocolVersion,
+} from "@ctrl-zebra/protocol";
 import {
   createGeminiModelGateway,
   createOpenAICompatibleModelGateway,
@@ -63,11 +69,19 @@ import {
 } from "./adapters/session-retention-configuration.js";
 import { SpawnCommandRunner } from "./adapters/spawn-command-runner.js";
 import { createStructuredLogger } from "./adapters/structured-logger.js";
+import { VscodeBoundedTextStorage } from "./adapters/vscode-bounded-text-storage.js";
 import { createWorkspaceCheckpointStoreProvider } from "./adapters/vscode-checkpoint-storage.js";
 import { VsCodeDiagnostics } from "./adapters/vscode-diagnostics.js";
 import { VsCodeEditorContext } from "./adapters/vscode-editor-context.js";
 import { isVscodeFileNotFound } from "./adapters/vscode-file-system-error.js";
 import { VsCodeLanguageServices } from "./adapters/vscode-language-services.js";
+import {
+  clearConfigurationEntries,
+  clearMemento,
+  clearProviderSecrets,
+  mcpConfigurationEntries,
+  nonMcpConfigurationEntries,
+} from "./adapters/vscode-local-data.js";
 import { VsCodeProposeFileCreateWorkspace } from "./adapters/vscode-propose-file-create-workspace.js";
 import { VsCodeProposeFileDeleteRenameWorkspace } from "./adapters/vscode-propose-file-delete-rename-workspace.js";
 import {
@@ -96,6 +110,11 @@ import { FileCreateApprovalWorkflow } from "./controllers/file-create-approval-w
 import { FileDeleteApprovalWorkflow } from "./controllers/file-delete-approval-workflow.js";
 import { FileEditApprovalWorkflow } from "./controllers/file-edit-approval-workflow.js";
 import { FileRenameApprovalWorkflow } from "./controllers/file-rename-approval-workflow.js";
+import {
+  clearLocalDataCommandId,
+  LocalDataClearController,
+  type LocalDataClearReport,
+} from "./controllers/local-data-clear.js";
 import { McpConnectionController } from "./controllers/mcp-connection-controller.js";
 import { McpPromptActions } from "./controllers/mcp-prompt-actions.js";
 import { McpResourceActions } from "./controllers/mcp-resource-actions.js";
@@ -150,6 +169,11 @@ export function activate(context: ExtensionContext): void {
   });
   const secrets = createProviderApiKeySecretReader(context.secrets);
   const providerApiKeyPresence = createProviderApiKeyPresenceReader(context.secrets);
+  const providerApiKeyStorages = {
+    openai: createOpenAIApiKeySecretStorage(context.secrets),
+    gemini: createGeminiApiKeySecretStorage(context.secrets),
+    "openai-compatible": createOpenAICompatibleApiKeySecretStorage(context.secrets),
+  } as const;
   const providerApiKeyCoordinator = new ProviderApiKeyOperationCoordinator();
   const canonicalize = createLocalWorkspaceUriCanonicalizer(realpath, Uri.file);
   const getSelectedRoot = () =>
@@ -781,6 +805,153 @@ export function activate(context: ExtensionContext): void {
     context.storageUri,
     workspace.fs,
   );
+  const workspaceLocalStorage =
+    context.storageUri === undefined
+      ? undefined
+      : new VscodeBoundedTextStorage({
+          root: context.storageUri,
+          fileSystem: workspace.fs,
+          joinPath: Uri.joinPath,
+          isFileNotFound: isVscodeFileNotFound,
+        });
+  const globalLocalStorage = new VscodeBoundedTextStorage({
+    root: context.globalStorageUri,
+    fileSystem: workspace.fs,
+    joinPath: Uri.joinPath,
+    isFileNotFound: isVscodeFileNotFound,
+  });
+  const localDataClear = new LocalDataClearController({
+    async clearSessions() {
+      if (context.storageUri === undefined) return { deleted: 0, failed: 0 };
+      const repository = await selectSessionRepository();
+      return (await repository.clear?.()) ?? { deleted: 0, failed: 1 };
+    },
+    async clearCheckpoints() {
+      if (context.storageUri === undefined) return { deleted: 0, failed: 0 };
+      const store = await selectCheckpointStore();
+      return (await store.clear?.(new AbortController().signal)) ?? { deleted: 0, failed: 1 };
+    },
+    async clearTemporaryFiles() {
+      const reports = [];
+      if (workspaceLocalStorage !== undefined) {
+        try {
+          reports.push(
+            await workspaceLocalStorage.clearRootEntries([
+              persistenceSessionsDirectory,
+              persistenceCheckpointsDirectory,
+            ]),
+          );
+        } catch {
+          reports.push({ deleted: 0, failed: 1 });
+        }
+      }
+      try {
+        reports.push(await globalLocalStorage.clearRootEntries([]));
+      } catch {
+        reports.push({ deleted: 0, failed: 1 });
+      }
+      return reports.reduce(
+        (total, report) => ({
+          deleted: total.deleted + report.deleted,
+          failed: total.failed + report.failed,
+        }),
+        { deleted: 0, failed: 0 },
+      );
+    },
+    async clearCaches() {
+      return { deleted: 0, failed: 0 };
+    },
+    async clearProviderSecret() {
+      return await clearProviderSecrets(providerApiKeyStorages);
+    },
+    async clearProviderConfiguration() {
+      return await clearConfigurationEntries(
+        { getConfiguration: (section, scope) => workspace.getConfiguration(section, scope) },
+        nonMcpConfigurationEntries,
+      );
+    },
+    async clearMcpConfiguration() {
+      return await clearConfigurationEntries(
+        { getConfiguration: (section, scope) => workspace.getConfiguration(section, scope) },
+        mcpConfigurationEntries,
+      );
+    },
+    async clearOtherLocalState() {
+      const reports = [];
+      try {
+        reports.push(await clearMemento(context.globalState));
+      } catch {
+        reports.push({ deleted: 0, failed: 1 });
+      }
+      try {
+        reports.push(await clearMemento(context.workspaceState));
+      } catch {
+        reports.push({ deleted: 0, failed: 1 });
+      }
+      return reports.reduce(
+        (total, report) => ({
+          deleted: total.deleted + report.deleted,
+          failed: total.failed + report.failed,
+        }),
+        { deleted: 0, failed: 0 },
+      );
+    },
+  });
+  localDataClear.registerOperationLock(
+    () => providerApiKeyCoordinator.acquireExclusive(),
+    "running",
+  );
+  localDataClear.registerOperationLock(async () => {
+    return await mcpConnection.acquireExclusive();
+  }, "resource");
+
+  async function requestLocalDataClear(
+    requestId?: string,
+    post?: (message: ExtensionToWebviewMessage) => void,
+  ): Promise<LocalDataClearReport | undefined> {
+    const confirmation = await window.showWarningMessage(
+      "This permanently deletes CtrlZebra Sessions, Checkpoints, temporary files, caches, Provider API keys, MCP/Provider settings, and other CtrlZebra local state. It does not delete workspace files, user code, VS Code data outside CtrlZebra, or other extensions. Continue?",
+      { modal: true },
+      "Clear CtrlZebra data",
+    );
+    if (confirmation !== "Clear CtrlZebra data") {
+      if (requestId !== undefined && post !== undefined) {
+        post({
+          protocolVersion,
+          type: "extension/local-data-clear-result",
+          requestId,
+          outcome: "cancelled",
+          categories: [],
+          message: "CtrlZebra local-data clearing was cancelled.",
+        });
+      }
+      return undefined;
+    }
+
+    const report = await localDataClear.run();
+    if (requestId !== undefined && post !== undefined) {
+      post({
+        protocolVersion,
+        type: "extension/local-data-clear-result",
+        requestId,
+        outcome: report.outcome,
+        categories: report.categories.map((category) => ({ ...category })),
+        message:
+          report.outcome === "completed"
+            ? "CtrlZebra local data was cleared."
+            : "Some CtrlZebra local data could not be cleared. Retry to continue.",
+      });
+    }
+    if (report.outcome === "completed") {
+      void window.showInformationMessage("CtrlZebra local data was cleared.");
+    } else {
+      void window.showWarningMessage(
+        "Some CtrlZebra local data could not be cleared. Retry the command to continue.",
+      );
+    }
+    return report;
+  }
+
   const chatRunner = createSelectingChatRunner({
     diagnosticSink: {
       emit: (diagnostic) => {
@@ -1044,13 +1215,10 @@ export function activate(context: ExtensionContext): void {
       controller: mcpConnection,
       registerCommand: (commandId, handler) => commands.registerCommand(commandId, handler),
     }),
+    commands.registerCommand(clearLocalDataCommandId, () => requestLocalDataClear()),
     registerProviderApiKeyCommands({
       coordinator: providerApiKeyCoordinator,
-      storages: {
-        openai: createOpenAIApiKeySecretStorage(context.secrets),
-        gemini: createGeminiApiKeySecretStorage(context.secrets),
-        "openai-compatible": createOpenAICompatibleApiKeySecretStorage(context.secrets),
-      },
+      storages: providerApiKeyStorages,
       presence: providerApiKeyPresence,
       registerCommand: (commandId, handler) => commands.registerCommand(commandId, handler),
       showInputBox: (options) => window.showInputBox(options),
@@ -1060,6 +1228,7 @@ export function activate(context: ExtensionContext): void {
       showErrorMessage: (message) => window.showErrorMessage(message),
     }),
     registerModelSelectionCommand({
+      isBlocked: () => localDataClear.isRunning,
       readConfiguration() {
         const settings = workspace.getConfiguration("ctrlZebra.provider");
         return readProviderSelectionConfiguration({
@@ -1171,6 +1340,12 @@ export function activate(context: ExtensionContext): void {
         }),
       createProviderOnboarding,
       editorContext: editorContextEntry,
+      localDataClear: {
+        controller: localDataClear,
+        request: (requestId, post) => {
+          void requestLocalDataClear(requestId, post);
+        },
+      },
       openExternalLink: (href) => {
         if (!isApprovedExternalLink(href)) {
           return;

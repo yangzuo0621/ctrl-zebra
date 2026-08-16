@@ -7,7 +7,70 @@ import {
   VscodeBoundedTextStorage,
 } from "./vscode-bounded-text-storage.js";
 
+const missing = new Error("missing");
+const fileType = { File: 1, Directory: 2 } as const;
+
+function uri(path: string): Uri {
+  return createTestUri(path.startsWith("/") ? path : `/${path}`);
+}
+
 describe("VscodeBoundedTextStorage", () => {
+  it("clears only non-persistence entries from the extension storage root", async () => {
+    const deleted: string[] = [];
+    const storage = new VscodeBoundedTextStorage({
+      root: uri("storage"),
+      joinPath: (base, ...segments) => uri(`${base.path}/${segments.join("/")}`),
+      isFileNotFound: () => false,
+      fileSystem: {
+        async createDirectory() {},
+        async delete(target) {
+          deleted.push(target.path);
+        },
+        async readDirectory() {
+          return [
+            ["sessions", fileType.Directory],
+            ["checkpoints", fileType.Directory],
+            ["cache", fileType.Directory],
+            ["stale.tmp", fileType.File],
+          ] as const;
+        },
+        async readFile() {
+          return new Uint8Array();
+        },
+        async rename() {},
+        async writeFile() {},
+      },
+    });
+
+    await expect(storage.clearRootEntries(["sessions", "checkpoints"])).resolves.toEqual({
+      deleted: 2,
+      failed: 0,
+    });
+    expect(deleted).toEqual(["/storage/cache", "/storage/stale.tmp"]);
+  });
+
+  it("treats a missing extension storage root as empty", async () => {
+    const storage = new VscodeBoundedTextStorage({
+      root: uri("storage"),
+      joinPath: (base, ...segments) => uri(`${base.path}/${segments.join("/")}`),
+      isFileNotFound: (error) => error === missing,
+      fileSystem: {
+        async createDirectory() {},
+        async delete() {},
+        async readDirectory() {
+          throw missing;
+        },
+        async readFile() {
+          return new Uint8Array();
+        },
+        async rename() {},
+        async writeFile() {},
+      },
+    });
+
+    await expect(storage.clearRootEntries([])).resolves.toEqual({ deleted: 0, failed: 0 });
+  });
+
   it("initializes, resolves, reads, writes, appends, renames, and deletes bounded text", async () => {
     const { storage, fileSystem } = createStorage();
     const manifestPath = ["sessions", "v1", "session-1", "manifest.json"] as const;

@@ -140,6 +140,12 @@
   color: var(--cz-color-error-fg);
 }
 
+.localDataWarning {
+  margin: var(--cz-space-2) 0 0;
+  font-size: var(--cz-font-size-xs);
+  color: var(--cz-color-warning-fg);
+}
+
 .sessionStatus {
   margin: var(--cz-space-2) 0 0;
   font-size: var(--cz-font-size-xs);

@@ -36,6 +36,7 @@ const providerLabels = {
 } as const satisfies Record<ProviderId, string>;
 
 export interface ModelSelectionCommandOptions {
+  readonly isBlocked?: () => boolean;
   readonly registerCommand: (
     commandId: string,
     handler: () => Promise<ProviderOnboardingActionResult>,
@@ -67,8 +68,12 @@ export function registerModelSelectionCommand({
   showInputBox,
   showInformationMessage,
   showErrorMessage,
+  isBlocked,
 }: ModelSelectionCommandOptions): Disposable {
   return registerCommand(selectModelCommandId, async () => {
+    if (isBlocked?.()) {
+      return { status: "cancelled" };
+    }
     let configuration: ProviderSelectionConfiguration;
     try {
       configuration = readConfiguration();

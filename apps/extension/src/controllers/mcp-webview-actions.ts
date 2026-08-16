@@ -91,6 +91,18 @@ export class McpWebviewActions {
     this.#publish(requestId, true);
   }
 
+  clearTransientState(): void {
+    this.#connectionSignature = undefined;
+    this.#toolSignature = undefined;
+    this.#catalogScope = undefined;
+    this.#catalogSequence = 0;
+    this.#catalogSequenceBlocked = false;
+    this.#catalogProjectionFailure = undefined;
+    this.#resourceSignature = undefined;
+    this.#promptSignature = undefined;
+    this.#resetDiagnostics();
+  }
+
   async refreshTools(requestId: string, serverId: string, generation: number): Promise<void> {
     const accepted = (await this.#connection.refreshTools?.(serverId, generation)) === true;
     if (!accepted) return;

@@ -97,6 +97,14 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
       afterSessionsCleared: () => {
         checkpointStore.getState().clear();
       },
+      afterLocalDataCleared: () => {
+        approvalStore.getState().clear();
+        checkpointStore.getState().clear();
+        mcpStore.getState().clearLocal();
+        onboardingStore.getState().clearLocal();
+        editorContextStore.getState().clearLocal();
+        workspaceFileStore.getState().clearLocal();
+      },
       afterSessionMutationFailed: () => {
         checkpointStore.getState().load();
         store.getState().loadSessions();
@@ -128,6 +136,7 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
   const sessionSwitchPending = useStore(store, (state) => state.sessionSwitchPending);
   const restoring = useStore(store, (state) => state.restoring);
   const sessionMutationPending = useStore(store, (state) => state.sessionMutationPending);
+  const localDataClearPending = useStore(store, (state) => state.localDataClearPending);
   const deletingSessionId = useStore(store, (state) => state.deletingSessionId);
   const sessionError = useStore(store, (state) => state.sessionError);
   const runError = useStore(store, (state) => state.runError);
@@ -233,6 +242,10 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
     if (window.confirm(strings.chat.clearSessionsConfirm)) {
       store.getState().clearSessions();
     }
+  };
+
+  const handleClearLocalData = () => {
+    store.getState().clearLocalData();
   };
 
   const handleDraftChange = (value: string) => {
@@ -393,11 +406,13 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
           ? strings.app.sessionActionHint.running
           : restoring
             ? strings.app.sessionActionHint.restoring
-            : sessionMutationPending
-              ? strings.chat.deletingSession
-              : sessionSwitchPending
-                ? strings.app.sessionActionHint.switching
-                : strings.app.sessionActionHint.ready}
+            : localDataClearPending
+              ? strings.chat.clearingLocalData
+              : sessionMutationPending
+                ? strings.chat.deletingSession
+                : sessionSwitchPending
+                  ? strings.app.sessionActionHint.switching
+                  : strings.app.sessionActionHint.ready}
       </p>
 
       {showSessionsDrawer ? (
@@ -469,7 +484,22 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
                   ? strings.chat.clearingSessions
                   : strings.chat.clearSessions}
               </Button>
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={handleClearLocalData}
+                disabled={
+                  host.clearLocalData === undefined ||
+                  sessionMutationPending ||
+                  localDataClearPending
+                }
+              >
+                {localDataClearPending
+                  ? strings.chat.clearingLocalData
+                  : strings.chat.clearLocalData}
+              </Button>
             </div>
+            <p className={styles.localDataWarning}>{strings.chat.clearLocalDataDescription}</p>
             {sessionError === undefined ? null : (
               <p className={styles.sessionError}>{sessionError}</p>
             )}

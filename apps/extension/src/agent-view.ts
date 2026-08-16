@@ -20,6 +20,7 @@ import type { SessionRecoveryActions } from "./controllers/session-recovery.js";
 import {
   type ApprovalUiActions,
   bindWebviewMessageController,
+  type LocalDataClearUiActions,
 } from "./controllers/webview-message-controller.js";
 import type { WorkspaceFileReferenceActions } from "./controllers/workspace-file-reference-actions.js";
 
@@ -112,6 +113,7 @@ class AgentViewProvider implements WebviewViewProvider {
         webviewView,
       ),
       workspaceFileActions: this.options.createWorkspaceFileReferenceActions?.(),
+      localDataClear: this.options.localDataClear,
     });
     this.options.reportDisplay?.();
   }
@@ -133,6 +135,7 @@ interface AgentViewProviderOptions {
   readonly createProviderOnboarding?: () => ProviderOnboardingController;
   readonly openExternalLink?: (href: string) => void;
   readonly editorContext?: EditorContextEntryController;
+  readonly localDataClear?: LocalDataClearUiActions;
 }
 
 interface RegisterAgentViewOptions extends AgentViewProviderOptions {

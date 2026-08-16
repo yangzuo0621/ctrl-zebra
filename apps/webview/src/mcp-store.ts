@@ -59,6 +59,7 @@ export interface McpState {
   cancelPrompt(): boolean;
   detachPrompt(previewId: string): void;
   clearDraft(): void;
+  clearLocal(): void;
   receive(message: ExtensionToWebviewMessage): void;
 }
 
@@ -416,6 +417,22 @@ export function createMcpStore(
         promptPreview: undefined,
         busy: undefined,
         announcement: strings.mcpAnnouncements.draftCleared,
+      });
+    },
+    clearLocal() {
+      connectionRequest = undefined;
+      resourceRequest = undefined;
+      promptRequest = undefined;
+      clearToolCatalogWatermarks();
+      clearDiagnosticWatermarks();
+      toolCatalogDeliveryClosed = true;
+      set({
+        connection: disconnected,
+        ...clearLiveState(),
+        attachments: [],
+        confirmations: [],
+        busy: undefined,
+        announcement: strings.mcpAnnouncements.disconnected,
       });
     },
     receive(message) {
