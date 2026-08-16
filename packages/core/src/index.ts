@@ -252,10 +252,23 @@ export {
   DuplicateSessionError,
   InconsistentSessionRecordError,
   InMemorySessionRepository,
+  maxSessionRecords,
   PersistedSessionRepository,
   SessionDeletionUnavailableError,
   SessionNotFoundError,
 } from "./session-repository.js";
+export type {
+  SessionRetentionCleanupOptions,
+  SessionRetentionCleanupReport,
+  SessionRetentionPolicy,
+} from "./session-retention.js";
+export {
+  cleanupExpiredSessions,
+  defaultSessionRetentionDays,
+  InvalidSessionRetentionPolicyError,
+  maxSessionRetentionDays,
+  minSessionRetentionDays,
+} from "./session-retention.js";
 export type { SessionStatusChangedEvent } from "./session-state-machine.js";
 export {
   InvalidSessionStatusTransitionError,

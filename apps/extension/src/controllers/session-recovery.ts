@@ -1,12 +1,15 @@
 import type { CheckpointStore } from "@ctrl-zebra/core";
 import {
   CorruptEventLogError,
+  cleanupExpiredSessions,
   EventLogLimitExceededError,
   InconsistentSessionRecordError,
   InvalidSessionManifestError,
   SessionNotFoundError,
   type SessionRecord,
   type SessionRepository,
+  type SessionRetentionCleanupReport,
+  type SessionRetentionPolicy,
 } from "@ctrl-zebra/core";
 import {
   assistantMessageSchema,
@@ -45,6 +48,23 @@ export interface SessionRecoveryActions {
   clear?(): Promise<number>;
 }
 
+export interface SessionRetentionOptions {
+  readonly readPolicy: () => SessionRetentionPolicy;
+  readonly onCleanup?: (report: SessionRetentionCleanupReport) => void;
+  readonly onFailure?: (error: unknown) => void;
+}
+
+interface RetentionCandidate {
+  readonly sessionId: string;
+  readonly status: SessionSummary["status"];
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+interface RetentionCandidateSource {
+  listRetentionCandidates(): Promise<readonly RetentionCandidate[]>;
+}
+
 export interface SessionRestoreProjection {
   readonly session: RestoredSession;
   readonly reasoning: RestoredReasoning;
@@ -75,14 +95,44 @@ export function createSessionRecoveryActions(
   selectRepository: () => Promise<SessionRepository>,
   now: () => Date = () => new Date(),
   selectCheckpointStore?: () => Promise<CheckpointStore>,
+  retention?: SessionRetentionOptions,
 ): SessionRecoveryActions {
   return {
     async list() {
       try {
         const repository = await selectRepository();
         const sessions = await repository.list();
+        let listedSessions = sessions;
+        if (retention !== undefined) {
+          try {
+            const policy = retention.readPolicy();
+            const checkpointStore =
+              policy.enabled && selectCheckpointStore !== undefined
+                ? await selectCheckpointStore()
+                : undefined;
+            const candidates =
+              policy.enabled && isRetentionCandidateSource(repository)
+                ? await repository.listRetentionCandidates()
+                : policy.enabled
+                  ? sessions.map((session) => ({ ...session, updatedAt: session.createdAt }))
+                  : undefined;
+            const report = await cleanupExpiredSessions(repository, checkpointStore, {
+              policy,
+              now,
+              signal: new AbortController().signal,
+              candidates,
+            });
+            retention.onCleanup?.(report);
+            if (report.removedSessionIds.length > 0) {
+              const removed = new Set(report.removedSessionIds);
+              listedSessions = sessions.filter(({ sessionId }) => !removed.has(sessionId));
+            }
+          } catch (error) {
+            retention.onFailure?.(error);
+          }
+        }
         const normalized: SessionSummary[] = [];
-        for (const session of sessions) {
+        for (const session of listedSessions) {
           if (isRecoverableStatus(session.status)) {
             await repository.update(session.sessionId, {
               status: "interrupted",
@@ -262,6 +312,12 @@ export function createSessionRecoveryActions(
       return deletedCount;
     },
   };
+}
+
+function isRetentionCandidateSource(
+  repository: SessionRepository,
+): repository is SessionRepository & RetentionCandidateSource {
+  return "listRetentionCandidates" in repository;
 }
 
 function applyRegenerationProjection(

@@ -3,6 +3,7 @@ import {
   type EventStorage,
   JsonlEventStore,
   type ManifestStorage,
+  maxSessionRecords,
   PersistedSessionRepository,
   type PersistencePath,
   type SessionCatalog,
@@ -97,7 +98,7 @@ class VsCodeSessionStorage implements ManifestStorage, EventStorage, SessionCata
 
   async clearSessions(): Promise<SessionDeletionReport> {
     const directory = [persistenceSessionsDirectory, persistenceFormatDirectory] as const;
-    const entries = await this.#storage.readDirectory(directory);
+    const entries = await this.#storage.readDirectory(directory, maxSessionRecords);
     let deleted = 0;
     let failed = 0;
     for (const [name, type] of entries) {
@@ -121,10 +122,10 @@ class VsCodeSessionStorage implements ManifestStorage, EventStorage, SessionCata
   }
 
   async listSessionIds(): Promise<readonly string[]> {
-    const entries = await this.#storage.readDirectory([
-      persistenceSessionsDirectory,
-      persistenceFormatDirectory,
-    ]);
+    const entries = await this.#storage.readDirectory(
+      [persistenceSessionsDirectory, persistenceFormatDirectory],
+      maxSessionRecords,
+    );
     const sessionIds: string[] = [];
     for (const [name, type] of entries) {
       if ((type & FileType.Directory) === 0) {

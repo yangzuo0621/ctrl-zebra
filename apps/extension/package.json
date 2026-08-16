@@ -144,6 +144,20 @@
           "scope": "window",
           "description": "Enable explicit editor context commands and visible, editable editor context drafts."
         },
+        "ctrlZebra.sessionRetention.enabled": {
+          "type": "boolean",
+          "default": true,
+          "scope": "machine",
+          "description": "Automatically remove local Sessions and their owned Checkpoints after the configured retention period."
+        },
+        "ctrlZebra.sessionRetention.days": {
+          "type": "number",
+          "default": 30,
+          "minimum": 1,
+          "maximum": 3650,
+          "scope": "machine",
+          "description": "Number of 24-hour UTC days to retain inactive local Sessions and their owned Checkpoints."
+        },
         "ctrlZebra.provider.id": {
           "type": "string",
           "enum": [

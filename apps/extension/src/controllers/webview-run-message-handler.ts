@@ -182,7 +182,7 @@ export class WebviewRunMessageHandler {
   }
 
   canStart(): boolean {
-    return !this.#disposed && this.#activeRun === undefined;
+    return !this.#disposed && this.#activeRun === undefined && this.#settlingRuns.size === 0;
   }
 
   async cancelSession(sessionId: string): Promise<void> {

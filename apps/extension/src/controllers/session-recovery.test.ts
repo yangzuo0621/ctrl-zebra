@@ -1,4 +1,4 @@
-import type { CheckpointStore } from "@ctrl-zebra/core";
+import type { CheckpointStore, SessionRetentionCleanupReport } from "@ctrl-zebra/core";
 import {
   InconsistentSessionRecordError,
   InMemorySessionRepository,
@@ -9,7 +9,7 @@ import {
   type PersistedEventRecord,
   persistenceFormatVersion,
 } from "@ctrl-zebra/protocol";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   completeReasoningV1Events,
@@ -20,6 +20,112 @@ import {
 import { createSessionRecoveryActions, SessionRecoveryError } from "./session-recovery.js";
 
 describe("Session recovery", () => {
+  it("runs configured retention on history listing and filters removed Sessions", async () => {
+    const repository = new InMemorySessionRepository();
+    await repository.create(manifest("session-expired", "2026-01-01T00:00:00.000Z"));
+    await repository.create(manifest("session-current", "2026-08-01T00:00:00.000Z"));
+    const checkpointOwners: Array<readonly unknown[]> = [];
+    const checkpointStore = {
+      async create() {
+        throw new Error("unused");
+      },
+      async read() {
+        return undefined;
+      },
+      async list() {
+        return [];
+      },
+      async deleteForSessions(sessionIds: readonly unknown[]) {
+        checkpointOwners.push(sessionIds);
+        return { deleted: 2, failed: 0 };
+      },
+    } satisfies CheckpointStore & {
+      deleteForSessions(
+        sessionIds: readonly unknown[],
+        signal: AbortSignal,
+      ): Promise<{ readonly deleted: number; readonly failed: number }>;
+    };
+    const reports: SessionRetentionCleanupReport[] = [];
+    const actions = createSessionRecoveryActions(
+      async () => repository,
+      () => new Date("2026-08-16T00:00:00.000Z"),
+      async () => checkpointStore,
+      {
+        readPolicy: () => ({ enabled: true, days: 30 }),
+        onCleanup: (report) => reports.push(report),
+      },
+    );
+
+    await expect(actions.list()).resolves.toEqual([
+      {
+        sessionId: "session-current",
+        status: "completed",
+        createdAt: "2026-08-01T00:00:00.000Z",
+      },
+    ]);
+    expect(checkpointOwners).toEqual([["session-expired"]]);
+    expect(reports).toHaveLength(1);
+    expect(reports[0]).toMatchObject({
+      expired: 1,
+      deletedSessions: 1,
+      deletedCheckpoints: 2,
+    });
+  });
+
+  it("does not select persistence or scan metadata when retention is disabled", async () => {
+    const repository = new InMemorySessionRepository();
+    await repository.create(manifest("session-current", "2026-08-01T00:00:00.000Z"));
+    const selectCheckpointStore = vi.fn(async () => {
+      throw new Error("disabled cleanup must not select Checkpoint storage");
+    });
+    const actions = createSessionRecoveryActions(
+      async () => repository,
+      () => new Date("2026-08-16T00:00:00.000Z"),
+      selectCheckpointStore,
+      { readPolicy: () => ({ enabled: false, days: 30 }) },
+    );
+
+    await expect(actions.list()).resolves.toHaveLength(1);
+    expect(selectCheckpointStore).not.toHaveBeenCalled();
+  });
+
+  it("keeps history listing available when retention cleanup fails", async () => {
+    const failure = new Error("retention storage failed");
+    const reported: unknown[] = [];
+    const repository: SessionRepository = {
+      async create() {},
+      async get() {
+        return undefined;
+      },
+      async list() {
+        return [
+          {
+            sessionId: "session-current",
+            status: "completed",
+            createdAt: "2026-08-01T00:00:00.000Z",
+          },
+        ];
+      },
+      async update() {},
+      async appendEvent() {},
+      async listRetentionCandidates() {
+        throw failure;
+      },
+    } as SessionRepository;
+    const actions = createSessionRecoveryActions(
+      async () => repository,
+      () => new Date("2026-08-16T00:00:00.000Z"),
+      undefined,
+      {
+        readPolicy: () => ({ enabled: true, days: 30 }),
+        onFailure: (error) => reported.push(error),
+      },
+    );
+
+    await expect(actions.list()).resolves.toMatchObject([{ sessionId: "session-current" }]);
+    expect(reported).toEqual([failure]);
+  });
+
   it("normalizes every non-terminal status and preserves every terminal status", async () => {
     const statuses = [
       "idle",

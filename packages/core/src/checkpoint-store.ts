@@ -136,7 +136,19 @@ export class AtomicCheckpointStore implements CheckpointStore {
     sessionId: unknown,
     signal: AbortSignal,
   ): Promise<CheckpointDeletionReport> {
-    const parsedSessionId = sessionIdSchema.parse(sessionId);
+    return await this.deleteForSessions([sessionId], signal);
+  }
+
+  async deleteForSessions(
+    sessionIds: readonly unknown[],
+    signal: AbortSignal,
+  ): Promise<CheckpointDeletionReport> {
+    if (sessionIds.length > maxCheckpointRecords) {
+      throw new RangeError(`Checkpoint Session ownership scan exceeds ${maxCheckpointRecords}.`);
+    }
+    const parsedSessionIds = new Set(
+      sessionIds.map((sessionId) => sessionIdSchema.parse(sessionId)),
+    );
     signal.throwIfAborted();
     const directory = getCheckpointPersistencePaths("index").directory;
     const names = await this.#storage.listFiles(directory, maxCheckpointRecords);
@@ -165,7 +177,7 @@ export class AtomicCheckpointStore implements CheckpointStore {
         failed += 1;
         continue;
       }
-      if (owner !== parsedSessionId) {
+      if (!parsedSessionIds.has(owner)) {
         continue;
       }
       try {

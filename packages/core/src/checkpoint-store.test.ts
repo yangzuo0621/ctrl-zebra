@@ -183,6 +183,27 @@ describe("AtomicCheckpointStore", () => {
     });
     expect(storage.files).toEqual(new Map());
   });
+
+  it("deletes a bounded set of Session owners without deleting another owner", async () => {
+    const storage = new FakeCheckpointStorage();
+    const store = createStore(storage);
+    const first = checkpoint;
+    const second = { ...checkpoint, id: "checkpoint-second", sessionId: "session-2" };
+    const other = { ...checkpoint, id: "checkpoint-other-batch", sessionId: "session-other" };
+    const firstPath = getCheckpointPersistencePaths(first.id).checkpoint.join("/");
+    const secondPath = getCheckpointPersistencePaths(second.id).checkpoint.join("/");
+    const otherPath = getCheckpointPersistencePaths(other.id).checkpoint.join("/");
+    storage.files.set(firstPath, JSON.stringify(first));
+    storage.files.set(`${secondPath}.tmp`, JSON.stringify(second));
+    storage.files.set(otherPath, JSON.stringify(other));
+
+    await expect(
+      store.deleteForSessions(["session-1", "session-2"], new AbortController().signal),
+    ).resolves.toEqual({ deleted: 2, failed: 0 });
+    expect(storage.files.has(firstPath)).toBe(false);
+    expect(storage.files.has(`${secondPath}.tmp`)).toBe(false);
+    expect(storage.files.has(otherPath)).toBe(true);
+  });
 });
 
 function createStore(storage: CheckpointStorage): AtomicCheckpointStore {

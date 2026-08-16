@@ -57,6 +57,10 @@ import {
   readProviderOnboardingConfiguration,
   readProviderSelectionConfiguration,
 } from "./adapters/provider-configuration.js";
+import {
+  readSessionRetentionConfiguration,
+  sessionRetentionSettingSection,
+} from "./adapters/session-retention-configuration.js";
 import { SpawnCommandRunner } from "./adapters/spawn-command-runner.js";
 import { createStructuredLogger } from "./adapters/structured-logger.js";
 import { createWorkspaceCheckpointStoreProvider } from "./adapters/vscode-checkpoint-storage.js";
@@ -1113,6 +1117,32 @@ export function activate(context: ExtensionContext): void {
         selectSessionRepository,
         undefined,
         selectCheckpointStore,
+        {
+          readPolicy: () =>
+            readSessionRetentionConfiguration(
+              workspace.getConfiguration(sessionRetentionSettingSection),
+            ),
+          onCleanup: (report) => {
+            if (report.outcome !== "completed") {
+              return;
+            }
+            if (report.deletedSessions > 0 || report.deletedCheckpoints > 0) {
+              void window.showInformationMessage(
+                `Automatic cleanup removed ${report.deletedSessions} expired Session${report.deletedSessions === 1 ? "" : "s"} and ${report.deletedCheckpoints} owned Checkpoint${report.deletedCheckpoints === 1 ? "" : "s"}.`,
+              );
+            }
+            if (report.failedSessions > 0 || report.failedCheckpoints > 0) {
+              void window.showWarningMessage(
+                "Automatic Session cleanup could not remove all expired local data. Retry by refreshing Session history.",
+              );
+            }
+          },
+          onFailure: () => {
+            void window.showWarningMessage(
+              "Automatic Session cleanup is unavailable. Retry by refreshing Session history.",
+            );
+          },
+        },
       ),
       checkpointActions,
       reportDeliveryFailure: () => {

@@ -78,6 +78,18 @@ describe("VscodeBoundedTextStorage", () => {
     );
   });
 
+  it("rejects a directory scan that exceeds its entry ceiling", async () => {
+    const { storage, fileSystem } = createStorage();
+    fileSystem.directoryEntries.set("file:///storage/sessions", [
+      ["one", 0 as FileType],
+      ["two", 0 as FileType],
+    ]);
+
+    await expect(storage.readDirectory(["sessions"], 1)).rejects.toThrow(
+      "Persistence directory exceeds the 1-entry limit.",
+    );
+  });
+
   it("rejects malformed UTF-8 and invalid relative path segments", async () => {
     const { storage, fileSystem } = createStorage();
     const malformedPath = ["sessions", "v1", "malformed.txt"] as const;
@@ -173,6 +185,7 @@ class FileNotFoundError extends Error {
 
 class FakeFileSystem implements VscodeBoundedTextFileSystem {
   readonly directories = new Set<string>();
+  readonly directoryEntries = new Map<string, [string, FileType][]>();
   readonly files = new Map<string, Uint8Array>();
   readonly renameCalls: Array<{
     readonly overwrite: boolean;
@@ -213,8 +226,8 @@ class FakeFileSystem implements VscodeBoundedTextFileSystem {
     }
   }
 
-  async readDirectory(_uri: Uri): Promise<[string, FileType][]> {
-    return [];
+  async readDirectory(uri: Uri): Promise<[string, FileType][]> {
+    return this.directoryEntries.get(uriKey(uri)) ?? [];
   }
 
   async readFile(uri: Uri): Promise<Uint8Array> {
