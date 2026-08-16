@@ -20,6 +20,34 @@ checks before each bounded capture. A direct command invocation therefore cannot
 Workspace Trust boundary. The captured context stays in a visible, editable Composer draft until the user
 sends or removes it; opening the Agent view, changing focus, or model activity never captures implicitly.
 
+## Session retention settings (T2105)
+
+The Extension owns two machine-scoped settings for local Session and recovery Checkpoint retention:
+
+| Setting | Type and bounds | Default | Effect |
+|---|---|---:|---|
+| `ctrlZebra.sessionRetention.enabled` | boolean | `true` | Enables automatic cleanup on an explicit Session history list/refresh. |
+| `ctrlZebra.sessionRetention.days` | integer `1..3650` | `30` | Retains the last 24-hour UTC-day window. |
+
+The Host validates both values before use. A Session is expired when its manifest `updatedAt` is at or
+before `now - days * 86,400,000` milliseconds; the comparison is timestamp-based and independent of the
+user's local timezone. The exact boundary is therefore predictable and testable. The clock is injected by
+the lifecycle owner for deterministic tests.
+
+Cleanup is lazy and bounded: it runs after the user explicitly requests Session history, never during
+activation, and examines at most 10,000 manifest metadata records without loading event logs. Disabled
+cleanup performs no candidate or Checkpoint scan. Sessions in `idle`, `preparing`, `streaming`,
+`awaiting_approval`, or `executing_tool` are protected while recovery or a Run may still own them; a list
+request is also blocked while a Run is active or settling. Once a list/retention operation starts, its
+Host lifecycle lock blocks a new Run until the complete cleanup and list projection finish. An expired
+Session and only its safely attributable local Checkpoints are removed. Malformed or unattributable
+Checkpoints remain for retry.
+
+The cleanup result is surfaced with fixed safe feedback: a successful removal reports the number of
+Sessions and owned Checkpoints removed, while partial storage failures report that cleanup could not
+remove all expired local data and can be retried by refreshing Session history. Cleanup changes no
+Protocol wire shape and requires no persisted-format migration.
+
 ## Scope and ownership
 
 `ctrlZebra.mcp.server` is one optional, machine-scoped VS Code setting. The Extension Host is the

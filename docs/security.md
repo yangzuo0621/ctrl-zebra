@@ -158,6 +158,30 @@ This document defines the Webview security constraints established before T0104.
   diagnostic correlation only, never paths, file names derived from content, message text, source,
   or raw storage exceptions.
 
+### Automatic Session retention (T2105)
+
+- Retention settings are untrusted machine configuration. The Extension Host validates the boolean
+  enable flag and the integer day range before constructing a Core policy; Webview messages, model
+  output, persisted Sessions, and workspace data cannot supply or override it. Disabled cleanup does
+  not select persistence or scan candidate metadata.
+- Cleanup is Host-triggered only by an explicit Session history list/refresh and uses an injected clock
+  plus a bounded 10,000-manifest scan. It never runs during activation. The exact UTC timestamp cutoff
+  is inclusive, so timezone formatting cannot change whether a record is expired.
+- Running and recovery-owned data is protected. `idle`, `preparing`, `streaming`,
+  `awaiting_approval`, and `executing_tool` candidates are never removed by the retention pass, and the
+  Host refuses a history request while a Run is active or settling. After a history request claims the
+  lifecycle lock, a new Run is blocked until the complete retention/list operation finishes. Session
+  deletion and Checkpoint attribution remain exact-ID operations under the existing trusted
+  extension-storage root.
+- Checkpoint cleanup deletes only records whose validated `sessionId` exactly matches a Session that
+  was removed by the retention pass. Invalid, unreadable, or unattributable records are retained rather
+  than guessed, including atomic-write temporary files that cannot be attributed safely. Workspace
+  files, source code, settings, secrets, and other extension data are outside the retention target.
+- Every candidate and storage operation observes the owned cancellation signal. Cancellation stops
+  further work and leaves later records for retry; it is not reported as success or as a raw failure.
+  Storage and parse failures produce bounded counts and fixed user-safe feedback without raw paths,
+  content, exception text, or identifiers derived from persisted data.
+
 ## Tool Input and Output
 
 - Model-supplied Tool Call IDs, names, and input are untrusted. The generic protocol Schema rejects
@@ -545,7 +569,8 @@ risk calls to avoid the matrix is forbidden.
 - Before-content is sensitive local workspace data. It is excluded from model context, Webview
   state, approval presentation, logs, telemetry, diagnostics, snapshots, and fixtures except for
   deterministic fake test content. Checkpoints never contain credentials or other forbidden
-  persistence data. No retention or automatic deletion policy is introduced by T0801.
+  persistence data. T0801 introduces no automatic rollback policy; T2105 separately owns bounded,
+  settings-controlled retention of expired local Sessions and safely attributable Checkpoints.
 
 ### File lifecycle mutation boundary (T2001)
 

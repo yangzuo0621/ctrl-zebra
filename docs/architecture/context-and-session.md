@@ -110,6 +110,26 @@ record is restored or persisted separately.
   attempt falls back to the prior completed branch. The new Run has fresh cancellation, Tool, and
   approval ownership and never executes old Tools automatically.
 
+## Session retention lifecycle (T2105)
+
+- Core owns the retention calculation and cleanup result. The Extension supplies the validated
+  machine policy, the injected clock, the Session repository, and the local Checkpoint store; Core
+  does not read VS Code configuration or filesystem APIs.
+- The Host invokes retention only after an explicit Session history list/refresh and never from
+  activation. Candidate collection is bounded to manifest metadata (at most 10,000 Sessions), so
+  retention does not load event logs or construct an unbounded history projection. Disabled policy
+  returns before candidate or Checkpoint selection. The Host holds a lifecycle lock for the complete
+  asynchronous retention/list operation, so a new Run cannot claim a Session while its old terminal
+  metadata is still being examined.
+- The cutoff uses `updatedAt <= now - days * 86,400,000` with UTC timestamp math. Recovery/live-run
+  statuses `idle`, `preparing`, `streaming`, `awaiting_approval`, and `executing_tool` are protected;
+  the Webview message controller also fences list/refresh while an active or settling Run exists.
+- Session deletion remains owned by the repository and Checkpoint attribution remains owned by the
+  persistence store. Core passes only successfully removed Session identities to the bounded
+  Checkpoint ownership scan; malformed or unattributable records stay for retry. Cancellation stops
+  the retention loop without changing Run or Session state, and storage errors become bounded report
+  counts for fixed Host feedback rather than raw exceptions.
+
 ## Session State Machine
 
 - Session status changes go through the Core state machine; callers and tools do not mutate or

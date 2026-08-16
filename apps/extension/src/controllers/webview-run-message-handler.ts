@@ -34,6 +34,7 @@ export class WebviewRunMessageHandler {
   #activeRun: ActiveRun | undefined;
   #disposed = false;
   #ownedSessionId: string | undefined;
+  #sessionHistoryLock = false;
   readonly #settlingRuns = new Set<ActiveRun>();
 
   constructor(
@@ -182,7 +183,31 @@ export class WebviewRunMessageHandler {
   }
 
   canStart(): boolean {
-    return !this.#disposed && this.#activeRun === undefined;
+    return !this.#disposed && this.#activeRun === undefined && !this.#sessionHistoryLock;
+  }
+
+  canListSessions(): boolean {
+    return (
+      !this.#disposed &&
+      this.#activeRun === undefined &&
+      this.#settlingRuns.size === 0 &&
+      !this.#sessionHistoryLock
+    );
+  }
+
+  acquireSessionHistoryLock(): (() => void) | undefined {
+    if (!this.canListSessions()) {
+      return undefined;
+    }
+    this.#sessionHistoryLock = true;
+    let released = false;
+    return () => {
+      if (released) {
+        return;
+      }
+      released = true;
+      this.#sessionHistoryLock = false;
+    };
   }
 
   async cancelSession(sessionId: string): Promise<void> {

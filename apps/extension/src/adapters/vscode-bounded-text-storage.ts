@@ -56,8 +56,15 @@ export class VscodeBoundedTextStorage {
     }
   }
 
-  async readDirectory(path: PersistencePath): Promise<readonly [string, FileType][]> {
-    return await this.#fileSystem.readDirectory(this.#resolve(path));
+  async readDirectory(
+    path: PersistencePath,
+    maxEntries?: number,
+  ): Promise<readonly [string, FileType][]> {
+    const entries = await this.#fileSystem.readDirectory(this.#resolve(path));
+    if (maxEntries !== undefined && entries.length > maxEntries) {
+      throw new RangeError(`Persistence directory exceeds the ${maxEntries}-entry limit.`);
+    }
+    return entries;
   }
 
   async readText(

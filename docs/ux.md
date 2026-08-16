@@ -364,6 +364,22 @@ Diff 查看完整的有界 before/after 内容：创建是空文件到完整内�
   usage, pending approvals, Checkpoint list, and session selector are cleared or refreshed together.
   A partial or unavailable cleanup shows a stable retry action and never claims that all data was
   deleted; already removed records stay removed on retry.
+- Automatic local retention is configured in VS Code machine settings, not as a hidden Webview action.
+  It defaults to 30 days, can be disabled with `ctrlZebra.sessionRetention.enabled`, and uses the
+  integer `ctrlZebra.sessionRetention.days` range `1..3650`. It runs only after the user explicitly
+  requests Session history or refreshes that list; opening the view or activating the Extension does
+  not cause a cleanup scan.
+- A completed cleanup that removes data shows the fixed safe feedback
+  “Automatic cleanup removed N expired Session(s) and M owned Checkpoint(s).” A partial cleanup shows
+  “Automatic Session cleanup could not remove all expired local data. Retry by refreshing Session
+  history.” If the policy or local store is unavailable, the fixed next step is “Automatic Session
+  cleanup is unavailable. Retry by refreshing Session history.” Disabled cleanup is silent.
+- Running or recovery-owned Sessions are never silently deleted. The Host protects `idle`,
+  `preparing`, `streaming`, `awaiting_approval`, and `executing_tool` states and ignores a list request
+  while a Run is active or settling. Once history refresh starts, its lifecycle lock blocks a new
+  submission until cleanup and list projection finish. Removed Sessions are filtered from the current
+  list projection; malformed or unattributable Checkpoints remain available for a later retry and no
+  workspace file is affected.
 - 最新一条已完成助手回复提供带作用范围说明的“重新生成”按钮，明确使用原用户问题和此前
   已完成历史；旧回复在新 Run 成功前保持可见。按钮在运行、恢复、会话切换或目标不再是最新
   回复时禁用。重新生成创建新的 Run，不重复旧 Tool 副作用或审批；取消、失败、截断和迟到

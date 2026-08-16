@@ -26,6 +26,12 @@ This document defines the React Webview constraints established before T0103. It
   request and Session, then commit them together. Errors, mismatches, disposal, or a newer request
   discard staged data and leave the current projection intact. A restored `interrupted` Session is
   display-only until the user explicitly submits a new Run.
+- Session history listing remains a Host-owned projection. An explicit list/refresh may trigger the
+  Host's bounded, settings-controlled T2105 retention pass; the Webview never chooses retention days,
+  supplies a cleanup target, or receives a new cleanup protocol message. Listing is ignored while a
+  Run is active or settling. Once listing starts, the Host lifecycle lock blocks a new Run until the
+  retention/list operation finishes, and the returned Session list simply omits records removed before
+  it was emitted.
 
 ## VS Code API Boundary
 

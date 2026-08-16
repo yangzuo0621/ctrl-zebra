@@ -55,6 +55,25 @@ describe.each(factories)("SessionRepository contract: %s", (_name, createReposit
     await expect(repository.list()).resolves.toEqual([
       { sessionId: manifest.sessionId, status: "idle", createdAt: manifest.createdAt },
     ]);
+
+    const candidateSource = repository as SessionRepository & {
+      listRetentionCandidates(): Promise<
+        readonly {
+          readonly sessionId: string;
+          readonly status: SessionManifest["status"];
+          readonly createdAt: string;
+          readonly updatedAt: string;
+        }[]
+      >;
+    };
+    await expect(candidateSource.listRetentionCandidates()).resolves.toEqual([
+      {
+        sessionId: manifest.sessionId,
+        status: manifest.status,
+        createdAt: manifest.createdAt,
+        updatedAt: manifest.updatedAt,
+      },
+    ]);
   });
 
   it("updates metadata and appends an event", async () => {

@@ -35,9 +35,9 @@ export class WebviewSessionMessageHandler {
     );
   }
 
-  list(requestId: string): void {
+  list(requestId: string): Promise<void> {
     this.#latestListRequestId = requestId;
-    void (this.actions?.list() ?? Promise.reject(new Error("Session storage unavailable."))).then(
+    return (this.actions?.list() ?? Promise.reject(new Error("Session storage unavailable."))).then(
       (sessions) =>
         (() => {
           const listedSessions = [...sessions];

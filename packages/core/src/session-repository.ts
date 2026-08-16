@@ -11,10 +11,19 @@ import {
 import type { EventStore } from "./event-store.js";
 import type { ManifestStore } from "./manifest-store.js";
 
+export const maxSessionRecords = 10_000;
+
 export interface SessionRecord {
   readonly manifest: SessionManifest;
   readonly events: readonly PersistedEventRecord[];
   readonly eventLogTailDamaged: boolean;
+}
+
+interface SessionRetentionCandidate {
+  readonly sessionId: string;
+  readonly status: SessionStatus;
+  readonly createdAt: string;
+  readonly updatedAt: string;
 }
 
 export interface SessionMetadataPatch {
@@ -125,6 +134,15 @@ export class InMemorySessionRepository implements SessionRepository {
     });
   }
 
+  async listRetentionCandidates(): Promise<readonly SessionRetentionCandidate[]> {
+    if (this.#records.size > maxSessionRecords) {
+      throw new RangeError(
+        `Persisted Session count exceeds the ${maxSessionRecords}-Session limit.`,
+      );
+    }
+    return [...this.#records.values()].map(({ manifest }) => toRetentionCandidate(manifest));
+  }
+
   async delete(sessionId: unknown): Promise<boolean> {
     const id = parseSessionId(sessionId);
     return this.#records.delete(id);
@@ -184,13 +202,36 @@ export class PersistedSessionRepository implements SessionRepository {
 
   async list(): Promise<readonly SessionSummary[]> {
     const summaries: SessionSummary[] = [];
-    for (const sessionId of await this.#catalog.listSessionIds()) {
+    const sessionIds = await this.#catalog.listSessionIds();
+    if (sessionIds.length > maxSessionRecords) {
+      throw new RangeError(
+        `Persisted Session count exceeds the ${maxSessionRecords}-Session limit.`,
+      );
+    }
+    for (const sessionId of sessionIds) {
       const manifest = await this.#manifests.read(sessionId);
       if (manifest !== undefined) {
         summaries.push(toSummary(manifest));
       }
     }
     return summaries;
+  }
+
+  async listRetentionCandidates(): Promise<readonly SessionRetentionCandidate[]> {
+    const sessionIds = await this.#catalog.listSessionIds();
+    if (sessionIds.length > maxSessionRecords) {
+      throw new RangeError(
+        `Persisted Session count exceeds the ${maxSessionRecords}-Session limit.`,
+      );
+    }
+    const candidates: SessionRetentionCandidate[] = [];
+    for (const sessionId of sessionIds) {
+      const manifest = await this.#manifests.read(sessionId);
+      if (manifest !== undefined) {
+        candidates.push(toRetentionCandidate(manifest));
+      }
+    }
+    return candidates;
   }
 
   async update(sessionId: unknown, patch: SessionMetadataPatch): Promise<void> {
@@ -251,6 +292,15 @@ function toSummary(manifest: SessionManifest): SessionSummary {
     status: manifest.status,
     createdAt: manifest.createdAt,
   });
+}
+
+function toRetentionCandidate(manifest: SessionManifest): SessionRetentionCandidate {
+  return {
+    sessionId: manifest.sessionId,
+    status: manifest.status,
+    createdAt: manifest.createdAt,
+    updatedAt: manifest.updatedAt,
+  };
 }
 
 function cloneRecord(record: SessionRecord): SessionRecord {

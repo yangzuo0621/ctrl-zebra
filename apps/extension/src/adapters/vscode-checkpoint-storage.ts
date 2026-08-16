@@ -67,7 +67,7 @@ class VsCodeCheckpointStorage implements CheckpointStorage {
   }
 
   async listFiles(directory: PersistencePath, maxFiles: number): Promise<readonly string[]> {
-    const entries = await this.#storage.readDirectory(directory);
+    const entries = await this.#storage.readDirectory(directory, maxFiles + 1);
     const files: string[] = [];
     for (const [name, type] of entries) {
       if ((type & FileType.File) !== 0) {
