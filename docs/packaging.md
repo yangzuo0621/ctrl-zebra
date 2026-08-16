@@ -106,7 +106,9 @@ the packaged license.
 The package command writes deterministic metadata at `dist/package/build-metadata.json` containing
 the full source commit, extension version, SHA-256 digests of `pnpm-lock.yaml` and `CHANGELOG.md`,
 and the source ref/type. It packages the same clean commit a second time and rejects a digest
-mismatch. The archive is then independently checked against the selected-file and archive allowlists.
+mismatch. `vsce` receives the fixed `SOURCE_DATE_EPOCH=0` value so ZIP entry timestamps and
+ordering remain stable across invocations and runners. The archive is then independently checked
+against the selected-file and archive allowlists.
 
 The release audit walks the production graph reported by the pinned pnpm lockfile, excludes private
 workspace packages from the third-party inventory, and requires every external package to declare a

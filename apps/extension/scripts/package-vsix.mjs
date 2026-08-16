@@ -37,6 +37,10 @@ const isGitHubActionsSource = validateGitHubActionsSource(process.env, {
   commit,
   version: manifest.version,
 });
+// @vscode/vsce honors SOURCE_DATE_EPOCH for ZIP entry timestamps and ordering.
+// Keep the archive byte-for-byte stable even when the two package invocations
+// happen in different seconds or on different runners.
+process.env.SOURCE_DATE_EPOCH = "0";
 if (!isGitHubActionsSource) {
   const upstream = (
     await git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"])
