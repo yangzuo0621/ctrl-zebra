@@ -303,6 +303,12 @@ pnpm smoke:vsix -- .artifacts/<artifact-name>.vsix
 Architecture, security, persistence, testing, performance, and packaging contracts live in
 [docs](docs/).
 
+## Contributing and security
+
+See the [contributor guide](CONTRIBUTING.md) for local development and pull-request workflow. Use
+the [Security Policy](SECURITY.md) to report a suspected vulnerability privately, and see the
+[Changelog](CHANGELOG.md) for repository changes.
+
 ## License
 
 CtrlZebra is licensed under the [MIT License](LICENSE). Copyright (c) 2026 Zuo Yang.
