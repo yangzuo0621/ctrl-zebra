@@ -1,5 +1,6 @@
 export const RELEASE_POLICY_VERSION: number;
 export const ALLOWED_LICENSE_IDS: readonly string[];
+export const ALLOWED_SPDX_EXCEPTION_IDS: readonly string[];
 
 export function normalizeLicenseExpression(value: unknown): string;
 export function isCompatibleLicenseExpression(value: unknown): boolean;
@@ -34,6 +35,12 @@ export function validateVersionConsistency(input: {
   requireReleaseNotes?: boolean;
 }): void;
 export function validateBuildProvenance(metadata: unknown, expected: Record<string, string>): void;
+export function resolveBuildSource(input: {
+  environment?: Record<string, string | undefined>;
+  version: string;
+  branch?: string;
+  tag?: string;
+}): { sourceRef: string; sourceRefType: "branch" | "tag" };
 export function validateReleaseSource(
   environment: Record<string, string | undefined>,
   input?: { version?: string; branch?: string },
@@ -60,3 +67,7 @@ export function createDependencyInventoryFile(input: {
   version: string;
   packages: readonly unknown[];
 }): unknown;
+export function validateDependencyInventoryFile(
+  document: unknown,
+  input?: { version?: string; sourceCommit?: string },
+): void;

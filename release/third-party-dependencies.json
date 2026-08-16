@@ -2,6 +2,7 @@
   "schemaVersion": 1,
   "product": "ctrl-zebra",
   "version": "0.1.1",
+  "sourceCommit": "fa670385f53089f2218029369b2d31670446192c",
   "packages": [
     {
       "name": "@ai-sdk/gateway",

@@ -105,14 +105,16 @@ the packaged license.
 
 The package command writes deterministic metadata at `dist/package/build-metadata.json` containing
 the full source commit, extension version, SHA-256 digests of `pnpm-lock.yaml` and `CHANGELOG.md`,
-and the source ref/type. It packages the same clean commit a second time and rejects a digest
+and a validated source ref/type. It packages the same clean commit a second time and rejects a digest
 mismatch. `vsce` receives the fixed `SOURCE_DATE_EPOCH=0` value so ZIP entry timestamps and
 ordering remain stable across invocations and runners. The archive is then independently checked
 against the selected-file and archive allowlists.
 
 The release audit walks the production graph reported by the pinned pnpm lockfile, excludes private
 workspace packages from the third-party inventory, and requires every external package to declare a
-compatible SPDX license. The generated inventory and deterministic SPDX-2.3 SBOM must match the
+compatible SPDX license. SPDX expressions use a bounded parser: base licenses and `WITH` exception
+identifiers must be in the explicit policy allowlists; unknown exceptions are rejected. The
+generated inventory and deterministic SPDX-2.3 SBOM must match the
 repository declarations under `release/`; a license or SBOM diff is a release failure. The audit
 also checks the packaged manifest against declared runtime dependencies and rejects development
 caches, source maps, credentials, nested dependency trees, and executables outside the reviewed

@@ -99,8 +99,8 @@ tag creation, GitHub Release creation, or Marketplace publication.
 - [ ] The extension manifest version, `CHANGELOG.md` release notes, `pnpm-lock.yaml` importer
   specifiers, and the matching `v<version>` tag are consistent.
 - [ ] The official package command records the source commit, version, lockfile digest, changelog
-  digest, and source ref in VSIX build provenance; packaging the same clean commit twice produces the
-  same artifact digest.
+  digest, and validated source ref/type in VSIX build provenance; packaging the same clean commit
+  twice produces the same artifact digest.
 - [ ] The retained artifact includes a SHA-256 checksum, a deterministic SPDX-2.3 SBOM, and a
   third-party dependency/license inventory whose declared packages and licenses match the lockfile.
 - [ ] The VSIX archive is independently audited against its allowlist and declared runtime
@@ -108,8 +108,8 @@ tag creation, GitHub Release creation, or Marketplace publication.
   executables are rejected.
 - [ ] The release workflow is manual by default, runs only from the protected main branch or the
   matching version tag, and keeps Marketplace publishing behind the protected environment named
-  `release`.
-  Any publishing credential is read only from the CI secret store and is never printed or persisted.
+  `release`. Only that protected gate may read the named `VSCE_PAT` credential from the CI secret
+  store after verification; it is never passed to build/test steps, printed, or persisted.
 - [ ] A release candidate test covers ordinary verification, version mismatch, missing CHANGELOG
   notes, license/SBOM diff, unexpected VSIX file, wrong branch, missing credentials, duplicate tag,
   and cancellation before publishing.

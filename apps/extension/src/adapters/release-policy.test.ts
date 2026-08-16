@@ -2,9 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import {
   assertDependencyInventoryMatches,
+  createDependencyInventoryFile,
   createSpdxDocument,
+  isCompatibleLicenseExpression,
+  resolveBuildSource,
   validateBuildProvenance,
   validateCompatibleLicenses,
+  validateDependencyInventoryFile,
   validatePublishPreconditions,
   validateReleaseSource,
   validateSpdxDocument,
@@ -108,6 +112,13 @@ describe("T2206 release policy", () => {
         { name: "runtime", version: "1.2.4", license: "MIT" },
       ]),
     ).toThrow(/differs/);
+    expect(isCompatibleLicenseExpression("MIT WITH UnknownException")).toBe(false);
+    expect(isCompatibleLicenseExpression("Apache-2.0 WITH LLVM-exception")).toBe(true);
+    expect(() =>
+      validateCompatibleLicenses([
+        { name: "bad-exception", version: "1.0.0", license: "MIT WITH UnknownException" },
+      ]),
+    ).toThrow(/Incompatible license/);
   });
 
   it("rejects unexpected files, development caches, and undeclared executables", () => {
@@ -166,6 +177,35 @@ describe("T2206 release policy", () => {
     ).toThrow(/version/);
   });
 
+  it("resolves and rejects local/CI source refs fail closed", () => {
+    expect(
+      resolveBuildSource({
+        environment: {
+          GITHUB_ACTIONS: "true",
+          GITHUB_REF: "refs/heads/main",
+          GITHUB_REF_TYPE: "branch",
+        },
+        version: "1.2.3",
+      }),
+    ).toEqual({ sourceRef: "refs/heads/main", sourceRefType: "branch" });
+    expect(resolveBuildSource({ branch: "release/candidate", version: "1.2.3" })).toEqual({
+      sourceRef: "refs/heads/release/candidate",
+      sourceRefType: "branch",
+    });
+    expect(() =>
+      resolveBuildSource({
+        environment: {
+          GITHUB_ACTIONS: "true",
+          GITHUB_REF: "refs/heads/main",
+          GITHUB_REF_TYPE: "tag",
+        },
+        version: "1.2.3",
+      }),
+    ).toThrow(/tag ref/);
+    expect(() => resolveBuildSource({ tag: "v1.2.4", version: "1.2.3" })).toThrow(/tag ref/);
+    expect(() => resolveBuildSource({ version: "1.2.3" })).toThrow(/validated local/);
+  });
+
   it("fails closed for missing credentials, duplicate tags, and cancellation", () => {
     expect(() =>
       validatePublishPreconditions({ publish: true, environment: "release", token: "" }),
@@ -188,10 +228,41 @@ describe("T2206 release policy", () => {
       version: "1.2.3",
       lockfileSha256: "b".repeat(64),
       changelogSha256: "c".repeat(64),
+      sourceRef: "refs/heads/main",
+      sourceRefType: "branch",
     };
     expect(() => validateBuildProvenance(expected, expected)).not.toThrow();
     expect(() =>
       validateBuildProvenance({ ...expected, changelogSha256: "d".repeat(64) }, expected),
     ).toThrow(/changelogSha256/);
+    expect(() =>
+      validateBuildProvenance({ ...expected, sourceRef: "refs/heads/tampered" }, expected),
+    ).toThrow(/sourceRef/);
+    expect(() => validateBuildProvenance({ ...expected, sourceRefType: "tag" }, expected)).toThrow(
+      /sourceRefType/,
+    );
+  });
+
+  it("requires inventory schema, product, version, and source commit metadata", () => {
+    const inventory = createDependencyInventoryFile({
+      commit: "a".repeat(40),
+      version: "1.2.3",
+      packages: [{ name: "runtime", version: "1.2.3", license: "MIT" }],
+    }) as Record<string, unknown>;
+    expect(() =>
+      validateDependencyInventoryFile(inventory, {
+        version: "1.2.3",
+        sourceCommit: "a".repeat(40),
+      }),
+    ).not.toThrow();
+    expect(() => validateDependencyInventoryFile({ ...inventory, product: "other" })).toThrow(
+      /product/,
+    );
+    expect(() =>
+      validateDependencyInventoryFile(
+        { ...inventory, sourceCommit: "b".repeat(40) },
+        { version: "1.2.3", sourceCommit: "a".repeat(40) },
+      ),
+    ).toThrow(/sourceCommit/);
   });
 });

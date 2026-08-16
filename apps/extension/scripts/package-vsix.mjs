@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 import yauzl from "yauzl";
-import { validateBuildProvenance } from "../../../scripts/release-policy.mjs";
+import { resolveBuildSource, validateBuildProvenance } from "../../../scripts/release-policy.mjs";
 import {
   assertCleanStatus,
   validateArchiveEntries,
@@ -32,7 +32,10 @@ validateReleaseDocuments({
   extensionLicense: await readFile(join(extensionRoot, "LICENSE"), "utf8"),
 });
 const commit = (await git(["rev-parse", "HEAD"])).trim();
-const branch = (await git(["branch", "--show-current"])).trim();
+const branch =
+  process.env.GITHUB_ACTIONS === "true"
+    ? undefined
+    : (await git(["branch", "--show-current"])).trim();
 const isGitHubActionsSource = validateGitHubActionsSource(process.env, {
   commit,
   version: manifest.version,
@@ -41,6 +44,16 @@ const isGitHubActionsSource = validateGitHubActionsSource(process.env, {
 // Keep the archive byte-for-byte stable even when the two package invocations
 // happen in different seconds or on different runners.
 process.env.SOURCE_DATE_EPOCH = "0";
+const localTag =
+  process.env.GITHUB_ACTIONS === "true" || branch
+    ? undefined
+    : (await git(["describe", "--tags", "--exact-match", "HEAD"])).trim();
+const source = resolveBuildSource({
+  environment: process.env,
+  version: manifest.version,
+  branch,
+  tag: localTag,
+});
 if (!isGitHubActionsSource) {
   const upstream = (
     await git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"])
@@ -58,8 +71,8 @@ const metadata = {
   version: manifest.version,
   lockfileSha256: sha256(lockfile),
   changelogSha256: sha256(changelog),
-  sourceRef: process.env.GITHUB_REF ?? `refs/heads/${branch}`,
-  sourceRefType: process.env.GITHUB_REF_TYPE ?? "branch",
+  sourceRef: source.sourceRef,
+  sourceRefType: source.sourceRefType,
 };
 const metadataPath = join(extensionRoot, "dist", "package", "build-metadata.json");
 await mkdir(dirname(metadataPath), { recursive: true });

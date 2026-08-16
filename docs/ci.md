@@ -79,7 +79,12 @@ workflow.
 - Workflow `GITHUB_TOKEN` permissions are limited to `contents: read`. Additional permissions require a prior update to this document that explains why the current task needs them.
 - Every `uses:` reference must be pinned to a full 40-character commit SHA, with the corresponding stable version tag recorded in an inline comment. Mutable tags and branches are prohibited.
 - Before adding another third-party action, verify its maintenance status, source, and required permissions.
-- CI must not read, pass, or depend on repository, environment, or organization secrets.
+- CI validation and packaging jobs must not read, pass, or depend on repository, environment, or
+  organization secrets. The only narrow exception is the manual release workflow's protected
+  `release` environment gate after verification succeeds and `publish=true`: that gate may read
+  exactly the `VSCE_PAT` credential from that environment's CI secret store, only to confirm it is
+  configured. It must not expose, persist, or pass the credential to build/test steps, and this
+  exception grants no access to repository or organization secrets.
 - Using `pull_request_target` to execute pull request code is prohibited.
 - Workflows must not publish packages to an external registry or Marketplace, push commits, create
   tags, modify pull requests, or write repository contents. Retaining the verified VSIX as a GitHub
@@ -108,7 +113,8 @@ corepack pnpm test:coverage
 
 `.github/workflows/release.yml` is a manual, verification-first workflow. It accepts the protected
 `main` branch or the exact `v<extension-version>` tag, checks the manifest/CHANGELOG/lockfile and
-release checklist, packages the VSIX twice, and fails if the two SHA-256 digests differ. It retains
+release checklist, packages the VSIX twice, and fails if the two SHA-256 digests differ. A branch
+verification also fails when the matching release tag already exists. It retains
 the verified VSIX, checksum, third-party license inventory, and deterministic SPDX-2.3 SBOM as one
 artifact. The workflow is not a tag or version creator.
 

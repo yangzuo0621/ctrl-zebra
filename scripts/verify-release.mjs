@@ -18,8 +18,10 @@ import {
   assertDependencyInventoryMatches,
   createDependencyInventoryFile,
   createSpdxDocument,
+  resolveBuildSource,
   validateBuildProvenance,
   validateCompatibleLicenses,
+  validateDependencyInventoryFile,
   validatePublishPreconditions,
   validateReleaseSource,
   validateSpdxDocument,
@@ -47,6 +49,14 @@ const tag =
   process.env.GITHUB_REF_TYPE === "tag"
     ? process.env.GITHUB_REF?.replace("refs/tags/", "")
     : undefined;
+const branch =
+  process.env.GITHUB_ACTIONS === "true"
+    ? undefined
+    : (await git(["branch", "--show-current"])).trim();
+const localTag =
+  process.env.GITHUB_ACTIONS === "true" || branch
+    ? undefined
+    : (await git(["describe", "--tags", "--exact-match", "HEAD"])).trim();
 
 if (process.env.GITHUB_ACTIONS === "true") {
   validateReleaseSource(process.env, { version });
@@ -54,6 +64,12 @@ if (process.env.GITHUB_ACTIONS === "true") {
     throw new Error("GitHub Actions source SHA does not match the checked-out commit.");
   }
 }
+const source = resolveBuildSource({
+  environment: process.env,
+  version,
+  branch,
+  tag: localTag,
+});
 
 validateVersionConsistency({
   version,
@@ -75,6 +91,7 @@ validateReleaseDocuments({
 const inventory = await collectProductionDependencies();
 validateCompatibleLicenses(inventory);
 const inventoryFile = createDependencyInventoryFile({ commit, version, packages: inventory });
+validateDependencyInventoryFile(inventoryFile, { version, sourceCommit: commit });
 const sbom = createSpdxDocument({ name: "ctrl-zebra", version, packages: inventory });
 validateSpdxDocument(sbom, inventory);
 
@@ -82,6 +99,14 @@ const declaredInventory = await readOptionalJson(
   join(repositoryRoot, "release", "third-party-dependencies.json"),
 );
 if (declaredInventory && !args.updateAudit) {
+  validateDependencyInventoryFile(declaredInventory, { version });
+  try {
+    await git(["merge-base", "--is-ancestor", declaredInventory.sourceCommit, commit]);
+  } catch {
+    throw new Error(
+      "Third-party dependency inventory sourceCommit is not an ancestor of the checkout.",
+    );
+  }
   assertDependencyInventoryMatches(inventory, declaredInventory.packages);
 }
 const declaredSbom = await readOptionalJson(join(repositoryRoot, "release", "sbom.spdx.json"));
@@ -105,12 +130,7 @@ if (args.artifact) {
 
 if (args.updateAudit) {
   await mkdir(join(repositoryRoot, "release"), { recursive: true });
-  await writeJson(join(repositoryRoot, "release", "third-party-dependencies.json"), {
-    schemaVersion: 1,
-    product: "ctrl-zebra",
-    version,
-    packages: inventoryFile.packages,
-  });
+  await writeJson(join(repositoryRoot, "release", "third-party-dependencies.json"), inventoryFile);
   await writeJson(join(repositoryRoot, "release", "sbom.spdx.json"), sbom);
 }
 
@@ -213,6 +233,8 @@ async function inspectArtifact(artifactPath, inventory) {
     version,
     lockfileSha256: sha256(lockfile),
     changelogSha256: sha256(changelog),
+    sourceRef: source.sourceRef,
+    sourceRefType: source.sourceRefType,
   });
   validateSelectedFiles([...expectedSelectedFiles]);
   validateVsixDependencyAudit({
@@ -225,6 +247,8 @@ async function inspectArtifact(artifactPath, inventory) {
     sha256: await sha256File(artifactPath),
     ...inspection,
     sourceCommit: packagedMetadata.commit,
+    sourceRef: packagedMetadata.sourceRef,
+    sourceRefType: packagedMetadata.sourceRefType,
     version: packagedMetadata.version,
     dependencyCount: inventory.length,
   };

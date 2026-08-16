@@ -16,7 +16,65 @@ export const ALLOWED_LICENSE_IDS = Object.freeze([
   "MIT-0",
 ]);
 
+// Exceptions are accepted only when they are listed by the SPDX License List.
+// Keep this allowlist explicit so an arbitrary `WITH <text>` never bypasses the
+// compatible-license gate. The list is intentionally independent of the
+// product's compatible base-license set above.
+export const ALLOWED_SPDX_EXCEPTION_IDS = Object.freeze([
+  "389-exception",
+  "Asterisk-exception",
+  "Asterisk-linking-protocols-exception",
+  "Autoconf-exception-2.0",
+  "Autoconf-exception-3.0",
+  "Autoconf-exception-generic",
+  "Autoconf-exception-generic-3.0",
+  "Autoconf-exception-macro",
+  "Bison-exception-1.24",
+  "Bison-exception-2.2",
+  "Bootloader-exception",
+  "CGAL-linking-exception",
+  "Classpath-exception-2.0",
+  "Classpath-exception-2.0-short",
+  "CLISP-exception-2.0",
+  "cryptsetup-OpenSSL-exception",
+  "Digia-Qt-LGPL-exception-1.1",
+  "DigiRule-FOSS-exception",
+  "eCos-exception-2.0",
+  "erlang-otp-linking-exception",
+  "Fawkes-Runtime-exception",
+  "FLTK-exception",
+  "fmt-exception",
+  "Font-exception-2.0",
+  "freertos-exception-2.0",
+  "GCC-exception-2.0",
+  "GCC-exception-2.0-note",
+  "GCC-exception-3.1",
+  "Gmsh-exception",
+  "GNAT-exception",
+  "GNOME-examples-exception",
+  "GNU-compiler-exception",
+  "GPL-2.0-with-classpath-exception",
+  "GPL-2.0-with-font-exception",
+  "GPL-2.0-with-GCC-exception",
+  "GPL-3.0-with-autoconf-exception",
+  "GPL-3.0-with-GCC-exception",
+  "LGPL-2.1-linking-exception",
+  "LLVM-exception",
+  "mif-exception",
+  "Nokia-Qt-exception-1.1",
+  "OCaml-LGPL-linking-exception",
+  "OpenJDK-assembly-exception-1.0",
+  "QPL-1.0-INRIA-2004-exception",
+  "Qt-GPL-exception-1.0",
+  "Qt-LGPL-exception-1.1",
+  "Swift-exception",
+  "Universal-FOSS-exception-1.0",
+  "WxWindows-exception-3.1",
+  "x11vnc-openssl-exception",
+]);
+
 const allowedLicenses = new Set(ALLOWED_LICENSE_IDS);
+const allowedSpdxExceptions = new Set(ALLOWED_SPDX_EXCEPTION_IDS);
 const forbiddenVsixFragments = Object.freeze([
   "/node_modules/",
   "/.pnpm/",
@@ -69,14 +127,82 @@ export function isCompatibleLicenseExpression(value) {
     return false;
   }
 
-  return expression
-    .replace(/[()]/gu, "")
-    .split(/\s+OR\s+/iu)
-    .some((alternative) =>
-      alternative
-        .split(/\s+AND\s+/iu)
-        .every((license) => allowedLicenses.has(license.trim().replace(/\s+WITH\s+.*/iu, ""))),
-    );
+  const tokens = expression.match(/[A-Za-z0-9.+-]+|[()]/gu);
+  if (!tokens || tokens.join("") !== expression.replace(/\s+/gu, "")) {
+    return false;
+  }
+
+  let index = 0;
+  let unknownException = false;
+
+  function parseOr() {
+    let compatible = parseAnd();
+    while (tokens[index] === "OR") {
+      index += 1;
+      compatible = parseAnd() || compatible;
+    }
+    return compatible;
+  }
+
+  function parseAnd() {
+    let compatible = parseAtom();
+    while (tokens[index] === "AND") {
+      index += 1;
+      compatible = parseAtom() && compatible;
+    }
+    return compatible;
+  }
+
+  function parseAtom() {
+    if (tokens[index] === "(") {
+      index += 1;
+      const compatible = parseOr();
+      if (tokens[index] !== ")") {
+        throw new Error("Unbalanced SPDX license expression.");
+      }
+      index += 1;
+      return compatible;
+    }
+
+    const license = tokens[index];
+    if (
+      !license ||
+      license === ")" ||
+      license === "AND" ||
+      license === "OR" ||
+      license === "WITH"
+    ) {
+      throw new Error("Malformed SPDX license expression.");
+    }
+    index += 1;
+    let compatible = allowedLicenses.has(license);
+    if (tokens[index] === "WITH") {
+      index += 1;
+      const exception = tokens[index];
+      if (
+        !exception ||
+        exception === ")" ||
+        exception === "AND" ||
+        exception === "OR" ||
+        exception === "WITH"
+      ) {
+        throw new Error("Malformed SPDX license exception expression.");
+      }
+      index += 1;
+      if (!allowedSpdxExceptions.has(exception)) {
+        unknownException = true;
+      }
+      compatible = compatible && allowedSpdxExceptions.has(exception);
+    }
+    return compatible;
+  }
+
+  try {
+    const compatible = parseOr();
+    return index === tokens.length && !unknownException && compatible;
+  } catch {
+    return false;
+  }
 }
 
 export function validateCompatibleLicenses(packages) {
@@ -300,11 +426,48 @@ export function validateBuildProvenance(metadata, expected) {
   if (!metadata || typeof metadata !== "object") {
     throw new Error("VSIX build provenance is missing.");
   }
-  for (const field of ["commit", "version", "lockfileSha256", "changelogSha256"]) {
+  for (const field of [
+    "commit",
+    "version",
+    "lockfileSha256",
+    "changelogSha256",
+    "sourceRef",
+    "sourceRefType",
+  ]) {
     if (metadata[field] !== expected[field]) {
       throw new Error(`VSIX build provenance does not match ${field}.`);
     }
   }
+  validateSourceRef({
+    sourceRef: metadata.sourceRef,
+    sourceRefType: metadata.sourceRefType,
+    version: expected.version,
+  });
+}
+
+export function resolveBuildSource({ environment, version, branch, tag } = {}) {
+  if (environment?.GITHUB_ACTIONS === "true") {
+    const source = {
+      sourceRef: environment.GITHUB_REF,
+      sourceRefType: environment.GITHUB_REF_TYPE,
+    };
+    validateSourceRef({ ...source, version });
+    return source;
+  }
+
+  if (typeof branch === "string" && branch.trim() !== "") {
+    const source = { sourceRef: `refs/heads/${branch}`, sourceRefType: "branch" };
+    validateSourceRef({ ...source, version });
+    return source;
+  }
+
+  if (typeof tag === "string" && tag.trim() !== "") {
+    const source = { sourceRef: `refs/tags/${tag}`, sourceRefType: "tag" };
+    validateSourceRef({ ...source, version });
+    return source;
+  }
+
+  throw new Error("Build provenance requires a validated local branch or matching tag.");
 }
 
 export function validateReleaseSource(environment, { version, branch = "main" } = {}) {
@@ -342,6 +505,28 @@ export function validateTagAvailability(tag, existingTags, { allowExisting = fal
   if (!allowExisting && Array.isArray(existingTags) && existingTags.includes(tag)) {
     throw new Error(`Release tag already exists: ${tag}.`);
   }
+}
+
+export function validateDependencyInventoryFile(document, { version, sourceCommit } = {}) {
+  if (!document || typeof document !== "object") {
+    throw new Error("Third-party dependency inventory metadata is missing.");
+  }
+  if (document.schemaVersion !== RELEASE_POLICY_VERSION) {
+    throw new Error("Third-party dependency inventory schema version is unsupported.");
+  }
+  if (document.product !== "ctrl-zebra") {
+    throw new Error("Third-party dependency inventory product is invalid.");
+  }
+  if (typeof document.version !== "string" || (version && document.version !== version)) {
+    throw new Error("Third-party dependency inventory version does not match the release.");
+  }
+  if (!/^[0-9a-f]{40}$/u.test(document.sourceCommit ?? "")) {
+    throw new Error("Third-party dependency inventory sourceCommit is invalid.");
+  }
+  if (sourceCommit && document.sourceCommit !== sourceCommit) {
+    throw new Error("Third-party dependency inventory sourceCommit does not match the checkout.");
+  }
+  validateCompatibleLicenses(document.packages);
 }
 
 export function validatePublishPreconditions({
@@ -414,6 +599,34 @@ export function createDependencyInventoryFile({ commit, version, packages }) {
     sourceCommit: commit,
     packages: inventory,
   };
+}
+
+function validateSourceRef({ sourceRef, sourceRefType, version }) {
+  if (sourceRefType === "branch") {
+    if (!isSafeGitRef(sourceRef, "refs/heads/")) {
+      throw new Error("Build provenance branch ref is invalid.");
+    }
+    return;
+  }
+  if (sourceRefType === "tag") {
+    if (sourceRef !== `refs/tags/v${version}`) {
+      throw new Error("Build provenance tag ref must exactly match the extension version.");
+    }
+    return;
+  }
+  throw new Error("Build provenance source ref type is invalid.");
+}
+
+function isSafeGitRef(value, prefix) {
+  return (
+    typeof value === "string" &&
+    value.startsWith(prefix) &&
+    value.length > prefix.length &&
+    !/[\s~^:?*[\\\]]/u.test(value) &&
+    !value.includes("..") &&
+    !value.endsWith("/") &&
+    !value.endsWith(".")
+  );
 }
 
 function extractYamlSection(text, heading) {
