@@ -109,4 +109,24 @@ describe("RunTokenBudget", () => {
       expect(observation.snapshot.actualTokens).toBeUndefined();
     }
   });
+
+  it("uses an overflow sentinel when derived input and output exceed the shared bound", () => {
+    const budget = new RunTokenBudget({ maxTokens: 20, warningTokens: 10 });
+    const observation = budget.observeUsage({
+      inputTokens: 1_500_000,
+      outputTokens: 1_500_000,
+      totalTokens: 1_000_000,
+    });
+
+    expect(observation).toMatchObject({
+      outcome: "exceeded",
+      snapshot: {
+        source: "actual",
+        effectiveTokens: 2_000_000,
+      },
+    });
+    if (observation.outcome === "exceeded") {
+      expect(observation.snapshot.actualTokens).toBeUndefined();
+    }
+  });
 });

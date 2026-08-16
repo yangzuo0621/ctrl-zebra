@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { runTokenBudgetConfigurationSchema, runTokenBudgetSnapshotSchema } from "./index.js";
+import {
+  maxTokenCount,
+  runTokenBudgetConfigurationSchema,
+  runTokenBudgetSnapshotSchema,
+} from "./index.js";
 
 describe("Run token budget protocol", () => {
   it("accepts bounded policy and snapshot values", () => {
@@ -56,6 +60,14 @@ describe("Run token budget protocol", () => {
       estimatedTokens: 1,
       actualTokens: 11,
       effectiveTokens: 10,
+    },
+    {
+      state: "warning",
+      source: "actual",
+      maxTokens: maxTokenCount,
+      warningTokens: maxTokenCount - 1,
+      estimatedTokens: 0,
+      effectiveTokens: maxTokenCount,
     },
     {
       state: "warning",

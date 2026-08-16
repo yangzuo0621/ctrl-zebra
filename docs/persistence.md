@@ -346,6 +346,10 @@ Run. A malformed, non-monotonic, duplicate warning, or event after exceeded in t
 Session corrupt. The latest valid snapshot across Runs is returned as `restoredSession.runBudget`, and a recovered
 `budget-exceeded` status is displayed as a terminal, user-recoverable Run outcome. Budget events
 remain outside model history and never resume a Provider request or Tool operation.
+The cancellation-priority race is the one exception to exceeded-terminal fencing: an exceeded event
+immediately followed by `cancelled` remains a cancelled Run with a display-only snapshot. Exceeded
+followed by `completed`, `truncated`, `failed`, or `interrupted`, including a manifest that claims
+one of those outcomes, is corrupt rather than restored as completed with an exceeded budget.
 
 ## Compatibility and migration
 

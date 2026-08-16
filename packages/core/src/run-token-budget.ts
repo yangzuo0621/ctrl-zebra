@@ -93,7 +93,15 @@ export class RunTokenBudget {
       this.#actualTokens = undefined;
     } else {
       this.#actualUsage = merged.usage;
-      this.#actualTokens = usageTokenCount(merged.usage);
+      const tokenCount = usageTokenCount(merged.usage);
+      if (tokenCount === "overflow") {
+        // Individual Usage fields are bounded, but their derived input+output total can still
+        // overflow the shared bound. Preserve provenance without displaying a fabricated clamp.
+        this.#actualOverflowed = true;
+        this.#actualTokens = undefined;
+      } else {
+        this.#actualTokens = tokenCount;
+      }
     }
     return this.#evaluate("actual");
   }
@@ -131,13 +139,16 @@ export class RunTokenBudget {
   }
 }
 
-function usageTokenCount(usage: TokenUsage): number | undefined {
+function usageTokenCount(usage: TokenUsage): number | "overflow" | undefined {
   const inputTokens = usage.inputTokens;
   const outputTokens = usage.outputTokens;
-  const fieldTotal =
-    inputTokens !== undefined && outputTokens !== undefined
-      ? saturatingAdd(inputTokens, outputTokens)
-      : undefined;
+  let fieldTotal: number | undefined;
+  if (inputTokens !== undefined && outputTokens !== undefined) {
+    if (inputTokens > maxTokenCount - outputTokens) {
+      return "overflow";
+    }
+    fieldTotal = inputTokens + outputTokens;
+  }
   const totals = [usage.totalTokens, fieldTotal, inputTokens, outputTokens].filter(
     (value): value is number => value !== undefined,
   );

@@ -180,6 +180,10 @@ persisted before the boundary is observed.
 The terminal status is recoverable only through the normal explicit `beginRun` reset gate. The
 latest valid run-budget event is projected in `extension/session-restored`; malformed, non-monotonic,
 or post-exceeded events within a Run make the Session corrupt rather than being guessed or reordered.
+If cancellation wins after an exceeded observation was emitted, the ordered log may contain the
+exceeded snapshot followed by `cancelled`; recovery preserves the cancellation-priority terminal and
+keeps the bounded snapshot display-only. An exceeded snapshot followed by `completed`, `truncated`,
+`failed`, or `interrupted` is corrupt and is never restored as a resumable completed Run.
 
 Reasoning text is well-formed Unicode and each delta contains 1–8,192 Unicode code points and at
 most 32,768 UTF-8 bytes. The Extension collector also enforces these cumulative ceilings without

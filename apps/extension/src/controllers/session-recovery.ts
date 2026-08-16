@@ -460,6 +460,7 @@ function recoverRunBudget(
   let latest: import("@ctrl-zebra/protocol").RunTokenBudgetSnapshot | undefined;
   let current: import("@ctrl-zebra/protocol").RunTokenBudgetSnapshot | undefined;
   let runClosed = true;
+  let terminalStatus: import("@ctrl-zebra/protocol").SessionStatus | undefined;
   for (const persisted of record.events) {
     if (persisted.event.type === "session.status-changed") {
       const data = persisted.event.data;
@@ -474,6 +475,7 @@ function recoverRunBudget(
       if (data.status === "preparing") {
         current = undefined;
         runClosed = false;
+        terminalStatus = undefined;
       } else if (
         data.status === "completed" ||
         data.status === "truncated" ||
@@ -482,10 +484,23 @@ function recoverRunBudget(
         data.status === "failed" ||
         data.status === "interrupted"
       ) {
+        if (terminalStatus !== undefined) {
+          throw new SessionRecoveryError("corrupt");
+        }
+        // A cancellation can win after the Core has persisted an exceeded observation. Preserve
+        // that explicit cancellation-priority race; every other terminal outcome is corrupt.
+        if (
+          current?.state === "exceeded" &&
+          data.status !== "budget-exceeded" &&
+          data.status !== "cancelled"
+        ) {
+          throw new SessionRecoveryError("corrupt");
+        }
         if (data.status === "budget-exceeded" && current?.state !== "exceeded") {
           throw new SessionRecoveryError("corrupt");
         }
         runClosed = true;
+        terminalStatus = data.status;
       }
       continue;
     }
@@ -518,6 +533,16 @@ function recoverRunBudget(
     }
     current = next;
     latest = next;
+  }
+  if (
+    current?.state === "exceeded" &&
+    record.manifest.status !== "budget-exceeded" &&
+    record.manifest.status !== "cancelled"
+  ) {
+    throw new SessionRecoveryError("corrupt");
+  }
+  if (record.manifest.status === "budget-exceeded" && current?.state !== "exceeded") {
+    throw new SessionRecoveryError("corrupt");
   }
   return latest;
 }

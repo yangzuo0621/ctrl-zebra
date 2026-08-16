@@ -1094,6 +1094,56 @@ describe("Session recovery", () => {
     expect(restored.session.runBudget).not.toHaveProperty("actualTokens");
   });
 
+  it.each([
+    "completed",
+    "truncated",
+    "failed",
+    "interrupted",
+  ] as const)("rejects an exceeded snapshot followed by incompatible %s terminal status", async (status) => {
+    const events = exceededBudgetEvents(status);
+    const repository = repositoryFixture("completed", events);
+    repository.get = async () => ({
+      manifest: {
+        ...manifest("session-fixture", "2026-07-31T00:00:00.000Z"),
+        status,
+        lastEventSequence: events.length,
+      },
+      events,
+      eventLogTailDamaged: false,
+    });
+    const actions = createSessionRecoveryActions(async () => repository);
+
+    await expect(actions.restore("session-fixture")).rejects.toMatchObject({
+      name: "SessionRecoveryError",
+      code: "corrupt",
+    });
+  });
+
+  it("preserves a cancelled terminal when cancellation wins after an exceeded observation", async () => {
+    const events = exceededBudgetEvents("cancelled");
+    const repository = repositoryFixture("completed", events);
+    repository.get = async () => ({
+      manifest: {
+        ...manifest("session-fixture", "2026-07-31T00:00:00.000Z"),
+        status: "cancelled",
+        lastEventSequence: events.length,
+      },
+      events,
+      eventLogTailDamaged: false,
+    });
+    const actions = createSessionRecoveryActions(async () => repository);
+
+    await expect(actions.restore("session-fixture")).resolves.toMatchObject({
+      session: {
+        status: "cancelled",
+        runBudget: {
+          state: "exceeded",
+          effectiveTokens: 100,
+        },
+      },
+    });
+  });
+
   it("rejects a duplicate warning or late budget event in one Run", async () => {
     const events: PersistedEventRecord[] = [
       {
@@ -1189,4 +1239,41 @@ function repositoryFixture(
     async update() {},
     async appendEvent() {},
   };
+}
+
+function exceededBudgetEvents(
+  status: "completed" | "truncated" | "cancelled" | "failed" | "interrupted",
+): PersistedEventRecord[] {
+  return [
+    {
+      sequence: 1,
+      recordedAt: "2026-07-31T00:00:01.000Z",
+      event: { type: "session.status-changed", data: { status: "preparing" } },
+    },
+    {
+      sequence: 2,
+      recordedAt: "2026-07-31T00:00:02.000Z",
+      event: { type: "session.status-changed", data: { status: "streaming" } },
+    },
+    {
+      sequence: 3,
+      recordedAt: "2026-07-31T00:00:03.000Z",
+      event: {
+        type: "session.run-budget",
+        data: {
+          state: "exceeded",
+          source: "estimate",
+          maxTokens: 100,
+          warningTokens: 80,
+          estimatedTokens: 100,
+          effectiveTokens: 100,
+        },
+      },
+    },
+    {
+      sequence: 4,
+      recordedAt: "2026-07-31T00:00:04.000Z",
+      event: { type: "session.status-changed", data: { status } },
+    },
+  ];
 }

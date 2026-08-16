@@ -78,6 +78,7 @@ export const runTokenBudgetSnapshotSchema = z
     }
     const observedTokens = Math.max(snapshot.estimatedTokens, snapshot.actualTokens ?? 0);
     const boundedActualOverflow =
+      snapshot.state === "exceeded" &&
       snapshot.source === "actual" &&
       snapshot.actualTokens === undefined &&
       snapshot.effectiveTokens === maxTokenCount;
