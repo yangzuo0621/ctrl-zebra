@@ -1,5 +1,5 @@
 import { McpToolDiscoveryError } from "@ctrl-zebra/mcp-client";
-import { protocolVersion } from "@ctrl-zebra/protocol";
+import { protocolVersion, type SessionSummary } from "@ctrl-zebra/protocol";
 import { describe, expect, it, vi } from "vitest";
 
 import { ProviderConfigurationError } from "../adapters/provider-configuration.js";
@@ -542,6 +542,57 @@ describe("bindWebviewMessageController", () => {
 
     messageListener?.({ protocolVersion, type: "webview/cancel", requestId: "run-active" });
     await Promise.resolve();
+  });
+
+  it("holds Run startup until an in-flight Session history refresh completes", async () => {
+    let messageListener: ((message: unknown) => void) | undefined;
+    let releaseList!: (sessions: readonly SessionSummary[]) => void;
+    const listResult = new Promise<readonly SessionSummary[]>((resolve) => {
+      releaseList = resolve;
+    });
+    const list = vi.fn(() => listResult);
+    const run = vi.fn(async () => {});
+    bindWebviewMessageController({
+      channel: {
+        onDidReceiveMessage(listener) {
+          messageListener = listener;
+          return { dispose() {} };
+        },
+        postMessage() {
+          return Promise.resolve(true);
+        },
+      },
+      lifetime: { onDidDispose: () => ({ dispose() {} }) },
+      reportDeliveryFailure: () => {},
+      chatRunner: { run },
+      sessionActions: {
+        list,
+        async restore() {
+          throw new Error("unused");
+        },
+      },
+    });
+
+    messageListener?.({ protocolVersion, type: "webview/list-sessions", requestId: "list-lock" });
+    await Promise.resolve();
+    messageListener?.({
+      protocolVersion,
+      type: "webview/submit",
+      requestId: "run-blocked",
+      content: "Must wait for retention.",
+    });
+    expect(run).not.toHaveBeenCalled();
+
+    releaseList([]);
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    messageListener?.({
+      protocolVersion,
+      type: "webview/submit",
+      requestId: "run-after-list",
+      content: "Now start.",
+    });
+    await Promise.resolve();
+    expect(run).toHaveBeenCalledTimes(1);
   });
 
   it("rejects a stale Session restore before it can become deletable", async () => {

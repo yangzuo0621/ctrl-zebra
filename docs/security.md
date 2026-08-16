@@ -169,8 +169,10 @@ This document defines the Webview security constraints established before T0104.
   is inclusive, so timezone formatting cannot change whether a record is expired.
 - Running and recovery-owned data is protected. `idle`, `preparing`, `streaming`,
   `awaiting_approval`, and `executing_tool` candidates are never removed by the retention pass, and the
-  Host refuses a history request while a Run is active or settling. Session deletion and Checkpoint
-  attribution remain exact-ID operations under the existing trusted extension-storage root.
+  Host refuses a history request while a Run is active or settling. After a history request claims the
+  lifecycle lock, a new Run is blocked until the complete retention/list operation finishes. Session
+  deletion and Checkpoint attribution remain exact-ID operations under the existing trusted
+  extension-storage root.
 - Checkpoint cleanup deletes only records whose validated `sessionId` exactly matches a Session that
   was removed by the retention pass. Invalid, unreadable, or unattributable records are retained rather
   than guessed, including atomic-write temporary files that cannot be attributed safely. Workspace

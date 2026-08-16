@@ -68,7 +68,7 @@ export class InvalidSessionRetentionPolicyError extends Error {
 }
 
 /**
- * Removes expired Sessions and their owned Checkpoints using one bounded metadata scan. The
+ * Removes expired Sessions and their owned Checkpoints using a bounded manifest metadata scan. The
  * caller supplies the clock so the date boundary is deterministic and independent of local time.
  */
 export async function cleanupExpiredSessions(
@@ -144,9 +144,11 @@ export async function cleanupExpiredSessions(
       continue;
     }
 
-    if (deleted) {
-      deletedSessions += 1;
+    if (!deleted) {
+      failedSessions += 1;
+      continue;
     }
+    deletedSessions += 1;
     removedSessionIds.push(candidate.sessionId);
     checkpointOwners.push(candidate.sessionId);
   }

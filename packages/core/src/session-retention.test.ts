@@ -253,6 +253,37 @@ describe("Session retention", () => {
     expect(owners).toEqual(["expired"]);
     expect(report.deletedCheckpoints).toBe(2);
   });
+
+  it("leaves Checkpoints untouched when Session deletion reports an absent Session", async () => {
+    const candidates = [
+      candidate("already-absent", "2026-01-01T00:00:00.000Z"),
+      candidate("deleted", "2026-01-01T00:00:00.000Z"),
+    ];
+    const { repository, deleted } = createRepository(candidates, {
+      delete: async (sessionId) => sessionId !== "already-absent",
+    });
+    let owners: readonly unknown[] = [];
+    const checkpointStore = createCheckpointStore((sessionIds) => {
+      owners = sessionIds;
+      return { deleted: 1, failed: 0 };
+    });
+
+    const report = await cleanupExpiredSessions(repository, checkpointStore, {
+      policy: { enabled: true, days: 30 },
+      now: () => new Date("2026-08-16T00:00:00.000Z"),
+      signal: new AbortController().signal,
+      candidates,
+    });
+
+    expect(deleted).toEqual(["deleted"]);
+    expect(owners).toEqual(["deleted"]);
+    expect(report).toMatchObject({
+      expired: 2,
+      deletedSessions: 1,
+      failedSessions: 1,
+      removedSessionIds: ["deleted"],
+    });
+  });
 });
 
 function candidate(

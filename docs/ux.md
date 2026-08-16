@@ -376,9 +376,10 @@ Diff 查看完整的有界 before/after 内容：创建是空文件到完整内�
   cleanup is unavailable. Retry by refreshing Session history.” Disabled cleanup is silent.
 - Running or recovery-owned Sessions are never silently deleted. The Host protects `idle`,
   `preparing`, `streaming`, `awaiting_approval`, and `executing_tool` states and ignores a list request
-  while a Run is active or settling. Removed Sessions are filtered from the current list projection;
-  malformed or unattributable Checkpoints remain available for a later retry and no workspace file is
-  affected.
+  while a Run is active or settling. Once history refresh starts, its lifecycle lock blocks a new
+  submission until cleanup and list projection finish. Removed Sessions are filtered from the current
+  list projection; malformed or unattributable Checkpoints remain available for a later retry and no
+  workspace file is affected.
 - 最新一条已完成助手回复提供带作用范围说明的“重新生成”按钮，明确使用原用户问题和此前
   已完成历史；旧回复在新 Run 成功前保持可见。按钮在运行、恢复、会话切换或目标不再是最新
   回复时禁用。重新生成创建新的 Run，不重复旧 Tool 副作用或审批；取消、失败、截断和迟到

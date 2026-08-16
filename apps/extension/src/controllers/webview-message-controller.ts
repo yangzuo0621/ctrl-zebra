@@ -308,7 +308,10 @@ export function bindWebviewMessageController({
         return;
       case "webview/list-sessions":
         if (runMessages.canListSessions() && !sessionMessages.isRestoring()) {
-          sessionMessages.list(data.requestId);
+          const releaseHistoryLock = runMessages.acquireSessionHistoryLock();
+          if (releaseHistoryLock !== undefined) {
+            void sessionMessages.list(data.requestId).finally(releaseHistoryLock);
+          }
         }
         return;
       case "webview/select-session":

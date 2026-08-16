@@ -118,7 +118,9 @@ record is restored or persisted separately.
 - The Host invokes retention only after an explicit Session history list/refresh and never from
   activation. Candidate collection is bounded to manifest metadata (at most 10,000 Sessions), so
   retention does not load event logs or construct an unbounded history projection. Disabled policy
-  returns before candidate or Checkpoint selection.
+  returns before candidate or Checkpoint selection. The Host holds a lifecycle lock for the complete
+  asynchronous retention/list operation, so a new Run cannot claim a Session while its old terminal
+  metadata is still being examined.
 - The cutoff uses `updatedAt <= now - days * 86,400,000` with UTC timestamp math. Recovery/live-run
   statuses `idle`, `preparing`, `streaming`, `awaiting_approval`, and `executing_tool` are protected;
   the Webview message controller also fences list/refresh while an active or settling Run exists.

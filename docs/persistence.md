@@ -77,7 +77,8 @@ Retention runs only as part of an explicit Session history list/refresh. It scan
 entries and reads only bounded manifest metadata; it does not load event logs or run at activation. When
 disabled, no retention candidate or Checkpoint scan occurs. `idle`, `preparing`, `streaming`,
 `awaiting_approval`, and `executing_tool` candidates are protected because recovery or a live Run may
-still own their data. The Host also blocks history listing while a Run is active or settling.
+still own their data. The Host also blocks history listing while a Run is active or settling and holds
+the lifecycle lock across the complete asynchronous list/retention operation before allowing a new Run.
 
 An expired Session is removed through the existing exact encoded Session-directory deletion, then its
 owned Checkpoints are removed by one bounded scan of `checkpoints/v1`. Only a validated Checkpoint whose

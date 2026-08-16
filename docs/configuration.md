@@ -38,8 +38,10 @@ Cleanup is lazy and bounded: it runs after the user explicitly requests Session 
 activation, and examines at most 10,000 manifest metadata records without loading event logs. Disabled
 cleanup performs no candidate or Checkpoint scan. Sessions in `idle`, `preparing`, `streaming`,
 `awaiting_approval`, or `executing_tool` are protected while recovery or a Run may still own them; a list
-request is also blocked while a Run is active or settling. An expired Session and only its safely
-attributable local Checkpoints are removed. Malformed or unattributable Checkpoints remain for retry.
+request is also blocked while a Run is active or settling. Once a list/retention operation starts, its
+Host lifecycle lock blocks a new Run until the complete cleanup and list projection finish. An expired
+Session and only its safely attributable local Checkpoints are removed. Malformed or unattributable
+Checkpoints remain for retry.
 
 The cleanup result is surfaced with fixed safe feedback: a successful removal reports the number of
 Sessions and owned Checkpoints removed, while partial storage failures report that cleanup could not

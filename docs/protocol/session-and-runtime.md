@@ -62,8 +62,9 @@ new-Session behavior.
 - `webview/list-sessions` remains the strict existing list intent and `extension/session-list` keeps its
   existing Session summary shape. On that explicit history request, the Host may perform T2105's
   bounded local retention pass before emitting the list; removed Sessions are omitted from that
-  response. The request is ignored while a Run is active or settling, and retention feedback is a
-  Host-local fixed notification rather than a new Protocol message or raw storage error.
+  response. The request is ignored while a Run is active or settling; once accepted, a Host lifecycle
+  lock blocks a new Run until retention and list projection finish. Retention feedback is a Host-local
+  fixed notification rather than a new Protocol message or raw storage error.
 - `extension/session-started` is a strict Host-to-Webview event containing `{ protocolVersion,
   type: "extension/session-started", requestId, sessionId }`. The Host emits it once, after the
   requested Session has been validated or a new Session has been allocated and the Run has produced
