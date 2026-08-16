@@ -51,6 +51,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Validate dependency update policy
+        run: pnpm test:dependabot
+
       - name: Check formatting and lint
         run: pnpm check
 
