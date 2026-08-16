@@ -192,6 +192,56 @@ describe("Webview protocol messages", () => {
     }
   });
 
+  it("round-trips the redacted diagnostics preview and rejects raw content fields", () => {
+    const request = {
+      protocolVersion,
+      type: "webview/diagnostics-export",
+      requestId: "diagnostics-1",
+    } as const;
+    const confirm = {
+      protocolVersion,
+      type: "webview/diagnostics-export-confirm",
+      requestId: request.requestId,
+      exportId: "export-1",
+    } as const;
+    const document = {
+      formatVersion: 1,
+      extensionVersion: "0.1.1",
+      vscodeVersion: "1.125.0",
+      platform: "linux",
+      provider: "openai",
+      errors: [],
+      mcp: { status: "unconfigured", generation: 0 },
+      runtime: { activationDurationMs: 1, memoryBytes: 2, runStatus: "idle" },
+    } as const;
+    const preview = {
+      protocolVersion,
+      type: "extension/diagnostics-export-preview",
+      requestId: request.requestId,
+      status: "ready",
+      exportId: confirm.exportId,
+      target: "file:///tmp/diagnostics.json",
+      document,
+      content: `${JSON.stringify(document)}\n`,
+    } as const;
+
+    expect(webviewToExtensionMessageSchema.parse(request)).toEqual(request);
+    expect(webviewToExtensionMessageSchema.parse(confirm)).toEqual(confirm);
+    expect(extensionToWebviewMessageSchema.parse(preview)).toEqual(preview);
+    expect(
+      extensionToWebviewMessageSchema.safeParse({
+        ...preview,
+        document: { ...preview.document, endpoint: "https://example.invalid?key=secret" },
+      }).success,
+    ).toBe(false);
+    expect(
+      extensionToWebviewMessageSchema.safeParse({
+        ...preview,
+        content: `${JSON.stringify(preview.document, null, 2)}\n`,
+      }).success,
+    ).toBe(false);
+  });
+
   it.each([
     { type: "webview/provider-status", requestId: "provider-1", extra: true },
     { type: "webview/provider-save-key", requestId: "provider-1", provider: "gemini" },
@@ -280,6 +330,21 @@ describe("Webview protocol messages", () => {
     expect(webviewToExtensionMessageSchema.parse(cancel)).toEqual(cancel);
     expect(extensionToWebviewMessageSchema.parse(delta)).toEqual(delta);
     expect(extensionToWebviewMessageSchema.parse(status)).toEqual(status);
+    for (const activeStatus of ["awaiting_approval", "executing_tool"] as const) {
+      expect(
+        extensionToWebviewMessageSchema.parse({
+          protocolVersion,
+          type: "extension/run-status",
+          requestId: "request-2",
+          status: activeStatus,
+        }),
+      ).toEqual({
+        protocolVersion,
+        type: "extension/run-status",
+        requestId: "request-2",
+        status: activeStatus,
+      });
+    }
     expect(
       extensionToWebviewMessageSchema.parse(JSON.parse(JSON.stringify(sessionStarted)) as unknown),
     ).toEqual(sessionStarted);

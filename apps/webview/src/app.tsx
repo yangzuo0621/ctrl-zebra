@@ -7,6 +7,8 @@ import { createApprovalStore } from "./approval-store.js";
 import { createChatStore, type DisplayMessage } from "./chat-store.js";
 import { CheckpointPanel } from "./checkpoint-panel.js";
 import { createCheckpointStore } from "./checkpoint-store.js";
+import { DiagnosticsExportPanel } from "./diagnostic-export-panel.js";
+import { createDiagnosticsExportStore } from "./diagnostic-export-store.js";
 import { EditorContextCard } from "./editor-context-card.js";
 import { createEditorContextStore } from "./editor-context-store.js";
 import { MarkdownMessage } from "./markdown-message.js";
@@ -105,6 +107,7 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
         approvalStore.getState().clear();
         checkpointStore.getState().clear();
         mcpStore.getState().clearLocal();
+        diagnosticsExportStore.getState().clear();
         onboardingStore.getState().clearLocal();
         editorContextStore.getState().clearLocal();
         workspaceFileStore.getState().clearLocal();
@@ -117,6 +120,9 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
   );
   const [mcpStore] = useState(() =>
     createMcpStore(host, createRequestId ?? (() => crypto.randomUUID())),
+  );
+  const [diagnosticsExportStore] = useState(() =>
+    createDiagnosticsExportStore(host, createRequestId ?? (() => crypto.randomUUID())),
   );
   const [onboardingStore] = useState(() =>
     createOnboardingStore(host, createRequestId ?? (() => crypto.randomUUID())),
@@ -175,6 +181,7 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
       approvalStore.getState().receive(message);
       checkpointStore.getState().receive(message);
       mcpStore.getState().receive(message);
+      diagnosticsExportStore.getState().receive(message);
       onboardingStore.getState().receive(message);
       editorContextStore.getState().receive(message);
       workspaceFileStore.getState().receive(message);
@@ -187,11 +194,13 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
       editorContextStore.getState().dispose();
       workspaceFileStore.getState().dispose();
       onboardingStore.getState().dispose();
+      diagnosticsExportStore.getState().dispose();
     };
   }, [
     approvalStore,
     checkpointStore,
     createRequestId,
+    diagnosticsExportStore,
     editorContextStore,
     host,
     mcpStore,
@@ -547,6 +556,7 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
       ) : null}
 
       <McpPanel store={mcpStore} />
+      <DiagnosticsExportPanel store={diagnosticsExportStore} />
 
       <main
         ref={mainRef}

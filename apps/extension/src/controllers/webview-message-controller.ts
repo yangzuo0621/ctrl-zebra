@@ -8,6 +8,7 @@ import {
 } from "@ctrl-zebra/protocol";
 import type { ChatRunner } from "./chat-runner.js";
 import type { CheckpointActions } from "./checkpoint-actions.js";
+import type { DiagnosticsExportController } from "./diagnostic-export.js";
 import type { EditorContextWebviewActions } from "./editor-context-entry.js";
 import type { LocalDataClearController } from "./local-data-clear.js";
 import { type McpPromptActions, McpPromptPreviewCancelledError } from "./mcp-prompt-actions.js";
@@ -16,7 +17,7 @@ import type { McpWebviewActions } from "./mcp-webview-actions.js";
 import type { ProviderOnboardingController } from "./provider-onboarding-controller.js";
 import type { SessionRecoveryActions } from "./session-recovery.js";
 import { WebviewCheckpointMessageHandler } from "./webview-checkpoint-message-handler.js";
-import { WebviewRunMessageHandler } from "./webview-run-message-handler.js";
+import { type HostRunStatus, WebviewRunMessageHandler } from "./webview-run-message-handler.js";
 import { WebviewSessionMessageHandler } from "./webview-session-message-handler.js";
 import type { WorkspaceFileReferenceActions } from "./workspace-file-reference-actions.js";
 
@@ -62,6 +63,7 @@ interface BindWebviewMessageControllerOptions {
   readonly sessionActions?: SessionRecoveryActions;
   readonly checkpointActions?: CheckpointActions;
   readonly reportRunFailure?: (error: unknown) => void;
+  readonly reportRunStatus?: (status: HostRunStatus) => void;
   readonly resourceActions?: McpResourceActions;
   readonly promptActions?: McpPromptActions;
   readonly mcpActions?: McpWebviewActions;
@@ -70,6 +72,7 @@ interface BindWebviewMessageControllerOptions {
   readonly editorContextActions?: EditorContextWebviewActions;
   readonly workspaceFileActions?: WorkspaceFileReferenceActions;
   readonly localDataClear?: LocalDataClearUiActions;
+  readonly diagnosticsExport?: DiagnosticsExportController;
 }
 
 export function bindWebviewMessageController({
@@ -81,6 +84,7 @@ export function bindWebviewMessageController({
   sessionActions,
   checkpointActions,
   reportRunFailure = () => {},
+  reportRunStatus = () => {},
   resourceActions,
   promptActions,
   mcpActions,
@@ -89,6 +93,7 @@ export function bindWebviewMessageController({
   editorContextActions,
   workspaceFileActions,
   localDataClear,
+  diagnosticsExport,
 }: BindWebviewMessageControllerOptions): void {
   let disposed = false;
   const post = (message: ExtensionToWebviewMessage) => {
@@ -107,6 +112,7 @@ export function bindWebviewMessageController({
     chatRunner,
     approvalActions,
     reportRunFailure,
+    reportRunStatus,
   );
   const sessionMessages = new WebviewSessionMessageHandler(
     post,
@@ -151,6 +157,15 @@ export function bindWebviewMessageController({
       case "webview/ping":
         post(createPong(data.requestId));
         mcpActions?.refresh(data.requestId);
+        return;
+      case "webview/diagnostics-export":
+        diagnosticsExport?.request(data.requestId, post);
+        return;
+      case "webview/diagnostics-export-confirm":
+        diagnosticsExport?.confirm(data.requestId, data.exportId, post);
+        return;
+      case "webview/diagnostics-export-cancel":
+        diagnosticsExport?.cancel(data.requestId, data.exportId, post);
         return;
       case "webview/provider-status":
         void providerOnboarding?.status(data.requestId, post).catch(reportRunFailure);
@@ -430,6 +445,7 @@ export function bindWebviewMessageController({
     resourceActions?.dispose();
     promptActions?.dispose();
     mcpActions?.dispose();
+    diagnosticsExport?.dispose();
     editorContextActions?.dispose();
     workspaceFileActions?.dispose();
     providerOnboarding?.dispose();

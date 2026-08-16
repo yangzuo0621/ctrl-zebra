@@ -6,6 +6,10 @@ import {
 } from "./approval.js";
 import { assistantMessageSchema, messageIdSchema, userMessageSchema } from "./chat-message.js";
 import { checkpointIdSchema, checkpointSummarySchema } from "./checkpoint.js";
+import {
+  diagnosticsExportDocumentSchema,
+  maxDiagnosticsExportBytes,
+} from "./diagnostics-export.js";
 import { ideTextContextSchema } from "./ide-context.js";
 import {
   mcpCatalogSequenceSchema,
@@ -197,6 +201,84 @@ export const providerActionMessageSchema = z.discriminatedUnion("status", [
     message: z.string().min(1).max(256),
   }),
 ]);
+
+export const diagnosticsExportRequestMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("webview/diagnostics-export"),
+});
+
+export const diagnosticsExportConfirmMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("webview/diagnostics-export-confirm"),
+  exportId: requestIdSchema,
+});
+
+export const diagnosticsExportCancelMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("webview/diagnostics-export-cancel"),
+  exportId: requestIdSchema,
+});
+
+export const diagnosticsExportTargetSchema = z
+  .string()
+  .min(1)
+  .max(1_024)
+  .refine((value) => value.isWellFormed(), "The export target must contain well-formed Unicode.")
+  .refine(
+    (value) => !/[\0\r\n\u2028\u2029]/u.test(value),
+    "The export target must not contain control characters.",
+  );
+
+const diagnosticsExportPreviewContentSchema = z
+  .string()
+  .min(1)
+  .max(maxDiagnosticsExportBytes)
+  .refine((value) => value.isWellFormed(), "The export content must contain well-formed Unicode.")
+  .refine(
+    (value) => utf8ByteLength(value) <= maxDiagnosticsExportBytes,
+    "The export content exceeds its serialized byte limit.",
+  );
+
+export const diagnosticsExportPreviewMessageSchema = z
+  .discriminatedUnion("status", [
+    z.strictObject({
+      ...protocolEnvelopeSchema.shape,
+      type: z.literal("extension/diagnostics-export-preview"),
+      status: z.literal("ready"),
+      exportId: requestIdSchema,
+      target: diagnosticsExportTargetSchema,
+      document: diagnosticsExportDocumentSchema,
+      content: diagnosticsExportPreviewContentSchema,
+    }),
+    z.strictObject({
+      ...protocolEnvelopeSchema.shape,
+      type: z.literal("extension/diagnostics-export-preview"),
+      status: z.literal("completed"),
+      message: z.string().min(1).max(256),
+    }),
+    z.strictObject({
+      ...protocolEnvelopeSchema.shape,
+      type: z.literal("extension/diagnostics-export-preview"),
+      status: z.literal("cancelled"),
+      code: z.enum(["user-cancelled", "no-target"]),
+      message: z.string().min(1).max(256),
+    }),
+    z.strictObject({
+      ...protocolEnvelopeSchema.shape,
+      type: z.literal("extension/diagnostics-export-preview"),
+      status: z.literal("error"),
+      code: z.enum(["invalid-state", "too-large", "write-failed", "unavailable"]),
+      message: z.string().min(1).max(256),
+    }),
+  ])
+  .superRefine((message, context) => {
+    if (message.status === "ready" && message.content !== `${JSON.stringify(message.document)}\n`) {
+      context.addIssue({
+        code: "custom",
+        message: "The diagnostics preview content must match the compact document serialization.",
+      });
+    }
+  });
 
 export const submitMessageSchema = z.strictObject({
   ...protocolEnvelopeSchema.shape,
@@ -666,6 +748,8 @@ export const reasoningRestoredMessageSchema = z
 export const runStatusSchema = z.enum([
   "preparing",
   "streaming",
+  "awaiting_approval",
+  "executing_tool",
   "completed",
   "truncated",
   "cancelled",
@@ -815,6 +899,9 @@ export const checkpointErrorMessageSchema = z.strictObject({
 
 export const webviewToExtensionMessageSchema = z.discriminatedUnion("type", [
   pingMessageSchema,
+  diagnosticsExportRequestMessageSchema,
+  diagnosticsExportConfirmMessageSchema,
+  diagnosticsExportCancelMessageSchema,
   submitMessageSchema,
   newChatMessageSchema,
   cancelMessageSchema,
@@ -857,6 +944,7 @@ export const webviewToExtensionMessageSchema = z.discriminatedUnion("type", [
 ]);
 export const extensionToWebviewMessageSchema = z.union([
   pongMessageSchema,
+  diagnosticsExportPreviewMessageSchema,
   providerStatusMessageSchema,
   providerActionMessageSchema,
   textDeltaMessageSchema,
@@ -908,6 +996,10 @@ export type ProviderSelectModelMessage = z.infer<typeof providerSelectModelMessa
 export type ProviderOpenSettingsMessage = z.infer<typeof providerOpenSettingsMessageSchema>;
 export type ProviderStatusMessage = z.infer<typeof providerStatusMessageSchema>;
 export type ProviderActionMessage = z.infer<typeof providerActionMessageSchema>;
+export type DiagnosticsExportRequestMessage = z.infer<typeof diagnosticsExportRequestMessageSchema>;
+export type DiagnosticsExportConfirmMessage = z.infer<typeof diagnosticsExportConfirmMessageSchema>;
+export type DiagnosticsExportCancelMessage = z.infer<typeof diagnosticsExportCancelMessageSchema>;
+export type DiagnosticsExportPreviewMessage = z.infer<typeof diagnosticsExportPreviewMessageSchema>;
 export type SubmitMessage = z.infer<typeof submitMessageSchema>;
 export type NewChatMessage = z.infer<typeof newChatMessageSchema>;
 export type CancelMessage = z.infer<typeof cancelMessageSchema>;

@@ -58,3 +58,27 @@ files, user code, and other Extension state remain outside its ownership.
 - Lazy initialization must be concurrency-safe: simultaneous callers share one initialization attempt and receive the same success or failure outcome.
 - Failed initialization must leave no partially registered or unowned resources. A later retry is allowed only when the owning contract defines it.
 - Background work must have an explicit trigger, cancellation path, and lifecycle owner; module import must never start work as a side effect.
+
+## User-triggered diagnostics export (T2205)
+
+Diagnostics export is composed in `extension.ts` but owned by the Extension-side
+`DiagnosticsExportController`. The controller enforces one in-flight request, exact request/export
+correlation, preview-before-confirmation, disposal invalidation, and fixed outcomes for no target,
+invalid state, size limit, unavailable save dialog, and write failure. It does not read workspace or
+conversation content and does not create background work during activation.
+
+- The host-independent Protocol owns the strict diagnostics document and preview/request message
+  schemas. The diagnostics builder owns the allowlist, redaction, aggregation, and UTF-8 bound;
+  `PerformanceBaselineRecorder` supplies the existing bounded activation/display/RSS snapshot. The
+  `ready` preview carries the exact compact serialization returned by that builder, including its
+  trailing newline, so the rendered content and confirmed bytes cannot diverge.
+- The Extension receives Run status only from the host-owned `WebviewRunMessageHandler` lifecycle
+  callbacks. It records the emitted status (including active non-idle states); after view disposal,
+  the unobservable state is represented as `unknown` rather than inferred from Webview state.
+- `vscode-diagnostics-export.ts` is the only VS Code adapter. It owns the save dialog options,
+  `Uri` display formatting, and `workspace.fs.writeFile` call. The selected target remains an opaque
+  adapter value until the user confirms; only a bounded display label crosses to the Webview.
+- The Webview owns the preview state and buttons. It cannot write directly and only sends strict
+  request/confirm/cancel intents. A cancelled dialog, explicit Cancel, stale correlation, or view
+  disposal cannot trigger a write. The write API is awaited and normalized to a fixed success or
+  failure message; no raw host error is forwarded.

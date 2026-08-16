@@ -13,6 +13,8 @@ import { mapRunErrorToUi } from "./run-error-mapper.js";
 
 type PostWebviewMessage = (message: ExtensionToWebviewMessage) => void;
 
+export type HostRunStatus = "idle" | "unknown" | RunStatus;
+
 interface ApprovalUiActions {
   showDiff(requestId: string, approvalId: string): void;
   decide(requestId: string, approvalId: string, decision: ApprovalDecisionIntent): void;
@@ -42,6 +44,7 @@ export class WebviewRunMessageHandler {
     private readonly chatRunner: ChatRunner,
     private readonly approvalActions?: ApprovalUiActions,
     private readonly reportRunFailure: (error: unknown) => void = () => {},
+    private readonly reportRunStatus: (status: HostRunStatus) => void = () => {},
   ) {}
 
   start(
@@ -298,6 +301,7 @@ export class WebviewRunMessageHandler {
 
   dispose(): void {
     this.#disposed = true;
+    this.reportRunStatus("unknown");
     this.#activeRun?.abortController.abort(new Error("Webview disposed during chat run."));
     this.#activeRun = undefined;
     this.#ownedSessionId = undefined;
@@ -308,6 +312,7 @@ export class WebviewRunMessageHandler {
   }
 
   #postStatus(requestId: string, status: RunStatus): void {
+    this.reportRunStatus(status);
     this.post({
       protocolVersion,
       type: "extension/run-status",
@@ -497,11 +502,12 @@ export class WebviewRunMessageHandler {
       return;
     }
 
-    if (event.status === "preparing") {
-      return;
-    }
-
-    if (event.status === "streaming") {
+    if (
+      event.status === "preparing" ||
+      event.status === "streaming" ||
+      event.status === "awaiting_approval" ||
+      event.status === "executing_tool"
+    ) {
       this.#postStatus(run.requestId, event.status);
       return;
     }

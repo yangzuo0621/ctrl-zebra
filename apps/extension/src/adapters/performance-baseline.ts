@@ -7,12 +7,20 @@ interface PerformanceBaselineDependencies {
   readonly logger: Pick<StructuredLogger, "info">;
 }
 
+export interface PerformanceBaselineSnapshot {
+  readonly activationDurationMs: number;
+  readonly firstWebviewDisplayDurationMs?: number;
+  readonly memoryBytes: number;
+}
+
 export class PerformanceBaselineRecorder {
   readonly #startedAt: number;
   readonly #now: () => number;
   readonly #readRssBytes: () => number;
   readonly #logger: Pick<StructuredLogger, "info">;
   #firstDisplayRecorded = false;
+  #activationDurationMs = 0;
+  #firstWebviewDisplayDurationMs: number | undefined;
 
   constructor({ startedAt, now, readRssBytes, logger }: PerformanceBaselineDependencies) {
     this.#startedAt = normalizeInteger(startedAt);
@@ -22,11 +30,12 @@ export class PerformanceBaselineRecorder {
   }
 
   recordActivationComplete(): void {
+    this.#activationDurationMs = this.#elapsedMilliseconds();
     this.#logger.info({
       event: "extension_activated",
       component: "extension",
       outcome: "success",
-      durationMs: this.#elapsedMilliseconds(),
+      durationMs: this.#activationDurationMs,
     });
     this.#logger.info({
       event: "extension_idle_memory_sampled",
@@ -42,12 +51,23 @@ export class PerformanceBaselineRecorder {
     }
 
     this.#firstDisplayRecorded = true;
+    this.#firstWebviewDisplayDurationMs = this.#elapsedMilliseconds();
     this.#logger.info({
       event: "agent_view_first_displayed",
       component: "agent_view",
       outcome: "success",
-      durationMs: this.#elapsedMilliseconds(),
+      durationMs: this.#firstWebviewDisplayDurationMs,
     });
+  }
+
+  getSnapshot(): PerformanceBaselineSnapshot {
+    return {
+      activationDurationMs: this.#activationDurationMs,
+      ...(this.#firstWebviewDisplayDurationMs === undefined
+        ? {}
+        : { firstWebviewDisplayDurationMs: this.#firstWebviewDisplayDurationMs }),
+      memoryBytes: normalizeInteger(this.#readRssBytes()),
+    };
   }
 
   #elapsedMilliseconds(): number {

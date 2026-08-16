@@ -11,6 +11,7 @@ import {
 
 import type { ChatRunner } from "./controllers/chat-runner.js";
 import type { CheckpointActions } from "./controllers/checkpoint-actions.js";
+import type { DiagnosticsExportController } from "./controllers/diagnostic-export.js";
 import type { EditorContextEntryController } from "./controllers/editor-context-entry.js";
 import type { McpPromptActions } from "./controllers/mcp-prompt-actions.js";
 import type { McpResourceActions } from "./controllers/mcp-resource-actions.js";
@@ -22,6 +23,7 @@ import {
   bindWebviewMessageController,
   type LocalDataClearUiActions,
 } from "./controllers/webview-message-controller.js";
+import type { HostRunStatus } from "./controllers/webview-run-message-handler.js";
 import type { WorkspaceFileReferenceActions } from "./controllers/workspace-file-reference-actions.js";
 
 export const agentViewId = "ctrlZebra.agentView";
@@ -103,6 +105,7 @@ class AgentViewProvider implements WebviewViewProvider {
       sessionActions: this.options.sessionActions,
       checkpointActions: this.options.checkpointActions,
       reportRunFailure: this.options.reportRunFailure,
+      reportRunStatus: this.options.reportRunStatus,
       resourceActions: this.options.createResourceActions?.(),
       promptActions: this.options.createPromptActions?.(),
       mcpActions: this.options.createMcpActions?.(),
@@ -114,6 +117,7 @@ class AgentViewProvider implements WebviewViewProvider {
       ),
       workspaceFileActions: this.options.createWorkspaceFileReferenceActions?.(),
       localDataClear: this.options.localDataClear,
+      diagnosticsExport: this.options.diagnosticsExport,
     });
     this.options.reportDisplay?.();
   }
@@ -128,6 +132,7 @@ interface AgentViewProviderOptions {
   readonly reportDeliveryFailure?: () => void;
   readonly reportDisplay?: () => void;
   readonly reportRunFailure?: (error: unknown) => void;
+  readonly reportRunStatus?: (status: HostRunStatus) => void;
   readonly createResourceActions?: () => McpResourceActions;
   readonly createPromptActions?: () => McpPromptActions;
   readonly createMcpActions?: () => McpWebviewActions;
@@ -136,6 +141,7 @@ interface AgentViewProviderOptions {
   readonly openExternalLink?: (href: string) => void;
   readonly editorContext?: EditorContextEntryController;
   readonly localDataClear?: LocalDataClearUiActions;
+  readonly diagnosticsExport?: DiagnosticsExportController;
 }
 
 interface RegisterAgentViewOptions extends AgentViewProviderOptions {

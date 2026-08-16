@@ -17,6 +17,12 @@ describe("PerformanceBaselineRecorder", () => {
     recorder.recordFirstWebviewDisplay();
     recorder.recordFirstWebviewDisplay();
 
+    expect(recorder.getSnapshot()).toEqual({
+      activationDurationMs: 12,
+      firstWebviewDisplayDurationMs: 51,
+      memoryBytes: 52_428_802,
+    });
+
     expect(info.mock.calls).toEqual([
       [
         {
@@ -56,6 +62,12 @@ describe("PerformanceBaselineRecorder", () => {
 
     recorder.recordActivationComplete();
     recorder.recordFirstWebviewDisplay();
+
+    expect(recorder.getSnapshot()).toEqual({
+      activationDurationMs: 0,
+      firstWebviewDisplayDurationMs: 0,
+      memoryBytes: 0,
+    });
 
     expect(info.mock.calls).toEqual([
       [expect.objectContaining({ durationMs: 0 })],

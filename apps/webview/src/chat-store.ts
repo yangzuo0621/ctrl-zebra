@@ -103,6 +103,15 @@ interface ChatState {
   dispose(): void;
 }
 
+function isActiveRunStatus(status: ChatState["status"]): boolean {
+  return (
+    status === "preparing" ||
+    status === "streaming" ||
+    status === "awaiting_approval" ||
+    status === "executing_tool"
+  );
+}
+
 type ScheduleFlush = (callback: () => void) => () => void;
 
 export interface ChatStoreOptions {
@@ -1210,7 +1219,7 @@ export function createChatStore({
         }
 
         if (message.type === "extension/text-delta") {
-          if (state.status === "preparing" || state.status === "streaming") {
+          if (isActiveRunStatus(state.status)) {
             beginRegenerationProjection();
             beginEditProjection();
             queueTextDelta(message.text);
@@ -1219,14 +1228,14 @@ export function createChatStore({
         }
 
         if (message.type === "extension/token-usage") {
-          if (state.status === "preparing" || state.status === "streaming") {
+          if (isActiveRunStatus(state.status)) {
             applyTokenUsage(message.usage);
           }
           return;
         }
 
         if (message.type === "extension/run-budget") {
-          if (state.status === "preparing" || state.status === "streaming") {
+          if (isActiveRunStatus(state.status)) {
             set({ runBudget: message.budget });
           }
           return;
@@ -1234,7 +1243,7 @@ export function createChatStore({
 
         if (message.type === "extension/reasoning-start") {
           if (
-            (state.status !== "preparing" && state.status !== "streaming") ||
+            !isActiveRunStatus(state.status) ||
             openReasoningBlockId !== undefined ||
             liveReasoningBlocks.has(message.blockId) ||
             reasoningBlockCountLimited
@@ -1320,7 +1329,7 @@ export function createChatStore({
         }
 
         if (message.type === "extension/tool-state") {
-          if (state.status === "preparing" || state.status === "streaming") {
+          if (isActiveRunStatus(state.status)) {
             beginRegenerationProjection();
             beginEditProjection();
             applyToolState(message);

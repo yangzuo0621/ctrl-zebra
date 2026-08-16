@@ -21,6 +21,7 @@ describe("bindWebviewMessageController", () => {
     let messageListener: ((message: unknown) => void) | undefined;
     let editArguments: unknown[] | undefined;
     const postedMessages: unknown[] = [];
+    const runStatuses: string[] = [];
     bindWebviewMessageController({
       channel: {
         onDidReceiveMessage(listener) {
@@ -47,6 +48,7 @@ describe("bindWebviewMessageController", () => {
         },
       },
       reportRunFailure: () => {},
+      reportRunStatus: (status) => runStatuses.push(status),
     });
 
     messageListener?.({
@@ -82,6 +84,111 @@ describe("bindWebviewMessageController", () => {
       requestId: "request-edit",
       status: "preparing",
     });
+    expect(runStatuses).toContain("preparing");
+    expect(runStatuses).toContain("streaming");
+  });
+
+  it("propagates active lifecycle states and fences a settling replaced view", async () => {
+    let oldMessageListener: ((message: unknown) => void) | undefined;
+    let oldDispose: (() => void) | undefined;
+    let newMessageListener: ((message: unknown) => void) | undefined;
+    const statuses: string[] = [];
+    let settleOldRun!: () => void;
+    const oldRunSettled = new Promise<void>((resolve) => {
+      settleOldRun = resolve;
+    });
+
+    bindWebviewMessageController({
+      channel: {
+        onDidReceiveMessage(listener) {
+          oldMessageListener = listener;
+          return { dispose() {} };
+        },
+        postMessage() {
+          return Promise.resolve(true);
+        },
+      },
+      lifetime: {
+        onDidDispose(listener) {
+          oldDispose = listener;
+          return { dispose() {} };
+        },
+      },
+      chatRunner: {
+        async run(_content, _signal, emit) {
+          emit({
+            type: "session.status-changed",
+            sessionId: "old-session",
+            previousStatus: "preparing",
+            status: "streaming",
+          });
+          await oldRunSettled;
+        },
+      },
+      reportRunStatus: (status) => statuses.push(status),
+    });
+
+    oldMessageListener?.({
+      protocolVersion,
+      type: "webview/submit",
+      requestId: "old-request",
+      content: "Old run",
+    });
+    expect(statuses).toEqual(["preparing", "streaming"]);
+
+    oldDispose?.();
+    expect(statuses.at(-1)).toBe("unknown");
+
+    bindWebviewMessageController({
+      channel: {
+        onDidReceiveMessage(listener) {
+          newMessageListener = listener;
+          return { dispose() {} };
+        },
+        postMessage() {
+          return Promise.resolve(true);
+        },
+      },
+      lifetime: { onDidDispose: () => ({ dispose() {} }) },
+      chatRunner: {
+        async run(_content, _signal, emit) {
+          emit({
+            type: "session.status-changed",
+            sessionId: "new-session",
+            previousStatus: "preparing",
+            status: "awaiting_approval",
+          });
+          emit({
+            type: "session.status-changed",
+            sessionId: "new-session",
+            previousStatus: "awaiting_approval",
+            status: "executing_tool",
+          });
+        },
+      },
+      reportRunStatus: (status) => statuses.push(status),
+    });
+
+    expect(statuses.at(-1)).toBe("unknown");
+    settleOldRun();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(statuses.at(-1)).toBe("unknown");
+
+    const newGenerationStart = statuses.length;
+    newMessageListener?.({
+      protocolVersion,
+      type: "webview/submit",
+      requestId: "new-request",
+      content: "New run",
+    });
+    await Promise.resolve();
+    expect(statuses.slice(newGenerationStart)).toEqual([
+      "preparing",
+      "awaiting_approval",
+      "executing_tool",
+      "completed",
+    ]);
   });
 
   it("does not report or publish refresh cancellation, but reports unexpected failures", async () => {

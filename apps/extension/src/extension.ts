@@ -30,6 +30,7 @@ import {
   ProgressLocation,
   Uri,
   env as vscodeEnv,
+  version as vscodeVersion,
   window,
   workspace,
 } from "vscode";
@@ -48,6 +49,7 @@ import { createVsCodeFileCreateApplier } from "./adapters/create-vscode-file-cre
 import { createVsCodeFileDeleteApplier } from "./adapters/create-vscode-file-delete-applier.js";
 import { createVsCodeFileRenameApplier } from "./adapters/create-vscode-file-rename-applier.js";
 import { createVsCodeWorkspaceEditApplier } from "./adapters/create-vscode-workspace-edit-applier.js";
+import { toDiagnosticsRuntime } from "./adapters/diagnostics-export.js";
 import { FileCreateConflictError } from "./adapters/file-create-applier.js";
 import { FileDeleteConflictError } from "./adapters/file-delete-applier.js";
 import { FileRenameConflictError } from "./adapters/file-rename-applier.js";
@@ -76,6 +78,7 @@ import { createStructuredLogger } from "./adapters/structured-logger.js";
 import { VscodeBoundedTextStorage } from "./adapters/vscode-bounded-text-storage.js";
 import { createWorkspaceCheckpointStoreProvider } from "./adapters/vscode-checkpoint-storage.js";
 import { VsCodeDiagnostics } from "./adapters/vscode-diagnostics.js";
+import { createVscodeDiagnosticsExportPort } from "./adapters/vscode-diagnostics-export.js";
 import { VsCodeEditorContext } from "./adapters/vscode-editor-context.js";
 import { isVscodeFileNotFound } from "./adapters/vscode-file-system-error.js";
 import { VsCodeLanguageServices } from "./adapters/vscode-language-services.js";
@@ -106,6 +109,10 @@ import { createSelectingChatRunner } from "./controllers/chat-runner.js";
 import { createCheckpointActions } from "./controllers/checkpoint-actions.js";
 import { combineToolRegistries } from "./controllers/combine-tool-registries.js";
 import { CommandApprovalWorkflow } from "./controllers/command-approval-workflow.js";
+import {
+  classifyDiagnosticsErrorCategory,
+  DiagnosticsExportController,
+} from "./controllers/diagnostic-export.js";
 import {
   createEditorContextSourceFingerprint,
   EditorContextEntryController,
@@ -156,6 +163,7 @@ import {
 } from "./controllers/run-error-mapper.js";
 import { createSessionRecoveryActions } from "./controllers/session-recovery.js";
 import { ToolApprovalWorkflowRouter } from "./controllers/tool-approval-workflow.js";
+import type { HostRunStatus } from "./controllers/webview-run-message-handler.js";
 import {
   selectCommandEnvironment,
   WorkspaceCommandExecutor,
@@ -193,6 +201,8 @@ export function activate(context: ExtensionContext): void {
     showWarningMessage: (message, options, item) =>
       window.showWarningMessage(message, options, item),
   });
+  let diagnosticsExport: DiagnosticsExportController;
+  let currentRunStatus: HostRunStatus = "idle";
   const mcpConnection = new McpConnectionController({
     readConfiguration() {
       const settings = workspace.getConfiguration(mcpServerSettingSection);
@@ -243,7 +253,49 @@ export function activate(context: ExtensionContext): void {
       } else {
         logger.info(entry);
       }
+      if (entry.outcome === "failure") {
+        diagnosticsExport.recordErrorCategory("mcp");
+      }
     },
+  });
+  diagnosticsExport = new DiagnosticsExportController({
+    createId: randomUUID,
+    readInput: () => {
+      let provider: unknown = "unknown";
+      try {
+        provider = readProviderOnboardingConfiguration(
+          workspace.getConfiguration("ctrlZebra.provider"),
+        ).provider;
+      } catch {
+        // A corrupt Provider setting is represented as unknown in the export.
+      }
+
+      const mcp = mcpConnection.getState();
+      return {
+        extensionVersion: context.extension.packageJSON?.version,
+        vscodeVersion,
+        platform,
+        provider,
+        errors: [],
+        mcp: {
+          status:
+            mcp.status === "disconnected" && mcp.server === undefined && mcp.generation === 0
+              ? "unconfigured"
+              : mcp.status,
+          generation: mcp.generation,
+          protocolMode: mcp.configuredMode,
+          ...(mcp.connection?.protocolVersion === undefined
+            ? {}
+            : { negotiatedVersion: mcp.connection.protocolVersion }),
+          ...(mcp.error === undefined ? {} : { errorCategory: "mcp" }),
+        },
+        runtime: toDiagnosticsRuntime(performanceBaseline.getSnapshot(), currentRunStatus),
+      };
+    },
+    target: createVscodeDiagnosticsExportPort(
+      (options) => window.showSaveDialog(options),
+      workspace.fs,
+    ),
   });
   const diffPresenter = createVsCodeDiffPresenter();
   const hashText = (text: string) => createHash("sha256").update(text, "utf8").digest("hex");
@@ -951,7 +1003,9 @@ export function activate(context: ExtensionContext): void {
       readRunBudgetConfiguration(workspace.getConfiguration(runBudgetSettingSection)),
     diagnosticSink: {
       emit: (diagnostic) => {
-        logger.error(getAgentRuntimeDiagnosticLogEntry(diagnostic));
+        const entry = getAgentRuntimeDiagnosticLogEntry(diagnostic);
+        diagnosticsExport.recordErrorCategory(classifyDiagnosticsErrorCategory(entry.errorCode));
+        logger.error(entry);
       },
     },
     selectSessionRepository,
@@ -1323,7 +1377,12 @@ export function activate(context: ExtensionContext): void {
       },
       reportDisplay: () => performanceBaseline.recordFirstWebviewDisplay(),
       reportRunFailure: (error) => {
-        logger.error(getRunFailureLogEntry(error));
+        const failure = getRunFailureLogEntry(error);
+        diagnosticsExport.recordErrorCategory(classifyDiagnosticsErrorCategory(failure.errorCode));
+        logger.error(failure);
+      },
+      reportRunStatus: (status) => {
+        currentRunStatus = status;
       },
       createResourceActions: () =>
         new McpResourceActions({ connection: mcpConnection, createId: randomUUID }),
@@ -1345,6 +1404,7 @@ export function activate(context: ExtensionContext): void {
           void requestLocalDataClear(requestId, post);
         },
       },
+      diagnosticsExport,
       openExternalLink: (href) => {
         if (!isApprovedExternalLink(href)) {
           return;
