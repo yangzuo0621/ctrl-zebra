@@ -45,9 +45,7 @@ export class WebviewRunMessageHandler {
     private readonly approvalActions?: ApprovalUiActions,
     private readonly reportRunFailure: (error: unknown) => void = () => {},
     private readonly reportRunStatus: (status: HostRunStatus) => void = () => {},
-  ) {
-    this.reportRunStatus("idle");
-  }
+  ) {}
 
   start(
     requestId: string,
@@ -504,11 +502,12 @@ export class WebviewRunMessageHandler {
       return;
     }
 
-    if (event.status === "preparing") {
-      return;
-    }
-
-    if (event.status === "streaming") {
+    if (
+      event.status === "preparing" ||
+      event.status === "streaming" ||
+      event.status === "awaiting_approval" ||
+      event.status === "executing_tool"
+    ) {
       this.#postStatus(run.requestId, event.status);
       return;
     }

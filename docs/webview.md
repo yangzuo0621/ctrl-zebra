@@ -376,10 +376,11 @@ focus, selection, disclosure state, and transcript scroll position.
   labelled normally; partial counts are labelled partial and unknown fields use an explicit em dash.
   A terminal response without any Provider count says that usage is unavailable rather than showing
   a fabricated zero. The component is presentation-only and receives store snapshots through props.
-- Live Usage is accepted only for the active request while preparing or streaming. Terminal,
-  cancellation, Session replacement, stale request, duplicate, and malformed messages cannot mutate
-  the display. A restored Session commits its bounded Usage projection atomically with the validated
-  `extension/session-restored` payload, and New chat clears it with the rest of the projection.
+- Live Usage is accepted only for the active request while preparing, streaming, awaiting approval, or
+  executing a Tool. Terminal, cancellation, Session replacement, stale request, duplicate, and
+  malformed messages cannot mutate the display. A restored Session commits its bounded Usage
+  projection atomically with the validated `extension/session-restored` payload, and New chat clears
+  it with the rest of the projection.
 
 ## File lifecycle approval and Diff projection (T2001)
 

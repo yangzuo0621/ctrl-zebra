@@ -47,6 +47,8 @@ export const strings = {
       idle: "Ready.",
       preparing: "Preparing response…",
       streaming: "Generating response…",
+      awaiting_approval: "Waiting for approval…",
+      executing_tool: "Executing Tool…",
       completed: "Response complete.",
       truncated: "Response truncated.",
       cancelled: "Response cancelled.",

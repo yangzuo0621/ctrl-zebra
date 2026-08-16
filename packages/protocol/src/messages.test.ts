@@ -330,6 +330,21 @@ describe("Webview protocol messages", () => {
     expect(webviewToExtensionMessageSchema.parse(cancel)).toEqual(cancel);
     expect(extensionToWebviewMessageSchema.parse(delta)).toEqual(delta);
     expect(extensionToWebviewMessageSchema.parse(status)).toEqual(status);
+    for (const activeStatus of ["awaiting_approval", "executing_tool"] as const) {
+      expect(
+        extensionToWebviewMessageSchema.parse({
+          protocolVersion,
+          type: "extension/run-status",
+          requestId: "request-2",
+          status: activeStatus,
+        }),
+      ).toEqual({
+        protocolVersion,
+        type: "extension/run-status",
+        requestId: "request-2",
+        status: activeStatus,
+      });
+    }
     expect(
       extensionToWebviewMessageSchema.parse(JSON.parse(JSON.stringify(sessionStarted)) as unknown),
     ).toEqual(sessionStarted);

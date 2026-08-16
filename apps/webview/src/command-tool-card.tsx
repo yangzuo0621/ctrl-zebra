@@ -49,7 +49,10 @@ export function CommandToolCard({
     runStatus === "truncated" && (toolCall.status === "pending" || toolCall.status === "running");
   const canTerminate =
     toolCall.status === "running" &&
-    (runStatus === "preparing" || runStatus === "streaming") &&
+    (runStatus === "preparing" ||
+      runStatus === "streaming" ||
+      runStatus === "awaiting_approval" ||
+      runStatus === "executing_tool") &&
     !terminationRequested;
   const visibleStatus = isAwaitingApproval
     ? strings.command.awaitingDecision

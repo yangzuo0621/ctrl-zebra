@@ -748,6 +748,8 @@ export const reasoningRestoredMessageSchema = z
 export const runStatusSchema = z.enum([
   "preparing",
   "streaming",
+  "awaiting_approval",
+  "executing_tool",
   "completed",
   "truncated",
   "cancelled",

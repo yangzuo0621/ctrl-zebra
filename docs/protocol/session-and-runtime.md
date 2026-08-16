@@ -88,6 +88,11 @@ new-Session behavior.
   its first accepted event. The Webview accepts it only for the active request and stores the
   confirmed Session identity; it never derives an identity from `requestId`, display state, or model
   output. A stale, duplicate, or mismatched event has no UI or ownership effect.
+- `extension/run-status` carries the host-owned lifecycle status for the active request. In addition
+  to `preparing` and `streaming`, the Extension propagates `awaiting_approval` and `executing_tool`
+  before the distinct terminal statuses `completed`, `truncated`, `cancelled`, `budget-exceeded`, or
+  `failed`. The Webview treats all four non-terminal values as active and ignores every status after
+  the correlated terminal outcome.
 - `extension/session-restored` keeps its existing strict restored-message shape and may carry the
   additive optional boolean `session.readOnly`. The Host sets it only for a recognized pre-multiturn
   `v1` Session whose history has a user message but no `session.status-changed` event. The Webview
