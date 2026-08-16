@@ -1,5 +1,5 @@
 import type { PersistencePath } from "@ctrl-zebra/core";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { FileSystem, FileType, Uri } from "vscode";
 import { createTestUri } from "../test/support/test-uri.js";
 import {
@@ -69,6 +69,65 @@ describe("VscodeBoundedTextStorage", () => {
     });
 
     await expect(storage.clearRootEntries([])).resolves.toEqual({ deleted: 0, failed: 0 });
+  });
+
+  it("continues after an owned-file deletion failure and reports the partial result", async () => {
+    const deleted: string[] = [];
+    const storage = new VscodeBoundedTextStorage({
+      root: uri("storage"),
+      joinPath: (base, ...segments) => uri(`${base.path}/${segments.join("/")}`),
+      isFileNotFound: () => false,
+      fileSystem: {
+        async createDirectory() {},
+        async delete(target) {
+          deleted.push(target.path);
+          if (target.path.endsWith("blocked.tmp")) {
+            throw new Error("file is locked");
+          }
+        },
+        async readDirectory() {
+          return [
+            ["blocked.tmp", fileType.File],
+            ["clear.tmp", fileType.File],
+          ] as const;
+        },
+        async readFile() {
+          return new Uint8Array();
+        },
+        async rename() {},
+        async writeFile() {},
+      },
+    });
+
+    await expect(storage.clearRootEntries([])).resolves.toEqual({ deleted: 1, failed: 1 });
+    expect(deleted).toEqual(["/storage/blocked.tmp", "/storage/clear.tmp"]);
+  });
+
+  it("is safe when a fresh adapter retries after restart and the root is absent", async () => {
+    const readDirectory = vi
+      .fn()
+      .mockResolvedValueOnce([["stale.tmp", fileType.File]] as const)
+      .mockRejectedValueOnce(missing);
+    const fileSystem = {
+      async createDirectory() {},
+      async delete() {},
+      readDirectory,
+      async readFile() {
+        return new Uint8Array();
+      },
+      async rename() {},
+      async writeFile() {},
+    };
+    const createStorage = () =>
+      new VscodeBoundedTextStorage({
+        root: uri("storage"),
+        joinPath: (base, ...segments) => uri(`${base.path}/${segments.join("/")}`),
+        isFileNotFound: (error) => error === missing,
+        fileSystem,
+      });
+
+    await expect(createStorage().clearRootEntries([])).resolves.toEqual({ deleted: 1, failed: 0 });
+    await expect(createStorage().clearRootEntries([])).resolves.toEqual({ deleted: 0, failed: 0 });
   });
 
   it("initializes, resolves, reads, writes, appends, renames, and deletes bounded text", async () => {
