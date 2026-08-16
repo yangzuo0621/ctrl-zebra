@@ -1,11 +1,12 @@
 import { execFile } from "node:child_process";
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 import yauzl from "yauzl";
-
+import { resolveBuildSource, validateBuildProvenance } from "../../../scripts/release-policy.mjs";
 import {
   assertCleanStatus,
   validateArchiveEntries,
@@ -20,6 +21,8 @@ const scriptsDirectory = dirname(fileURLToPath(import.meta.url));
 const extensionRoot = resolve(scriptsDirectory, "..");
 const repositoryRoot = resolve(extensionRoot, "..", "..");
 const manifest = JSON.parse(await readFile(join(extensionRoot, "package.json"), "utf8"));
+const lockfile = await readFile(join(repositoryRoot, "pnpm-lock.yaml"));
+const changelog = await readFile(join(repositoryRoot, "CHANGELOG.md"));
 
 assertCleanStatus(await git(["status", "--porcelain=v1", "--untracked-files=all"]));
 validateReleaseDocuments({
@@ -29,9 +32,27 @@ validateReleaseDocuments({
   extensionLicense: await readFile(join(extensionRoot, "LICENSE"), "utf8"),
 });
 const commit = (await git(["rev-parse", "HEAD"])).trim();
+const branch =
+  process.env.GITHUB_ACTIONS === "true"
+    ? undefined
+    : (await git(["branch", "--show-current"])).trim();
 const isGitHubActionsSource = validateGitHubActionsSource(process.env, {
   commit,
   version: manifest.version,
+});
+// @vscode/vsce honors SOURCE_DATE_EPOCH for ZIP entry timestamps and ordering.
+// Keep the archive byte-for-byte stable even when the two package invocations
+// happen in different seconds or on different runners.
+process.env.SOURCE_DATE_EPOCH = "0";
+const localTag =
+  process.env.GITHUB_ACTIONS === "true" || branch
+    ? undefined
+    : (await git(["describe", "--tags", "--exact-match", "HEAD"])).trim();
+const source = resolveBuildSource({
+  environment: process.env,
+  version: manifest.version,
+  branch,
+  tag: localTag,
 });
 if (!isGitHubActionsSource) {
   const upstream = (
@@ -44,7 +65,15 @@ for (const command of ["check", "typecheck", "test:unit", "test:integration", "b
   await pnpm([command]);
 }
 
-const metadata = { commit, version: manifest.version };
+const metadata = {
+  schemaVersion: 1,
+  commit,
+  version: manifest.version,
+  lockfileSha256: sha256(lockfile),
+  changelogSha256: sha256(changelog),
+  sourceRef: source.sourceRef,
+  sourceRefType: source.sourceRefType,
+};
 const metadataPath = join(extensionRoot, "dist", "package", "build-metadata.json");
 await mkdir(dirname(metadataPath), { recursive: true });
 await writeFile(metadataPath, `${JSON.stringify(metadata)}\n`, "utf8");
@@ -63,6 +92,21 @@ const artifactPath = join(
 );
 await mkdir(artifactDirectory, { recursive: true });
 await vsce(["package", "--no-dependencies", "--out", artifactPath]);
+
+const repeatArtifactPath = join(
+  artifactDirectory,
+  `${manifest.name}-${manifest.version}-${commit.slice(0, 12)}.repeat.vsix`,
+);
+try {
+  await vsce(["package", "--no-dependencies", "--out", repeatArtifactPath]);
+  const firstDigest = await sha256File(artifactPath);
+  const repeatDigest = await sha256File(repeatArtifactPath);
+  if (firstDigest !== repeatDigest) {
+    throw new Error("VSIX packaging is not reproducible for the same source commit.");
+  }
+} finally {
+  await rm(repeatArtifactPath, { force: true });
+}
 
 const inspection = await inspectVsix(artifactPath, metadata);
 assertCleanStatus(await git(["status", "--porcelain=v1", "--untracked-files=no"]));
@@ -98,6 +142,7 @@ async function inspectVsix(artifactPath, expectedMetadata) {
 
   const sizes = validateArchiveEntries(entries, archiveStat.size);
   validateBuildMetadata(packagedMetadata, expectedMetadata);
+  validateBuildProvenance(packagedMetadata, expectedMetadata);
   return sizes;
 }
 
@@ -149,4 +194,12 @@ async function run(executable, args, cwd) {
     process.stderr.write(result.stderr);
   }
   return result.stdout;
+}
+
+function sha256(value) {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+async function sha256File(filePath) {
+  return sha256(await readFile(filePath));
 }
