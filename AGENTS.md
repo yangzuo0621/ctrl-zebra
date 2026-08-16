@@ -1,45 +1,39 @@
 # CtrlZebra Agent Constitution and Document Router
 
-These rules keep work scoped, verifiable, and consistent with the product and architecture owners. The
-linked owner documents contain detailed policy; this file is the concise universal constitution.
+This file contains repository-wide invariants and routes agents to the authoritative documents for task-specific rules. Keep root context small: load detailed policy only when the work requires it.
 
 ## 1. Scope and sources of truth
 
-- Work on exactly one roadmap task or standalone maintenance change at a time. Preserve behavior,
-  architecture, security, public contracts, persisted data, user behavior, and roadmap order.
-- The product remains the desktop VS Code Extension authorized by
-  [the product foundation](docs/roadmap/product-foundation.md). Do not add unrelated maintenance,
-  refactors, dependencies, later-task work, or scope expansion.
-- `docs/implementation-plan.md` is the hot roadmap index: order, active/pending status, counts,
-  progress summary, current/next task, active-spec links, and the completed-history link only. Active
-  task specifications own goals, deliverables, tests, exclusions, prerequisites, and gates; completed
-  task status/PR/date records and specifications live under `docs/roadmap/archive/`.
-- Domain documents own exact architecture, protocol, security, persistence, UX, webview, CI, packaging,
-  and release rules. Public entry points and domain documents own exact interfaces and schemas.
-  Resolve conflicts by this ownership map and use change control to correct the source.
+- Work on exactly one roadmap task or one standalone maintenance change at a time.
+- Preserve product scope, architecture, security, public contracts, persisted data, user behavior, and roadmap order unless change control explicitly authorizes otherwise.
+- The product remains the desktop VS Code Extension defined by [`docs/roadmap/product-foundation.md`](docs/roadmap/product-foundation.md).
+- [`docs/implementation-plan.md`](docs/implementation-plan.md) is the active roadmap index. Active task specifications own task goals, acceptance criteria, deliverables, exclusions, prerequisites, and gates. Completed task records belong under `docs/roadmap/archive/`.
+- Domain documents own their respective architecture, protocol, security, persistence, UX, CI, packaging, and release rules.
+- Public package entry points and domain documents own exact interfaces and schemas. Resolve conflicts through the owning source rather than duplicating policy elsewhere.
 
 ### Progressive document loading
 
-Start with only the documents needed for the work:
+Read only the documents required by the current work.
 
 | Work area | Read first |
 |---|---|
-| Roadmap task | `docs/implementation-plan.md`, then the linked active phase section |
+| Roadmap task | `docs/implementation-plan.md`, then the linked active task/phase section |
 | Product scope/baseline | `docs/roadmap/product-foundation.md` |
-| Code/config/dependency | `docs/development.md`; add `docs/testing.md` for tests or logic |
-| Lifecycle/providers/tools/session | The applicable anchored section in `docs/architecture/` |
-| Webview/protocol/UX | The applicable section of `docs/protocol.md`, `docs/webview.md`, or `docs/ux.md` |
-| Workspace, approvals, commands, credentials | The applicable anchored section of `docs/security.md` |
-| Persistence/checkpoints | `docs/persistence.md` plus the checkpoint/restore security section |
-| MCP | `docs/architecture/mcp-client.md` and the applicable MCP domain section |
+| Code/config/dependency | `docs/development.md`; add `docs/testing.md` when behavior or tests change |
+| Core lifecycle/providers/tools/session | Applicable section under `docs/architecture/` |
+| Webview/protocol/UX | Applicable section of `docs/protocol.md`, `docs/webview.md`, or `docs/ux.md` |
+| Workspace/approvals/commands/credentials | Applicable section of `docs/security.md` |
+| Persistence/checkpoints | `docs/persistence.md` plus applicable restore/security rules |
+| MCP | `docs/architecture/mcp-client.md` plus applicable MCP security rules |
 | CI/packaging/release | `docs/ci.md`, `docs/packaging.md`, or `docs/release-checklist.md` |
-| Implementation review | `docs/review-checklist.md` and only the reviewed task's required documents |
+| Implementation review | `docs/review-checklist.md` plus only documents required by the reviewed change |
+| Auto workflow | `.agents/skills/auto-workflow/SKILL.md` and the dispatched role Skill |
 
-Do not load completed history or whole cold-domain documents for routine execution when an anchored
-section is sufficient. Use Context7 for current library, framework, SDK, API, CLI, or cloud-service
-documentation; it supplements, and does not replace, repository owner documents.
+Do not load completed history or whole domain documents when an applicable anchored section is sufficient.
 
-## 2. Architecture and dependency constitution
+Use current external library/framework/API documentation when necessary, but repository owner documents remain authoritative for CtrlZebra policy and architecture.
+
+## 2. Architecture invariants
 
 Allowed package directions are:
 
@@ -53,95 +47,69 @@ core ──────────────────→ protocol
 testkit ───────────────→ core contracts + protocol
 ```
 
-- `packages/core` is host- and vendor-independent: no VS Code, React/Webview, Node filesystem, or
-  concrete model SDK. Inject model, Tool, approval, storage, clock, and ID capabilities through
-  interfaces.
-- SDK types/failures stay in `packages/providers`; the Extension owns VS Code APIs, URI conversion,
-  lifecycle, and composition. `extension.ts` remains registration/composition-only.
-- Webview owns presentation/interaction only, never models, files, secrets, or VS Code commands.
-  Protocol owns JSON-serializable boundary DTOs/Schemas and validates untrusted `unknown` before
-  dispatch, persistence, or execution.
-- Builtin tools use Core contracts and Protocol DTOs; host adapters perform workspace operations.
-  MCP SDK types remain private while Extension owns processes, configuration, Trust, and lifecycle.
-- Use public package entry points only. No deep cross-package imports, cycles, or unowned abstractions.
-- Cancellation is not failure: after cancellation emit no deltas, execute no Tool/retry, and create no
-  side effect. Only the Core state machine changes Session status; Tools/callers do not mutate status,
-  continue loops, approve operations, or make UI decisions.
+- `packages/core` remains host- and vendor-independent.
+- SDK-specific types and failures remain inside provider boundaries.
+- Extension code owns VS Code APIs, host lifecycle, URI conversion, and composition.
+- Webview owns presentation and interaction only.
+- Protocol owns JSON-serializable boundary contracts and validation of untrusted boundary data.
+- MCP SDK implementation details remain private to the MCP boundary.
+- Use public package entry points only. Do not introduce deep cross-package imports, dependency cycles, or unowned abstractions.
+- Preserve Core ownership of Session state transitions and the lifecycle/cancellation guarantees defined by the applicable architecture documents.
 
-## 3. Security and resource red lines
+## 3. Security and resource invariants
 
-- Treat Webview input, model output, Tool arguments, persisted data, and summaries as untrusted.
-- Workspace targets stay host-boundary URIs. Require the selected root; validate scheme and authority
-  by segments; canonicalize with the host's symlink-aware operation; and reject missing identity or
-  containment.
-- Reject binary workspace content. Bound reads, searches, logs, context, command output, and the
-  global serialized Tool Result before constructing unbounded values.
-- Writes and commands require an expiring, single-use approval for the exact immutable operation;
-  material change, retry, cancellation, consumption, or reuse invalidates it.
-- Commands are an executable plus ordered arguments, spawned directly without a shell, from a trusted
-  workspace with canonical selected-workspace cwd, minimal environment, bounded time/output, and full
-  process-tree termination. Immediately before side effects re-check trust, approval, scope, cwd, and
-  operation; disable writes/commands in untrusted workspaces.
-- Store API keys only in VS Code `SecretStorage`; never put secrets or authorization data in Webview
-  state, logs, diagnostics, persisted messages, fixtures, snapshots, or commits.
-- Long-running work accepts an `AbortSignal`; timers, listeners, streams, processes, registrations,
-  and unobserved promises have explicit ownership and idempotent cleanup. Distinguish timeout,
-  cancellation, spawn failure, non-zero exit, cleanup failure, and unconfirmed termination.
-- Preserve checkpoint/restore safety, MCP security/lifecycle ownership, bounded resource rules, and
-  exact approval semantics in their owning documents.
+- Treat Webview input, model output, Tool arguments/results, persisted data, and summaries as untrusted.
+- Workspace operations must remain confined to the selected canonical workspace root.
+- Writes and commands require exact, expiring, single-use authorization for the immutable operation.
+- Revalidate security-sensitive state immediately before side effects.
+- Never execute commands through a shell unless an authoritative security design explicitly changes this rule.
+- Never expose secrets outside approved secret storage or place them in logs, persisted messages, fixtures, snapshots, diagnostics, or commits.
+- Bound externally influenced reads, searches, logs, context, Tool results, and command output before constructing unbounded values.
+- Long-running operations must preserve cancellation, ownership, cleanup, and bounded-resource guarantees.
+- Preserve checkpoint/restore and MCP security boundaries defined in their owning documents.
 
-## 4. Task workflow and evidence
+Read `docs/security.md` and the applicable domain document before modifying any of these mechanisms.
 
-1. Check `git status`; confirm the task/scope, prerequisites, exclusions, contracts, and validation
-   commands before editing. Do not overlap another active task.
-2. Complete the [Reuse Before Build](docs/development.md#reuse-before-build) audit before adding an
-   implementation, fake, wrapper, interface, helper, error, constant, or mechanism.
-   `TARGETED` is the default; `FULL` is Executor-only under the documented triggers; `ESCALATED
-   FULL` is Reviewer-only under its existing escalation conditions. Record tier-appropriate evidence
-   in the task execution, handoff, or PR.
-3. Apply [Build vs Buy](docs/development.md#build-vs-buy) before a documented general-purpose trigger.
-   CtrlZebra retains policy, authorization, lifecycle, state, budgets, cancellation, persistence
-   compatibility, security gates, and stable errors. Do not adopt a dependency outside confirmed scope.
-4. Validate from narrow to broad: affected direct checks, package tests/types, repository checks, and
-   required smoke tests. Follow `docs/testing.md`; finish with `git diff --check`, `git status
-   --short`, and a final diff review. Report unrun checks.
-5. Use the compact [task template](docs/roadmap/task-template.md) for transient execution, handoff, and
-   PR evidence. Do not copy execution logs or detailed audits into the implementation index.
+## 4. Development and verification
 
-Reviewers start from the compact Review Handoff, exact current PR diff/revision, and acceptance criteria
-when an explicitly selected workflow requires independent review. They open extra documents only for a
-touched contract, material handoff claim, concrete concern, or documented similarity escalation. In an
-active auto-workflow, the read-only Task-Reviewer is that run's sole implementation-quality gate.
-Ordinary implementation / MANUAL completion does not automatically require a Reviewer; a user may still
-explicitly request an independent review. For workflows that use Root closure, closure is transactional
-and never reopens implementation review.
+- Confirm task scope, acceptance criteria, prerequisites, exclusions, and affected contracts before editing.
+- Follow [`Reuse Before Build`](docs/development.md#reuse-before-build) before introducing a new implementation, wrapper, abstraction, helper, fake, error, constant, or mechanism.
+- Apply [`Build vs Buy`](docs/development.md#build-vs-buy) when its documented triggers apply.
+- Keep implementation task-scoped. Do not opportunistically add unrelated maintenance, refactors, dependencies, or later-roadmap work.
+- Validate from narrow to broad according to `docs/testing.md`: affected checks first, then required package/repository checks and smoke tests.
+- Finish implementation work with `git diff --check`, `git status --short`, and a final diff review. Report required checks that were not run.
+- Use `docs/roadmap/task-template.md` for task execution/handoff evidence when the selected workflow requires it.
 
-## 5. Git, authorization, and destructive actions
+Detailed Executor, Reviewer, Planner, AUTO, reuse-tier, review-loop, handoff, and closure behavior belongs to the applicable `.agents/skills/*/SKILL.md`, not this root file.
 
-- `main` is protected. Changes reach it only through a reviewed, squash-merged PR. Fetch before a
-  roadmap task and create the dedicated `codex/...` branch from the exact latest remote revision.
-- Without explicit authorization, do not stage, commit, push, create/update a PR, merge, delete a
-  branch, rewrite history, or clean the workspace. AUTO_DRAFT/AUTO_FULL meanings and authorization
-  envelopes are owned by [auto-workflow](.agents/skills/auto-workflow/SKILL.md); do not broaden them.
-- Keep changes task-scoped; never commit secrets, build output, coverage, caches, temporary files, or
-  private editor state. Never use `git reset --hard`, force-push, or destructive cleanup without
-  explicit authorization for the exact target and scope.
-- Do not overwrite, discard, relocate, or clean user changes. A reviewer never edits implementation,
-  plan, PR state, or task status; no role self-approves. Preserve exact revision freshness and
-  invalidate approval after any implementation change.
+## 5. Git and authorization
+
+- `main` is protected. Changes reach it only through the repository's approved PR process.
+- Keep branches, commits, PRs, and status changes scoped to the assigned task.
+- Do not stage, commit, push, create/update/merge a PR, delete branches, rewrite history, or clean the workspace unless the current request or selected workflow explicitly authorizes that operation.
+- AUTO authorization profiles and their exact envelopes are owned exclusively by `.agents/skills/auto-workflow/SKILL.md`.
+- Never overwrite, discard, relocate, or clean unrelated user changes.
+- Never force-push, use destructive cleanup, or bypass branch protection without explicit authorization for that exact action and target.
+- Do not invent Git, PR, CI, review, merge, or cleanup state; verify it.
 
 ## 6. Change control and stop conditions
 
-Before changing a module boundary, technical baseline, task order, acceptance criterion, persisted
-format, security model, public contract, or cross-module contract:
+Before changing a module boundary, technical baseline, roadmap order, acceptance criterion, persisted format, security model, public contract, or cross-module contract:
 
-1. Present concrete evidence and at least one alternative with its impact.
-2. Obtain direction.
-3. Update the authoritative roadmap/domain documents and an ADR when the decision is long-lived.
-4. Only then implement and verify.
+1. Identify the concrete evidence and affected owner.
+2. Present the change and at least one viable alternative with impact.
+3. Obtain direction when the existing authoritative sources do not already authorize the change.
+4. Update the authoritative documentation and ADR when the decision is long-lived.
+5. Only then implement and verify.
 
-Stop and report instead of guessing for a security/architecture conflict, public/runtime or persisted
-contract change, roadmap reorder/acceptance change, AUTO authorization change, Reviewer bypass,
-dependency introduction, deleted historical evidence, unresolved conflicting sources of truth, or
-required scope expansion. Record non-blocking discoveries in the owning document or engineering
-opportunity ledger; do not implement them opportunistically.
+Stop and report rather than guess when work requires:
+
+- an unauthorized architecture, security, public-contract, persistence, or roadmap change;
+- scope expansion beyond the assigned task;
+- an unapproved dependency introduction;
+- bypassing an authorization or independent-review boundary;
+- destructive treatment of unrelated user work;
+- resolving contradictory authoritative sources without ownership guidance; or
+- claiming repository, CI, review, PR, or runtime state that cannot be verified.
+
+Record non-blocking discoveries in the appropriate owner document or engineering-opportunity mechanism rather than implementing them opportunistically.
