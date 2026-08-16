@@ -219,6 +219,9 @@ describe("T2206 release policy", () => {
         cancelled: true,
       }),
     ).toThrow(/cancelled before credentials/);
+    expect(() => validatePublishPreconditions({ cancelled: true })).toThrow(
+      /cancelled before credentials/,
+    );
     expect(validatePublishPreconditions({ publish: false })).toBe(false);
   });
 

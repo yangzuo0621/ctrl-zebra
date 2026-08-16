@@ -535,11 +535,11 @@ export function validatePublishPreconditions({
   token,
   cancelled = false,
 }) {
-  if (!publish) {
-    return false;
-  }
   if (cancelled) {
     throw new Error("Release publishing was cancelled before credentials were read.");
+  }
+  if (!publish) {
+    return false;
   }
   if (environment !== "release") {
     throw new Error("Marketplace publishing requires the protected release environment.");

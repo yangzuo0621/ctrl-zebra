@@ -136,7 +136,7 @@ if (args.updateAudit) {
 
 if (args.publish || args.cancelled) {
   validatePublishPreconditions({
-    publish: args.publish,
+    publish: args.publish || args.cancelled,
     cancelled: args.cancelled,
     environment: process.env.RELEASE_ENVIRONMENT,
     token: process.env.VSCE_PAT,
