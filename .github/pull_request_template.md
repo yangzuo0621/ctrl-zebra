@@ -30,6 +30,15 @@ Title format:
 <!-- List each command or manual check with its result. Report required checks that were not run. -->
 - <!-- `command` — passed, or a manual check and its result -->
 
+## Contributor checklist
+
+- [ ] This change stays within the stated task or maintenance scope.
+- [ ] I ran the checks listed under Verification and reported required checks that remain unrun.
+- [ ] I removed secrets, credentials, private workspace content, and sensitive provider or MCP data
+      from the diff, logs, fixtures, and screenshots.
+- [ ] This change does not disclose a security report; if it does, I used the private path in
+      [SECURITY.md](../SECURITY.md) instead of a public issue or pull request.
+
 ## Reuse and Similarity Audit
 
 - Audit tier and trigger: TARGETED / FULL / ESCALATED FULL — <!-- Executor reason; Reviewer escalation reason when applicable -->

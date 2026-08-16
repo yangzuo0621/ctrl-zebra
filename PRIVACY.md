@@ -207,8 +207,8 @@ third-party service.
 
 Credentials must be entered only through a supported password-masked command. Users should not paste
 credentials, private source, prompts, or logs into public issues. Security-sensitive reports should
-be shared privately with the maintainer when a private reporting channel is available on the
-repository.
+be submitted through the [Security Policy](SECURITY.md)'s private vulnerability-reporting path, not
+through a public issue or pull request. Do not include secrets or private user data in a report.
 
 ## Changes to this notice
 

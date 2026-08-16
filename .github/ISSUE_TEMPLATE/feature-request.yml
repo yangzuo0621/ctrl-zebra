@@ -1,0 +1,44 @@
+name: Feature request
+description: Suggest a focused product or documentation improvement.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Keep the proposal focused and do not include credentials, private source, workspace contents, prompts, or raw logs.
+        Security vulnerabilities belong in the [private security-reporting path](https://github.com/yangzuo0621/ctrl-zebra/security/advisories/new).
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user or maintainer problem would this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposed-change
+    attributes:
+      label: Proposed change
+      description: Describe the smallest useful behavior or documentation change.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What other approaches or workarounds did you consider?
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Add safe context, links, or mockups. Do not attach private data.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Proposal checks
+      options:
+        - label: I searched existing issues and this is not a duplicate.
+          required: true
+        - label: I have removed sensitive information from this proposal.
+          required: true

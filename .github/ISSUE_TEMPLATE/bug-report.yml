@@ -1,0 +1,65 @@
+name: Bug report
+description: Report a reproducible product or documentation problem.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include API keys, tokens, authorization headers, private source, prompts, workspace contents, or raw logs.
+        For suspected vulnerabilities, use the [private security-reporting path](https://github.com/yangzuo0621/ctrl-zebra/security/advisories/new) instead of this form.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened, and what user-visible behavior was unexpected?
+    validations:
+      required: true
+  - type: textarea
+    id: steps-to-reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Give the smallest reproducible sequence using synthetic or non-sensitive data.
+    validations:
+      required: true
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected behavior
+      description: What should have happened?
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: CtrlZebra version or commit
+      placeholder: 0.0.0 or 19ee12d
+    validations:
+      required: true
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Environment
+      description: Select the closest environment for the report.
+      options:
+        - Windows
+        - macOS
+        - Linux
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized logs or screenshots
+      description: Optional. Remove secrets, paths, workspace content, prompts, and personal data before attaching anything.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Report checks
+      options:
+        - label: I searched existing issues and this is not a duplicate.
+          required: true
+        - label: I have removed sensitive information from this report.
+          required: true
