@@ -16,6 +16,7 @@ import {
   InconsistentSessionRecordError,
   InMemorySessionRepository,
   PersistedSessionRepository,
+  ReadOnlySessionError,
   type SessionCatalog,
   SessionNotFoundError,
   type SessionRepository,
@@ -149,6 +150,84 @@ describe("PersistedSessionRepository", () => {
       InconsistentSessionRecordError,
     );
   });
+
+  it("opens a pre-multiturn v1 Session read-only and preserves its source", async () => {
+    const harness = createPersistedHarness();
+    await harness.repository.create(manifest);
+    await harness.events.append(manifest.sessionId, {
+      sequence: 1,
+      recordedAt: "2026-07-19T10:01:00+08:00",
+      event: {
+        type: "session.user-message",
+        data: {
+          messageId: "message-1",
+          sessionId: manifest.sessionId,
+          createdAt: "2026-07-19T10:01:00+08:00",
+          role: "user",
+          content: "Legacy question",
+        },
+      },
+    });
+    await harness.events.append(manifest.sessionId, {
+      sequence: 2,
+      recordedAt: "2026-07-19T10:01:01+08:00",
+      event: { type: "agent.text-delta", data: { text: "Legacy answer" } },
+    });
+    await harness.manifests.write({ ...manifest, lastEventSequence: 2, status: "completed" });
+    const before = new Map(harness.storage.files);
+    const reopened = new PersistedSessionRepository(
+      harness.manifests,
+      harness.events,
+      harness.catalog,
+    );
+
+    await expect(reopened.get(manifest.sessionId)).resolves.toMatchObject({
+      readOnly: true,
+      events: [{ sequence: 1 }, { sequence: 2 }],
+    });
+    await expect(
+      reopened.update(manifest.sessionId, {
+        status: "interrupted",
+        updatedAt: manifest.updatedAt,
+      }),
+    ).rejects.toBeInstanceOf(ReadOnlySessionError);
+    await expect(
+      reopened.appendEvent(manifest.sessionId, {
+        sequence: 3,
+        recordedAt: "2026-07-19T10:01:02+08:00",
+        event: { type: "session.status-changed", data: { status: "preparing" } },
+      }),
+    ).rejects.toBeInstanceOf(ReadOnlySessionError);
+    expect(harness.storage.files).toEqual(before);
+  });
+
+  it("allows a newly created Session to commit its first lifecycle event", async () => {
+    const harness = createPersistedHarness();
+    await harness.repository.create(manifest);
+    await harness.repository.appendEvent(manifest.sessionId, {
+      sequence: 1,
+      recordedAt: "2026-07-19T10:01:00+08:00",
+      event: {
+        type: "session.user-message",
+        data: {
+          messageId: "message-1",
+          sessionId: manifest.sessionId,
+          createdAt: "2026-07-19T10:01:00+08:00",
+          role: "user",
+          content: "New question",
+        },
+      },
+    });
+    await harness.repository.appendEvent(manifest.sessionId, {
+      sequence: 2,
+      recordedAt: "2026-07-19T10:01:01+08:00",
+      event: { type: "session.status-changed", data: { status: "preparing" } },
+    });
+
+    await expect(harness.repository.get(manifest.sessionId)).resolves.not.toHaveProperty(
+      "readOnly",
+    );
+  });
 });
 
 function createPersistedHarness() {
@@ -180,7 +259,10 @@ function createPersistedHarness() {
     },
   };
   return {
+    catalog,
+    events,
     manifests,
+    storage,
     repository: new PersistedSessionRepository(manifests, events, catalog),
   };
 }

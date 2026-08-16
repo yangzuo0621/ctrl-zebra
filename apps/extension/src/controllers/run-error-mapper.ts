@@ -9,6 +9,7 @@ import {
   InvalidModelMessageTokenCountError,
   MaxToolStepsExceededError,
   ModelGatewayError,
+  ReadOnlySessionError,
   ToolExecutionError,
   ToolRepetitionDetectedError,
   ToolUnavailableError,
@@ -150,6 +151,14 @@ export function mapRunErrorToUi(error: unknown): RunErrorDto {
       message: error.followedToolUse
         ? "The model used tools but did not provide a final response. Review the tool results and try again."
         : "The model completed without a usable response. Try again or rephrase the request.",
+    };
+  }
+
+  if (error instanceof ReadOnlySessionError) {
+    return {
+      code: "internal",
+      message:
+        "This older Session is read-only and cannot be continued safely. Start a new chat to continue.",
     };
   }
 

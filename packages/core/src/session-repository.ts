@@ -17,6 +17,8 @@ export interface SessionRecord {
   readonly manifest: SessionManifest;
   readonly events: readonly PersistedEventRecord[];
   readonly eventLogTailDamaged: boolean;
+  /** Historical pre-multiturn Sessions can be displayed but must never receive new events. */
+  readonly readOnly?: boolean;
 }
 
 interface SessionRetentionCandidate {
@@ -77,6 +79,15 @@ export class SessionDeletionUnavailableError extends Error {
   }
 }
 
+export class ReadOnlySessionError extends Error {
+  constructor(readonly sessionId: string) {
+    super(
+      `Session "${sessionId}" is read-only because its legacy format cannot be continued safely.`,
+    );
+    this.name = "ReadOnlySessionError";
+  }
+}
+
 export class InconsistentSessionRecordError extends Error {
   constructor(readonly sessionId: string) {
     super(`Session "${sessionId}" has inconsistent persisted metadata and events.`);
@@ -86,6 +97,8 @@ export class InconsistentSessionRecordError extends Error {
 
 export class InMemorySessionRepository implements SessionRepository {
   readonly #records = new Map<string, SessionRecord>();
+  // A newly created Session may briefly have a user event before its first lifecycle event.
+  readonly #freshSessionIds = new Set<string>();
 
   async create(manifest: unknown): Promise<void> {
     const parsed = parseInitialManifest(manifest);
@@ -97,12 +110,25 @@ export class InMemorySessionRepository implements SessionRepository {
       events: [],
       eventLogTailDamaged: false,
     });
+    this.#freshSessionIds.add(parsed.sessionId);
   }
 
   async get(sessionId: unknown): Promise<SessionRecord | undefined> {
     const id = parseSessionId(sessionId);
     const record = this.#records.get(id);
-    return record === undefined ? undefined : cloneRecord(record);
+    if (record === undefined) {
+      return undefined;
+    }
+    if (
+      record.readOnly !== true &&
+      !this.#freshSessionIds.has(id) &&
+      isLegacyReadOnlySession(record.events)
+    ) {
+      const readOnlyRecord = { ...record, readOnly: true };
+      this.#records.set(id, readOnlyRecord);
+      return cloneRecord(readOnlyRecord);
+    }
+    return cloneRecord(record);
   }
 
   async list(): Promise<readonly SessionSummary[]> {
@@ -111,12 +137,14 @@ export class InMemorySessionRepository implements SessionRepository {
 
   async update(sessionId: unknown, patch: SessionMetadataPatch): Promise<void> {
     const current = await this.#require(sessionId);
+    assertWritable(current);
     const manifest = sessionManifestSchema.parse({ ...current.manifest, ...patch });
     this.#records.set(manifest.sessionId, { ...current, manifest });
   }
 
   async appendEvent(sessionId: unknown, record: unknown): Promise<void> {
     const current = await this.#require(sessionId);
+    assertWritable(current);
     const event = persistedEventRecordSchema.parse(record);
     const expected = current.events.length + 1;
     if (event.sequence !== expected) {
@@ -145,12 +173,15 @@ export class InMemorySessionRepository implements SessionRepository {
 
   async delete(sessionId: unknown): Promise<boolean> {
     const id = parseSessionId(sessionId);
-    return this.#records.delete(id);
+    const deleted = this.#records.delete(id);
+    this.#freshSessionIds.delete(id);
+    return deleted;
   }
 
   async clear(): Promise<SessionDeletionReport> {
     const count = this.#records.size;
     this.#records.clear();
+    this.#freshSessionIds.clear();
     return { deleted: count, failed: 0 };
   }
 
@@ -168,6 +199,9 @@ export class PersistedSessionRepository implements SessionRepository {
   readonly #manifests: ManifestStore;
   readonly #events: EventStore;
   readonly #catalog: SessionCatalog;
+  // This in-process knowledge prevents a first user event from being mistaken for a legacy read.
+  // A restart intentionally loses it, so an incomplete source then fails closed as read-only.
+  readonly #freshSessionIds = new Set<string>();
 
   constructor(manifests: ManifestStore, events: EventStore, catalog: SessionCatalog) {
     this.#manifests = manifests;
@@ -181,6 +215,7 @@ export class PersistedSessionRepository implements SessionRepository {
       throw new DuplicateSessionError(parsed.sessionId);
     }
     await this.#manifests.write(parsed);
+    this.#freshSessionIds.add(parsed.sessionId);
   }
 
   async get(sessionId: unknown): Promise<SessionRecord | undefined> {
@@ -197,6 +232,9 @@ export class PersistedSessionRepository implements SessionRepository {
       manifest,
       events: result.records,
       eventLogTailDamaged: result.tailDamaged,
+      ...(!this.#freshSessionIds.has(manifest.sessionId) && isLegacyReadOnlySession(result.records)
+        ? { readOnly: true }
+        : {}),
     };
   }
 
@@ -236,11 +274,13 @@ export class PersistedSessionRepository implements SessionRepository {
 
   async update(sessionId: unknown, patch: SessionMetadataPatch): Promise<void> {
     const current = await this.#require(sessionId);
+    assertWritable(current);
     await this.#manifests.write(sessionManifestSchema.parse({ ...current.manifest, ...patch }));
   }
 
   async appendEvent(sessionId: unknown, record: unknown): Promise<void> {
     const current = await this.#require(sessionId);
+    assertWritable(current);
     const event = persistedEventRecordSchema.parse(record);
     await this.#events.append(current.manifest.sessionId, event);
     await this.#manifests.write({
@@ -255,14 +295,22 @@ export class PersistedSessionRepository implements SessionRepository {
     if (this.#catalog.deleteSession === undefined) {
       throw new SessionDeletionUnavailableError();
     }
-    return await this.#catalog.deleteSession(id);
+    const deleted = await this.#catalog.deleteSession(id);
+    if (deleted) {
+      this.#freshSessionIds.delete(id);
+    }
+    return deleted;
   }
 
   async clear(): Promise<SessionDeletionReport> {
     if (this.#catalog.clearSessions === undefined) {
       throw new SessionDeletionUnavailableError();
     }
-    return await this.#catalog.clearSessions();
+    const report = await this.#catalog.clearSessions();
+    if (report.failed === 0) {
+      this.#freshSessionIds.clear();
+    }
+    return report;
   }
 
   async #require(sessionId: unknown): Promise<SessionRecord> {
@@ -308,5 +356,25 @@ function cloneRecord(record: SessionRecord): SessionRecord {
     manifest: sessionManifestSchema.parse(record.manifest),
     events: record.events.map((event) => persistedEventRecordSchema.parse(event)),
     eventLogTailDamaged: record.eventLogTailDamaged,
+    ...(record.readOnly === true ? { readOnly: true } : {}),
   };
+}
+
+/**
+ * T1504 added explicit status lifecycle events. Older v1 Sessions have a user message and model
+ * output but no status event at all. Their history is still safe to display, but appending a new
+ * Run would guess the boundary between the old single turn and the new lifecycle, so they remain
+ * read-only until a future explicit migration exists.
+ */
+export function isLegacyReadOnlySession(events: readonly PersistedEventRecord[]): boolean {
+  return (
+    events.some(({ event }) => event.type === "session.user-message") &&
+    !events.some(({ event }) => event.type === "session.status-changed")
+  );
+}
+
+function assertWritable(record: SessionRecord): void {
+  if (record.readOnly === true) {
+    throw new ReadOnlySessionError(record.manifest.sessionId);
+  }
 }

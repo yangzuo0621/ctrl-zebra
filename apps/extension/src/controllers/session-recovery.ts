@@ -5,6 +5,7 @@ import {
   EventLogLimitExceededError,
   InconsistentSessionRecordError,
   InvalidSessionManifestError,
+  ReadOnlySessionError,
   SessionNotFoundError,
   type SessionRecord,
   type SessionRepository,
@@ -133,12 +134,22 @@ export function createSessionRecoveryActions(
         }
         const normalized: SessionSummary[] = [];
         for (const session of listedSessions) {
+          // A legacy read-only Session has no safe place to record the recovery-only status
+          // transition. Its source remains untouched; the restore projection explains the limit.
           if (isRecoverableStatus(session.status)) {
-            await repository.update(session.sessionId, {
-              status: "interrupted",
-              updatedAt: now().toISOString(),
-            });
-            normalized.push({ ...session, status: "interrupted" });
+            try {
+              await repository.update(session.sessionId, {
+                status: "interrupted",
+                updatedAt: now().toISOString(),
+              });
+              normalized.push({ ...session, status: "interrupted" });
+            } catch (error) {
+              if (error instanceof ReadOnlySessionError) {
+                normalized.push({ ...session, status: "interrupted" });
+              } else {
+                throw error;
+              }
+            }
           } else {
             normalized.push(session);
           }
@@ -167,7 +178,11 @@ export function createSessionRecoveryActions(
       const status = isRecoverableStatus(record.manifest.status)
         ? "interrupted"
         : record.manifest.status;
-      if (status === "interrupted" && record.manifest.status !== "interrupted") {
+      if (
+        status === "interrupted" &&
+        record.manifest.status !== "interrupted" &&
+        record.readOnly !== true
+      ) {
         try {
           await repository.update(sessionId, {
             status,
@@ -219,6 +234,7 @@ export function createSessionRecoveryActions(
           status,
           messages: projectedMessages,
           eventLogTailDamaged: record.eventLogTailDamaged,
+          ...(record.readOnly === true ? { readOnly: true } : {}),
           usage: recoverUsage(record),
         }),
         reasoning: recoverReasoning(record),

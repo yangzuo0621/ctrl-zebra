@@ -2,6 +2,7 @@ import {
   InMemorySessionRepository,
   type ModelGateway,
   type ModelRequest,
+  ReadOnlySessionError,
   type SessionRecord,
   type SessionRepository,
   ToolRegistry,
@@ -910,6 +911,73 @@ describe("createChatRunner", () => {
         "session-damaged",
       ),
     ).rejects.toMatchObject({ code: "corrupt" });
+    expect(appendCalls).toBe(0);
+    expect(gatewayStarted).toBe(false);
+  });
+
+  it("rejects a legacy read-only continuation before append or model startup", async () => {
+    let appendCalls = 0;
+    let gatewayStarted = false;
+    const repository: SessionRepository = {
+      async get() {
+        return {
+          manifest: {
+            formatVersion: 1 as const,
+            sessionId: "session-legacy",
+            status: "completed" as const,
+            createdAt: "2026-08-10T00:00:00.000Z",
+            updatedAt: "2026-08-10T00:00:00.000Z",
+            lastEventSequence: 1,
+          },
+          events: [
+            {
+              sequence: 1,
+              recordedAt: "2026-08-10T00:00:00.000Z",
+              event: {
+                type: "session.user-message",
+                data: {
+                  messageId: "message-legacy",
+                  sessionId: "session-legacy",
+                  createdAt: "2026-08-10T00:00:00.000Z",
+                  role: "user",
+                  content: "Legacy question",
+                },
+              },
+            },
+          ],
+          eventLogTailDamaged: false,
+          readOnly: true,
+        };
+      },
+      async list() {
+        return [];
+      },
+      async create() {},
+      async update() {},
+      async appendEvent() {
+        appendCalls += 1;
+      },
+    };
+    const runner = createChatRunner({
+      modelGateway: {
+        async *stream() {
+          gatewayStarted = true;
+          yield { type: "finish", reason: "stop" } as const;
+        },
+      },
+      sessionRepository: repository,
+    });
+
+    await expect(
+      runner.run(
+        "Fresh question",
+        new AbortController().signal,
+        () => {},
+        [],
+        [],
+        "session-legacy",
+      ),
+    ).rejects.toBeInstanceOf(ReadOnlySessionError);
     expect(appendCalls).toBe(0);
     expect(gatewayStarted).toBe(false);
   });

@@ -3,6 +3,7 @@ import {
   EmptyAgentResponseError,
   MaxToolStepsExceededError,
   ModelGatewayError,
+  ReadOnlySessionError,
   ToolRepetitionDetectedError,
   UnexpectedToolCallError,
 } from "@ctrl-zebra/core";
@@ -168,6 +169,14 @@ describe("mapRunErrorToUi", () => {
       code: "internal",
       message:
         "The model used tools but did not provide a final response. Review the tool results and try again.",
+    });
+  });
+
+  it("maps a legacy read-only Session to a fixed new-chat prompt", () => {
+    expect(mapRunErrorToUi(new ReadOnlySessionError("session-legacy"))).toEqual({
+      code: "internal",
+      message:
+        "This older Session is read-only and cannot be continued safely. Start a new chat to continue.",
     });
   });
 

@@ -14,6 +14,7 @@ import {
   type ModelMessage,
   maxModelContextWindowTokens,
   projectExternalContext,
+  ReadOnlySessionError,
   SessionNotFoundError,
   type SessionRecord,
   type SessionRepository,
@@ -177,6 +178,9 @@ export function createChatRunner({
       }
       if (existingRecord.eventLogTailDamaged) {
         throw new SessionRecoveryError("corrupt");
+      }
+      if (existingRecord.readOnly === true) {
+        throw new ReadOnlySessionError(existingRecord.manifest.sessionId);
       }
       if (isActiveSessionStatus(existingRecord.manifest.status)) {
         throw new SessionRecoveryError("unavailable");

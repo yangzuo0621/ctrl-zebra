@@ -344,13 +344,18 @@ Diff 查看完整的有界 before/after 内容：创建是空文件到完整内�
 - 新建、选择和恢复会话不得在无提示时覆盖当前草稿或活动 Run。
 - 一个 Session 可以包含多个顺序回合。`completed`、`truncated`、`cancelled`、`failed` 和重启后显示的
   `interrupted` 都可以在用户明确发送下一条消息时继续；继续会创建新的 Run，不复用旧的取消
-  句柄、审批或待执行操作。恢复本身只展示历史，不自动发送或续跑。
+  句柄、审批或待执行操作。恢复本身只展示历史，不自动发送或续跑。识别出的旧版单回合
+  `v1` Session 以只读历史打开：保留消息并显示固定说明，禁用 Composer、编辑和重新生成，
+  但保留显式 `New chat` 与删除入口。
 - 失败、取消、截断或中断回合保留用户问题，未完成的 Agent 文本标记为部分/未完成并不注入下一轮；
   已经完整提交的 Tool Call/Result 可以按历史顺序保留。孤立 Tool Call/Result、损坏记录或
   未知 Session 显示可操作错误并阻止错投到其他会话。
 - `New chat` 不删除或迁移历史。用户选择/恢复会话时，界面必须明确当前 Session；恢复成功后
   下一次发送追加到该 Session，而不是隐式创建另一会话。恢复失败、Session 不存在或活动 Run
   竞态时，保留当前投影和草稿，丢弃陈旧恢复结果。
+- 旧版只读 Session 的恢复结果通过可选 `readOnly` 标记表达；Host 不原地改写源数据，也不
+  猜测未来格式。只读提示必须说明历史仍被保留、继续操作需要 `New chat`，并在状态文本之外
+  通过实际禁用控件表达边界。
 - 删除、归档、重命名或自动标题若需要新增协议或持久化字段，必须作为独立任务走变更控制。
 - Checkpoint 展示目标文件、所属操作、创建时间和当前是否可安全恢复。
 - Session history controls provide an explicit `Delete` action for the selected saved Session and a

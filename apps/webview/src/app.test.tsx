@@ -327,6 +327,66 @@ describe("App streaming chat", () => {
     expect(host.sent.some(({ type }) => type === "webview/submit")).toBe(false);
   });
 
+  it("explains and fences a restored legacy read-only Session", async () => {
+    const host = createWebviewHostFixture();
+    const ids = ["list-legacy", "restore-legacy"];
+    const user = userEvent.setup();
+    render(<App host={host} createRequestId={() => ids.shift() ?? "unexpected"} />);
+
+    await user.click(screen.getByRole("button", { name: strings.app.sessions }));
+    await user.click(screen.getByRole("button", { name: strings.app.refresh }));
+    act(() =>
+      host.emit({
+        protocolVersion,
+        type: "extension/session-list",
+        requestId: "list-legacy",
+        sessions: [
+          {
+            sessionId: "session-legacy",
+            status: "completed",
+            createdAt: "2026-07-19T10:00:00.000Z",
+          },
+        ],
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: strings.app.restore }));
+    act(() =>
+      host.emit({
+        protocolVersion,
+        type: "extension/session-restored",
+        requestId: "restore-legacy",
+        session: {
+          sessionId: "session-legacy",
+          status: "completed",
+          eventLogTailDamaged: false,
+          readOnly: true,
+          messages: [
+            {
+              messageId: "legacy-user",
+              sessionId: "session-legacy",
+              createdAt: "2026-07-19T10:00:00.000Z",
+              role: "user",
+              content: "Legacy question",
+            },
+            {
+              messageId: "legacy-assistant",
+              sessionId: "session-legacy",
+              createdAt: "2026-07-19T10:00:01.000Z",
+              role: "assistant",
+              content: "Legacy answer",
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(screen.getByText(strings.chat.readOnlySession)).toBeVisible();
+    expect(screen.getByRole("textbox", { name: strings.app.messageLabel })).toBeDisabled();
+    expect(screen.getByRole("button", { name: strings.app.send })).toBeDisabled();
+    expect(screen.getByRole("button", { name: strings.chat.editScope })).toBeDisabled();
+    expect(screen.getByRole("button", { name: strings.chat.regenerateScope })).toBeDisabled();
+  });
+
   it("submits user content and renders a correlated pending response", async () => {
     const host = createWebviewHostFixture();
     const user = userEvent.setup();

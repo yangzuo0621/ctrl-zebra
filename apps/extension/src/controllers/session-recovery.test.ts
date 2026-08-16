@@ -887,6 +887,64 @@ describe("Session recovery", () => {
     });
   });
 
+  it("restores a legacy Session with a read-only prompt without writing recovery status", async () => {
+    const updates: unknown[] = [];
+    const actions = createSessionRecoveryActions(async () => ({
+      async get() {
+        return {
+          manifest: {
+            ...manifest("legacy-session", "2026-07-31T00:00:00.000Z"),
+            status: "streaming" as const,
+            lastEventSequence: 2,
+          },
+          events: [
+            {
+              sequence: 1,
+              recordedAt: "2026-07-31T00:00:01.000Z",
+              event: {
+                type: "session.user-message",
+                data: {
+                  messageId: "legacy-user",
+                  sessionId: "legacy-session",
+                  createdAt: "2026-07-31T00:00:01.000Z",
+                  role: "user",
+                  content: "Legacy question",
+                },
+              },
+            },
+            {
+              sequence: 2,
+              recordedAt: "2026-07-31T00:00:02.000Z",
+              event: { type: "agent.text-delta", data: { text: "Legacy answer" } },
+            },
+          ] as const satisfies readonly PersistedEventRecord[],
+          eventLogTailDamaged: false,
+          readOnly: true,
+        };
+      },
+      async list() {
+        return [];
+      },
+      async create() {},
+      async update(_sessionId, patch) {
+        updates.push(patch);
+      },
+      async appendEvent() {},
+    }));
+
+    await expect(actions.restore("legacy-session")).resolves.toMatchObject({
+      session: {
+        status: "interrupted",
+        readOnly: true,
+        messages: [
+          { role: "user", content: "Legacy question" },
+          { role: "assistant", content: "Legacy answer" },
+        ],
+      },
+    });
+    expect(updates).toEqual([]);
+  });
+
   it("isolates a malformed persisted reasoning lifecycle", async () => {
     const actions = createSessionRecoveryActions(async () =>
       repositoryFixture("completed", malformedReasoningV1Events),

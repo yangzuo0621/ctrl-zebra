@@ -499,6 +499,63 @@ describe("chat reasoning store", () => {
     expect(harness.store.getState().usage).toEqual({ inputTokens: 10, totalTokens: 12 });
   });
 
+  it("restores legacy Sessions as read-only and blocks mutations until New chat", () => {
+    const harness = createHarness(["list-legacy", "restore-legacy", "new-chat"]);
+    harness.store.getState().loadSessions();
+    harness.receive({
+      protocolVersion,
+      type: "extension/session-list",
+      requestId: "list-legacy",
+      sessions: [
+        {
+          sessionId: "session-legacy",
+          status: "completed",
+          createdAt: "2026-07-31T00:00:00.000Z",
+        },
+      ],
+    });
+    expect(harness.store.getState().restoreSelectedSession()).toBe(true);
+    harness.receive({
+      protocolVersion,
+      type: "extension/session-restored",
+      requestId: "restore-legacy",
+      session: {
+        sessionId: "session-legacy",
+        status: "completed",
+        eventLogTailDamaged: false,
+        readOnly: true,
+        messages: [
+          {
+            messageId: "legacy-user",
+            sessionId: "session-legacy",
+            createdAt: "2026-07-31T00:00:00.000Z",
+            role: "user",
+            content: "Legacy question",
+          },
+          {
+            messageId: "legacy-assistant",
+            sessionId: "session-legacy",
+            createdAt: "2026-07-31T00:00:01.000Z",
+            role: "assistant",
+            content: "Legacy answer",
+          },
+        ],
+      },
+    });
+
+    expect(harness.store.getState().readOnly).toBe(true);
+    expect(harness.store.getState().submit("Do not append.")).toBe(false);
+    expect(harness.store.getState().regenerate("legacy-assistant")).toBe(false);
+    expect(harness.store.getState().editMessage("legacy-user", "Do not edit.")).toBe(false);
+    expect(harness.host.submit).not.toHaveBeenCalled();
+    expect(harness.host.regenerate).not.toHaveBeenCalled();
+    expect(harness.host.editMessage).not.toHaveBeenCalled();
+
+    expect(harness.store.getState().newChat()).toBe(true);
+    expect(harness.store.getState().readOnly).toBe(false);
+    expect(harness.host.newChat).toHaveBeenCalledWith("new-chat");
+  });
+
   it("discards a staged restore when the next message does not match", () => {
     const harness = createHarness(["list-1", "restore-1"]);
     harness.store.getState().loadSessions();
