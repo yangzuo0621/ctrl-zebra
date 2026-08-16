@@ -169,6 +169,22 @@ export const strings = {
     restore: "Restore change",
     fileCount: (count: number) => `${count} file(s)`,
   },
+  diagnosticsExport: {
+    heading: "Diagnostics export",
+    open: "Export diagnostics",
+    preparing: "Preparing diagnostics…",
+    previewNotice:
+      "Review the redacted content and selected target before saving. Secrets, paths, workspace content, and conversation text are excluded.",
+    target: "Target",
+    contentLabel: "Redacted diagnostics content",
+    confirm: "Save file",
+    cancel: "Cancel export",
+    exporting: "Saving diagnostics…",
+    ready: "Diagnostics are ready for review.",
+    completed: "Diagnostics export complete.",
+    cancelled: "Diagnostics export cancelled.",
+    failed: "Diagnostics export failed. Review the state and try again.",
+  },
   command: {
     eyebrow: "Command Tool",
     name: "run_command",

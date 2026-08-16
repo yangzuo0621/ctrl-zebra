@@ -11,6 +11,7 @@ import {
 
 import type { ChatRunner } from "./controllers/chat-runner.js";
 import type { CheckpointActions } from "./controllers/checkpoint-actions.js";
+import type { DiagnosticsExportController } from "./controllers/diagnostic-export.js";
 import type { EditorContextEntryController } from "./controllers/editor-context-entry.js";
 import type { McpPromptActions } from "./controllers/mcp-prompt-actions.js";
 import type { McpResourceActions } from "./controllers/mcp-resource-actions.js";
@@ -114,6 +115,7 @@ class AgentViewProvider implements WebviewViewProvider {
       ),
       workspaceFileActions: this.options.createWorkspaceFileReferenceActions?.(),
       localDataClear: this.options.localDataClear,
+      diagnosticsExport: this.options.diagnosticsExport,
     });
     this.options.reportDisplay?.();
   }
@@ -136,6 +138,7 @@ interface AgentViewProviderOptions {
   readonly openExternalLink?: (href: string) => void;
   readonly editorContext?: EditorContextEntryController;
   readonly localDataClear?: LocalDataClearUiActions;
+  readonly diagnosticsExport?: DiagnosticsExportController;
 }
 
 interface RegisterAgentViewOptions extends AgentViewProviderOptions {

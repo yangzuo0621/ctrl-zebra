@@ -1325,3 +1325,30 @@ The T1804–T1807 implementation applies these rules end to end: configuration p
 schemas normalize the closed modes, the controlled lifecycle owns negotiation, and deterministic
 local fixtures cover modern, legacy, malformed, and cleanup outcomes. The VSIX policy excludes those
 fixtures and all credentials or process details from the release artifact.
+
+### User-triggered redacted diagnostics export (T2205)
+
+The diagnostics export is an explicit local user action. It is a bounded support artifact, never a
+telemetry event, automatic upload, persisted Session record, model input, or authorization artifact.
+The Host builds it from an explicit allowlist and the Protocol validates the complete strict document
+before any file write. The document contains only the format version, extension version, VS Code
+version, closed platform and Provider identifiers, aggregated stable error categories, bounded MCP
+status/generation/negotiation facts, and bounded runtime facts (activation/first-display durations,
+RSS bytes, and a closed Run status).
+
+- Provider configuration is read only through the non-sensitive onboarding projection. Keys,
+  SecretStorage values, authorization headers, endpoint URLs or credentials, model requests and raw
+  Provider/SDK errors never enter the document. MCP command/arguments/cwd/environment, Server output,
+  workspace paths/content, editor/diagnostic content, conversation text, stacks, causes, and raw
+  third-party errors are likewise excluded. Stable error category counts are the only error history.
+- Version and enum values are closed, malformed values become `unknown` or `[REDACTED]`, and corrupt
+  objects/getters fail closed without copying arbitrary properties. Error entries and integer fields
+  have fixed limits; the serialized UTF-8 document has a 64 KiB ceiling. The preview DTO uses the
+  same validated document, so the user sees the exact bounded content before saving.
+- The selected VS Code save target is shown only as a bounded UI label. It is not copied into the
+  document. The user must confirm after reviewing both target and content; closing the save dialog or
+  pressing Cancel performs no write. A write failure produces a fixed local status and never exposes
+  the filesystem error. Disposal drops pending state and rejects stale request/export IDs.
+- Export bytes are written once through `workspace.fs.writeFile` after the explicit confirmation.
+  Cancellation is guaranteed before the write starts; VS Code's write API is not treated as
+  cancellable after the write begins. No export path sends data over the network or records telemetry.

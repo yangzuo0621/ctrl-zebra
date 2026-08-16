@@ -231,3 +231,12 @@ The complete wire shape and status combinations live in [Protocol](protocol.md);
 security ownership live in [Architecture](architecture.md) and [Security](security.md). The
 Extension, Webview, persistence, and local stdio fixture paths now consume the same negotiated
 projection; recovery remains an explicit user action and never starts a hidden reconnect.
+
+## Diagnostics export does not add configuration (T2205)
+
+The user-triggered diagnostics export reads the existing non-sensitive Provider onboarding projection
+and MCP connection snapshot only when the user requests a preview. It adds no setting, endpoint,
+credential, SecretStorage entry, or telemetry switch. Missing or malformed configuration is rendered
+as a closed `unknown`/`unconfigured` diagnostic fact; keys, authorization material, endpoint values,
+command arguments, paths, workspace content, conversation content, and raw configuration/Provider
+errors are never copied into the export.

@@ -1,0 +1,168 @@
+import type { ExtensionToWebviewMessage } from "@ctrl-zebra/protocol";
+import { describe, expect, it, vi } from "vitest";
+
+import { DiagnosticsExportController } from "./diagnostic-export.js";
+
+function createInput() {
+  return {
+    extensionVersion: "0.1.1",
+    vscodeVersion: "1.125.0",
+    platform: "linux",
+    provider: "openai",
+    errors: [],
+    mcp: { status: "unconfigured", generation: 0 },
+    runtime: { activationDurationMs: 1, memoryBytes: 2, runStatus: "idle" },
+  };
+}
+
+describe("DiagnosticsExportController", () => {
+  it("shows a bounded preview and writes only after explicit confirmation", async () => {
+    let choose!: (target: unknown) => void;
+    const writes: Uint8Array[] = [];
+    const post = vi.fn<(message: ExtensionToWebviewMessage) => void>();
+    const controller = new DiagnosticsExportController({
+      createId: () => "export-1",
+      readInput: createInput,
+      target: {
+        chooseTarget: () => new Promise((resolve) => (choose = resolve)),
+        formatTarget: () => "file:///tmp/diagnostics.json",
+        writeFile: async (_target, bytes) => {
+          writes.push(bytes);
+        },
+      },
+    });
+
+    controller.request("request-1", post);
+    await Promise.resolve();
+    choose("target");
+    await Promise.resolve();
+    expect(post).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "extension/diagnostics-export-preview",
+        requestId: "request-1",
+        status: "ready",
+        exportId: "export-1",
+        target: "file:///tmp/diagnostics.json",
+      }),
+    );
+    expect(writes).toHaveLength(0);
+
+    controller.confirm("request-1", "export-1", post);
+    await Promise.resolve();
+    expect(writes).toHaveLength(1);
+    expect(new TextDecoder().decode(writes[0])).not.toContain("target");
+    expect(post).toHaveBeenLastCalledWith(
+      expect.objectContaining({ status: "completed", requestId: "request-1" }),
+    );
+  });
+
+  it("treats target cancellation as a no-write outcome", async () => {
+    const post = vi.fn<(message: ExtensionToWebviewMessage) => void>();
+    const controller = new DiagnosticsExportController({
+      createId: () => "export-2",
+      readInput: createInput,
+      target: {
+        chooseTarget: async () => undefined,
+        formatTarget: () => "unused",
+        writeFile: vi.fn(),
+      },
+    });
+
+    controller.request("request-2", post);
+    await Promise.resolve();
+    expect(post).toHaveBeenLastCalledWith(
+      expect.objectContaining({ status: "cancelled", code: "no-target" }),
+    );
+  });
+
+  it("keeps cancellation separate from a write failure", async () => {
+    const post = vi.fn<(message: ExtensionToWebviewMessage) => void>();
+    const writeFile = vi.fn(async () => {
+      throw new Error("disk secret");
+    });
+    const controller = new DiagnosticsExportController({
+      createId: () => "export-3",
+      readInput: createInput,
+      target: {
+        chooseTarget: async () => "target",
+        formatTarget: () => "target",
+        writeFile,
+      },
+    });
+
+    controller.request("request-3", post);
+    await Promise.resolve();
+    const ready = post.mock.calls[0]?.[0];
+    if (ready?.type !== "extension/diagnostics-export-preview" || ready.status !== "ready") {
+      throw new Error("Expected a diagnostics preview.");
+    }
+    controller.cancel("request-3", ready.exportId, post);
+    expect(writeFile).not.toHaveBeenCalled();
+    expect(post).toHaveBeenLastCalledWith(
+      expect.objectContaining({ status: "cancelled", code: "user-cancelled" }),
+    );
+
+    controller.request("request-4", post);
+    await Promise.resolve();
+    await Promise.resolve();
+    const next = post.mock.calls.at(-1)?.[0];
+    if (next?.type !== "extension/diagnostics-export-preview" || next.status !== "ready") {
+      throw new Error("Expected a second diagnostics preview.");
+    }
+    controller.confirm("request-4", next.exportId, post);
+    await Promise.resolve();
+    expect(post).toHaveBeenLastCalledWith(
+      expect.objectContaining({ status: "error", code: "write-failed" }),
+    );
+  });
+
+  it("reports corrupt source state with a stable error without leaking the cause", async () => {
+    const post = vi.fn<(message: ExtensionToWebviewMessage) => void>();
+    const controller = new DiagnosticsExportController({
+      createId: () => "export-4",
+      readInput: () => {
+        throw new Error("raw third-party secret");
+      },
+      target: {
+        chooseTarget: vi.fn(),
+        formatTarget: () => "target",
+        writeFile: vi.fn(),
+      },
+    });
+
+    controller.request("request-5", post);
+    await Promise.resolve();
+    expect(post).toHaveBeenLastCalledWith(
+      expect.objectContaining({ status: "error", code: "invalid-state" }),
+    );
+    expect(JSON.stringify(post.mock.calls)).not.toContain("raw third-party secret");
+  });
+
+  it("normalizes a synchronous write failure without exposing its cause", async () => {
+    const post = vi.fn<(message: ExtensionToWebviewMessage) => void>();
+    const controller = new DiagnosticsExportController({
+      createId: () => "export-5",
+      readInput: createInput,
+      target: {
+        chooseTarget: async () => "target",
+        formatTarget: () => "target",
+        writeFile: () => {
+          throw new Error("permission denied: private path");
+        },
+      },
+    });
+
+    controller.request("request-6", post);
+    await Promise.resolve();
+    await Promise.resolve();
+    const ready = post.mock.calls.at(-1)?.[0];
+    if (ready?.type !== "extension/diagnostics-export-preview" || ready.status !== "ready") {
+      throw new Error("Expected a diagnostics preview.");
+    }
+    controller.confirm("request-6", ready.exportId, post);
+    expect(post).toHaveBeenLastCalledWith(
+      expect.objectContaining({ status: "error", code: "write-failed" }),
+    );
+    expect(JSON.stringify(post.mock.calls)).not.toContain("private path");
+  });
+});

@@ -31,6 +31,9 @@ export interface WebviewHost {
   deleteSession?(requestId: string, sessionId: string): void;
   clearSessions?(requestId: string): void;
   clearLocalData?(requestId: string): void;
+  requestDiagnosticsExport?(requestId: string): void;
+  confirmDiagnosticsExport?(requestId: string, exportId: string): void;
+  cancelDiagnosticsExport?(requestId: string, exportId: string): void;
   listCheckpoints(requestId: string): void;
   restoreCheckpoint(requestId: string, checkpointId: string): void;
   connectMcp?(requestId: string): void;
@@ -224,6 +227,29 @@ const webviewHost: WebviewHost = {
       type: "webview/clear-local-data",
       requestId,
       confirm: true,
+    });
+  },
+  requestDiagnosticsExport(requestId) {
+    getVsCodeApi().postMessage({
+      protocolVersion,
+      type: "webview/diagnostics-export",
+      requestId,
+    });
+  },
+  confirmDiagnosticsExport(requestId, exportId) {
+    getVsCodeApi().postMessage({
+      protocolVersion,
+      type: "webview/diagnostics-export-confirm",
+      requestId,
+      exportId,
+    });
+  },
+  cancelDiagnosticsExport(requestId, exportId) {
+    getVsCodeApi().postMessage({
+      protocolVersion,
+      type: "webview/diagnostics-export-cancel",
+      requestId,
+      exportId,
     });
   },
   listCheckpoints(requestId) {

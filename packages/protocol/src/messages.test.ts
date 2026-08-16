@@ -192,6 +192,48 @@ describe("Webview protocol messages", () => {
     }
   });
 
+  it("round-trips the redacted diagnostics preview and rejects raw content fields", () => {
+    const request = {
+      protocolVersion,
+      type: "webview/diagnostics-export",
+      requestId: "diagnostics-1",
+    } as const;
+    const confirm = {
+      protocolVersion,
+      type: "webview/diagnostics-export-confirm",
+      requestId: request.requestId,
+      exportId: "export-1",
+    } as const;
+    const preview = {
+      protocolVersion,
+      type: "extension/diagnostics-export-preview",
+      requestId: request.requestId,
+      status: "ready",
+      exportId: confirm.exportId,
+      target: "file:///tmp/diagnostics.json",
+      document: {
+        formatVersion: 1,
+        extensionVersion: "0.1.1",
+        vscodeVersion: "1.125.0",
+        platform: "linux",
+        provider: "openai",
+        errors: [],
+        mcp: { status: "unconfigured", generation: 0 },
+        runtime: { activationDurationMs: 1, memoryBytes: 2, runStatus: "idle" },
+      },
+    } as const;
+
+    expect(webviewToExtensionMessageSchema.parse(request)).toEqual(request);
+    expect(webviewToExtensionMessageSchema.parse(confirm)).toEqual(confirm);
+    expect(extensionToWebviewMessageSchema.parse(preview)).toEqual(preview);
+    expect(
+      extensionToWebviewMessageSchema.safeParse({
+        ...preview,
+        document: { ...preview.document, endpoint: "https://example.invalid?key=secret" },
+      }).success,
+    ).toBe(false);
+  });
+
   it.each([
     { type: "webview/provider-status", requestId: "provider-1", extra: true },
     { type: "webview/provider-save-key", requestId: "provider-1", provider: "gemini" },
