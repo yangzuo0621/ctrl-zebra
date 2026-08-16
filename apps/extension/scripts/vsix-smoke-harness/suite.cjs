@@ -42,8 +42,8 @@ exports.run = async () => {
       ["text-streaming", "tool-calling"],
       vscode.ConfigurationTarget.Global,
     );
-    const providerReport = await vscode.commands.executeCommand(
-      "ctrlZebra.checkProviderConnection",
+    const providerReport = await settleNotificationCommand(
+      vscode.commands.executeCommand("ctrlZebra.checkProviderConnection"),
     );
     if (
       providerReport?.outcome !== "completed" ||
@@ -129,4 +129,25 @@ async function closeServer(server) {
   await new Promise((resolve, reject) => {
     server.close((error) => (error === undefined ? resolve() : reject(error)));
   });
+}
+
+async function settleNotificationCommand(command) {
+  let settled = false;
+  void command.then(
+    () => {
+      settled = true;
+    },
+    () => {
+      settled = true;
+    },
+  );
+  const deadline = Date.now() + 10_000;
+  while (!settled && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await vscode.commands.executeCommand("workbench.action.closeMessages");
+  }
+  if (!settled) {
+    throw new Error("The installed Provider check did not settle after closing its notification.");
+  }
+  return await command;
 }
