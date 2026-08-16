@@ -12,6 +12,8 @@ export const localDataClearCategories = [
   "other-local-state",
 ] as const;
 
+export const maxLocalDataClearCount = 10_000;
+
 export type LocalDataClearCategory = (typeof localDataClearCategories)[number];
 
 export interface LocalDataClearCounts {
@@ -27,6 +29,22 @@ export interface LocalDataClearCategoryReport extends LocalDataClearCounts {
 export interface LocalDataClearReport {
   readonly outcome: "completed" | "partial";
   readonly categories: readonly LocalDataClearCategoryReport[];
+}
+
+export function combineLocalDataClearCounts(
+  total: LocalDataClearCounts,
+  report: LocalDataClearCounts,
+): LocalDataClearCounts {
+  return {
+    deleted: Math.min(
+      maxLocalDataClearCount,
+      normalizeCount(total.deleted) + normalizeCount(report.deleted),
+    ),
+    failed: Math.min(
+      maxLocalDataClearCount,
+      normalizeCount(total.failed) + normalizeCount(report.failed),
+    ),
+  };
 }
 
 export type LocalDataOperationLock = () => Promise<() => void>;
@@ -147,7 +165,7 @@ function normalizeCounts(value: LocalDataClearCounts): LocalDataClearCounts {
 }
 
 function normalizeCount(value: number): number {
-  return Number.isSafeInteger(value) && value >= 0 ? value : 1;
+  return Number.isSafeInteger(value) && value >= 0 ? Math.min(value, maxLocalDataClearCount) : 1;
 }
 
 function failedBeforeCleanupReport(): LocalDataClearReport {

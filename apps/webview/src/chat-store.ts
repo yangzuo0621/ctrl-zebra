@@ -1,6 +1,7 @@
 import {
   type ExtensionToWebviewMessage,
   hasTokenUsage,
+  type LocalDataClearCategoryResult,
   maxReasoningBlockCodePoints,
   maxReasoningBlocksPerRun,
   maxReasoningBlockUtf8Bytes,
@@ -75,6 +76,7 @@ interface ChatState {
   readonly restoring: boolean;
   readonly sessionMutationPending: boolean;
   readonly localDataClearPending: boolean;
+  readonly localDataClearCategories: readonly LocalDataClearCategoryResult[];
   readonly deletingSessionId?: string;
   readonly sessionError?: string;
   readonly runError?: string;
@@ -572,6 +574,7 @@ export function createChatStore({
       restoring: false,
       sessionMutationPending: false,
       localDataClearPending: false,
+      localDataClearCategories: [],
       reasoningAnnouncement: "",
       sessionAnnouncement: "",
       submit(content) {
@@ -765,6 +768,7 @@ export function createChatStore({
           restoring: false,
           sessionMutationPending: false,
           deletingSessionId: undefined,
+          localDataClearCategories: [],
           sessionError: undefined,
           runError: undefined,
           usage: undefined,
@@ -889,6 +893,7 @@ export function createChatStore({
           localDataClearPending: true,
           sessionMutationPending: true,
           deletingSessionId: undefined,
+          localDataClearCategories: [],
           sessionError: undefined,
           sessionAnnouncement: strings.chat.clearingLocalData,
         });
@@ -1034,6 +1039,7 @@ export function createChatStore({
             set({
               localDataClearPending: false,
               sessionMutationPending: false,
+              localDataClearCategories: [],
               sessionError: undefined,
               sessionAnnouncement: strings.chat.localDataClearCancelled,
             });
@@ -1051,6 +1057,7 @@ export function createChatStore({
           set({
             localDataClearPending: false,
             sessionMutationPending: false,
+            localDataClearCategories: message.categories,
             deletingSessionId: undefined,
             regeneratingMessageId: undefined,
             editingMessageId: undefined,
@@ -1364,6 +1371,7 @@ export function createChatStore({
         set({
           sessionMutationPending: false,
           localDataClearPending: false,
+          localDataClearCategories: [],
           deletingSessionId: undefined,
         });
         resetLiveReasoning();

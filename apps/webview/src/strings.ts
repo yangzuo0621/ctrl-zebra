@@ -1,4 +1,5 @@
 import type {
+  LocalDataClearCategory,
   ProviderAction,
   ProviderDisplayId,
   RunStatus,
@@ -420,6 +421,22 @@ export const strings = {
     localDataCleared: "All CtrlZebra local data cleared.",
     localDataClearCancelled: "CtrlZebra local-data clearing was cancelled.",
     localDataClearFailed: "Some CtrlZebra local data could not be cleared. Retry to continue.",
+    localDataClearCategoriesLabel: "Local-data clear results",
+    localDataClearCategoryLabels: {
+      "running-operations": "Running operations",
+      sessions: "Sessions",
+      checkpoints: "Checkpoints",
+      "temporary-files": "Temporary files",
+      caches: "Caches",
+      "provider-secret": "Provider Secret",
+      "provider-configuration": "Provider configuration",
+      "mcp-configuration": "MCP configuration",
+      "other-local-state": "Other local state",
+    } satisfies Record<LocalDataClearCategory, string>,
+    localDataClearCategoryStatus: (outcome: "cleared" | "failed") =>
+      outcome === "cleared" ? "Cleared" : "Needs retry",
+    localDataClearCategoryCounts: (deleted: number, failed: number) =>
+      `Deleted ${deleted}; failed ${failed}`,
     sessionDeletionFailed: "Saved Session deletion was incomplete. Retry to finish.",
     responseDifferentSession: "The response belonged to a different Session.",
     sessionOwnershipRejected: "Session ownership rejected.",

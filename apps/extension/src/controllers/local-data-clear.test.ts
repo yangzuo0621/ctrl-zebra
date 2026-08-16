@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  combineLocalDataClearCounts,
   LocalDataClearController,
   type LocalDataClearCounts,
   localDataClearCategories,
+  maxLocalDataClearCount,
 } from "./local-data-clear.js";
 
 const emptyCounts: LocalDataClearCounts = { deleted: 0, failed: 0 };
@@ -44,6 +46,35 @@ describe("LocalDataClearController", () => {
         outcome: "cleared",
       })),
     });
+  });
+
+  it("caps category counts at the protocol maximum before emission", async () => {
+    const controller = new LocalDataClearController(
+      createOperations({
+        sessions: async () => ({
+          deleted: maxLocalDataClearCount + 1,
+          failed: maxLocalDataClearCount + 2,
+        }),
+      }),
+    );
+
+    const result = await controller.run();
+
+    expect(result.categories.find(({ category }) => category === "sessions")).toEqual({
+      category: "sessions",
+      deleted: maxLocalDataClearCount,
+      failed: maxLocalDataClearCount,
+      outcome: "failed",
+    });
+  });
+
+  it("caps combined storage reports without allowing invalid counts to escape", () => {
+    expect(
+      combineLocalDataClearCounts(
+        { deleted: maxLocalDataClearCount, failed: 1 },
+        { deleted: maxLocalDataClearCount, failed: Number.POSITIVE_INFINITY },
+      ),
+    ).toEqual({ deleted: maxLocalDataClearCount, failed: 2 });
   });
 
   it("cleans every category in deterministic order and continues after a failure", async () => {

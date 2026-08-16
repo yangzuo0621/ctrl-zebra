@@ -780,6 +780,26 @@ describe("Webview protocol messages", () => {
         ],
       }).success,
     ).toBe(false);
+    expect(
+      extensionToWebviewMessageSchema.safeParse({
+        ...result,
+        categories: [result.categories[0], result.categories[0]],
+      }).success,
+    ).toBe(false);
+    expect(
+      extensionToWebviewMessageSchema.safeParse({
+        ...result,
+        outcome: "cancelled",
+        categories: [result.categories[0]],
+      }).success,
+    ).toBe(false);
+    expect(
+      extensionToWebviewMessageSchema.parse({
+        ...result,
+        outcome: "cancelled",
+        categories: [],
+      }),
+    ).toEqual({ ...result, outcome: "cancelled", categories: [] });
   });
 
   it("accepts only an opaque selected Session intent", () => {

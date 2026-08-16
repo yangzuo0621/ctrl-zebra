@@ -137,6 +137,7 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
   const restoring = useStore(store, (state) => state.restoring);
   const sessionMutationPending = useStore(store, (state) => state.sessionMutationPending);
   const localDataClearPending = useStore(store, (state) => state.localDataClearPending);
+  const localDataClearCategories = useStore(store, (state) => state.localDataClearCategories);
   const deletingSessionId = useStore(store, (state) => state.deletingSessionId);
   const sessionError = useStore(store, (state) => state.sessionError);
   const runError = useStore(store, (state) => state.runError);
@@ -502,6 +503,29 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
             <p className={styles.localDataWarning}>{strings.chat.clearLocalDataDescription}</p>
             {sessionError === undefined ? null : (
               <p className={styles.sessionError}>{sessionError}</p>
+            )}
+            {localDataClearCategories.length === 0 ? null : (
+              <ul
+                className={styles.localDataClearCategories}
+                aria-label={strings.chat.localDataClearCategoriesLabel}
+              >
+                {localDataClearCategories.map(({ category, outcome, deleted, failed }) => (
+                  <li
+                    className={
+                      outcome === "failed"
+                        ? styles.localDataClearCategoryFailed
+                        : styles.localDataClearCategory
+                    }
+                    key={category}
+                  >
+                    <span>{strings.chat.localDataClearCategoryLabels[category]}</span>
+                    <span>
+                      {strings.chat.localDataClearCategoryStatus(outcome)} ·{" "}
+                      {strings.chat.localDataClearCategoryCounts(deleted, failed)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
             )}
             {restoring ? (
               <p className={styles.sessionStatus}>{strings.app.restoringSession}</p>

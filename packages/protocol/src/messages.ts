@@ -541,19 +541,32 @@ export const localDataClearCategoryResultSchema = z.strictObject({
   failed: z.number().int().nonnegative().max(10_000),
 });
 
+const localDataClearCategoryResultsSchema = z
+  .array(localDataClearCategoryResultSchema)
+  .max(9)
+  .refine(
+    (categories) => new Set(categories.map(({ category }) => category)).size === categories.length,
+    "Each local-data clear category may appear at most once.",
+  );
+
 export const clearLocalDataMessageSchema = z.strictObject({
   ...protocolEnvelopeSchema.shape,
   type: z.literal("webview/clear-local-data"),
   confirm: z.literal(true),
 });
 
-export const localDataClearResultMessageSchema = z.strictObject({
-  ...protocolEnvelopeSchema.shape,
-  type: z.literal("extension/local-data-clear-result"),
-  outcome: z.enum(["completed", "partial", "cancelled"]),
-  categories: z.array(localDataClearCategoryResultSchema).max(9),
-  message: z.string().min(1).max(256),
-});
+export const localDataClearResultMessageSchema = z
+  .strictObject({
+    ...protocolEnvelopeSchema.shape,
+    type: z.literal("extension/local-data-clear-result"),
+    outcome: z.enum(["completed", "partial", "cancelled"]),
+    categories: localDataClearCategoryResultsSchema,
+    message: z.string().min(1).max(256),
+  })
+  .refine(({ outcome, categories }) => outcome !== "cancelled" || categories.length === 0, {
+    path: ["categories"],
+    message: "Cancelled local-data clear results must not contain category results.",
+  });
 
 export const listCheckpointsMessageSchema = z.strictObject({
   ...protocolEnvelopeSchema.shape,

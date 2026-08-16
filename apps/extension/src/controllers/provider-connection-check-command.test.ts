@@ -1,8 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { ProviderApiKeySecretReader } from "../adapters/api-key-secret-storage.js";
+import {
+  ApiKeySecretStorageError,
+  type ProviderApiKeySecretReader,
+} from "../adapters/api-key-secret-storage.js";
 import type { ProviderConfiguration, ProviderId } from "../adapters/provider-configuration.js";
 import { providerEndpointPolicy } from "../adapters/provider-endpoint-policy.js";
+import { ProviderApiKeyOperationCoordinator } from "./provider-api-key-command.js";
 import {
   checkProviderConnection,
   checkProviderConnectionCommandId,
@@ -11,6 +15,49 @@ import {
 } from "./provider-connection-check-command.js";
 
 describe("Provider connection check", () => {
+  it("does not read the Provider Secret while the lifecycle coordinator is exclusive", async () => {
+    const coordinator = new ProviderApiKeyOperationCoordinator();
+    const release = await coordinator.acquireExclusive();
+    try {
+      const secrets = createSecrets({ openai: "test-openai-key" });
+      const fetch = createFetch(jsonResponse({ id: "gpt-test" }));
+
+      const report = await checkProviderConnection({
+        configuration: openAIConfiguration(),
+        secrets,
+        providerApiKeyCoordinator: coordinator,
+        fetch,
+        signal: new AbortController().signal,
+      });
+
+      expect(report).toMatchObject({ outcome: "failed", errorCode: "authentication" });
+      expect(secrets.read).not.toHaveBeenCalled();
+      expect(fetch).not.toHaveBeenCalled();
+    } finally {
+      release();
+    }
+  });
+
+  it("maps a coordinated SecretStorage read failure without contacting the Provider", async () => {
+    const coordinator = new ProviderApiKeyOperationCoordinator();
+    const read = vi.fn(async () => {
+      throw new ApiKeySecretStorageError("read");
+    });
+    const fetch = createFetch(jsonResponse({ id: "gpt-test" }));
+
+    const report = await checkProviderConnection({
+      configuration: openAIConfiguration(),
+      secrets: { read } satisfies ProviderApiKeySecretReader,
+      providerApiKeyCoordinator: coordinator,
+      fetch,
+      signal: new AbortController().signal,
+    });
+
+    expect(report).toMatchObject({ outcome: "failed", errorCode: "configuration" });
+    expect(read).toHaveBeenCalledOnce();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it.each([
     {
       provider: "openai" as const,

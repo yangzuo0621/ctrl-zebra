@@ -112,7 +112,9 @@ import { FileEditApprovalWorkflow } from "./controllers/file-edit-approval-workf
 import { FileRenameApprovalWorkflow } from "./controllers/file-rename-approval-workflow.js";
 import {
   clearLocalDataCommandId,
+  combineLocalDataClearCounts,
   LocalDataClearController,
+  type LocalDataClearCounts,
   type LocalDataClearReport,
 } from "./controllers/local-data-clear.js";
 import { McpConnectionController } from "./controllers/mcp-connection-controller.js";
@@ -832,7 +834,7 @@ export function activate(context: ExtensionContext): void {
       return (await store.clear?.(new AbortController().signal)) ?? { deleted: 0, failed: 1 };
     },
     async clearTemporaryFiles() {
-      const reports = [];
+      const reports: LocalDataClearCounts[] = [];
       if (workspaceLocalStorage !== undefined) {
         try {
           reports.push(
@@ -850,13 +852,7 @@ export function activate(context: ExtensionContext): void {
       } catch {
         reports.push({ deleted: 0, failed: 1 });
       }
-      return reports.reduce(
-        (total, report) => ({
-          deleted: total.deleted + report.deleted,
-          failed: total.failed + report.failed,
-        }),
-        { deleted: 0, failed: 0 },
-      );
+      return reports.reduce(combineLocalDataClearCounts, { deleted: 0, failed: 0 });
     },
     async clearCaches() {
       return { deleted: 0, failed: 0 };
@@ -877,7 +873,7 @@ export function activate(context: ExtensionContext): void {
       );
     },
     async clearOtherLocalState() {
-      const reports = [];
+      const reports: LocalDataClearCounts[] = [];
       try {
         reports.push(await clearMemento(context.globalState));
       } catch {
@@ -888,13 +884,7 @@ export function activate(context: ExtensionContext): void {
       } catch {
         reports.push({ deleted: 0, failed: 1 });
       }
-      return reports.reduce(
-        (total, report) => ({
-          deleted: total.deleted + report.deleted,
-          failed: total.failed + report.failed,
-        }),
-        { deleted: 0, failed: 0 },
-      );
+      return reports.reduce(combineLocalDataClearCounts, { deleted: 0, failed: 0 });
     },
   });
   localDataClear.registerOperationLock(
@@ -1012,6 +1002,7 @@ export function activate(context: ExtensionContext): void {
         configuration,
         requiredCapabilities: ["text-streaming", "tool-calling"],
         secrets,
+        providerApiKeyCoordinator,
         factories: {
           gemini: ({ configuration: geminiConfiguration, apiKey }) => {
             return createGeminiModelGateway({
@@ -1236,6 +1227,7 @@ export function activate(context: ExtensionContext): void {
         });
       },
       secrets,
+      providerApiKeyCoordinator,
       updateModel: (modelId) =>
         workspace
           .getConfiguration("ctrlZebra.provider")
@@ -1254,6 +1246,7 @@ export function activate(context: ExtensionContext): void {
         });
       },
       secrets,
+      providerApiKeyCoordinator,
       registerCommand: (commandId, handler) => commands.registerCommand(commandId, handler),
       runWithProgress: (task) =>
         window.withProgress(

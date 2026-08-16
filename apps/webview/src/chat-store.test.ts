@@ -1283,6 +1283,9 @@ describe("chat reasoning store", () => {
       sessionMutationPending: false,
       sessionError: "Some Provider Secret data could not be cleared. Retry to continue.",
       sessionAnnouncement: "Some CtrlZebra local data could not be cleared. Retry to continue.",
+      localDataClearCategories: [
+        { category: "provider-secret", outcome: "failed", deleted: 0, failed: 1 },
+      ],
     });
   });
 
@@ -1303,6 +1306,7 @@ describe("chat reasoning store", () => {
       messages: expect.any(Array),
       localDataClearPending: false,
       sessionMutationPending: false,
+      localDataClearCategories: [],
       sessionAnnouncement: "CtrlZebra local-data clearing was cancelled.",
     });
     expect(harness.store.getState().messages).not.toHaveLength(0);

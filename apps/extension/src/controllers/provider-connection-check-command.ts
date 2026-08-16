@@ -14,6 +14,7 @@ import {
   providerEndpointPolicy,
 } from "../adapters/provider-endpoint-policy.js";
 import { isRecord } from "../adapters/record-validation.js";
+import { ProviderApiKeyOperationCoordinator } from "./provider-api-key-command.js";
 
 export const checkProviderConnectionCommandId = "ctrlZebra.checkProviderConnection";
 
@@ -64,6 +65,7 @@ export interface ProviderConnectionCheckLogEntry {
 export interface ProviderConnectionCheckOptions {
   readonly configuration: ProviderConfiguration;
   readonly secrets: ProviderApiKeySecretReader;
+  readonly providerApiKeyCoordinator?: ProviderApiKeyOperationCoordinator;
   readonly fetch?: typeof fetch;
   readonly signal: AbortSignal;
   readonly timeoutMs?: number;
@@ -76,6 +78,7 @@ export interface RegisterProviderConnectionCheckOptions {
   ) => Disposable;
   readonly readConfiguration: () => ProviderConfiguration;
   readonly secrets: ProviderApiKeySecretReader;
+  readonly providerApiKeyCoordinator?: ProviderApiKeyOperationCoordinator;
   readonly fetch?: typeof fetch;
   readonly runWithProgress: <T>(task: (token: CancellationToken) => Thenable<T>) => Thenable<T>;
   readonly showInformationMessage: (message: string) => Thenable<unknown>;
@@ -129,6 +132,7 @@ export function registerProviderConnectionCheckCommand({
   registerCommand,
   readConfiguration,
   secrets,
+  providerApiKeyCoordinator,
   fetch: fetchMetadata = globalThis.fetch,
   runWithProgress,
   showInformationMessage,
@@ -155,6 +159,7 @@ export function registerProviderConnectionCheckCommand({
         const checkedReport = await checkProviderConnection({
           configuration,
           secrets,
+          providerApiKeyCoordinator,
           fetch: fetchMetadata,
           signal: cancellation.signal,
         });
@@ -204,6 +209,7 @@ export function registerProviderConnectionCheckCommand({
 export async function checkProviderConnection({
   configuration,
   secrets,
+  providerApiKeyCoordinator,
   fetch: fetchMetadata = globalThis.fetch,
   signal,
   timeoutMs = connectionCheckTimeoutMs,
@@ -243,7 +249,12 @@ export async function checkProviderConnection({
     }
 
     throwIfAborted(deadline.signal);
-    const apiKey = await readApiKey(configuration, secrets, deadline.signal);
+    const apiKey = await readApiKey(
+      configuration,
+      secrets,
+      providerApiKeyCoordinator,
+      deadline.signal,
+    );
     throwIfAborted(deadline.signal);
     const response = await requestMetadata(target, apiKey, fetchMetadata, deadline.signal);
     throwIfAborted(deadline.signal);
@@ -320,13 +331,18 @@ function createMetadataTarget(configuration: ProviderConfiguration): MetadataTar
 async function readApiKey(
   configuration: ProviderConfiguration,
   secrets: ProviderApiKeySecretReader,
+  providerApiKeyCoordinator: ProviderApiKeyOperationCoordinator | undefined,
   signal: AbortSignal,
 ): Promise<string | undefined> {
   throwIfAborted(signal);
 
   let apiKey: string | undefined;
   try {
-    apiKey = await awaitWithAbort(secrets.read(configuration.provider), signal);
+    const coordinator = providerApiKeyCoordinator ?? new ProviderApiKeyOperationCoordinator();
+    apiKey = await awaitWithAbort(
+      coordinator.run(configuration.provider, () => secrets.read(configuration.provider)),
+      signal,
+    );
   } catch (error) {
     if (signal.aborted) {
       throw signal.reason ?? cancelledReason;

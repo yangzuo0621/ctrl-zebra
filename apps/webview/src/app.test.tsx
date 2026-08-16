@@ -21,6 +21,43 @@ describe("App streaming chat", () => {
     });
   });
 
+  it("renders bounded per-category local-data outcomes for retry", async () => {
+    const host = createWebviewHostFixture();
+    host.clearLocalData = (requestId) => {
+      host.sent.push({
+        protocolVersion,
+        type: "webview/clear-local-data",
+        requestId,
+        confirm: true,
+      });
+    };
+    const user = userEvent.setup();
+    render(<App host={host} createRequestId={() => "clear-local-1"} />);
+
+    await user.click(screen.getByRole("button", { name: strings.app.sessions }));
+    await user.click(screen.getByRole("button", { name: strings.chat.clearLocalData }));
+    act(() =>
+      host.emit({
+        protocolVersion,
+        type: "extension/local-data-clear-result",
+        requestId: "clear-local-1",
+        outcome: "partial",
+        categories: [
+          { category: "provider-secret", outcome: "failed", deleted: 0, failed: 1 },
+          { category: "sessions", outcome: "cleared", deleted: 10_000, failed: 0 },
+        ],
+        message: strings.chat.localDataClearFailed,
+      }),
+    );
+
+    expect(
+      screen.getByRole("list", { name: strings.chat.localDataClearCategoriesLabel }),
+    ).toHaveTextContent("Provider Secret");
+    expect(screen.getByText("Needs retry · Deleted 0; failed 1")).toBeVisible();
+    expect(screen.getByText("Sessions")).toBeVisible();
+    expect(screen.getByText("Cleared · Deleted 10000; failed 0")).toBeVisible();
+  });
+
   it("lists Agent changes and requests a selected Checkpoint restore", async () => {
     const host = createWebviewHostFixture();
     const ids = ["checkpoint-list-1", "checkpoint-restore-1"];
