@@ -103,3 +103,23 @@ On Ubuntu with an available Xvfb display, also run:
 corepack pnpm test:integration
 corepack pnpm test:coverage
 ```
+
+## T2206 reproducible release verification
+
+`.github/workflows/release.yml` is a manual, verification-first workflow. It accepts the protected
+`main` branch or the exact `v<extension-version>` tag, checks the manifest/CHANGELOG/lockfile and
+release checklist, packages the VSIX twice, and fails if the two SHA-256 digests differ. It retains
+the verified VSIX, checksum, third-party license inventory, and deterministic SPDX-2.3 SBOM as one
+artifact. The workflow is not a tag or version creator.
+
+The `publish` input defaults to `false`. Only an explicit `true` input can enter the protected
+`release` environment, where a maintainer may configure Marketplace trusted publishing or a
+`VSCE_PAT` secret. The workflow never prints, writes, or persists that credential. A cancelled run
+is rejected before the credential gate, and missing credentials, a duplicate tag, a wrong branch,
+or a version-tag mismatch fail closed.
+
+`pnpm release:verify -- --artifact <path>` is the local/CI audit command. It compares generated
+third-party packages and licenses with `release/third-party-dependencies.json` and
+`release/sbom.spdx.json`, then independently inspects the VSIX archive for allowlist violations,
+development caches, source maps, credentials, and undeclared executables. Update those declarations
+only through `pnpm release:update-audit` after an intentionally reviewed dependency change.

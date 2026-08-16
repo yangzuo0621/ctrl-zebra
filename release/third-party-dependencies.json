@@ -1,0 +1,132 @@
+{
+  "schemaVersion": 1,
+  "product": "ctrl-zebra",
+  "version": "0.1.1",
+  "packages": [
+    {
+      "name": "@ai-sdk/gateway",
+      "version": "4.0.21",
+      "license": "Apache-2.0"
+    },
+    {
+      "name": "@ai-sdk/google",
+      "version": "4.0.17",
+      "license": "Apache-2.0"
+    },
+    {
+      "name": "@ai-sdk/openai-compatible",
+      "version": "3.0.11",
+      "license": "Apache-2.0"
+    },
+    {
+      "name": "@ai-sdk/openai",
+      "version": "4.0.15",
+      "license": "Apache-2.0"
+    },
+    {
+      "name": "@ai-sdk/provider-utils",
+      "version": "5.0.10",
+      "license": "Apache-2.0"
+    },
+    {
+      "name": "@ai-sdk/provider",
+      "version": "4.0.3",
+      "license": "Apache-2.0"
+    },
+    {
+      "name": "@modelcontextprotocol/client",
+      "version": "2.0.0",
+      "license": "MIT"
+    },
+    {
+      "name": "@modelcontextprotocol/core",
+      "version": "2.0.0",
+      "license": "MIT"
+    },
+    {
+      "name": "@standard-schema/spec",
+      "version": "1.1.0",
+      "license": "MIT"
+    },
+    {
+      "name": "@vercel/oidc",
+      "version": "3.2.0",
+      "license": "Apache-2.0"
+    },
+    {
+      "name": "@workflow/serde",
+      "version": "4.1.0",
+      "license": "Apache-2.0"
+    },
+    {
+      "name": "ai",
+      "version": "7.0.29",
+      "license": "Apache-2.0"
+    },
+    {
+      "name": "cross-spawn",
+      "version": "7.0.6",
+      "license": "MIT"
+    },
+    {
+      "name": "eventsource-parser",
+      "version": "3.1.0",
+      "license": "MIT"
+    },
+    {
+      "name": "eventsource",
+      "version": "3.0.7",
+      "license": "MIT"
+    },
+    {
+      "name": "isexe",
+      "version": "2.0.0",
+      "license": "ISC"
+    },
+    {
+      "name": "jose",
+      "version": "6.2.7",
+      "license": "MIT"
+    },
+    {
+      "name": "json-schema",
+      "version": "0.4.0",
+      "license": "(AFL-2.1 OR BSD-3-Clause)"
+    },
+    {
+      "name": "path-key",
+      "version": "3.1.1",
+      "license": "MIT"
+    },
+    {
+      "name": "pkce-challenge",
+      "version": "5.0.1",
+      "license": "MIT"
+    },
+    {
+      "name": "re2js",
+      "version": "2.8.6",
+      "license": "MIT"
+    },
+    {
+      "name": "shebang-command",
+      "version": "2.0.0",
+      "license": "MIT"
+    },
+    {
+      "name": "shebang-regex",
+      "version": "3.0.0",
+      "license": "MIT"
+    },
+    {
+      "name": "which",
+      "version": "2.0.2",
+      "license": "ISC"
+    },
+    {
+      "name": "zod",
+      "version": "4.4.3",
+      "license": "MIT"
+    }
+  ]
+}

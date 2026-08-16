@@ -1,26 +1,29 @@
-name: Package VSIX
+name: Reproducible Release Verification
 
 on:
   workflow_dispatch:
-  push:
-    tags:
-      - "v*.*.*"
+    inputs:
+      publish:
+        description: "Enter the protected release environment after verification (does not publish by default)."
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
 
 concurrency:
-  group: package-vsix-${{ github.ref }}
+  group: release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  package:
-    name: Build verified VSIX
+  verify:
+    name: Verify reproducible release
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     steps:
-      - name: Check out repository
+      - name: Check out immutable source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
@@ -42,10 +45,11 @@ jobs:
       - name: Verify release metadata and dependency declarations
         run: pnpm release:verify
 
-      - name: Build and verify VSIX
+      - name: Build reproducible VSIX
         run: xvfb-run -a pnpm package:vsix
 
-      - name: Record VSIX checksum
+      - name: Audit exact VSIX and write release evidence
+        id: audit
         shell: bash
         run: |
           set -euo pipefail
@@ -55,17 +59,20 @@ jobs:
             exit 1
           fi
           pnpm release:verify -- --artifact "${vsix_files[0]}" --output .artifacts/release
-          (
-            cd .artifacts
-            sha256sum -- *.vsix > SHA256SUMS
-          )
+          printf 'path=%s\n' "${vsix_files[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Record VSIX checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256sum -- "${{ steps.audit.outputs.path }}" > .artifacts/SHA256SUMS
           cat .artifacts/SHA256SUMS
 
-      - name: Upload verified VSIX
+      - name: Upload verified release evidence
         id: upload
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: ctrl-zebra-vsix-${{ github.sha }}
+          name: ctrl-zebra-release-${{ github.sha }}
           path: |
             .artifacts/*.vsix
             .artifacts/SHA256SUMS
@@ -77,22 +84,45 @@ jobs:
           retention-days: 30
           compression-level: 0
 
-      - name: Write build summary
+      - name: Write release summary
         shell: bash
         env:
           ARTIFACT_DIGEST: ${{ steps.upload.outputs.artifact-digest }}
           ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
         run: |
           {
-            echo "## Verified VSIX"
+            echo "## Reproducible release verification"
             echo
             echo "Source commit: \`${GITHUB_SHA}\`"
             echo
             echo "Artifact archive SHA-256: \`${ARTIFACT_DIGEST}\`"
             echo
-            echo "[Download artifact](${ARTIFACT_URL})"
+            echo "[Download retained evidence](${ARTIFACT_URL})"
             echo
             echo '```text'
             cat .artifacts/SHA256SUMS
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+  protected-publish-gate:
+    name: Protected publication confirmation
+    needs: verify
+    if: ${{ inputs.publish && !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment:
+      name: release
+    permissions:
+      contents: read
+
+    steps:
+      - name: Require a CI secret-store credential
+        env:
+          RELEASE_ENVIRONMENT: release
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: |
+          if [[ -z "${VSCE_PAT}" ]]; then
+            echo "VSCE_PAT is not configured in the protected release environment." >&2
+            exit 1
+          fi
+          echo "Protected publication confirmation received; Marketplace publication remains a separate manual operation."

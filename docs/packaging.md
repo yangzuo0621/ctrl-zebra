@@ -100,3 +100,18 @@ manual release action.
 The repository and packaged extension declare MIT and contain identical license text. The official
 command does not use `--skip-license`; `vsce` and the independent archive verifier must both observe
 the packaged license.
+
+## T2206 release provenance and dependency audit
+
+The package command writes deterministic metadata at `dist/package/build-metadata.json` containing
+the full source commit, extension version, SHA-256 digests of `pnpm-lock.yaml` and `CHANGELOG.md`,
+and the source ref/type. It packages the same clean commit a second time and rejects a digest
+mismatch. The archive is then independently checked against the selected-file and archive allowlists.
+
+The release audit walks the production graph reported by the pinned pnpm lockfile, excludes private
+workspace packages from the third-party inventory, and requires every external package to declare a
+compatible SPDX license. The generated inventory and deterministic SPDX-2.3 SBOM must match the
+repository declarations under `release/`; a license or SBOM diff is a release failure. The audit
+also checks the packaged manifest against declared runtime dependencies and rejects development
+caches, source maps, credentials, nested dependency trees, and executables outside the reviewed
+bundle allowlist.
