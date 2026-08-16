@@ -1,7 +1,10 @@
 import type { ExtensionToWebviewMessage } from "@ctrl-zebra/protocol";
 import { describe, expect, it, vi } from "vitest";
 
-import { DiagnosticsExportController } from "./diagnostic-export.js";
+import {
+  classifyDiagnosticsErrorCategory,
+  DiagnosticsExportController,
+} from "./diagnostic-export.js";
 
 function createInput(runStatus: "idle" | "streaming" = "idle") {
   return {
@@ -16,6 +19,46 @@ function createInput(runStatus: "idle" | "streaming" = "idle") {
 }
 
 describe("DiagnosticsExportController", () => {
+  it("maps provider failures to stable categories and caps aggregate counts", () => {
+    const categories = new Map([
+      ["provider-timeout", "configuration"],
+      ["missing-api-key", "authentication"],
+      ["secret-storage-read", "authentication"],
+      ["permission-denied", "authentication"],
+      ["run-budget-configuration", "configuration"],
+      ["budget-exceeded", "budget"],
+      ["configuration-invalid", "configuration"],
+      ["context-overflow", "context"],
+      ["invalid-context", "context"],
+      ["rate-limit", "rate-limit"],
+      ["unavailable", "network"],
+      ["network", "network"],
+      ["invalid-request", "configuration"],
+      ["model-not-found", "configuration"],
+      ["mcp-connect", "mcp"],
+      ["server-exit", "mcp"],
+      ["tool-failed", "tool"],
+      ["unexpected", "internal"],
+    ] as const);
+    for (const [code, category] of categories) {
+      expect(classifyDiagnosticsErrorCategory(code)).toBe(category);
+    }
+
+    const controller = new DiagnosticsExportController({
+      createId: () => "unused",
+      readInput: createInput,
+      target: {
+        chooseTarget: async () => undefined,
+        formatTarget: () => "unused",
+        writeFile: vi.fn(),
+      },
+    });
+    for (let index = 0; index < 1_005; index += 1) {
+      controller.recordErrorCategory("network");
+    }
+    expect(controller.getErrorCounts()).toEqual([{ category: "network", count: 1_000 }]);
+  });
+
   it("shows a bounded preview and writes only after explicit confirmation", async () => {
     let choose!: (target: unknown) => void;
     const writes: Uint8Array[] = [];
@@ -198,5 +241,112 @@ describe("DiagnosticsExportController", () => {
       expect.objectContaining({ status: "error", code: "write-failed" }),
     );
     expect(JSON.stringify(post.mock.calls)).not.toContain("private path");
+  });
+
+  it("reports an unavailable save dialog without exposing its cause", async () => {
+    const post = vi.fn<(message: ExtensionToWebviewMessage) => void>();
+    const controller = new DiagnosticsExportController({
+      createId: () => "export-6",
+      readInput: createInput,
+      target: {
+        chooseTarget: async () => {
+          throw new Error("dialog credentials");
+        },
+        formatTarget: () => "unused",
+        writeFile: vi.fn(),
+      },
+    });
+
+    controller.request("request-7", post);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(post).toHaveBeenLastCalledWith(
+      expect.objectContaining({ status: "error", code: "unavailable" }),
+    );
+    expect(JSON.stringify(post.mock.calls)).not.toContain("dialog credentials");
+  });
+
+  it("reports unavailable preview failures from ID and target formatting", async () => {
+    const post = vi.fn<(message: ExtensionToWebviewMessage) => void>();
+    const createIdFailure = new DiagnosticsExportController({
+      createId: () => {
+        throw new Error("id secret");
+      },
+      readInput: createInput,
+      target: {
+        chooseTarget: async () => "target",
+        formatTarget: () => "target",
+        writeFile: vi.fn(),
+      },
+    });
+
+    createIdFailure.request("request-8", post);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(post).toHaveBeenLastCalledWith(
+      expect.objectContaining({ status: "error", code: "unavailable" }),
+    );
+
+    const invalidTarget = new DiagnosticsExportController({
+      createId: () => "export-9",
+      readInput: createInput,
+      target: {
+        chooseTarget: async () => "private target",
+        formatTarget: () => "",
+        writeFile: vi.fn(),
+      },
+    });
+    invalidTarget.request("request-9", post);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(post).toHaveBeenLastCalledWith(
+      expect.objectContaining({ status: "error", code: "unavailable" }),
+    );
+    expect(JSON.stringify(post.mock.calls)).not.toContain("private target");
+  });
+
+  it("rejects overlapping and stale control requests without writing", async () => {
+    let choose!: (target: unknown) => void;
+    const post = vi.fn<(message: ExtensionToWebviewMessage) => void>();
+    const writeFile = vi.fn(async () => {});
+    const controller = new DiagnosticsExportController({
+      createId: () => "export-10",
+      readInput: createInput,
+      target: {
+        chooseTarget: () => new Promise((resolve) => (choose = resolve)),
+        formatTarget: () => "target",
+        writeFile,
+      },
+    });
+
+    controller.request("request-10", post);
+    await Promise.resolve();
+    controller.request("request-11", post);
+    expect(post).toHaveBeenLastCalledWith(
+      expect.objectContaining({ requestId: "request-11", code: "invalid-state" }),
+    );
+
+    choose("target");
+    await Promise.resolve();
+    await Promise.resolve();
+    const ready = post.mock.calls.at(-1)?.[0];
+    if (ready?.type !== "extension/diagnostics-export-preview" || ready.status !== "ready") {
+      throw new Error("Expected a diagnostics preview.");
+    }
+
+    controller.confirm("request-10", "wrong-id", post);
+    expect(post).toHaveBeenLastCalledWith(
+      expect.objectContaining({ requestId: "request-10", code: "invalid-state" }),
+    );
+    controller.cancel("request-10", "wrong-id", post);
+    expect(post).toHaveBeenLastCalledWith(
+      expect.objectContaining({ requestId: "request-10", code: "invalid-state" }),
+    );
+    controller.cancel("request-10", ready.exportId, post);
+    expect(post).toHaveBeenLastCalledWith(
+      expect.objectContaining({ requestId: "request-10", status: "cancelled" }),
+    );
+    controller.confirm("request-10", ready.exportId, post);
+    expect(writeFile).not.toHaveBeenCalled();
   });
 });

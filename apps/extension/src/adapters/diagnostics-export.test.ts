@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createDiagnosticsExport } from "./diagnostics-export.js";
+import { createDiagnosticsExport, toDiagnosticsRuntime } from "./diagnostics-export.js";
 
 describe("diagnostics export builder", () => {
   it("keeps only safe versions, categories, statuses, and bounded runtime facts", () => {
@@ -111,5 +111,97 @@ describe("diagnostics export builder", () => {
     expect(result.document.provider).toBe("unknown");
     expect(result.document.mcp).toEqual({ status: "unconfigured", generation: 0 });
     expect(result.document.runtime.memoryBytes).toBe(0);
+  });
+
+  it("fails closed for malformed containers and hostile source objects", () => {
+    const throwingSource = new Proxy(
+      {},
+      {
+        ownKeys() {
+          throw new Error("private source");
+        },
+      },
+    );
+    const result = createDiagnosticsExport({
+      extensionVersion: "",
+      vscodeVersion: "line\nbreak",
+      platform: "private-os",
+      provider: "private-provider",
+      errors: "not an array" as unknown as readonly unknown[],
+      mcp: throwingSource,
+      runtime: throwingSource,
+    });
+
+    expect(result.document.extensionVersion).toBe("unknown");
+    expect(result.document.vscodeVersion).toBe("unknown");
+    expect(result.document.errors).toEqual([]);
+    expect(result.document.mcp).toEqual({ status: "unknown", generation: 0 });
+    expect(result.document.runtime).toEqual({
+      activationDurationMs: 0,
+      memoryBytes: 0,
+      runStatus: "unknown",
+    });
+    expect(result.json).not.toContain("private source");
+
+    const throwingErrors: unknown[] = [];
+    Object.defineProperty(throwingErrors, "slice", {
+      value: () => {
+        throw new Error("private error list");
+      },
+    });
+    expect(
+      createDiagnosticsExport({
+        extensionVersion: "0.1.1",
+        vscodeVersion: "1.125.0",
+        platform: "linux",
+        provider: "openai",
+        errors: throwingErrors,
+        mcp: undefined,
+        runtime: { runStatus: "idle" },
+      }).document.errors,
+    ).toEqual([]);
+  });
+
+  it("sorts valid error categories and drops zero or invalid counts", () => {
+    const result = createDiagnosticsExport({
+      extensionVersion: "0.1.1",
+      vscodeVersion: "1.125.0",
+      platform: "linux",
+      provider: "openai",
+      errors: [
+        { category: "internal", count: 0 },
+        { category: "network", count: 2 },
+        { category: "configuration", count: 1 },
+        { category: "not-a-category", count: 5 },
+      ],
+      mcp: undefined,
+      runtime: { runStatus: "idle" },
+    });
+
+    expect(result.document.errors).toEqual([
+      { category: "configuration", count: 1 },
+      { category: "network", count: 2 },
+    ]);
+  });
+
+  it("projects the host snapshot with an observed active Run status", () => {
+    expect(
+      toDiagnosticsRuntime({ activationDurationMs: 12, memoryBytes: 52_428_800 }, "executing_tool"),
+    ).toEqual({
+      activationDurationMs: 12,
+      memoryBytes: 52_428_800,
+      runStatus: "executing_tool",
+    });
+    expect(
+      toDiagnosticsRuntime(
+        { activationDurationMs: 12, firstWebviewDisplayDurationMs: 28, memoryBytes: 52_428_800 },
+        "awaiting_approval",
+      ),
+    ).toEqual({
+      activationDurationMs: 12,
+      firstWebviewDisplayDurationMs: 28,
+      memoryBytes: 52_428_800,
+      runStatus: "awaiting_approval",
+    });
   });
 });

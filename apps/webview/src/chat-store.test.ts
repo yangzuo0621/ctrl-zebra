@@ -59,6 +59,113 @@ function startRun(harness: ReturnType<typeof createHarness>) {
 }
 
 describe("chat reasoning store", () => {
+  it("keeps projections active while awaiting approval and executing a Tool", () => {
+    const harness = createHarness();
+    startRun(harness);
+    harness.receive({
+      protocolVersion,
+      type: "extension/run-status",
+      requestId: "request-1",
+      status: "awaiting_approval",
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/text-delta",
+      requestId: "request-1",
+      text: "Approval granted",
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/token-usage",
+      requestId: "request-1",
+      usage: { inputTokens: 2, outputTokens: 3, totalTokens: 5 },
+    });
+    const budget = {
+      state: "warning" as const,
+      source: "estimate" as const,
+      maxTokens: 100,
+      warningTokens: 80,
+      estimatedTokens: 20,
+      effectiveTokens: 20,
+    };
+    harness.receive({
+      protocolVersion,
+      type: "extension/run-budget",
+      requestId: "request-1",
+      budget,
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/reasoning-start",
+      requestId: "request-1",
+      blockId: "approval-block",
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/reasoning-delta",
+      requestId: "request-1",
+      blockId: "approval-block",
+      text: "Waiting for the Tool.",
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/reasoning-end",
+      requestId: "request-1",
+      blockId: "wrong-block",
+      truncated: false,
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/reasoning-end",
+      requestId: "request-1",
+      blockId: "approval-block",
+      truncated: false,
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/run-status",
+      requestId: "request-1",
+      status: "executing_tool",
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/tool-state",
+      requestId: "request-1",
+      call: { id: "call-1", name: "run_command", input: { command: "pwd" } },
+      source: { kind: "builtin" },
+      status: "error",
+      result: {
+        callId: "call-1",
+        name: "run_command",
+        status: "error",
+        error: { code: "failed", message: "The command failed safely." },
+      },
+    });
+    harness.flush();
+
+    expect(harness.store.getState()).toMatchObject({
+      status: "executing_tool",
+      usage: { inputTokens: 2, outputTokens: 3, totalTokens: 5 },
+      runBudget: budget,
+    });
+    expect(harness.store.getState().messages[1]).toMatchObject({
+      content: "Approval granted",
+      reasoningBlocks: [
+        expect.objectContaining({
+          blockId: "approval-block",
+          content: "Waiting for the Tool.",
+          state: "complete",
+        }),
+      ],
+      toolCalls: [
+        expect.objectContaining({
+          call: expect.objectContaining({ id: "call-1" }),
+          status: "error",
+        }),
+      ],
+    });
+  });
+
   it("flushes a visible batch within 50 milliseconds when no animation frame runs", () => {
     vi.useFakeTimers();
     vi.stubGlobal(

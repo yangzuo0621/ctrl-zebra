@@ -20,6 +20,16 @@ const document = {
 const content = `${JSON.stringify(document)}\n`;
 
 describe("diagnostics export store", () => {
+  it("leaves the export action unavailable when the host has no configuration", () => {
+    const store = createDiagnosticsExportStore(
+      createWebviewHostFixture(),
+      () => "request-no-config",
+    );
+
+    expect(store.getState().start()).toBe(false);
+    expect(store.getState().status).toBe("idle");
+  });
+
   it("requires an explicit preview confirmation before posting a save", () => {
     const host = createWebviewHostFixture();
     host.requestDiagnosticsExport = vi.fn();
