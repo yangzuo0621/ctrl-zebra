@@ -86,23 +86,24 @@ describe("Model selection command", () => {
     );
   });
 
-  it.each([
-    401, 403,
-  ])("distinguishes authentication status %s from ordinary failures", async (status) => {
-    const harness = createHarness({
-      configuration: { provider: "openai" },
-      responseStatus: status,
-      manualModelId: "gpt-manual",
-    });
+  it.each([401, 403])(
+    "distinguishes authentication status %s from ordinary failures",
+    async (status) => {
+      const harness = createHarness({
+        configuration: { provider: "openai" },
+        responseStatus: status,
+        manualModelId: "gpt-manual",
+      });
 
-    registerModelSelectionCommand(harness.options);
-    await harness.run();
+      registerModelSelectionCommand(harness.options);
+      await harness.run();
 
-    expect(harness.showErrorMessage).toHaveBeenCalledWith(
-      "OpenAI rejected the saved API key. Enter a model ID manually.",
-    );
-    expect(harness.updateModel).toHaveBeenCalledWith("gpt-manual");
-  });
+      expect(harness.showErrorMessage).toHaveBeenCalledWith(
+        "OpenAI rejected the saved API key. Enter a model ID manually.",
+      );
+      expect(harness.updateModel).toHaveBeenCalledWith("gpt-manual");
+    },
+  );
 
   it.each([500, 503])("treats server status %s as an unavailable list", async (status) => {
     const harness = createHarness({

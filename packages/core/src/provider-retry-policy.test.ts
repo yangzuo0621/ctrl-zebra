@@ -46,22 +46,20 @@ describe("RetryingModelGateway", () => {
     expect(delay.wait.mock.calls.map(([milliseconds]) => milliseconds)).toEqual([250, 500]);
   });
 
-  it.each([
-    "authentication",
-    "invalid-request",
-    "malformed-response",
-    "unknown",
-  ] as const)("does not retry the stable non-retryable %s category", async (code) => {
-    const failure = new ModelGatewayError(code);
-    const gateway = scriptedGateway([failure]);
-    const delay = recordingDelay();
+  it.each(["authentication", "invalid-request", "malformed-response", "unknown"] as const)(
+    "does not retry the stable non-retryable %s category",
+    async (code) => {
+      const failure = new ModelGatewayError(code);
+      const gateway = scriptedGateway([failure]);
+      const delay = recordingDelay();
 
-    await expect(
-      collect(new RetryingModelGateway(gateway.gateway, delay).stream(request, signal())),
-    ).rejects.toBe(failure);
-    expect(gateway.attempts()).toBe(1);
-    expect(delay.wait).not.toHaveBeenCalled();
-  });
+      await expect(
+        collect(new RetryingModelGateway(gateway.gateway, delay).stream(request, signal())),
+      ).rejects.toBe(failure);
+      expect(gateway.attempts()).toBe(1);
+      expect(delay.wait).not.toHaveBeenCalled();
+    },
+  );
 
   it("stops after two retries and propagates the final error", async () => {
     const finalFailure = new ModelGatewayError("unavailable");

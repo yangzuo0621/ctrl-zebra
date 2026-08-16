@@ -70,28 +70,27 @@ describe("OpenAI API key SecretStorage adapter", () => {
     await expect(storage.read()).resolves.toBeUndefined();
   });
 
-  it.each([
-    "read",
-    "save",
-    "delete",
-  ] as const)("maps a %s failure without exposing the backend error", async (operation) => {
-    const backend = new InMemorySecretStorage();
-    backend.failure = operation;
-    const storage = createOpenAIApiKeySecretStorage(backend);
+  it.each(["read", "save", "delete"] as const)(
+    "maps a %s failure without exposing the backend error",
+    async (operation) => {
+      const backend = new InMemorySecretStorage();
+      backend.failure = operation;
+      const storage = createOpenAIApiKeySecretStorage(backend);
 
-    const result =
-      operation === "read"
-        ? storage.read()
-        : operation === "save"
-          ? storage.save("test-openai-api-key")
-          : storage.delete();
+      const result =
+        operation === "read"
+          ? storage.read()
+          : operation === "save"
+            ? storage.save("test-openai-api-key")
+            : storage.delete();
 
-    const error = await result.catch((failure: unknown) => failure);
+      const error = await result.catch((failure: unknown) => failure);
 
-    expect(error).toBeInstanceOf(ApiKeySecretStorageError);
-    expect(error).toMatchObject({ operation });
-    expect(String(error)).not.toContain("test-openai-api-key");
-  });
+      expect(error).toBeInstanceOf(ApiKeySecretStorageError);
+      expect(error).toMatchObject({ operation });
+      expect(String(error)).not.toContain("test-openai-api-key");
+    },
+  );
 });
 
 describe("Gemini API key SecretStorage adapter", () => {

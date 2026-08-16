@@ -336,30 +336,30 @@ describe("AgentRuntime", () => {
     expect(requests[0]?.messages.at(-1)).toEqual({ role: "user", content: "Say hello." });
   });
 
-  it.each([
-    "static",
-    "provider",
-  ] as const)("rejects more than 10,000 history messages from the %s source before copying", async (source) => {
-    const requests: ModelRequest[] = [];
-    const count = vi.fn(() => 0);
-    const gateway = createModelGateway([], (request) => requests.push(request));
-    const history = Array.from({ length: 10_001 }, () => ({
-      role: "user" as const,
-      content: "Oversized history",
-    }));
-    const load = vi.fn(async () => history);
-    const runtime = new AgentRuntime(gateway, { emit() {} }, undefined, {
-      ...(source === "static" ? { history } : { historyProvider: { load } }),
-      tokenCounter: { count },
-    });
+  it.each(["static", "provider"] as const)(
+    "rejects more than 10,000 history messages from the %s source before copying",
+    async (source) => {
+      const requests: ModelRequest[] = [];
+      const count = vi.fn(() => 0);
+      const gateway = createModelGateway([], (request) => requests.push(request));
+      const history = Array.from({ length: 10_001 }, () => ({
+        role: "user" as const,
+        content: "Oversized history",
+      }));
+      const load = vi.fn(async () => history);
+      const runtime = new AgentRuntime(gateway, { emit() {} }, undefined, {
+        ...(source === "static" ? { history } : { historyProvider: { load } }),
+        tokenCounter: { count },
+      });
 
-    await expect(runtime.run(userMessage, new AbortController().signal)).rejects.toEqual(
-      new InvalidModelHistoryError(),
-    );
-    expect(load).toHaveBeenCalledTimes(source === "provider" ? 1 : 0);
-    expect(count).not.toHaveBeenCalled();
-    expect(requests).toHaveLength(0);
-  });
+      await expect(runtime.run(userMessage, new AbortController().signal)).rejects.toEqual(
+        new InvalidModelHistoryError(),
+      );
+      expect(load).toHaveBeenCalledTimes(source === "provider" ? 1 : 0);
+      expect(count).not.toHaveBeenCalled();
+      expect(requests).toHaveLength(0);
+    },
+  );
 
   it("prunes over-budget history while retaining the newest user message", async () => {
     const requests: ModelRequest[] = [];
@@ -838,90 +838,88 @@ describe("AgentRuntime", () => {
     expect(requests).toHaveLength(4);
   });
 
-  it.each([
-    "missing-run-id",
-    "prior-run-id",
-    "session-mismatch",
-    "call-mismatch",
-  ] as const)("fails closed for an approval scope with a $1", async (mismatch) => {
-    const requests: ModelRequest[] = [];
-    const gateway = createModelGateway(
-      [
-        {
-          type: "tool.call",
-          call: { id: "call-approval", name: "edit_file", input: {} },
-        },
-        { type: "finish", reason: "tool-calls" },
-      ],
-      (request) => requests.push(request),
-    );
-    const registry = new ToolRegistry();
-    const execute = vi.fn(async () => ({ output: null, truncated: false }));
-    registry.register({
-      name: "edit_file",
-      description: "Edit a file.",
-      inputSchema: emptyInputSchema,
-      risk: "write",
-      parseInput: () => null,
-      execute,
-      prepareApproval: async () => ({ output: null, truncated: false }),
-    });
-    const requestDecision = vi.fn(async () => ({
-      requestId: "approval-invalid",
-      decision: "approved" as const,
-      decidedAt: "2026-07-19T00:01:00.000Z",
-    }));
-    const consume = vi.fn(async () => ({ outcome: "approved" as const }));
-    const invalidate = vi.fn();
-    const workflow: ToolApprovalWorkflow = {
-      async create(prepared) {
-        const baseScope = {
-          sessionId: prepared.sessionId,
-          runId: prepared.runId,
-          call: prepared.call,
-          risk: prepared.risk,
-          resources: [],
-        };
-        const scope =
-          mismatch === "missing-run-id"
-            ? (({ runId: _runId, ...withoutRunId }) => withoutRunId)(baseScope)
-            : mismatch === "prior-run-id"
-              ? { ...baseScope, runId: "run-previous" }
-              : mismatch === "session-mismatch"
-                ? { ...baseScope, sessionId: "session-other" }
-                : { ...baseScope, call: { ...prepared.call, id: "stale-call" } };
-        return {
-          request: {
-            id: "approval-invalid",
-            scope,
-            presentation: { title: "Edit", summary: "Edit one file." },
-            createdAt: "2026-07-19T00:00:00.000Z",
-            expiresAt: "2026-07-19T00:05:00.000Z",
+  it.each(["missing-run-id", "prior-run-id", "session-mismatch", "call-mismatch"] as const)(
+    "fails closed for an approval scope with a $1",
+    async (mismatch) => {
+      const requests: ModelRequest[] = [];
+      const gateway = createModelGateway(
+        [
+          {
+            type: "tool.call",
+            call: { id: "call-approval", name: "edit_file", input: {} },
           },
-          requestDecision,
-          consume,
-          invalidate,
-        };
-      },
-    };
-    const events: AgentRuntimeEvent[] = [];
-    const runtime = new AgentRuntime(gateway, { emit: (event) => events.push(event) }, registry, {
-      approvalWorkflow: workflow,
-      createRunId: () => "run-current",
-    });
+          { type: "finish", reason: "tool-calls" },
+        ],
+        (request) => requests.push(request),
+      );
+      const registry = new ToolRegistry();
+      const execute = vi.fn(async () => ({ output: null, truncated: false }));
+      registry.register({
+        name: "edit_file",
+        description: "Edit a file.",
+        inputSchema: emptyInputSchema,
+        risk: "write",
+        parseInput: () => null,
+        execute,
+        prepareApproval: async () => ({ output: null, truncated: false }),
+      });
+      const requestDecision = vi.fn(async () => ({
+        requestId: "approval-invalid",
+        decision: "approved" as const,
+        decidedAt: "2026-07-19T00:01:00.000Z",
+      }));
+      const consume = vi.fn(async () => ({ outcome: "approved" as const }));
+      const invalidate = vi.fn();
+      const workflow: ToolApprovalWorkflow = {
+        async create(prepared) {
+          const baseScope = {
+            sessionId: prepared.sessionId,
+            runId: prepared.runId,
+            call: prepared.call,
+            risk: prepared.risk,
+            resources: [],
+          };
+          const scope =
+            mismatch === "missing-run-id"
+              ? (({ runId: _runId, ...withoutRunId }) => withoutRunId)(baseScope)
+              : mismatch === "prior-run-id"
+                ? { ...baseScope, runId: "run-previous" }
+                : mismatch === "session-mismatch"
+                  ? { ...baseScope, sessionId: "session-other" }
+                  : { ...baseScope, call: { ...prepared.call, id: "stale-call" } };
+          return {
+            request: {
+              id: "approval-invalid",
+              scope,
+              presentation: { title: "Edit", summary: "Edit one file." },
+              createdAt: "2026-07-19T00:00:00.000Z",
+              expiresAt: "2026-07-19T00:05:00.000Z",
+            },
+            requestDecision,
+            consume,
+            invalidate,
+          };
+        },
+      };
+      const events: AgentRuntimeEvent[] = [];
+      const runtime = new AgentRuntime(gateway, { emit: (event) => events.push(event) }, registry, {
+        approvalWorkflow: workflow,
+        createRunId: () => "run-current",
+      });
 
-    await expect(
-      runtime.run({ ...userMessage, content: "Modify the file." }, new AbortController().signal),
-    ).rejects.toThrow("not bound to the current Session, Run, and Tool Call");
+      await expect(
+        runtime.run({ ...userMessage, content: "Modify the file." }, new AbortController().signal),
+      ).rejects.toThrow("not bound to the current Session, Run, and Tool Call");
 
-    expect(requests).toHaveLength(1);
-    expect(execute).not.toHaveBeenCalled();
-    expect(requestDecision).not.toHaveBeenCalled();
-    expect(consume).not.toHaveBeenCalled();
-    expect(invalidate).toHaveBeenCalledOnce();
-    expect(events.filter((event) => event.type === "agent.approval-state")).toHaveLength(0);
-    expect(events.at(-1)).toMatchObject({ status: "failed" });
-  });
+      expect(requests).toHaveLength(1);
+      expect(execute).not.toHaveBeenCalled();
+      expect(requestDecision).not.toHaveBeenCalled();
+      expect(consume).not.toHaveBeenCalled();
+      expect(invalidate).toHaveBeenCalledOnce();
+      expect(events.filter((event) => event.type === "agent.approval-state")).toHaveLength(0);
+      expect(events.at(-1)).toMatchObject({ status: "failed" });
+    },
+  );
 
   it("emits text deltas in model order and completes the Session", async () => {
     const gateway = createModelGateway([
@@ -1629,104 +1627,110 @@ describe("AgentRuntime", () => {
       },
       expectedApprovalStatuses: ["pending", "expired"],
     },
-  ] as const)("returns an $outcome file-edit result to the model and continues", async (scenario) => {
-    const requests: ModelRequest[] = [];
-    const gateway = createScriptedModelGateway(
-      [
+  ] as const)(
+    "returns an $outcome file-edit result to the model and continues",
+    async (scenario) => {
+      const requests: ModelRequest[] = [];
+      const gateway = createScriptedModelGateway(
         [
-          {
-            type: "tool.call",
-            call: {
-              id: "call-edit",
-              name: "propose_file_edit",
-              input: {},
+          [
+            {
+              type: "tool.call",
+              call: {
+                id: "call-edit",
+                name: "propose_file_edit",
+                input: {},
+              },
             },
-          },
-          { type: "finish", reason: "tool-calls" },
+            { type: "finish", reason: "tool-calls" },
+          ],
+          [
+            { type: "text.delta", text: `continued after ${scenario.outcome}` },
+            { type: "finish", reason: "stop" },
+          ],
         ],
-        [
-          { type: "text.delta", text: `continued after ${scenario.outcome}` },
-          { type: "finish", reason: "stop" },
-        ],
-      ],
-      requests,
-    );
-    const registry = new ToolRegistry();
-    const execute = vi.fn(async () => ({ output: null, truncated: false }));
-    const prepareApproval = vi.fn(async () => ({
-      output: {
-        uri: "file:///workspace/src/file.ts",
-        originalRevision: { kind: "document_version", value: 1 },
-        edits: [
-          {
-            range: {
-              start: { line: 0, character: 0 },
-              end: { line: 0, character: 0 },
+        requests,
+      );
+      const registry = new ToolRegistry();
+      const execute = vi.fn(async () => ({ output: null, truncated: false }));
+      const prepareApproval = vi.fn(async () => ({
+        output: {
+          uri: "file:///workspace/src/file.ts",
+          originalRevision: { kind: "document_version", value: 1 },
+          edits: [
+            {
+              range: {
+                start: { line: 0, character: 0 },
+                end: { line: 0, character: 0 },
+              },
+              newText: "zebra",
             },
-            newText: "zebra",
-          },
-        ],
-      },
-      truncated: false,
-    }));
-    registry.register({
-      name: "propose_file_edit",
-      description: "Prepare a file edit.",
-      inputSchema: emptyInputSchema,
-      risk: "write",
-      parseInput: () => null,
-      execute,
-      prepareApproval,
-    });
-    const consume = vi.fn(async () => scenario.consumption);
-    const workflow: ToolApprovalWorkflow = {
-      async create(prepared) {
-        expect(prepared.runId).toMatch(/^run-/);
-        expect(prepared.runId).not.toBe(userMessage.messageId);
-        return {
-          request: {
-            id: "approval-edit",
-            scope: {
-              sessionId: prepared.sessionId,
-              runId: prepared.runId,
-              call: prepared.call,
-              risk: "write",
-              resources: [],
+          ],
+        },
+        truncated: false,
+      }));
+      registry.register({
+        name: "propose_file_edit",
+        description: "Prepare a file edit.",
+        inputSchema: emptyInputSchema,
+        risk: "write",
+        parseInput: () => null,
+        execute,
+        prepareApproval,
+      });
+      const consume = vi.fn(async () => scenario.consumption);
+      const workflow: ToolApprovalWorkflow = {
+        async create(prepared) {
+          expect(prepared.runId).toMatch(/^run-/);
+          expect(prepared.runId).not.toBe(userMessage.messageId);
+          return {
+            request: {
+              id: "approval-edit",
+              scope: {
+                sessionId: prepared.sessionId,
+                runId: prepared.runId,
+                call: prepared.call,
+                risk: "write",
+                resources: [],
+              },
+              presentation: { title: "Apply edit", summary: "Apply one edit." },
+              createdAt: "2026-07-19T00:00:00.000Z",
+              expiresAt: "2026-07-19T00:05:00.000Z",
             },
-            presentation: { title: "Apply edit", summary: "Apply one edit." },
-            createdAt: "2026-07-19T00:00:00.000Z",
-            expiresAt: "2026-07-19T00:05:00.000Z",
-          },
-          requestDecision: async () => ({
-            requestId: "approval-edit",
-            decision: scenario.decision,
-            ...(scenario.decision === "expired" ? {} : { decidedAt: "2026-07-19T00:01:00.000Z" }),
-          }),
-          consume,
-          invalidate: vi.fn(),
-        };
-      },
-    };
-    const events: AgentRuntimeEvent[] = [];
-    const runtime = new AgentRuntime(gateway, { emit: (event) => events.push(event) }, registry, {
-      approvalWorkflow: workflow,
-    });
+            requestDecision: async () => ({
+              requestId: "approval-edit",
+              decision: scenario.decision,
+              ...(scenario.decision === "expired" ? {} : { decidedAt: "2026-07-19T00:01:00.000Z" }),
+            }),
+            consume,
+            invalidate: vi.fn(),
+          };
+        },
+      };
+      const events: AgentRuntimeEvent[] = [];
+      const runtime = new AgentRuntime(gateway, { emit: (event) => events.push(event) }, registry, {
+        approvalWorkflow: workflow,
+      });
 
-    await runtime.run(userMessage, new AbortController().signal);
+      await runtime.run(userMessage, new AbortController().signal);
 
-    expect(execute).not.toHaveBeenCalled();
-    expect(prepareApproval).toHaveBeenCalledOnce();
-    expect(consume).toHaveBeenCalledTimes(scenario.decision === "approved" ? 1 : 0);
-    expect(requests[1]?.messages.at(-1)).toEqual({ role: "tool", result: scenario.expectedResult });
-    expect(
-      events.filter((event) => event.type === "agent.approval-state").map(({ status }) => status),
-    ).toEqual(scenario.expectedApprovalStatuses);
-    expect(events).toContainEqual({
-      type: "agent.text-delta",
-      sessionId: "session-1",
-      text: `continued after ${scenario.outcome}`,
-    });
-  });
+      expect(execute).not.toHaveBeenCalled();
+      expect(prepareApproval).toHaveBeenCalledOnce();
+      expect(consume).toHaveBeenCalledTimes(scenario.decision === "approved" ? 1 : 0);
+      expect(requests[1]?.messages.at(-1)).toEqual({
+        role: "tool",
+        result: scenario.expectedResult,
+      });
+      expect(
+        events.filter((event) => event.type === "agent.approval-state").map(({ status }) => status),
+      ).toEqual(scenario.expectedApprovalStatuses);
+      expect(events).toContainEqual({
+        type: "agent.text-delta",
+        sessionId: "session-1",
+        text: `continued after ${scenario.outcome}`,
+      });
+    },
+  );
 
   it("cancels while awaiting approval without consuming or continuing the model", async () => {
     const requests: ModelRequest[] = [];
@@ -2643,34 +2647,37 @@ describe("AgentRuntime", () => {
       target: "agent.tool-state",
       targetNextCount: 1,
     },
-  ] as const)("does not request another model event after a synchronous %s sink abort", async (testCase) => {
-    const controller = new AbortController();
-    const cancellation = new Error(`cancel after ${testCase.name}`);
-    let nextCount = 0;
-    const events: AgentRuntimeEvent[] = [];
-    const runtime = new AgentRuntime(
-      createCountingModelGateway(testCase.events, () => {
-        nextCount += 1;
-      }),
-      {
-        emit(event) {
-          events.push(event);
-          if (event.type === testCase.target) {
-            controller.abort(cancellation);
-          }
+  ] as const)(
+    "does not request another model event after a synchronous %s sink abort",
+    async (testCase) => {
+      const controller = new AbortController();
+      const cancellation = new Error(`cancel after ${testCase.name}`);
+      let nextCount = 0;
+      const events: AgentRuntimeEvent[] = [];
+      const runtime = new AgentRuntime(
+        createCountingModelGateway(testCase.events, () => {
+          nextCount += 1;
+        }),
+        {
+          emit(event) {
+            events.push(event);
+            if (event.type === testCase.target) {
+              controller.abort(cancellation);
+            }
+          },
         },
-      },
-    );
+      );
 
-    await expect(runtime.run(userMessage, controller.signal)).resolves.toBeUndefined();
+      await expect(runtime.run(userMessage, controller.signal)).resolves.toBeUndefined();
 
-    expect(nextCount).toBe(testCase.targetNextCount);
-    expect(events.filter((event) => event.type === testCase.target)).toHaveLength(1);
-    expect(
-      events.filter((event) => event.type === "agent.tool-state" && event.status !== "pending"),
-    ).toHaveLength(0);
-    expect(events.at(-1)).toMatchObject({ status: "cancelled" });
-  });
+      expect(nextCount).toBe(testCase.targetNextCount);
+      expect(events.filter((event) => event.type === testCase.target)).toHaveLength(1);
+      expect(
+        events.filter((event) => event.type === "agent.tool-state" && event.status !== "pending"),
+      ).toHaveLength(0);
+      expect(events.at(-1)).toMatchObject({ status: "cancelled" });
+    },
+  );
 
   it("cancels before starting the model when the signal is already aborted", async () => {
     const controller = new AbortController();

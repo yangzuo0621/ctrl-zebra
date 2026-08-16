@@ -37,35 +37,36 @@ const transitionCases = statuses.flatMap((previousStatus) =>
 );
 
 describe("ApprovalStateMachine", () => {
-  it.each(
-    transitionCases,
-  )("enforces the transition from %s to %s", (previousStatus, status, isLegal) => {
-    const events: ApprovalStatusChangedEvent[] = [];
-    const machine = new ApprovalStateMachine("approval-1", previousStatus, {
-      emit(event) {
-        events.push(event);
-      },
-    });
-
-    if (isLegal) {
-      machine.transitionTo(status);
-
-      expect(machine.status).toBe(status);
-      expect(events).toEqual([
-        {
-          type: "approval.status-changed",
-          requestId: "approval-1",
-          previousStatus,
-          status,
+  it.each(transitionCases)(
+    "enforces the transition from %s to %s",
+    (previousStatus, status, isLegal) => {
+      const events: ApprovalStatusChangedEvent[] = [];
+      const machine = new ApprovalStateMachine("approval-1", previousStatus, {
+        emit(event) {
+          events.push(event);
         },
-      ]);
-      return;
-    }
+      });
 
-    expect(() => machine.transitionTo(status)).toThrow(InvalidApprovalStatusTransitionError);
-    expect(machine.status).toBe(previousStatus);
-    expect(events).toEqual([]);
-  });
+      if (isLegal) {
+        machine.transitionTo(status);
+
+        expect(machine.status).toBe(status);
+        expect(events).toEqual([
+          {
+            type: "approval.status-changed",
+            requestId: "approval-1",
+            previousStatus,
+            status,
+          },
+        ]);
+        return;
+      }
+
+      expect(() => machine.transitionTo(status)).toThrow(InvalidApprovalStatusTransitionError);
+      expect(machine.status).toBe(previousStatus);
+      expect(events).toEqual([]);
+    },
+  );
 
   it("permits exactly one consumer for an approved request", () => {
     const machine = new ApprovalStateMachine("approval-1", "approved", { emit() {} });

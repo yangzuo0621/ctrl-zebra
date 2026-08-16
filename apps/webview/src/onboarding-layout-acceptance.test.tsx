@@ -55,25 +55,26 @@ describe("Onboarding responsive and theme acceptance matrix", () => {
     document.documentElement.style.removeProperty("zoom");
   });
 
-  it.each(
-    themeMatrix,
-  )("keeps required actions and missing copy available for the %s theme", (theme, background, foreground) => {
-    document.documentElement.style.setProperty("--vscode-sideBar-background", background);
-    document.documentElement.style.setProperty("--vscode-editor-foreground", foreground);
-    render(
-      <OnboardingCard
-        status={noConfigStatus}
-        announcement={`${theme} status`}
-        onAction={(_action: ProviderAction) => true}
-        onSelectPrompt={() => {}}
-      />,
-    );
+  it.each(themeMatrix)(
+    "keeps required actions and missing copy available for the %s theme",
+    (theme, background, foreground) => {
+      document.documentElement.style.setProperty("--vscode-sideBar-background", background);
+      document.documentElement.style.setProperty("--vscode-editor-foreground", foreground);
+      render(
+        <OnboardingCard
+          status={noConfigStatus}
+          announcement={`${theme} status`}
+          onAction={(_action: ProviderAction) => true}
+          onSelectPrompt={() => {}}
+        />,
+      );
 
-    expect(screen.getByText("Finish API key and model setup to start a chat.")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Save API key" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Select model" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Open Provider settings" })).toBeVisible();
-  });
+      expect(screen.getByText("Finish API key and model setup to start a chat.")).toBeVisible();
+      expect(screen.getByRole("button", { name: "Save API key" })).toBeVisible();
+      expect(screen.getByRole("button", { name: "Select model" })).toBeVisible();
+      expect(screen.getByRole("button", { name: "Open Provider settings" })).toBeVisible();
+    },
+  );
 
   it("keeps the primary controls keyboard reachable at 300px and 200% text scale", async () => {
     document.documentElement.style.width = "300px";

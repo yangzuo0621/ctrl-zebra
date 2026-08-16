@@ -165,19 +165,18 @@ describe("MCP Tool JSON Schema boundary", () => {
     ).toThrow(expect.objectContaining({ reason: "invalid-reference" }));
   });
 
-  it.each([
-    "#",
-    "#/properties/value",
-    "#/$defs/value/properties/child",
-  ])("rejects root, non-anchor, and nested local reference target %s", (target) => {
-    expect(() =>
-      validateMcpToolSchema({
-        type: "object",
-        $defs: { value: { type: "string" } },
-        properties: { value: { $ref: target } },
-      }),
-    ).toThrow(expect.objectContaining({ reason: "invalid-reference" }));
-  });
+  it.each(["#", "#/properties/value", "#/$defs/value/properties/child"])(
+    "rejects root, non-anchor, and nested local reference target %s",
+    (target) => {
+      expect(() =>
+        validateMcpToolSchema({
+          type: "object",
+          $defs: { value: { type: "string" } },
+          properties: { value: { $ref: target } },
+        }),
+      ).toThrow(expect.objectContaining({ reason: "invalid-reference" }));
+    },
+  );
 
   it("enforces original bytes and property limits before stripping or compiling", () => {
     expect(() =>

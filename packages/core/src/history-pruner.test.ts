@@ -143,16 +143,14 @@ describe("Model History Pruner", () => {
     });
   });
 
-  it.each([
-    -1,
-    1.5,
-    Number.POSITIVE_INFINITY,
-    maxModelContextWindowTokens + 1,
-  ])("rejects an invalid history budget: %s", (maxTokens) => {
-    expect(() => pruneModelHistory([], maxTokens, oneTokenPerMessage)).toThrow(
-      InvalidHistoryBudgetError,
-    );
-  });
+  it.each([-1, 1.5, Number.POSITIVE_INFINITY, maxModelContextWindowTokens + 1])(
+    "rejects an invalid history budget: %s",
+    (maxTokens) => {
+      expect(() => pruneModelHistory([], maxTokens, oneTokenPerMessage)).toThrow(
+        InvalidHistoryBudgetError,
+      );
+    },
+  );
 
   it.each([
     -1,

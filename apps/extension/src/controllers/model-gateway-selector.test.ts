@@ -101,35 +101,36 @@ describe("ModelGateway selector", () => {
     expect(factories).toBeDefined();
   });
 
-  it.each([
-    "openai",
-    "gemini",
-    "openai-compatible",
-  ] as const)("selects the %s factory with validated configuration and its credential", async (provider) => {
-    const factory = vi.fn(() => gateways[provider]);
-    const secrets: ProviderApiKeySecretReader = {
-      read: vi.fn(async () => `test-${provider}-api-key`),
-    };
+  it.each(["openai", "gemini", "openai-compatible"] as const)(
+    "selects the %s factory with validated configuration and its credential",
+    async (provider) => {
+      const factory = vi.fn(() => gateways[provider]);
+      const secrets: ProviderApiKeySecretReader = {
+        read: vi.fn(async () => `test-${provider}-api-key`),
+      };
 
-    const selected = await selectModelGateway({
-      configuration: configuration(provider),
-      requiredCapabilities: ["text-streaming"],
-      secrets,
-      factories: { [provider]: factory },
-    });
+      const selected = await selectModelGateway({
+        configuration: configuration(provider),
+        requiredCapabilities: ["text-streaming"],
+        secrets,
+        factories: { [provider]: factory },
+      });
 
-    expect(selected).toBeInstanceOf(RetryingModelGateway);
-    expect((selected as RetryingModelGateway).gateway).toBe(gateways[provider]);
-    await expect(collect(selected.stream(request, new AbortController().signal))).resolves.toEqual([
-      { type: "text.delta", text: provider },
-      { type: "finish", reason: "stop" },
-    ]);
-    expect(secrets.read).toHaveBeenCalledWith(provider);
-    expect(factory).toHaveBeenCalledWith({
-      configuration: configuration(provider),
-      apiKey: `test-${provider}-api-key`,
-    });
-  });
+      expect(selected).toBeInstanceOf(RetryingModelGateway);
+      expect((selected as RetryingModelGateway).gateway).toBe(gateways[provider]);
+      await expect(
+        collect(selected.stream(request, new AbortController().signal)),
+      ).resolves.toEqual([
+        { type: "text.delta", text: provider },
+        { type: "finish", reason: "stop" },
+      ]);
+      expect(secrets.read).toHaveBeenCalledWith(provider);
+      expect(factory).toHaveBeenCalledWith({
+        configuration: configuration(provider),
+        apiKey: `test-${provider}-api-key`,
+      });
+    },
+  );
 
   it("allows an explicit local compatible endpoint without a credential", async () => {
     const localConfiguration: ProviderConfiguration = {

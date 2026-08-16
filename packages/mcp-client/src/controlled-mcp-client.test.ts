@@ -48,21 +48,21 @@ describe("ControlledMcpClient", () => {
     expect(port.terminateCount).toBe(1);
   });
 
-  it.each([
-    ["2025-11-25"],
-    ["2027-01-01"],
-  ])("rejects incompatible protocol version %s without fallback", async (version) => {
-    const client = new ControlledMcpClient(discoveryPort({}, [version]));
+  it.each([["2025-11-25"], ["2027-01-01"]])(
+    "rejects incompatible protocol version %s without fallback",
+    async (version) => {
+      const client = new ControlledMcpClient(discoveryPort({}, [version]));
 
-    await expect(client.connect()).resolves.toMatchObject({
-      kind: "failed",
-      error: { code: "protocol-incompatible" },
-    });
-    expect(client.getState()).toMatchObject({
-      status: "failed",
-      error: { code: "protocol-incompatible" },
-    });
-  });
+      await expect(client.connect()).resolves.toMatchObject({
+        kind: "failed",
+        error: { code: "protocol-incompatible" },
+      });
+      expect(client.getState()).toMatchObject({
+        status: "failed",
+        error: { code: "protocol-incompatible" },
+      });
+    },
+  );
 
   it("classifies malformed stdout and cleans up the port", async () => {
     const port = new FixtureStdioPort((message, fixture) => {

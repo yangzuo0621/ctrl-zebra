@@ -69,15 +69,12 @@ describe("run_command input", () => {
     });
   });
 
-  it.each([
-    "",
-    "   ",
-    " node",
-    "node ",
-    "node\n--eval",
-  ])("rejects invalid command %j", (command) => {
-    expect(() => parseRunCommandInput(validInput({ command }))).toThrow(TypeError);
-  });
+  it.each(["", "   ", " node", "node ", "node\n--eval"])(
+    "rejects invalid command %j",
+    (command) => {
+      expect(() => parseRunCommandInput(validInput({ command }))).toThrow(TypeError);
+    },
+  );
 
   it.each([
     "../outside",

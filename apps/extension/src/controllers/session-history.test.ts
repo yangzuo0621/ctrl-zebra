@@ -368,21 +368,21 @@ describe("projectSessionModelHistory", () => {
         { role: "assistant", content: "Second answer" },
       ],
     },
-  ] as const)("projects an edited $target from its earlier branch", ({
-    target,
-    expectedPrefix,
-  }) => {
-    const session = record(editBranchEvents(target));
+  ] as const)(
+    "projects an edited $target from its earlier branch",
+    ({ target, expectedPrefix }) => {
+      const session = record(editBranchEvents(target));
 
-    expect(projectSessionModelHistory(session)).toEqual([
-      ...expectedPrefix,
-      { role: "user", content: "Edited question" },
-      { role: "assistant", content: "Edited answer" },
-    ]);
-    const source = record(editBranchEvents(target).slice(0, 20));
-    expect(projectEditContext(source, target).history).toEqual(expectedPrefix);
-    expect(projectEditContext(source, target).targetUserMessageId).toBe(target);
-  });
+      expect(projectSessionModelHistory(session)).toEqual([
+        ...expectedPrefix,
+        { role: "user", content: "Edited question" },
+        { role: "assistant", content: "Edited answer" },
+      ]);
+      const source = record(editBranchEvents(target).slice(0, 20));
+      expect(projectEditContext(source, target).history).toEqual(expectedPrefix);
+      expect(projectEditContext(source, target).targetUserMessageId).toBe(target);
+    },
+  );
 
   it("accepts the latest live user projection alias for editing", () => {
     const context = projectEditContext(
@@ -396,16 +396,17 @@ describe("projectSessionModelHistory", () => {
   it.each([
     { replacementStatus: "cancelled" as const, label: "cancelled" },
     { replacementStatus: "completed" as const, label: "completed" },
-  ])("keeps a live alias bound to its original target after a $label edit", ({
-    replacementStatus,
-  }) => {
-    const context = projectEditContext(
-      record(editBranchEvents("message-2", replacementStatus)),
-      "request-1:user",
-    );
+  ])(
+    "keeps a live alias bound to its original target after a $label edit",
+    ({ replacementStatus }) => {
+      const context = projectEditContext(
+        record(editBranchEvents("message-2", replacementStatus)),
+        "request-1:user",
+      );
 
-    expect(context.targetUserMessageId).toBe("message-2");
-  });
+      expect(context.targetUserMessageId).toBe("message-2");
+    },
+  );
 
   it("keeps the original branch when an edit Run is cancelled", () => {
     const session = record(editBranchEvents("message-2", "cancelled"));

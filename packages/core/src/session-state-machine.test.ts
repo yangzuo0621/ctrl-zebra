@@ -53,35 +53,36 @@ const transitionCases = statuses.flatMap((previousStatus) =>
 );
 
 describe("SessionStateMachine", () => {
-  it.each(
-    transitionCases,
-  )("enforces the transition from %s to %s", (previousStatus, status, isLegal) => {
-    const events: SessionStatusChangedEvent[] = [];
-    const machine = new SessionStateMachine("session-1", previousStatus, {
-      emit(event) {
-        events.push(event);
-      },
-    });
-
-    if (isLegal) {
-      machine.transitionTo(status);
-
-      expect(machine.status).toBe(status);
-      expect(events).toEqual([
-        {
-          type: "session.status-changed",
-          sessionId: "session-1",
-          previousStatus,
-          status,
+  it.each(transitionCases)(
+    "enforces the transition from %s to %s",
+    (previousStatus, status, isLegal) => {
+      const events: SessionStatusChangedEvent[] = [];
+      const machine = new SessionStateMachine("session-1", previousStatus, {
+        emit(event) {
+          events.push(event);
         },
-      ]);
-      return;
-    }
+      });
 
-    expect(() => machine.transitionTo(status)).toThrow(InvalidSessionStatusTransitionError);
-    expect(machine.status).toBe(previousStatus);
-    expect(events).toEqual([]);
-  });
+      if (isLegal) {
+        machine.transitionTo(status);
+
+        expect(machine.status).toBe(status);
+        expect(events).toEqual([
+          {
+            type: "session.status-changed",
+            sessionId: "session-1",
+            previousStatus,
+            status,
+          },
+        ]);
+        return;
+      }
+
+      expect(() => machine.transitionTo(status)).toThrow(InvalidSessionStatusTransitionError);
+      expect(machine.status).toBe(previousStatus);
+      expect(events).toEqual([]);
+    },
+  );
 
   it("commits the new status before synchronously emitting the event", () => {
     let statusObservedBySink: SessionStatus | undefined;
@@ -138,25 +139,23 @@ describe("SessionStateMachine", () => {
     ]);
   });
 
-  it.each([
-    "preparing",
-    "streaming",
-    "awaiting_approval",
-    "executing_tool",
-  ] as const)("rejects beginRun while %s owns an active Run", (status) => {
-    const events: SessionStatusChangedEvent[] = [];
-    const machine = new SessionStateMachine("session-1", status, {
-      emit(event) {
-        events.push(event);
-      },
-    });
+  it.each(["preparing", "streaming", "awaiting_approval", "executing_tool"] as const)(
+    "rejects beginRun while %s owns an active Run",
+    (status) => {
+      const events: SessionStatusChangedEvent[] = [];
+      const machine = new SessionStateMachine("session-1", status, {
+        emit(event) {
+          events.push(event);
+        },
+      });
 
-    expect(() => machine.beginRun()).toThrow(
-      new InvalidSessionStatusTransitionError(status, "preparing"),
-    );
-    expect(machine.status).toBe(status);
-    expect(events).toEqual([]);
-  });
+      expect(() => machine.beginRun()).toThrow(
+        new InvalidSessionStatusTransitionError(status, "preparing"),
+      );
+      expect(machine.status).toBe(status);
+      expect(events).toEqual([]);
+    },
+  );
 
   it("commits a beginRun reset before synchronously emitting its event", () => {
     let statusObservedBySink: SessionStatus | undefined;

@@ -1094,30 +1094,28 @@ describe("Session recovery", () => {
     expect(restored.session.runBudget).not.toHaveProperty("actualTokens");
   });
 
-  it.each([
-    "completed",
-    "truncated",
-    "failed",
-    "interrupted",
-  ] as const)("rejects an exceeded snapshot followed by incompatible %s terminal status", async (status) => {
-    const events = exceededBudgetEvents(status);
-    const repository = repositoryFixture("completed", events);
-    repository.get = async () => ({
-      manifest: {
-        ...manifest("session-fixture", "2026-07-31T00:00:00.000Z"),
-        status,
-        lastEventSequence: events.length,
-      },
-      events,
-      eventLogTailDamaged: false,
-    });
-    const actions = createSessionRecoveryActions(async () => repository);
+  it.each(["completed", "truncated", "failed", "interrupted"] as const)(
+    "rejects an exceeded snapshot followed by incompatible %s terminal status",
+    async (status) => {
+      const events = exceededBudgetEvents(status);
+      const repository = repositoryFixture("completed", events);
+      repository.get = async () => ({
+        manifest: {
+          ...manifest("session-fixture", "2026-07-31T00:00:00.000Z"),
+          status,
+          lastEventSequence: events.length,
+        },
+        events,
+        eventLogTailDamaged: false,
+      });
+      const actions = createSessionRecoveryActions(async () => repository);
 
-    await expect(actions.restore("session-fixture")).rejects.toMatchObject({
-      name: "SessionRecoveryError",
-      code: "corrupt",
-    });
-  });
+      await expect(actions.restore("session-fixture")).rejects.toMatchObject({
+        name: "SessionRecoveryError",
+        code: "corrupt",
+      });
+    },
+  );
 
   it("preserves a cancelled terminal when cancellation wins after an exceeded observation", async () => {
     const events = exceededBudgetEvents("cancelled");
@@ -1147,27 +1145,28 @@ describe("Session recovery", () => {
   it.each([
     ["a late assistant text delta", { type: "agent.text-delta", data: { text: "late" } }],
     ["a late Tool state", { type: "agent.tool-state", data: { status: "running" } }],
-  ] satisfies ReadonlyArray<
-    readonly [string, PersistedEventRecord["event"]]
-  >)("rejects %s between an exceeded snapshot and cancellation", async (_name, event) => {
-    const events = exceededBudgetEvents("cancelled", event);
-    const repository = repositoryFixture("completed", events);
-    repository.get = async () => ({
-      manifest: {
-        ...manifest("session-fixture", "2026-07-31T00:00:00.000Z"),
-        status: "cancelled",
-        lastEventSequence: events.length,
-      },
-      events,
-      eventLogTailDamaged: false,
-    });
-    const actions = createSessionRecoveryActions(async () => repository);
+  ] satisfies ReadonlyArray<readonly [string, PersistedEventRecord["event"]]>)(
+    "rejects %s between an exceeded snapshot and cancellation",
+    async (_name, event) => {
+      const events = exceededBudgetEvents("cancelled", event);
+      const repository = repositoryFixture("completed", events);
+      repository.get = async () => ({
+        manifest: {
+          ...manifest("session-fixture", "2026-07-31T00:00:00.000Z"),
+          status: "cancelled",
+          lastEventSequence: events.length,
+        },
+        events,
+        eventLogTailDamaged: false,
+      });
+      const actions = createSessionRecoveryActions(async () => repository);
 
-    await expect(actions.restore("session-fixture")).rejects.toMatchObject({
-      name: "SessionRecoveryError",
-      code: "corrupt",
-    });
-  });
+      await expect(actions.restore("session-fixture")).rejects.toMatchObject({
+        name: "SessionRecoveryError",
+        code: "corrupt",
+      });
+    },
+  );
 
   it("rejects a duplicate warning or late budget event in one Run", async () => {
     const events: PersistedEventRecord[] = [

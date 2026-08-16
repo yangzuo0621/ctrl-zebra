@@ -50,19 +50,19 @@ describe("JsonlEventStore", () => {
     });
   });
 
-  it.each([
-    '{"sequence":2',
-    JSON.stringify({ ...event(2), unexpected: true }),
-  ])("retains valid records and reports a damaged final record %#", async (damagedTail) => {
-    const storage = new FakeEventStorage();
-    storage.content = `${JSON.stringify(event(1))}\n${damagedTail}`;
-    const store = new JsonlEventStore(storage);
+  it.each(['{"sequence":2', JSON.stringify({ ...event(2), unexpected: true })])(
+    "retains valid records and reports a damaged final record %#",
+    async (damagedTail) => {
+      const storage = new FakeEventStorage();
+      storage.content = `${JSON.stringify(event(1))}\n${damagedTail}`;
+      const store = new JsonlEventStore(storage);
 
-    await expect(store.read(sessionId)).resolves.toEqual({
-      records: [event(1)],
-      tailDamaged: true,
-    });
-  });
+      await expect(store.read(sessionId)).resolves.toEqual({
+        records: [event(1)],
+        tailDamaged: true,
+      });
+    },
+  );
 
   it("rejects an invalid record before the final non-empty line", async () => {
     const storage = new FakeEventStorage();

@@ -10,14 +10,17 @@ describe("ModelGatewayError", () => {
     "unavailable",
     "malformed-response",
     "unknown",
-  ] as const satisfies readonly ModelGatewayErrorCode[])("exposes the stable %s category without provider details", (code) => {
-    const error = new ModelGatewayError(code);
+  ] as const satisfies readonly ModelGatewayErrorCode[])(
+    "exposes the stable %s category without provider details",
+    (code) => {
+      const error = new ModelGatewayError(code);
 
-    expect(error).toBeInstanceOf(Error);
-    expect(error.name).toBe("ModelGatewayError");
-    expect(error.code).toBe(code);
-    expect(error.message).toBe(`Model provider failed with category: ${code}.`);
-  });
+      expect(error).toBeInstanceOf(Error);
+      expect(error.name).toBe("ModelGatewayError");
+      expect(error.code).toBe(code);
+      expect(error.message).toBe(`Model provider failed with category: ${code}.`);
+    },
+  );
 
   it("retains an internal cause without serializing it", () => {
     const cause = new Error("provider secret");

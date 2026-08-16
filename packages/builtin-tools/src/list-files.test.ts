@@ -94,20 +94,17 @@ describe("list_files", () => {
     expect(() => tool.parseInput(value)).toThrow(TypeError);
   });
 
-  it.each([
-    null,
-    ["/absolute/file.ts"],
-    ["../outside.ts"],
-    ["src\\file.ts"],
-    [42],
-  ])("rejects invalid host output %#", async (value) => {
-    const workspace = createWorkspace(value);
-    const tool = createListFilesTool(workspace);
+  it.each([null, ["/absolute/file.ts"], ["../outside.ts"], ["src\\file.ts"], [42]])(
+    "rejects invalid host output %#",
+    async (value) => {
+      const workspace = createWorkspace(value);
+      const tool = createListFilesTool(workspace);
 
-    await expect(
-      tool.execute(tool.parseInput({}), { signal: new AbortController().signal }),
-    ).rejects.toEqual(new InvalidWorkspaceFileListError());
-  });
+      await expect(
+        tool.execute(tool.parseInput({}), { signal: new AbortController().signal }),
+      ).rejects.toEqual(new InvalidWorkspaceFileListError());
+    },
+  );
 
   it("does not call the workspace after cancellation", async () => {
     const controller = new AbortController();

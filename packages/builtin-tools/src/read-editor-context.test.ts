@@ -63,16 +63,14 @@ describe(readEditorContextToolName, () => {
     ).resolves.toMatchObject({ truncated: true });
   });
 
-  it.each([
-    null,
-    {},
-    { scope: "selection", extra: true },
-    { scope: "file" },
-  ])("rejects malformed input %#", (value) => {
-    expect(() => createReadEditorContextTool(createPort(context)).parseInput(value)).toThrow(
-      TypeError,
-    );
-  });
+  it.each([null, {}, { scope: "selection", extra: true }, { scope: "file" }])(
+    "rejects malformed input %#",
+    (value) => {
+      expect(() => createReadEditorContextTool(createPort(context)).parseInput(value)).toThrow(
+        TypeError,
+      );
+    },
+  );
 
   it("maps a closed host outcome to a stable failed Tool error", async () => {
     const tool = createReadEditorContextTool({

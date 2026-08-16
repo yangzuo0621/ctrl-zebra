@@ -11,10 +11,10 @@ describe("BasicApprovalPolicy", () => {
     ["write", "require_approval"],
     ["execute", "require_approval"],
     ["network", "deny"],
-  ] as const satisfies readonly (readonly [
-    ToolRisk,
-    ApprovalPolicyDisposition,
-  ])[])("maps %s risk to %s", (risk, expectedDisposition) => {
-    expect(policy.evaluate(risk)).toBe(expectedDisposition);
-  });
+  ] as const satisfies readonly (readonly [ToolRisk, ApprovalPolicyDisposition])[])(
+    "maps %s risk to %s",
+    (risk, expectedDisposition) => {
+      expect(policy.evaluate(risk)).toBe(expectedDisposition);
+    },
+  );
 });
