@@ -461,7 +461,11 @@ function recoverRunBudget(
   let current: import("@ctrl-zebra/protocol").RunTokenBudgetSnapshot | undefined;
   let runClosed = true;
   let terminalStatus: import("@ctrl-zebra/protocol").SessionStatus | undefined;
+  let exceededAwaitingTerminal = false;
   for (const persisted of record.events) {
+    if (exceededAwaitingTerminal && persisted.event.type !== "session.status-changed") {
+      throw new SessionRecoveryError("corrupt");
+    }
     if (persisted.event.type === "session.status-changed") {
       const data = persisted.event.data;
       if (
@@ -469,6 +473,13 @@ function recoverRunBudget(
         data === null ||
         !("status" in data) ||
         !sessionStatusSchema.safeParse(data.status).success
+      ) {
+        throw new SessionRecoveryError("corrupt");
+      }
+      if (
+        exceededAwaitingTerminal &&
+        data.status !== "budget-exceeded" &&
+        data.status !== "cancelled"
       ) {
         throw new SessionRecoveryError("corrupt");
       }
@@ -501,6 +512,7 @@ function recoverRunBudget(
         }
         runClosed = true;
         terminalStatus = data.status;
+        exceededAwaitingTerminal = false;
       }
       continue;
     }
@@ -533,6 +545,7 @@ function recoverRunBudget(
     }
     current = next;
     latest = next;
+    exceededAwaitingTerminal = next.state === "exceeded";
   }
   if (
     current?.state === "exceeded" &&

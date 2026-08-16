@@ -1144,6 +1144,31 @@ describe("Session recovery", () => {
     });
   });
 
+  it.each([
+    ["a late assistant text delta", { type: "agent.text-delta", data: { text: "late" } }],
+    ["a late Tool state", { type: "agent.tool-state", data: { status: "running" } }],
+  ] satisfies ReadonlyArray<
+    readonly [string, PersistedEventRecord["event"]]
+  >)("rejects %s between an exceeded snapshot and cancellation", async (_name, event) => {
+    const events = exceededBudgetEvents("cancelled", event);
+    const repository = repositoryFixture("completed", events);
+    repository.get = async () => ({
+      manifest: {
+        ...manifest("session-fixture", "2026-07-31T00:00:00.000Z"),
+        status: "cancelled",
+        lastEventSequence: events.length,
+      },
+      events,
+      eventLogTailDamaged: false,
+    });
+    const actions = createSessionRecoveryActions(async () => repository);
+
+    await expect(actions.restore("session-fixture")).rejects.toMatchObject({
+      name: "SessionRecoveryError",
+      code: "corrupt",
+    });
+  });
+
   it("rejects a duplicate warning or late budget event in one Run", async () => {
     const events: PersistedEventRecord[] = [
       {
@@ -1243,6 +1268,7 @@ function repositoryFixture(
 
 function exceededBudgetEvents(
   status: "completed" | "truncated" | "cancelled" | "failed" | "interrupted",
+  interveningEvent?: PersistedEventRecord["event"],
 ): PersistedEventRecord[] {
   return [
     {
@@ -1270,9 +1296,19 @@ function exceededBudgetEvents(
         },
       },
     },
+    ...(interveningEvent === undefined
+      ? []
+      : [
+          {
+            sequence: 4,
+            recordedAt: "2026-07-31T00:00:04.000Z",
+            event: interveningEvent,
+          },
+        ]),
     {
-      sequence: 4,
-      recordedAt: "2026-07-31T00:00:04.000Z",
+      sequence: interveningEvent === undefined ? 4 : 5,
+      recordedAt:
+        interveningEvent === undefined ? "2026-07-31T00:00:04.000Z" : "2026-07-31T00:00:05.000Z",
       event: { type: "session.status-changed", data: { status } },
     },
   ];
