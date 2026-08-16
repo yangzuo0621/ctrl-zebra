@@ -51,6 +51,7 @@ export type {
   AgentReasoningEndEvent,
   AgentReasoningEvent,
   AgentReasoningStartEvent,
+  AgentRunBudgetEvent,
   AgentRuntimeDiagnostic,
   AgentRuntimeDiagnosticPhase,
   AgentRuntimeDiagnosticSink,
@@ -68,6 +69,7 @@ export {
   EmptyAgentResponseError,
   InvalidModelUsageError,
   MaxToolStepsExceededError,
+  RunTokenBudgetExceededError,
   SessionIdentityMismatchError,
   UnexpectedToolCallError,
 } from "./agent-runtime.js";
@@ -241,6 +243,13 @@ export {
   maxProviderRetryAttempts,
   RetryingModelGateway,
 } from "./provider-retry-policy.js";
+export type { RunTokenBudgetObservation } from "./run-token-budget.js";
+export {
+  defaultRunTokenBudget,
+  InvalidRunTokenBudgetError,
+  InvalidRunTokenEstimateError,
+  RunTokenBudget,
+} from "./run-token-budget.js";
 export type {
   SessionCatalog,
   SessionDeletionReport,

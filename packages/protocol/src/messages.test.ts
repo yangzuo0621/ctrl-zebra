@@ -291,6 +291,21 @@ describe("Webview protocol messages", () => {
       usage: { inputTokens: 12, outputTokens: 4, totalTokens: 16 },
     } as const;
     expect(extensionToWebviewMessageSchema.parse(usage)).toEqual(usage);
+
+    const budget = {
+      protocolVersion,
+      type: "extension/run-budget",
+      requestId: "request-2",
+      budget: {
+        state: "warning",
+        source: "estimate",
+        maxTokens: 100,
+        warningTokens: 80,
+        estimatedTokens: 80,
+        effectiveTokens: 80,
+      },
+    } as const;
+    expect(extensionToWebviewMessageSchema.parse(budget)).toEqual(budget);
   });
 
   it("round-trips a strictly target-bound regeneration command", () => {

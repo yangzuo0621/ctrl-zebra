@@ -98,6 +98,43 @@ describe("createChatRunner", () => {
     });
   });
 
+  it("persists a Run budget boundary before terminal status without starting a Provider request", async () => {
+    const repository = new InMemorySessionRepository();
+    let streamCalls = 0;
+    const runner = createChatRunner({
+      modelGateway: {
+        async *stream() {
+          streamCalls += 1;
+          yield { type: "text.delta", text: "must not run" } as const;
+          yield { type: "finish", reason: "stop" } as const;
+        },
+      },
+      createId: (() => {
+        const ids = ["session-budget", "message-budget"];
+        return () => ids.shift() ?? "unexpected-id";
+      })(),
+      now: () => new Date("2026-08-10T00:00:00.000Z"),
+      sessionRepository: repository,
+      runTokenBudget: { maxTokens: 1, warningTokens: 1 },
+    });
+
+    await runner.run("Stop at the budget.", new AbortController().signal, () => {});
+
+    expect(streamCalls).toBe(0);
+    const record = await repository.get("session-budget");
+    expect(record?.manifest.status).toBe("budget-exceeded");
+    expect(record?.events.map(({ event }) => event.type)).toEqual([
+      "session.user-message",
+      "session.status-changed",
+      "session.status-changed",
+      "session.run-budget",
+      "session.status-changed",
+    ]);
+    expect(
+      record?.events.find(({ event }) => event.type === "session.run-budget")?.event.data,
+    ).toEqual(expect.objectContaining({ state: "exceeded", source: "estimate" }));
+  });
+
   it("persists only the bounded reasoning projection in source order", async () => {
     const repository = new InMemorySessionRepository();
     const ids = ["session-reasoning", "message-reasoning"];

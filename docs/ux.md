@@ -154,6 +154,11 @@ CtrlZebra 应让用户在不理解内部 Agent 状态机的情况下完成以下
 - 响应因长度上限截断时，保留已显示文本并明确标记“未完成”；不得把它当作完整答案或继续执行
   尚未开始的 Tool，用户可通过后续消息继续对话。
 - 错误不得只依靠颜色表达；可恢复状态与终止状态必须可区分。
+- 单次 Run 达到 Token 预警时，在 Usage 区域明确显示“Estimated”和阈值；达到硬上限时显示独立
+  的 `budget-exceeded` 终态，并同时展示可用的 Provider actual Usage。文案必须说明这是本地
+  Token 安全护栏而不是 Provider 账单；估算值不得显示为费用。
+- `budget-exceeded` 保留已提交的文本、Tool 结果和 Usage，停止后续 Model/Tool 循环；用户可通过
+  正常 follow-up Run 继续。恢复 Session 时重现最近的预算快照和终态，不自动重试或执行迟到副作用。
 - Checkpoint 只在存在相关恢复能力时进入主界面，并与产生修改的会话、Run 或文件建立清晰关联。
 - 恢复入口不得暗示可以覆盖用户在 Agent 修改后产生的内容。
 
@@ -342,7 +347,7 @@ Diff 查看完整的有界 before/after 内容：创建是空文件到完整内�
 - 会话列表优先展示可识别标题、最近活动时间和需要关注的状态。
 - 仅有时间戳和内部状态不足以作为长期会话识别方式。
 - 新建、选择和恢复会话不得在无提示时覆盖当前草稿或活动 Run。
-- 一个 Session 可以包含多个顺序回合。`completed`、`truncated`、`cancelled`、`failed` 和重启后显示的
+- 一个 Session 可以包含多个顺序回合。`completed`、`truncated`、`cancelled`、`budget-exceeded`、`failed` 和重启后显示的
   `interrupted` 都可以在用户明确发送下一条消息时继续；继续会创建新的 Run，不复用旧的取消
   句柄、审批或待执行操作。恢复本身只展示历史，不自动发送或续跑。识别出的旧版单回合
   `v1` Session 以只读历史打开：保留消息并显示固定说明，禁用 Composer、编辑和重新生成，

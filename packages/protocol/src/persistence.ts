@@ -11,6 +11,7 @@ import {
   reasoningEndDataSchema,
   reasoningLimitDataSchema,
 } from "./reasoning.js";
+import { runTokenBudgetSnapshotSchema } from "./run-token-budget.js";
 import { sessionIdSchema, sessionStatusSchema } from "./session.js";
 import { jsonValueSchema, toolCallSchema, toolNameSchema, toolResultSchema } from "./tool.js";
 import { tokenUsageSchema } from "./usage.js";
@@ -153,6 +154,10 @@ export const persistedUsageEventPayloadSchema = z.strictObject({
   type: z.literal("session.usage"),
   data: tokenUsageSchema,
 });
+export const persistedRunBudgetEventPayloadSchema = z.strictObject({
+  type: z.literal("session.run-budget"),
+  data: runTokenBudgetSnapshotSchema,
+});
 export const persistedRegenerationEventPayloadSchema = z.strictObject({
   type: z.literal("session.regeneration"),
   data: z.strictObject({
@@ -178,6 +183,7 @@ const persistedMcpToolEventTypes = new Set(["session.mcp-tool-call", "session.mc
 const persistedMcpResourceEventTypes = new Set(["session.mcp-resource-attached"]);
 const persistedMcpPromptEventTypes = new Set(["session.mcp-prompt-confirmed"]);
 const persistedUsageEventTypes = new Set(["session.usage"]);
+const persistedRunBudgetEventTypes = new Set(["session.run-budget"]);
 const persistedRegenerationEventTypes = new Set(["session.regeneration"]);
 const persistedEditEventTypes = new Set(["session.edit"]);
 
@@ -229,6 +235,15 @@ export const persistedEventPayloadSchema = genericPersistedEventPayloadSchema.su
       });
     }
     if (
+      persistedRunBudgetEventTypes.has(payload.type) &&
+      !persistedRunBudgetEventPayloadSchema.safeParse(payload).success
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Persisted Run budget events must match their strict version 1 schema.",
+      });
+    }
+    if (
       persistedRegenerationEventTypes.has(payload.type) &&
       !persistedRegenerationEventPayloadSchema.safeParse(payload).success
     ) {
@@ -267,6 +282,7 @@ export type PersistedMcpResourceEventPayload = z.infer<
 >;
 export type PersistedMcpPromptEventPayload = z.infer<typeof persistedMcpPromptEventPayloadSchema>;
 export type PersistedUsageEventPayload = z.infer<typeof persistedUsageEventPayloadSchema>;
+export type PersistedRunBudgetEventPayload = z.infer<typeof persistedRunBudgetEventPayloadSchema>;
 export type PersistedRegenerationEventPayload = z.infer<
   typeof persistedRegenerationEventPayloadSchema
 >;

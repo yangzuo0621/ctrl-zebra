@@ -34,6 +34,21 @@ before `now - days * 86,400,000` milliseconds; the comparison is timestamp-based
 user's local timezone. The exact boundary is therefore predictable and testable. The clock is injected by
 the lifecycle owner for deterministic tests.
 
+## Run token safety budget (T2204)
+
+The Extension owns two machine-scoped settings for the per-Run token safety guardrail:
+
+| Setting | Type and bounds | Default | Effect |
+|---|---|---:|---|
+| `ctrlZebra.runBudget.maxTokens` | integer `1..2,000,000` | `100,000` | Hard per-Run token safety limit. |
+| `ctrlZebra.runBudget.warningTokens` | integer `1..maxTokens` | `80,000` | Emits one in-Run warning at this threshold. |
+
+The values are validated before a Provider request starts. They count Stage 15 local estimates and
+accepted Provider Usage in one Run; they do not represent a price or Provider bill. Reaching the
+limit transitions the Session to the independent `budget-exceeded` terminal status, prevents a
+subsequent model request or Tool step, and remains recoverable through a new explicit Run. An
+invalid setting fails closed with a configuration error and does not start the Provider.
+
 Cleanup is lazy and bounded: it runs after the user explicitly requests Session history, never during
 activation, and examines at most 10,000 manifest metadata records without loading event logs. Disabled
 cleanup performs no candidate or Checkpoint scan. Sessions in `idle`, `preparing`, `streaming`,
@@ -59,6 +74,7 @@ settings, at every configured user, workspace, workspace-folder, and language ov
 | `ctrlZebra.mcp` | `server` |
 | `ctrlZebra.sessionRetention` | `enabled`, `days` |
 | `ctrlZebra.editorContext` | `enabled` |
+| `ctrlZebra.runBudget` | `maxTokens`, `warningTokens` |
 
 Clearing restores registered defaults rather than deleting unrelated VS Code settings. It is separate
 from Session retention and does not run at activation, on restart, or silently during uninstall. The

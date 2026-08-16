@@ -28,6 +28,7 @@ import {
   type McpResourceAttachment,
   type PersistedMcpToolSource,
   persistenceFormatVersion,
+  type RunTokenBudgetConfiguration,
   type SessionStatus,
   sessionIdSchema,
   type ToolStateSourceDto,
@@ -102,6 +103,7 @@ interface ChatRunnerDependencies {
   readonly approvalWorkflow?: ToolApprovalWorkflow;
   readonly sessionRepository?: SessionRepository;
   readonly mcpToolSources?: ReadonlyMap<string, RuntimeMcpToolSource>;
+  readonly runTokenBudget?: RunTokenBudgetConfiguration;
 }
 
 interface SelectedToolRegistry {
@@ -119,6 +121,7 @@ interface SelectingChatRunnerDependencies {
   readonly now?: () => Date;
   readonly approvalWorkflow?: ToolApprovalWorkflow;
   readonly selectSessionRepository?: () => Promise<SessionRepository>;
+  readonly readRunTokenBudget?: () => RunTokenBudgetConfiguration;
 }
 
 interface InternalRunOptions {
@@ -135,6 +138,7 @@ export function createChatRunner({
   approvalWorkflow,
   sessionRepository,
   mcpToolSources,
+  runTokenBudget,
 }: ChatRunnerDependencies): ChatRunner {
   const runInternal = async (
     content: string,
@@ -242,6 +246,7 @@ export function createChatRunner({
         {
           approvalWorkflow,
           diagnosticSink,
+          runTokenBudget,
         },
       );
       try {
@@ -377,6 +382,7 @@ export function createChatRunner({
       {
         approvalWorkflow,
         diagnosticSink,
+        runTokenBudget,
         ...(existingRecord === undefined
           ? {}
           : {
@@ -438,6 +444,7 @@ function projectRuntimeEvent(
     (event.status === "completed" ||
       event.status === "truncated" ||
       event.status === "cancelled" ||
+      event.status === "budget-exceeded" ||
       event.status === "failed")
   ) {
     reasoning.close();
@@ -473,6 +480,7 @@ export function createSelectingChatRunner({
   now,
   approvalWorkflow,
   selectSessionRepository,
+  readRunTokenBudget,
 }: SelectingChatRunnerDependencies): ChatRunner {
   return {
     async run(
@@ -487,6 +495,8 @@ export function createSelectingChatRunner({
       signal.throwIfAborted();
       const sessionRepository = await selectSessionRepository?.();
       signal.throwIfAborted();
+      const runTokenBudget = readRunTokenBudget?.();
+      signal.throwIfAborted();
       const selected = await selectToolRegistry(signal);
       const selection = selected instanceof ToolRegistry ? { registry: selected } : selected;
       signal.throwIfAborted();
@@ -500,6 +510,7 @@ export function createSelectingChatRunner({
         now,
         approvalWorkflow,
         diagnosticSink,
+        runTokenBudget,
         sessionRepository,
         mcpToolSources: selection.mcpToolSources,
       }).run(content, signal, emit, externalResources, externalPrompts, sessionId, workspaceFiles);
@@ -507,6 +518,8 @@ export function createSelectingChatRunner({
     async regenerate(sessionId, targetAssistantMessageId, signal, emit) {
       signal.throwIfAborted();
       const sessionRepository = await selectSessionRepository?.();
+      signal.throwIfAborted();
+      const runTokenBudget = readRunTokenBudget?.();
       signal.throwIfAborted();
       const selected = await selectToolRegistry(signal);
       const selection = selected instanceof ToolRegistry ? { registry: selected } : selected;
@@ -521,6 +534,7 @@ export function createSelectingChatRunner({
         now,
         approvalWorkflow,
         diagnosticSink,
+        runTokenBudget,
         sessionRepository,
         mcpToolSources: selection.mcpToolSources,
       });
@@ -533,6 +547,8 @@ export function createSelectingChatRunner({
       signal.throwIfAborted();
       const sessionRepository = await selectSessionRepository?.();
       signal.throwIfAborted();
+      const runTokenBudget = readRunTokenBudget?.();
+      signal.throwIfAborted();
       const selected = await selectToolRegistry(signal);
       const selection = selected instanceof ToolRegistry ? { registry: selected } : selected;
       signal.throwIfAborted();
@@ -546,6 +562,7 @@ export function createSelectingChatRunner({
         now,
         approvalWorkflow,
         diagnosticSink,
+        runTokenBudget,
         sessionRepository,
         mcpToolSources: selection.mcpToolSources,
       });
@@ -602,10 +619,17 @@ function projectPersistedEvents(
       ? omitUiSource(rawData)
       : event.type === "agent.usage"
         ? event.usage
-        : rawData;
+        : event.type === "agent.run-budget"
+          ? event.budget
+          : rawData;
   const events: { readonly type: string; readonly data: JsonValue }[] = [
     {
-      type: event.type === "agent.usage" ? "session.usage" : type,
+      type:
+        event.type === "agent.usage"
+          ? "session.usage"
+          : event.type === "agent.run-budget"
+            ? "session.run-budget"
+            : type,
       data: jsonValueSchema.parse(data),
     },
   ];

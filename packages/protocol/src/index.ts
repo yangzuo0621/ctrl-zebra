@@ -305,6 +305,7 @@ export type {
   RunErrorMessage,
   RunStatus,
   RunStatusMessage,
+  RunTokenBudgetMessage,
   SelectSessionMessage,
   SessionDeletedMessage,
   SessionDeletionErrorMessage,
@@ -406,6 +407,7 @@ export {
   runningToolStateMessageSchema,
   runStatusMessageSchema,
   runStatusSchema,
+  runTokenBudgetMessageSchema,
   selectSessionMessageSchema,
   sessionDeletedMessageSchema,
   sessionDeletionErrorMessageSchema,
@@ -435,6 +437,7 @@ export type {
   PersistedMessageRecord,
   PersistedReasoningEventPayload,
   PersistedRegenerationEventPayload,
+  PersistedRunBudgetEventPayload,
   PersistedUsageEventPayload,
   SessionManifest,
   SessionPersistencePaths,
@@ -456,6 +459,7 @@ export {
   persistedMessageRecordSchema,
   persistedReasoningEventPayloadSchema,
   persistedRegenerationEventPayloadSchema,
+  persistedRunBudgetEventPayloadSchema,
   persistedSessionIdSchema,
   persistedUsageEventPayloadSchema,
   persistenceCheckpointsDirectory,
@@ -506,6 +510,22 @@ export {
   maxCommandDisplayOutputBytes,
   runCommandOutputSchema,
 } from "./run-command.js";
+export type {
+  RunBudgetConfiguration,
+  RunBudgetSnapshot,
+  RunTokenBudgetConfiguration,
+  RunTokenBudgetSnapshot,
+  RunTokenBudgetSource,
+  RunTokenBudgetState,
+} from "./run-token-budget.js";
+export {
+  runBudgetConfigurationSchema,
+  runBudgetSnapshotSchema,
+  runTokenBudgetConfigurationSchema,
+  runTokenBudgetSnapshotSchema,
+  runTokenBudgetSourceSchema,
+  runTokenBudgetStateSchema,
+} from "./run-token-budget.js";
 export type { SessionId, SessionStatus, SessionSummary } from "./session.js";
 export {
   sessionIdSchema,

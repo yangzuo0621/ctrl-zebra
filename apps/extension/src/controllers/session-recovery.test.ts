@@ -945,6 +945,278 @@ describe("Session recovery", () => {
     expect(updates).toEqual([]);
   });
 
+  it("restores the latest bounded Run budget snapshot and terminal status", async () => {
+    const events: PersistedEventRecord[] = [
+      {
+        sequence: 1,
+        recordedAt: "2026-07-31T00:00:01.000Z",
+        event: { type: "session.status-changed", data: { status: "preparing" } },
+      },
+      {
+        sequence: 2,
+        recordedAt: "2026-07-31T00:00:02.000Z",
+        event: { type: "session.status-changed", data: { status: "streaming" } },
+      },
+      {
+        sequence: 3,
+        recordedAt: "2026-07-31T00:00:03.000Z",
+        event: {
+          type: "session.run-budget",
+          data: {
+            state: "warning",
+            source: "estimate",
+            maxTokens: 100,
+            warningTokens: 80,
+            estimatedTokens: 80,
+            effectiveTokens: 80,
+          },
+        },
+      },
+      {
+        sequence: 4,
+        recordedAt: "2026-07-31T00:00:04.000Z",
+        event: {
+          type: "session.run-budget",
+          data: {
+            state: "exceeded",
+            source: "actual",
+            maxTokens: 100,
+            warningTokens: 80,
+            estimatedTokens: 85,
+            actualTokens: 100,
+            effectiveTokens: 100,
+          },
+        },
+      },
+      {
+        sequence: 5,
+        recordedAt: "2026-07-31T00:00:05.000Z",
+        event: { type: "session.status-changed", data: { status: "budget-exceeded" } },
+      },
+    ];
+    const repository = repositoryFixture("completed", events);
+    repository.get = async () => ({
+      manifest: {
+        ...manifest("session-fixture", "2026-07-31T00:00:00.000Z"),
+        status: "budget-exceeded",
+        lastEventSequence: events.length,
+      },
+      events,
+      eventLogTailDamaged: false,
+    });
+    const actions = createSessionRecoveryActions(async () => repository);
+
+    await expect(actions.restore("session-fixture")).resolves.toMatchObject({
+      session: {
+        status: "budget-exceeded",
+        runBudget: {
+          state: "exceeded",
+          source: "actual",
+          actualTokens: 100,
+          effectiveTokens: 100,
+        },
+      },
+    });
+  });
+
+  it("restores an actual-usage overflow sentinel without treating it as regressed state", async () => {
+    const events: PersistedEventRecord[] = [
+      {
+        sequence: 1,
+        recordedAt: "2026-07-31T00:00:01.000Z",
+        event: { type: "session.status-changed", data: { status: "preparing" } },
+      },
+      {
+        sequence: 2,
+        recordedAt: "2026-07-31T00:00:02.000Z",
+        event: { type: "session.status-changed", data: { status: "streaming" } },
+      },
+      {
+        sequence: 3,
+        recordedAt: "2026-07-31T00:00:03.000Z",
+        event: {
+          type: "session.run-budget",
+          data: {
+            state: "warning",
+            source: "actual",
+            maxTokens: maxTokenCount,
+            warningTokens: maxTokenCount - 1,
+            estimatedTokens: 0,
+            actualTokens: maxTokenCount - 1,
+            effectiveTokens: maxTokenCount - 1,
+          },
+        },
+      },
+      {
+        sequence: 4,
+        recordedAt: "2026-07-31T00:00:04.000Z",
+        event: {
+          type: "session.run-budget",
+          data: {
+            state: "exceeded",
+            source: "actual",
+            maxTokens: maxTokenCount,
+            warningTokens: maxTokenCount - 1,
+            estimatedTokens: 0,
+            effectiveTokens: maxTokenCount,
+          },
+        },
+      },
+      {
+        sequence: 5,
+        recordedAt: "2026-07-31T00:00:05.000Z",
+        event: { type: "session.status-changed", data: { status: "budget-exceeded" } },
+      },
+    ];
+    const repository = repositoryFixture("completed", events);
+    repository.get = async () => ({
+      manifest: {
+        ...manifest("session-fixture", "2026-07-31T00:00:00.000Z"),
+        status: "budget-exceeded",
+        lastEventSequence: events.length,
+      },
+      events,
+      eventLogTailDamaged: false,
+    });
+    const actions = createSessionRecoveryActions(async () => repository);
+
+    const restored = await actions.restore("session-fixture");
+    expect(restored).toMatchObject({
+      session: {
+        status: "budget-exceeded",
+        runBudget: {
+          source: "actual",
+          state: "exceeded",
+          effectiveTokens: maxTokenCount,
+        },
+      },
+    });
+    expect(restored.session.runBudget).not.toHaveProperty("actualTokens");
+  });
+
+  it.each([
+    "completed",
+    "truncated",
+    "failed",
+    "interrupted",
+  ] as const)("rejects an exceeded snapshot followed by incompatible %s terminal status", async (status) => {
+    const events = exceededBudgetEvents(status);
+    const repository = repositoryFixture("completed", events);
+    repository.get = async () => ({
+      manifest: {
+        ...manifest("session-fixture", "2026-07-31T00:00:00.000Z"),
+        status,
+        lastEventSequence: events.length,
+      },
+      events,
+      eventLogTailDamaged: false,
+    });
+    const actions = createSessionRecoveryActions(async () => repository);
+
+    await expect(actions.restore("session-fixture")).rejects.toMatchObject({
+      name: "SessionRecoveryError",
+      code: "corrupt",
+    });
+  });
+
+  it("preserves a cancelled terminal when cancellation wins after an exceeded observation", async () => {
+    const events = exceededBudgetEvents("cancelled");
+    const repository = repositoryFixture("completed", events);
+    repository.get = async () => ({
+      manifest: {
+        ...manifest("session-fixture", "2026-07-31T00:00:00.000Z"),
+        status: "cancelled",
+        lastEventSequence: events.length,
+      },
+      events,
+      eventLogTailDamaged: false,
+    });
+    const actions = createSessionRecoveryActions(async () => repository);
+
+    await expect(actions.restore("session-fixture")).resolves.toMatchObject({
+      session: {
+        status: "cancelled",
+        runBudget: {
+          state: "exceeded",
+          effectiveTokens: 100,
+        },
+      },
+    });
+  });
+
+  it.each([
+    ["a late assistant text delta", { type: "agent.text-delta", data: { text: "late" } }],
+    ["a late Tool state", { type: "agent.tool-state", data: { status: "running" } }],
+  ] satisfies ReadonlyArray<
+    readonly [string, PersistedEventRecord["event"]]
+  >)("rejects %s between an exceeded snapshot and cancellation", async (_name, event) => {
+    const events = exceededBudgetEvents("cancelled", event);
+    const repository = repositoryFixture("completed", events);
+    repository.get = async () => ({
+      manifest: {
+        ...manifest("session-fixture", "2026-07-31T00:00:00.000Z"),
+        status: "cancelled",
+        lastEventSequence: events.length,
+      },
+      events,
+      eventLogTailDamaged: false,
+    });
+    const actions = createSessionRecoveryActions(async () => repository);
+
+    await expect(actions.restore("session-fixture")).rejects.toMatchObject({
+      name: "SessionRecoveryError",
+      code: "corrupt",
+    });
+  });
+
+  it("rejects a duplicate warning or late budget event in one Run", async () => {
+    const events: PersistedEventRecord[] = [
+      {
+        sequence: 1,
+        recordedAt: "2026-07-31T00:00:01.000Z",
+        event: { type: "session.status-changed", data: { status: "preparing" } },
+      },
+      {
+        sequence: 2,
+        recordedAt: "2026-07-31T00:00:02.000Z",
+        event: {
+          type: "session.run-budget",
+          data: {
+            state: "warning",
+            source: "estimate",
+            maxTokens: 100,
+            warningTokens: 80,
+            estimatedTokens: 80,
+            effectiveTokens: 80,
+          },
+        },
+      },
+      {
+        sequence: 3,
+        recordedAt: "2026-07-31T00:00:03.000Z",
+        event: {
+          type: "session.run-budget",
+          data: {
+            state: "warning",
+            source: "estimate",
+            maxTokens: 100,
+            warningTokens: 80,
+            estimatedTokens: 81,
+            effectiveTokens: 81,
+          },
+        },
+      },
+    ];
+    const actions = createSessionRecoveryActions(async () =>
+      repositoryFixture("completed", events),
+    );
+
+    await expect(actions.restore("session-fixture")).rejects.toMatchObject({
+      name: "SessionRecoveryError",
+      code: "corrupt",
+    });
+  });
+
   it("isolates a malformed persisted reasoning lifecycle", async () => {
     const actions = createSessionRecoveryActions(async () =>
       repositoryFixture("completed", malformedReasoningV1Events),
@@ -992,4 +1264,52 @@ function repositoryFixture(
     async update() {},
     async appendEvent() {},
   };
+}
+
+function exceededBudgetEvents(
+  status: "completed" | "truncated" | "cancelled" | "failed" | "interrupted",
+  interveningEvent?: PersistedEventRecord["event"],
+): PersistedEventRecord[] {
+  return [
+    {
+      sequence: 1,
+      recordedAt: "2026-07-31T00:00:01.000Z",
+      event: { type: "session.status-changed", data: { status: "preparing" } },
+    },
+    {
+      sequence: 2,
+      recordedAt: "2026-07-31T00:00:02.000Z",
+      event: { type: "session.status-changed", data: { status: "streaming" } },
+    },
+    {
+      sequence: 3,
+      recordedAt: "2026-07-31T00:00:03.000Z",
+      event: {
+        type: "session.run-budget",
+        data: {
+          state: "exceeded",
+          source: "estimate",
+          maxTokens: 100,
+          warningTokens: 80,
+          estimatedTokens: 100,
+          effectiveTokens: 100,
+        },
+      },
+    },
+    ...(interveningEvent === undefined
+      ? []
+      : [
+          {
+            sequence: 4,
+            recordedAt: "2026-07-31T00:00:04.000Z",
+            event: interveningEvent,
+          },
+        ]),
+    {
+      sequence: interveningEvent === undefined ? 4 : 5,
+      recordedAt:
+        interveningEvent === undefined ? "2026-07-31T00:00:04.000Z" : "2026-07-31T00:00:05.000Z",
+      event: { type: "session.status-changed", data: { status } },
+    },
+  ];
 }

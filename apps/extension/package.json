@@ -163,6 +163,22 @@
           "scope": "machine",
           "description": "Number of 24-hour UTC days to retain inactive local Sessions and their owned Checkpoints."
         },
+        "ctrlZebra.runBudget.maxTokens": {
+          "type": "number",
+          "default": 100000,
+          "minimum": 1,
+          "maximum": 2000000,
+          "scope": "machine",
+          "description": "Maximum estimated or Provider-reported tokens allowed in one Run. This is a safety limit, not a Provider bill."
+        },
+        "ctrlZebra.runBudget.warningTokens": {
+          "type": "number",
+          "default": 80000,
+          "minimum": 1,
+          "maximum": 2000000,
+          "scope": "machine",
+          "description": "Token count at which CtrlZebra warns that the current Run is approaching its safety limit."
+        },
         "ctrlZebra.provider.id": {
           "type": "string",
           "enum": [

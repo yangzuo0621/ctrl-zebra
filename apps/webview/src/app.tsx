@@ -45,6 +45,10 @@ function messageContent(message: DisplayMessage, status: string): string {
     return strings.app.messageFallback.failed;
   }
 
+  if (status === "budget-exceeded") {
+    return strings.app.messageFallback.budgetExceeded;
+  }
+
   return strings.app.messageFallback.waiting;
 }
 
@@ -145,6 +149,7 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
   const reasoningAnnouncement = useStore(store, (state) => state.reasoningAnnouncement);
   const sessionAnnouncement = useStore(store, (state) => state.sessionAnnouncement);
   const usage = useStore(store, (state) => state.usage);
+  const runBudget = useStore(store, (state) => state.runBudget);
   const regeneratingMessageId = useStore(store, (state) => state.regeneratingMessageId);
   const approval = useStore(approvalStore, (state) => state.current);
   const pendingDecision = useStore(approvalStore, (state) => state.pendingDecision);
@@ -752,7 +757,7 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
           </p>
         )}
 
-        <TokenUsageSummary usage={usage} status={status} />
+        <TokenUsageSummary usage={usage} runBudget={runBudget} status={status} />
 
         <EditorContextCard store={editorContextStore} />
         <WorkspaceFileReferenceCard store={workspaceFileStore} />

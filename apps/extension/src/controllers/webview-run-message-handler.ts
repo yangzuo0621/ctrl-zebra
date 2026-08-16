@@ -338,7 +338,7 @@ export class WebviewRunMessageHandler {
     this.#postStatus(requestId, "failed");
   }
 
-  #finish(run: ActiveRun, status: "completed" | "truncated" | "cancelled" | "failed"): void {
+  #finish(run: ActiveRun, status: RunStatus): void {
     if (this.#disposed || this.#activeRun !== run || run.terminalSent) {
       return;
     }
@@ -394,6 +394,16 @@ export class WebviewRunMessageHandler {
         type: "extension/token-usage",
         requestId: run.requestId,
         usage: event.usage,
+      });
+      return;
+    }
+
+    if (event.type === "agent.run-budget") {
+      this.post({
+        protocolVersion,
+        type: "extension/run-budget",
+        requestId: run.requestId,
+        budget: event.budget,
       });
       return;
     }
@@ -504,7 +514,8 @@ export class WebviewRunMessageHandler {
     if (
       event.status === "completed" ||
       event.status === "truncated" ||
-      event.status === "cancelled"
+      event.status === "cancelled" ||
+      event.status === "budget-exceeded"
     ) {
       this.#finish(run, event.status);
     }
