@@ -6,12 +6,11 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 import yauzl from "yauzl";
-
+import { validateBuildProvenance } from "../../../scripts/release-policy.mjs";
 import {
   assertCleanStatus,
   validateArchiveEntries,
   validateBuildMetadata,
-  validateBuildProvenance,
   validateGitHubActionsSource,
   validateReleaseDocuments,
   validateSelectedFiles,
