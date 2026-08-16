@@ -1,6 +1,7 @@
 export const RELEASE_POLICY_VERSION: number;
 export const ALLOWED_LICENSE_IDS: readonly string[];
 export const ALLOWED_SPDX_EXCEPTION_IDS: readonly string[];
+export const POLICY_COMPATIBLE_SPDX_EXCEPTION_IDS: readonly string[];
 
 export function normalizeLicenseExpression(value: unknown): string;
 export function isCompatibleLicenseExpression(value: unknown): boolean;

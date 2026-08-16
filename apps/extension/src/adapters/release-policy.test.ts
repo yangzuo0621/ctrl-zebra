@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  ALLOWED_SPDX_EXCEPTION_IDS,
   assertDependencyInventoryMatches,
   createDependencyInventoryFile,
   createSpdxDocument,
@@ -113,7 +114,12 @@ describe("T2206 release policy", () => {
       ]),
     ).toThrow(/differs/);
     expect(isCompatibleLicenseExpression("MIT WITH UnknownException")).toBe(false);
+    expect(isCompatibleLicenseExpression("MIT WITH GPL-3.0-with-GCC-exception")).toBe(false);
+    expect(ALLOWED_SPDX_EXCEPTION_IDS).toContain("GStreamer-exception-2008");
+    expect(ALLOWED_SPDX_EXCEPTION_IDS).not.toContain("GPL-3.0-with-GCC-exception");
     expect(isCompatibleLicenseExpression("Apache-2.0 WITH LLVM-exception")).toBe(true);
+    expect(isCompatibleLicenseExpression("Apache-2.0 WITH GStreamer-exception-2008")).toBe(true);
+    expect(isCompatibleLicenseExpression("Apache-2.0 WITH GCC-exception-3.1")).toBe(false);
     expect(() =>
       validateCompatibleLicenses([
         { name: "bad-exception", version: "1.0.0", license: "MIT WITH UnknownException" },
@@ -204,6 +210,25 @@ describe("T2206 release policy", () => {
     ).toThrow(/tag ref/);
     expect(() => resolveBuildSource({ tag: "v1.2.4", version: "1.2.3" })).toThrow(/tag ref/);
     expect(() => resolveBuildSource({ version: "1.2.3" })).toThrow(/validated local/);
+  });
+
+  it("requires version-specific notes for a detached matching tag", () => {
+    expect(resolveBuildSource({ tag: "v1.2.3", version: "1.2.3" })).toEqual({
+      sourceRef: "refs/tags/v1.2.3",
+      sourceRefType: "tag",
+    });
+    expect(() =>
+      validateVersionConsistency({
+        version: "1.2.3",
+        extensionVersion: "1.2.3",
+        tag: "v1.2.3",
+        changelog: changelog.replace("## [1.2.3]", "## [1.2.4]"),
+        lockfile,
+        extensionManifest: manifest,
+        releaseChecklist,
+        requireReleaseNotes: true,
+      }),
+    ).toThrow(/release notes/);
   });
 
   it("fails closed for missing credentials, duplicate tags, and cancellation", () => {

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import spdxExceptionData from "../release/spdx-exceptions.json" with { type: "json" };
 
 export const RELEASE_POLICY_VERSION = 1;
 
@@ -16,65 +17,34 @@ export const ALLOWED_LICENSE_IDS = Object.freeze([
   "MIT-0",
 ]);
 
-// Exceptions are accepted only when they are listed by the SPDX License List.
-// Keep this allowlist explicit so an arbitrary `WITH <text>` never bypasses the
-// compatible-license gate. The list is intentionally independent of the
-// product's compatible base-license set above.
-export const ALLOWED_SPDX_EXCEPTION_IDS = Object.freeze([
-  "389-exception",
-  "Asterisk-exception",
-  "Asterisk-linking-protocols-exception",
-  "Autoconf-exception-2.0",
-  "Autoconf-exception-3.0",
-  "Autoconf-exception-generic",
-  "Autoconf-exception-generic-3.0",
-  "Autoconf-exception-macro",
-  "Bison-exception-1.24",
-  "Bison-exception-2.2",
-  "Bootloader-exception",
-  "CGAL-linking-exception",
-  "Classpath-exception-2.0",
-  "Classpath-exception-2.0-short",
-  "CLISP-exception-2.0",
-  "cryptsetup-OpenSSL-exception",
-  "Digia-Qt-LGPL-exception-1.1",
-  "DigiRule-FOSS-exception",
-  "eCos-exception-2.0",
-  "erlang-otp-linking-exception",
-  "Fawkes-Runtime-exception",
-  "FLTK-exception",
-  "fmt-exception",
-  "Font-exception-2.0",
-  "freertos-exception-2.0",
-  "GCC-exception-2.0",
-  "GCC-exception-2.0-note",
-  "GCC-exception-3.1",
-  "Gmsh-exception",
-  "GNAT-exception",
-  "GNOME-examples-exception",
-  "GNU-compiler-exception",
-  "GPL-2.0-with-classpath-exception",
-  "GPL-2.0-with-font-exception",
-  "GPL-2.0-with-GCC-exception",
-  "GPL-3.0-with-autoconf-exception",
-  "GPL-3.0-with-GCC-exception",
-  "LGPL-2.1-linking-exception",
+// This list is generated from the pinned SPDX License List data file under
+// release/spdx-exceptions.json. The product policy intentionally permits only
+// the reviewed exceptions below; canonical does not mean compatible here.
+export const ALLOWED_SPDX_EXCEPTION_IDS = Object.freeze(spdxExceptionData.licenseExceptionIds);
+export const POLICY_COMPATIBLE_SPDX_EXCEPTION_IDS = Object.freeze([
+  "GStreamer-exception-2008",
   "LLVM-exception",
-  "mif-exception",
-  "Nokia-Qt-exception-1.1",
-  "OCaml-LGPL-linking-exception",
-  "OpenJDK-assembly-exception-1.0",
-  "QPL-1.0-INRIA-2004-exception",
-  "Qt-GPL-exception-1.0",
-  "Qt-LGPL-exception-1.1",
-  "Swift-exception",
-  "Universal-FOSS-exception-1.0",
-  "WxWindows-exception-3.1",
-  "x11vnc-openssl-exception",
 ]);
 
 const allowedLicenses = new Set(ALLOWED_LICENSE_IDS);
-const allowedSpdxExceptions = new Set(ALLOWED_SPDX_EXCEPTION_IDS);
+const canonicalSpdxExceptions = new Set(ALLOWED_SPDX_EXCEPTION_IDS);
+const allowedSpdxExceptions = new Set(POLICY_COMPATIBLE_SPDX_EXCEPTION_IDS);
+if (
+  spdxExceptionData.schemaVersion !== 1 ||
+  spdxExceptionData.source !==
+    "https://raw.githubusercontent.com/spdx/license-list-data/779ef2e5dff6d4af389c53de5e97116ab0bb52e8/json/exceptions.json" ||
+  spdxExceptionData.sourceVersion !== "3.28.0" ||
+  !Array.isArray(spdxExceptionData.licenseExceptionIds) ||
+  canonicalSpdxExceptions.size !== ALLOWED_SPDX_EXCEPTION_IDS.length ||
+  ALLOWED_SPDX_EXCEPTION_IDS.some(
+    (identifier) => typeof identifier !== "string" || !/^[A-Za-z0-9.-]+$/u.test(identifier),
+  ) ||
+  POLICY_COMPATIBLE_SPDX_EXCEPTION_IDS.some(
+    (identifier) => !canonicalSpdxExceptions.has(identifier),
+  )
+) {
+  throw new Error("Pinned SPDX exception data is invalid or out of policy.");
+}
 const forbiddenVsixFragments = Object.freeze([
   "/node_modules/",
   "/.pnpm/",
