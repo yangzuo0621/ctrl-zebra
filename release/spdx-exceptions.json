@@ -1,7 +1,9 @@
 {
   "schemaVersion": 1,
-  "source": "https://raw.githubusercontent.com/spdx/license-list-data/779ef2e5dff6d4af389c53de5e97116ab0bb52e8/json/exceptions.json",
+  "source": "https://raw.githubusercontent.com/spdx/license-list-data/c4a7237ec8f4654e867546f9f409749300f1bf4c/json/exceptions.json",
   "sourceVersion": "3.28.0",
+  "sourceSha256": "bd145bb558f44432fcd6f0d7e956ed0124dff72af7641a7cfcb1b557dc390a5b",
+  "catalogSha256": "2fc95500adc21b07e29d6edc27ed029040ef71f23906d291667c4b0a85c05253",
   "licenseExceptionIds": [
     "389-exception",
     "Asterisk-exception",

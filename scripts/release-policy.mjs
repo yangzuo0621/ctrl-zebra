@@ -17,6 +17,14 @@ export const ALLOWED_LICENSE_IDS = Object.freeze([
   "MIT-0",
 ]);
 
+export const SPDX_EXCEPTION_SOURCE =
+  "https://raw.githubusercontent.com/spdx/license-list-data/c4a7237ec8f4654e867546f9f409749300f1bf4c/json/exceptions.json";
+export const SPDX_EXCEPTION_SOURCE_VERSION = "3.28.0";
+export const SPDX_EXCEPTION_SOURCE_SHA256 =
+  "bd145bb558f44432fcd6f0d7e956ed0124dff72af7641a7cfcb1b557dc390a5b";
+export const SPDX_EXCEPTION_CATALOG_SHA256 =
+  "2fc95500adc21b07e29d6edc27ed029040ef71f23906d291667c4b0a85c05253";
+
 // This list is generated from the pinned SPDX License List data file under
 // release/spdx-exceptions.json. The product policy intentionally permits only
 // the reviewed exceptions below; canonical does not mean compatible here.
@@ -26,19 +34,60 @@ export const POLICY_COMPATIBLE_SPDX_EXCEPTION_IDS = Object.freeze([
   "LLVM-exception",
 ]);
 
+function serializeSpdxExceptionCatalog(catalog) {
+  return JSON.stringify({
+    schemaVersion: catalog?.schemaVersion,
+    source: catalog?.source,
+    sourceVersion: catalog?.sourceVersion,
+    licenseExceptionIds: catalog?.licenseExceptionIds,
+  });
+}
+
+export function validateSpdxExceptionCatalog(catalog) {
+  if (!catalog || typeof catalog !== "object") {
+    throw new Error("Pinned SPDX exception catalog is missing.");
+  }
+  if (catalog.schemaVersion !== 1) {
+    throw new Error("Pinned SPDX exception catalog schema version is unsupported.");
+  }
+  if (catalog.source !== SPDX_EXCEPTION_SOURCE) {
+    throw new Error("Pinned SPDX exception catalog source is invalid.");
+  }
+  if (catalog.sourceVersion !== SPDX_EXCEPTION_SOURCE_VERSION) {
+    throw new Error("Pinned SPDX exception catalog source version is invalid.");
+  }
+  if (catalog.sourceSha256 !== SPDX_EXCEPTION_SOURCE_SHA256) {
+    throw new Error("Pinned SPDX exception source digest is invalid.");
+  }
+  if (
+    !Array.isArray(catalog.licenseExceptionIds) ||
+    catalog.licenseExceptionIds.length === 0 ||
+    catalog.licenseExceptionIds.some(
+      (identifier) => typeof identifier !== "string" || !/^[A-Za-z0-9.-]+$/u.test(identifier),
+    ) ||
+    new Set(catalog.licenseExceptionIds).size !== catalog.licenseExceptionIds.length
+  ) {
+    throw new Error("Pinned SPDX exception catalog identifiers are invalid.");
+  }
+  const catalogSha256 = createHash("sha256")
+    .update(serializeSpdxExceptionCatalog(catalog))
+    .digest("hex");
+  if (
+    catalog.catalogSha256 !== SPDX_EXCEPTION_CATALOG_SHA256 ||
+    catalog.catalogSha256 !== catalogSha256
+  ) {
+    throw new Error("Pinned SPDX exception catalog digest is invalid.");
+  }
+  return true;
+}
+
+validateSpdxExceptionCatalog(spdxExceptionData);
+
 const allowedLicenses = new Set(ALLOWED_LICENSE_IDS);
 const canonicalSpdxExceptions = new Set(ALLOWED_SPDX_EXCEPTION_IDS);
 const allowedSpdxExceptions = new Set(POLICY_COMPATIBLE_SPDX_EXCEPTION_IDS);
 if (
-  spdxExceptionData.schemaVersion !== 1 ||
-  spdxExceptionData.source !==
-    "https://raw.githubusercontent.com/spdx/license-list-data/779ef2e5dff6d4af389c53de5e97116ab0bb52e8/json/exceptions.json" ||
-  spdxExceptionData.sourceVersion !== "3.28.0" ||
-  !Array.isArray(spdxExceptionData.licenseExceptionIds) ||
   canonicalSpdxExceptions.size !== ALLOWED_SPDX_EXCEPTION_IDS.length ||
-  ALLOWED_SPDX_EXCEPTION_IDS.some(
-    (identifier) => typeof identifier !== "string" || !/^[A-Za-z0-9.-]+$/u.test(identifier),
-  ) ||
   POLICY_COMPATIBLE_SPDX_EXCEPTION_IDS.some(
     (identifier) => !canonicalSpdxExceptions.has(identifier),
   )

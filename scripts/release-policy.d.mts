@@ -2,10 +2,15 @@ export const RELEASE_POLICY_VERSION: number;
 export const ALLOWED_LICENSE_IDS: readonly string[];
 export const ALLOWED_SPDX_EXCEPTION_IDS: readonly string[];
 export const POLICY_COMPATIBLE_SPDX_EXCEPTION_IDS: readonly string[];
+export const SPDX_EXCEPTION_SOURCE: string;
+export const SPDX_EXCEPTION_SOURCE_VERSION: string;
+export const SPDX_EXCEPTION_SOURCE_SHA256: string;
+export const SPDX_EXCEPTION_CATALOG_SHA256: string;
 
 export function normalizeLicenseExpression(value: unknown): string;
 export function isCompatibleLicenseExpression(value: unknown): boolean;
 export function validateCompatibleLicenses(packages: readonly unknown[]): void;
+export function validateSpdxExceptionCatalog(catalog: unknown): boolean;
 export function canonicalizeDependencyInventory(packages: readonly unknown[]): readonly unknown[];
 export function assertDependencyInventoryMatches(
   actual: readonly unknown[],

@@ -70,16 +70,17 @@ const source = resolveBuildSource({
   branch,
   tag: localTag,
 });
+const effectiveTag = tag ?? localTag;
 
 validateVersionConsistency({
   version,
   extensionVersion: manifest.version,
-  tag,
+  tag: effectiveTag,
   changelog,
   lockfile,
   extensionManifest: manifest,
   releaseChecklist,
-  requireReleaseNotes: Boolean(tag),
+  requireReleaseNotes: Boolean(effectiveTag),
 });
 validateReleaseDocuments({
   rootReadme: await readFile(join(repositoryRoot, "README.md"), "utf8"),

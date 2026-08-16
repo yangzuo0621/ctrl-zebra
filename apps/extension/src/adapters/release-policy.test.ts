@@ -7,12 +7,17 @@ import {
   createSpdxDocument,
   isCompatibleLicenseExpression,
   resolveBuildSource,
+  SPDX_EXCEPTION_CATALOG_SHA256,
+  SPDX_EXCEPTION_SOURCE,
+  SPDX_EXCEPTION_SOURCE_SHA256,
+  SPDX_EXCEPTION_SOURCE_VERSION,
   validateBuildProvenance,
   validateCompatibleLicenses,
   validateDependencyInventoryFile,
   validatePublishPreconditions,
   validateReleaseSource,
   validateSpdxDocument,
+  validateSpdxExceptionCatalog,
   validateTagAvailability,
   validateVersionConsistency,
   validateVsixDependencyAudit,
@@ -125,6 +130,30 @@ describe("T2206 release policy", () => {
         { name: "bad-exception", version: "1.0.0", license: "MIT WITH UnknownException" },
       ]),
     ).toThrow(/Incompatible license/);
+  });
+
+  it("fails closed for tampered SPDX catalog source, digest, and identifiers", () => {
+    const catalog = {
+      schemaVersion: 1,
+      source: SPDX_EXCEPTION_SOURCE,
+      sourceVersion: SPDX_EXCEPTION_SOURCE_VERSION,
+      sourceSha256: SPDX_EXCEPTION_SOURCE_SHA256,
+      catalogSha256: SPDX_EXCEPTION_CATALOG_SHA256,
+      licenseExceptionIds: [...ALLOWED_SPDX_EXCEPTION_IDS],
+    };
+    expect(validateSpdxExceptionCatalog(catalog)).toBe(true);
+    expect(() =>
+      validateSpdxExceptionCatalog({ ...catalog, source: `${catalog.source}/tampered` }),
+    ).toThrow(/source is invalid/);
+    expect(() =>
+      validateSpdxExceptionCatalog({ ...catalog, sourceSha256: "0".repeat(64) }),
+    ).toThrow(/source digest is invalid/);
+    expect(() =>
+      validateSpdxExceptionCatalog({
+        ...catalog,
+        licenseExceptionIds: [...catalog.licenseExceptionIds, "Unknown-exception"],
+      }),
+    ).toThrow(/catalog digest is invalid/);
   });
 
   it("rejects unexpected files, development caches, and undeclared executables", () => {
