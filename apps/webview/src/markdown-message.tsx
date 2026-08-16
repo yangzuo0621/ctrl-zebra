@@ -28,7 +28,7 @@ interface MarkdownToken {
   readonly content: string;
   readonly info: string;
   readonly children: readonly MarkdownToken[] | null;
-  attrGet(name: string): string | null;
+  attrGet(name: string): string | number | null;
 }
 
 interface MarkdownMessageProps {
@@ -467,7 +467,7 @@ function buildInlineTree(tokens: readonly MarkdownToken[]): readonly InlineNode[
         if (token.content.length > 0) append({ kind: "text", text: token.content });
         continue;
       }
-      const href = token.type === "link_open" ? (token.attrGet("href") ?? undefined) : undefined;
+      const href = token.type === "link_open" ? readStringAttribute(token, "href") : undefined;
       stack.push({
         kind: "element",
         tokenType:
@@ -514,6 +514,11 @@ function buildInlineTree(tokens: readonly MarkdownToken[]): readonly InlineNode[
   }
 
   return root.children;
+}
+
+function readStringAttribute(token: MarkdownToken, name: string): string | undefined {
+  const value = token.attrGet(name);
+  return typeof value === "string" ? value : undefined;
 }
 
 function readCodeLanguage(info: string): string {
