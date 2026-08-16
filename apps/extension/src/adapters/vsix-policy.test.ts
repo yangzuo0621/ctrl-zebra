@@ -13,6 +13,25 @@ import {
 } from "../../scripts/vsix-policy.mjs";
 
 describe("VSIX package policy", () => {
+  it("owns the reviewed Marketplace screenshots in both exact allowlists", () => {
+    expect(
+      expectedSelectedFiles.filter((fileName) => fileName.startsWith("media/marketplace/")),
+    ).toEqual([
+      "media/marketplace/agent-overview.png",
+      "media/marketplace/provider-setup.png",
+      "media/marketplace/safe-tools.png",
+    ]);
+    expect(
+      expectedArchiveFiles.filter((fileName) =>
+        fileName.startsWith("extension/media/marketplace/"),
+      ),
+    ).toEqual([
+      "extension/media/marketplace/agent-overview.png",
+      "extension/media/marketplace/provider-setup.png",
+      "extension/media/marketplace/safe-tools.png",
+    ]);
+  });
+
   it("accepts exactly the selected and archived allowlists", () => {
     expect(() => validateSelectedFiles([...expectedSelectedFiles])).not.toThrow();
     expect(
