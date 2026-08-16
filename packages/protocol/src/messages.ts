@@ -522,6 +522,52 @@ export const clearSessionsMessageSchema = z.strictObject({
   confirm: z.literal(true),
 });
 
+export const localDataClearCategorySchema = z.enum([
+  "running-operations",
+  "sessions",
+  "checkpoints",
+  "temporary-files",
+  "caches",
+  "provider-secret",
+  "provider-configuration",
+  "mcp-configuration",
+  "other-local-state",
+]);
+
+export const localDataClearCategoryResultSchema = z.strictObject({
+  category: localDataClearCategorySchema,
+  outcome: z.enum(["cleared", "failed"]),
+  deleted: z.number().int().nonnegative().max(10_000),
+  failed: z.number().int().nonnegative().max(10_000),
+});
+
+const localDataClearCategoryResultsSchema = z
+  .array(localDataClearCategoryResultSchema)
+  .max(9)
+  .refine(
+    (categories) => new Set(categories.map(({ category }) => category)).size === categories.length,
+    "Each local-data clear category may appear at most once.",
+  );
+
+export const clearLocalDataMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("webview/clear-local-data"),
+  confirm: z.literal(true),
+});
+
+export const localDataClearResultMessageSchema = z
+  .strictObject({
+    ...protocolEnvelopeSchema.shape,
+    type: z.literal("extension/local-data-clear-result"),
+    outcome: z.enum(["completed", "partial", "cancelled"]),
+    categories: localDataClearCategoryResultsSchema,
+    message: z.string().min(1).max(256),
+  })
+  .refine(({ outcome, categories }) => outcome !== "cancelled" || categories.length === 0, {
+    path: ["categories"],
+    message: "Cancelled local-data clear results must not contain category results.",
+  });
+
 export const listCheckpointsMessageSchema = z.strictObject({
   ...protocolEnvelopeSchema.shape,
   type: z.literal("webview/list-checkpoints"),
@@ -794,6 +840,7 @@ export const webviewToExtensionMessageSchema = z.discriminatedUnion("type", [
   restoreSessionMessageSchema,
   deleteSessionMessageSchema,
   clearSessionsMessageSchema,
+  clearLocalDataMessageSchema,
   listCheckpointsMessageSchema,
   restoreCheckpointMessageSchema,
 ]);
@@ -819,6 +866,7 @@ export const extensionToWebviewMessageSchema = z.union([
   sessionDeletedMessageSchema,
   sessionsClearedMessageSchema,
   sessionDeletionErrorMessageSchema,
+  localDataClearResultMessageSchema,
   checkpointListMessageSchema,
   checkpointRestoredMessageSchema,
   checkpointErrorMessageSchema,
@@ -892,6 +940,10 @@ export type SelectSessionMessage = z.infer<typeof selectSessionMessageSchema>;
 export type RestoreSessionMessage = z.infer<typeof restoreSessionMessageSchema>;
 export type DeleteSessionMessage = z.infer<typeof deleteSessionMessageSchema>;
 export type ClearSessionsMessage = z.infer<typeof clearSessionsMessageSchema>;
+export type LocalDataClearCategory = z.infer<typeof localDataClearCategorySchema>;
+export type LocalDataClearCategoryResult = z.infer<typeof localDataClearCategoryResultSchema>;
+export type ClearLocalDataMessage = z.infer<typeof clearLocalDataMessageSchema>;
+export type LocalDataClearResultMessage = z.infer<typeof localDataClearResultMessageSchema>;
 export type ListCheckpointsMessage = z.infer<typeof listCheckpointsMessageSchema>;
 export type RestoreCheckpointMessage = z.infer<typeof restoreCheckpointMessageSchema>;
 export type ShowApprovalDiffMessage = z.infer<typeof showApprovalDiffMessageSchema>;

@@ -78,3 +78,15 @@ capability outside Stage 14.
 - [x] Manual trusted and untrusted workspace paths verify connection/startup approval, Tools,
   Resources, Prompts, cancellation, failure, explicit restart and disconnect with no late UI,
   context injection, persistence, model continuation or residual process.
+
+## Stage 21 complete local-data handoff addendum (T2106)
+
+- [x] The uninstall-before/device-handoff path is documented in both README files and PRIVACY.md:
+  invoke `CtrlZebra: Clear All Local Data`, accept the modal high-risk warning, and retry any
+  category reported as partial before uninstalling.
+- [x] The path explicitly excludes workspace files/user code, VS Code data outside CtrlZebra, and
+  other Extension state, and documents local-only handling of Sessions, Checkpoints, temporary/cache
+  state, Provider Secret, MCP/Provider configuration, and other CtrlZebra state.
+- [ ] On the release candidate, verify the exact VSIX command path, empty/all-category cleanup,
+  partial SecretStorage/files/config failures, running-operation settlement, restart, concurrent
+  calls, and idempotent retry in the release environment.

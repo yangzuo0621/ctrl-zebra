@@ -140,6 +140,32 @@
   color: var(--cz-color-error-fg);
 }
 
+.localDataWarning {
+  margin: var(--cz-space-2) 0 0;
+  font-size: var(--cz-font-size-xs);
+  color: var(--cz-color-warning-fg);
+}
+
+.localDataClearCategories {
+  display: grid;
+  gap: var(--cz-space-1);
+  list-style: none;
+  margin: var(--cz-space-2) 0 0;
+  padding: 0;
+  font-size: var(--cz-font-size-xs);
+}
+
+.localDataClearCategory,
+.localDataClearCategoryFailed {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--cz-space-2);
+}
+
+.localDataClearCategoryFailed {
+  color: var(--cz-color-error-fg);
+}
+
 .sessionStatus {
   margin: var(--cz-space-2) 0 0;
   font-size: var(--cz-font-size-xs);

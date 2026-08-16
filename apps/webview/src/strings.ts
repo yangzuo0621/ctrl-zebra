@@ -1,4 +1,5 @@
 import type {
+  LocalDataClearCategory,
   ProviderAction,
   ProviderDisplayId,
   RunStatus,
@@ -406,19 +407,43 @@ export const strings = {
     sessionListUnavailable: "Session list unavailable.",
     deletingSession: "Deleting Session…",
     clearingSessions: "Clearing saved Sessions…",
+    clearingLocalData: "Clearing all CtrlZebra local data…",
     deleteSession: "Delete selected Session",
     clearSessions: "Clear all saved Sessions",
+    clearLocalData: "Clear all CtrlZebra local data",
     deleteSessionConfirm: "Delete this saved Session and its Checkpoints?",
     clearSessionsConfirm:
       "Clear all saved Sessions and their Checkpoints? This does not delete workspace files or settings.",
+    clearLocalDataDescription:
+      "High risk: this removes CtrlZebra Sessions, Checkpoints, temporary files, caches, Provider keys, MCP/Provider settings, and other CtrlZebra local state. Workspace files, user code, VS Code data outside CtrlZebra, and other extensions are not removed.",
     sessionDeleted: "Session deleted.",
     sessionsCleared: "All saved Sessions cleared.",
+    localDataCleared: "All CtrlZebra local data cleared.",
+    localDataClearCancelled: "CtrlZebra local-data clearing was cancelled.",
+    localDataClearFailed: "Some CtrlZebra local data could not be cleared. Retry to continue.",
+    localDataClearCategoriesLabel: "Local-data clear results",
+    localDataClearCategoryLabels: {
+      "running-operations": "Running operations",
+      sessions: "Sessions",
+      checkpoints: "Checkpoints",
+      "temporary-files": "Temporary files",
+      caches: "Caches",
+      "provider-secret": "Provider Secret",
+      "provider-configuration": "Provider configuration",
+      "mcp-configuration": "MCP configuration",
+      "other-local-state": "Other local state",
+    } satisfies Record<LocalDataClearCategory, string>,
+    localDataClearCategoryStatus: (outcome: "cleared" | "failed") =>
+      outcome === "cleared" ? "Cleared" : "Needs retry",
+    localDataClearCategoryCounts: (deleted: number, failed: number) =>
+      `Deleted ${deleted}; failed ${failed}`,
     sessionDeletionFailed: "Saved Session deletion was incomplete. Retry to finish.",
     responseDifferentSession: "The response belonged to a different Session.",
     sessionOwnershipRejected: "Session ownership rejected.",
   },
   provider: {
     checking: "Checking Provider configuration.",
+    cleared: "Provider configuration and key state cleared.",
   },
   mcpAnnouncements: {
     disconnected: "MCP Server disconnected.",

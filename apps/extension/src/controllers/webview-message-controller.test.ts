@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ProviderConfigurationError } from "../adapters/provider-configuration.js";
 import type { ChatRunner, ChatRunnerEvent } from "./chat-runner.js";
+import { LocalDataClearController } from "./local-data-clear.js";
 import { McpPromptActions } from "./mcp-prompt-actions.js";
 import { McpResourceActions } from "./mcp-resource-actions.js";
 import type { McpWebviewActions } from "./mcp-webview-actions.js";
@@ -1793,6 +1794,96 @@ describe("bindWebviewMessageController", () => {
       postedMessages.findIndex(
         (message) => (message as { type?: string }).type === "extension/session-deleted",
       ),
+    );
+  });
+
+  it("cancels and settles an active run before local-data cleanup and publishes its result", async () => {
+    let messageListener: ((message: unknown) => void) | undefined;
+    let runSettled = false;
+    const cleanupStarted = vi.fn(async () => {
+      expect(runSettled).toBe(true);
+      return { deleted: 0, failed: 0 };
+    });
+    const localDataClear = new LocalDataClearController({
+      clearSessions: cleanupStarted,
+      clearCheckpoints: async () => ({ deleted: 0, failed: 0 }),
+      clearTemporaryFiles: async () => ({ deleted: 0, failed: 0 }),
+      clearCaches: async () => ({ deleted: 0, failed: 0 }),
+      clearProviderSecret: async () => ({ deleted: 0, failed: 0 }),
+      clearProviderConfiguration: async () => ({ deleted: 0, failed: 0 }),
+      clearMcpConfiguration: async () => ({ deleted: 0, failed: 0 }),
+      clearOtherLocalState: async () => ({ deleted: 0, failed: 0 }),
+    });
+    const postedMessages: unknown[] = [];
+    const chatRunner: ChatRunner = {
+      async run(_content, signal) {
+        await new Promise<void>((resolve) => {
+          signal.addEventListener(
+            "abort",
+            () => {
+              runSettled = true;
+              resolve();
+            },
+            { once: true },
+          );
+        });
+      },
+    };
+
+    bindWebviewMessageController({
+      channel: {
+        onDidReceiveMessage(listener) {
+          messageListener = listener;
+          return { dispose() {} };
+        },
+        postMessage(message) {
+          postedMessages.push(message);
+          return Promise.resolve(true);
+        },
+      },
+      lifetime: { onDidDispose: () => ({ dispose() {} }) },
+      chatRunner,
+      localDataClear: {
+        controller: localDataClear,
+        request(requestId, post) {
+          void localDataClear.run().then((report) => {
+            post({
+              protocolVersion,
+              type: "extension/local-data-clear-result",
+              requestId,
+              outcome: report.outcome,
+              categories: report.categories.map((category) => ({ ...category })),
+              message: "CtrlZebra local data was cleared.",
+            });
+          });
+        },
+      },
+    });
+
+    messageListener?.({
+      protocolVersion,
+      type: "webview/submit",
+      requestId: "run-1",
+      content: "Keep running",
+    });
+    await Promise.resolve();
+    messageListener?.({
+      protocolVersion,
+      type: "webview/clear-local-data",
+      requestId: "clear-local-1",
+      confirm: true,
+    });
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+    expect(cleanupStarted).toHaveBeenCalledOnce();
+    expect(runSettled).toBe(true);
+    expect(postedMessages).toContainEqual(
+      expect.objectContaining({
+        type: "extension/local-data-clear-result",
+        requestId: "clear-local-1",
+        outcome: "completed",
+      }),
     );
   });
 });

@@ -733,6 +733,75 @@ describe("Webview protocol messages", () => {
     ).toBe(false);
   });
 
+  it("round-trips the high-risk local-data clear contract with category reports", () => {
+    const request = {
+      protocolVersion,
+      type: "webview/clear-local-data",
+      requestId: "clear-local-data-1",
+      confirm: true,
+    } as const;
+    const result = {
+      protocolVersion,
+      type: "extension/local-data-clear-result",
+      requestId: request.requestId,
+      outcome: "partial",
+      categories: [
+        {
+          category: "running-operations",
+          outcome: "cleared",
+          deleted: 0,
+          failed: 0,
+        },
+        {
+          category: "provider-secret",
+          outcome: "failed",
+          deleted: 2,
+          failed: 1,
+        },
+      ],
+      message: "Some CtrlZebra local data could not be cleared. Retry to continue.",
+    } as const;
+
+    expect(webviewToExtensionMessageSchema.parse(request)).toEqual(request);
+    expect(extensionToWebviewMessageSchema.parse(result)).toEqual(result);
+    expect(webviewToExtensionMessageSchema.safeParse({ ...request, confirm: false }).success).toBe(
+      false,
+    );
+    expect(
+      extensionToWebviewMessageSchema.safeParse({
+        ...result,
+        categories: [
+          {
+            category: "unknown",
+            outcome: "failed",
+            deleted: 0,
+            failed: 1,
+          },
+        ],
+      }).success,
+    ).toBe(false);
+    expect(
+      extensionToWebviewMessageSchema.safeParse({
+        ...result,
+        categories: [result.categories[0], result.categories[0]],
+      }).success,
+    ).toBe(false);
+    expect(
+      extensionToWebviewMessageSchema.safeParse({
+        ...result,
+        outcome: "cancelled",
+        categories: [result.categories[0]],
+      }).success,
+    ).toBe(false);
+    expect(
+      extensionToWebviewMessageSchema.parse({
+        ...result,
+        outcome: "cancelled",
+        categories: [],
+      }),
+    ).toEqual({ ...result, outcome: "cancelled", categories: [] });
+  });
+
   it("accepts only an opaque selected Session intent", () => {
     const selected = {
       protocolVersion,

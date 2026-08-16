@@ -93,6 +93,32 @@ next explicit history refresh. Cancellation stops before the next candidate or s
 does not suppress the existing recovery/deletion safety gates. The v1 persisted format and Session
 summary wire projection remain unchanged.
 
+## Complete local-data clearing (T2106)
+
+Complete clearing is an explicit Host-owned data-control operation for uninstall or device handoff;
+it does not introduce a persisted-format migration. Its fixed order is: establish the running-operation
+cancellation gate, clear Sessions, clear Checkpoints, clear temporary files, reset transient caches,
+delete the three exact Provider Secret names, remove explicit CtrlZebra Provider/retention/editor
+configuration values, remove the exact MCP configuration value, and clear CtrlZebra Extension Mementos.
+The operation is single-flight: concurrent requests share one result, and a later request retries the
+remaining data after a partial result.
+
+Session and Checkpoint stores retain ownership of their versioned directories. The Extension's
+workspace `storageUri` root cleanup removes only direct entries outside `sessions` and `checkpoints`,
+and the Extension-owned `globalStorageUri` root is scanned separately for CtrlZebra temporary/cache
+artifacts. Missing roots are empty and safe to retry. The latter is Extension-scoped storage; VS Code
+global data outside CtrlZebra, workspace files, user code, and another Extension's storage are never
+targets. Mementos are cleared only through the current Extension's `globalState` and `workspaceState`.
+
+Before any durable cleanup, the Host closes the Webview event gates, cancels and settles active Runs,
+invalidates Resource/Prompt/editor/workspace projections, disconnects MCP, and holds Provider Secret
+operation exclusion through the complete cleanup. An MCP termination-unconfirmed result fails closed
+before storage cleanup. Each of the nine categories returns bounded deleted/failed counts; one category
+failure does not suppress later categories, and no partial result is reported as complete. A restart
+does not resume work or recreate deleted state: remaining data is discoverable on the next explicit
+clear request and can be safely retried. This operation is the uninstall-before path, not automatic
+cleanup or workspace deletion.
+
 ## File responsibilities
 
 ### `manifest.json`

@@ -141,6 +141,7 @@ export class McpConnectionController {
   #connectPromise: Promise<McpConnectionSnapshot> | undefined;
   #attemptController: AbortController | undefined;
   #disposed = false;
+  #exclusive = false;
   #terminationBlocked = false;
   #toolDiagnostic: McpToolDiagnostic | undefined;
 
@@ -245,6 +246,9 @@ export class McpConnectionController {
     if (this.#disposed) {
       return Promise.reject(new Error("The MCP connection controller has been disposed."));
     }
+    if (this.#exclusive) {
+      return Promise.resolve(this.#fail("internal"));
+    }
     if (this.#connectPromise !== undefined) {
       return this.#connectPromise;
     }
@@ -294,6 +298,26 @@ export class McpConnectionController {
     this.#clearConnection();
     this.#dependencies.notifyInformation("The MCP Server is disconnected.");
     return this.#snapshot;
+  }
+
+  async acquireExclusive(): Promise<() => void> {
+    this.#exclusive = true;
+    try {
+      const snapshot = await this.disconnect();
+      if (snapshot.status !== "disconnected") {
+        throw new Error("The MCP Server could not be confirmed as disconnected.");
+      }
+    } catch (error) {
+      this.#exclusive = false;
+      throw error;
+    }
+
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      this.#exclusive = false;
+    };
   }
 
   markConfigurationStale(): void {

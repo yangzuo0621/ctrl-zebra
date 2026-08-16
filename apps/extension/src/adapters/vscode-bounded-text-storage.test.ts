@@ -1,5 +1,5 @@
 import type { PersistencePath } from "@ctrl-zebra/core";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { FileSystem, FileType, Uri } from "vscode";
 import { createTestUri } from "../test/support/test-uri.js";
 import {
@@ -7,7 +7,129 @@ import {
   VscodeBoundedTextStorage,
 } from "./vscode-bounded-text-storage.js";
 
+const missing = new Error("missing");
+const fileType = { File: 1, Directory: 2 } as const;
+
+function uri(path: string): Uri {
+  return createTestUri(path.startsWith("/") ? path : `/${path}`);
+}
+
 describe("VscodeBoundedTextStorage", () => {
+  it("clears only non-persistence entries from the extension storage root", async () => {
+    const deleted: string[] = [];
+    const storage = new VscodeBoundedTextStorage({
+      root: uri("storage"),
+      joinPath: (base, ...segments) => uri(`${base.path}/${segments.join("/")}`),
+      isFileNotFound: () => false,
+      fileSystem: {
+        async createDirectory() {},
+        async delete(target) {
+          deleted.push(target.path);
+        },
+        async readDirectory() {
+          return [
+            ["sessions", fileType.Directory],
+            ["checkpoints", fileType.Directory],
+            ["cache", fileType.Directory],
+            ["stale.tmp", fileType.File],
+          ] as const;
+        },
+        async readFile() {
+          return new Uint8Array();
+        },
+        async rename() {},
+        async writeFile() {},
+      },
+    });
+
+    await expect(storage.clearRootEntries(["sessions", "checkpoints"])).resolves.toEqual({
+      deleted: 2,
+      failed: 0,
+    });
+    expect(deleted).toEqual(["/storage/cache", "/storage/stale.tmp"]);
+  });
+
+  it("treats a missing extension storage root as empty", async () => {
+    const storage = new VscodeBoundedTextStorage({
+      root: uri("storage"),
+      joinPath: (base, ...segments) => uri(`${base.path}/${segments.join("/")}`),
+      isFileNotFound: (error) => error === missing,
+      fileSystem: {
+        async createDirectory() {},
+        async delete() {},
+        async readDirectory() {
+          throw missing;
+        },
+        async readFile() {
+          return new Uint8Array();
+        },
+        async rename() {},
+        async writeFile() {},
+      },
+    });
+
+    await expect(storage.clearRootEntries([])).resolves.toEqual({ deleted: 0, failed: 0 });
+  });
+
+  it("continues after an owned-file deletion failure and reports the partial result", async () => {
+    const deleted: string[] = [];
+    const storage = new VscodeBoundedTextStorage({
+      root: uri("storage"),
+      joinPath: (base, ...segments) => uri(`${base.path}/${segments.join("/")}`),
+      isFileNotFound: () => false,
+      fileSystem: {
+        async createDirectory() {},
+        async delete(target) {
+          deleted.push(target.path);
+          if (target.path.endsWith("blocked.tmp")) {
+            throw new Error("file is locked");
+          }
+        },
+        async readDirectory() {
+          return [
+            ["blocked.tmp", fileType.File],
+            ["clear.tmp", fileType.File],
+          ] as const;
+        },
+        async readFile() {
+          return new Uint8Array();
+        },
+        async rename() {},
+        async writeFile() {},
+      },
+    });
+
+    await expect(storage.clearRootEntries([])).resolves.toEqual({ deleted: 1, failed: 1 });
+    expect(deleted).toEqual(["/storage/blocked.tmp", "/storage/clear.tmp"]);
+  });
+
+  it("is safe when a fresh adapter retries after restart and the root is absent", async () => {
+    const readDirectory = vi
+      .fn()
+      .mockResolvedValueOnce([["stale.tmp", fileType.File]] as const)
+      .mockRejectedValueOnce(missing);
+    const fileSystem = {
+      async createDirectory() {},
+      async delete() {},
+      readDirectory,
+      async readFile() {
+        return new Uint8Array();
+      },
+      async rename() {},
+      async writeFile() {},
+    };
+    const createStorage = () =>
+      new VscodeBoundedTextStorage({
+        root: uri("storage"),
+        joinPath: (base, ...segments) => uri(`${base.path}/${segments.join("/")}`),
+        isFileNotFound: (error) => error === missing,
+        fileSystem,
+      });
+
+    await expect(createStorage().clearRootEntries([])).resolves.toEqual({ deleted: 1, failed: 0 });
+    await expect(createStorage().clearRootEntries([])).resolves.toEqual({ deleted: 0, failed: 0 });
+  });
+
   it("initializes, resolves, reads, writes, appends, renames, and deletes bounded text", async () => {
     const { storage, fileSystem } = createStorage();
     const manifestPath = ["sessions", "v1", "session-1", "manifest.json"] as const;

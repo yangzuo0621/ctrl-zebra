@@ -16,6 +16,7 @@ import {
   type ProviderGatewayFactories,
   selectModelGateway,
 } from "./model-gateway-selector.js";
+import { ProviderApiKeyOperationCoordinator } from "./provider-api-key-command.js";
 
 const gateways = {
   openai: gateway("openai"),
@@ -57,6 +58,27 @@ function configuration(provider: ProviderConfiguration["provider"]): ProviderCon
 }
 
 describe("ModelGateway selector", () => {
+  it("does not read the Provider Secret while the lifecycle coordinator is exclusive", async () => {
+    const coordinator = new ProviderApiKeyOperationCoordinator();
+    const release = await coordinator.acquireExclusive();
+    try {
+      const secrets: ProviderApiKeySecretReader = { read: vi.fn() };
+
+      await expect(
+        selectModelGateway({
+          configuration: configuration("openai"),
+          requiredCapabilities: ["text-streaming"],
+          secrets,
+          providerApiKeyCoordinator: coordinator,
+          factories: { openai: vi.fn(() => gateways.openai) },
+        }),
+      ).rejects.toBeInstanceOf(MissingProviderApiKeyError);
+      expect(secrets.read).not.toHaveBeenCalled();
+    } finally {
+      release();
+    }
+  });
+
   it("narrows each keyed factory to its Provider configuration", () => {
     const factories = {
       openai: ({ configuration: selected, apiKey }) => {

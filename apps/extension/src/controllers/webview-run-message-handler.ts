@@ -232,6 +232,29 @@ export class WebviewRunMessageHandler {
     await Promise.all([...this.#settlingRuns].map((run) => run.settled));
   }
 
+  async acquireLocalDataClearLock(): Promise<() => void> {
+    if (this.#disposed) {
+      return () => {};
+    }
+    if (this.#sessionHistoryLock) {
+      throw new Error("A Session operation is already in progress.");
+    }
+    this.#sessionHistoryLock = true;
+    try {
+      await this.cancelAllSessions();
+    } catch (error) {
+      this.#sessionHistoryLock = false;
+      throw error;
+    }
+
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      this.#sessionHistoryLock = false;
+    };
+  }
+
   setOwnedSession(sessionId: string): void {
     if (this.#activeRun === undefined) {
       this.#ownedSessionId = sessionId;

@@ -15,6 +15,7 @@ import type {
   ProviderSelectionConfiguration,
 } from "../adapters/provider-configuration.js";
 import { isRecord } from "../adapters/record-validation.js";
+import { ProviderApiKeyOperationCoordinator } from "./provider-api-key-command.js";
 import type { ProviderOnboardingActionResult } from "./provider-onboarding-controller.js";
 
 export const selectModelCommandId = "ctrlZebra.selectModel";
@@ -36,12 +37,14 @@ const providerLabels = {
 } as const satisfies Record<ProviderId, string>;
 
 export interface ModelSelectionCommandOptions {
+  readonly isBlocked?: () => boolean;
   readonly registerCommand: (
     commandId: string,
     handler: () => Promise<ProviderOnboardingActionResult>,
   ) => Disposable;
   readonly readConfiguration: () => ProviderSelectionConfiguration;
   readonly secrets: ProviderApiKeySecretReader;
+  readonly providerApiKeyCoordinator?: ProviderApiKeyOperationCoordinator;
   readonly updateModel: (modelId: string) => Thenable<void>;
   readonly fetch?: typeof fetch;
   readonly showQuickPick: <T extends QuickPickItem>(
@@ -61,14 +64,19 @@ export function registerModelSelectionCommand({
   registerCommand,
   readConfiguration,
   secrets,
+  providerApiKeyCoordinator,
   updateModel,
   fetch: fetchModels = globalThis.fetch,
   showQuickPick,
   showInputBox,
   showInformationMessage,
   showErrorMessage,
+  isBlocked,
 }: ModelSelectionCommandOptions): Disposable {
   return registerCommand(selectModelCommandId, async () => {
+    if (isBlocked?.()) {
+      return { status: "cancelled" };
+    }
     let configuration: ProviderSelectionConfiguration;
     try {
       configuration = readConfiguration();
@@ -100,6 +108,7 @@ export function registerModelSelectionCommand({
       provider: listTarget.provider,
       endpoint: listTarget.endpoint,
       secrets,
+      providerApiKeyCoordinator,
       fetchModels,
       showErrorMessage,
     });
@@ -147,6 +156,7 @@ interface LoadOfficialModelIdsOptions {
   readonly provider: Extract<ProviderId, "openai" | "gemini">;
   readonly endpoint: string;
   readonly secrets: ProviderApiKeySecretReader;
+  readonly providerApiKeyCoordinator?: ProviderApiKeyOperationCoordinator;
   readonly fetchModels: typeof fetch;
   readonly showErrorMessage: (message: string) => Thenable<unknown>;
 }
@@ -155,12 +165,14 @@ async function loadOfficialModelIds({
   provider,
   endpoint,
   secrets,
+  providerApiKeyCoordinator,
   fetchModels,
   showErrorMessage,
 }: LoadOfficialModelIdsOptions): Promise<readonly string[] | undefined> {
   let apiKey: string | undefined;
   try {
-    apiKey = await secrets.read(provider);
+    const coordinator = providerApiKeyCoordinator ?? new ProviderApiKeyOperationCoordinator();
+    apiKey = await coordinator.run(provider, () => secrets.read(provider));
   } catch (error) {
     if (!(error instanceof ApiKeySecretStorageError)) {
       await showErrorMessage("Unable to read the saved API key. Enter a model ID manually.");

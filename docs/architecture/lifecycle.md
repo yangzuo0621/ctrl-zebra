@@ -6,6 +6,22 @@
 - `deactivate()` is reserved for asynchronous cleanup that VS Code must await. Synchronous VS Code registrations should be owned by `ExtensionContext.subscriptions` instead of being disposed a second time from `deactivate()`.
 - Cleanup must be idempotent. A partially initialized resource must either never become reachable or have an owner that can safely dispose it.
 
+## Uninstall-before local-data cleanup (T2106)
+
+`ctrlZebra.clearLocalData` is a normal Extension-lifetime command and the Agent view delegates to
+the same Host controller. Activation only creates the lightweight controller, adapters, and command;
+it does not scan storage or clear anything. The user must invoke the action and accept its modal
+high-risk warning before work begins.
+
+The controller acquires cancellation/resource locks before clearing Session and Checkpoint stores,
+Extension-owned storage roots, transient caches, Provider Secret names, configuration leaves, MCP
+configuration, and Extension Mementos. It holds those locks through completion, shares concurrent
+requests, releases them in reverse order, and reports each category so a failed cleanup can be retried.
+MCP termination failure prevents destructive cleanup. A restart does not resume the operation; the
+remaining local state is handled by a new explicit request. Uninstall documentation directs users to
+run this action before removing the Extension, while VS Code global data outside CtrlZebra, workspace
+files, user code, and other Extension state remain outside its ownership.
+
 ## Disposable Ownership
 
 - Every command, provider, event listener, watcher, timer, stream, child process, and other long-lived resource has exactly one lifecycle owner.

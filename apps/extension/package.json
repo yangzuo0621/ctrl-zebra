@@ -113,6 +113,11 @@
         "category": "CtrlZebra"
       },
       {
+        "command": "ctrlZebra.clearLocalData",
+        "title": "Clear All Local Data",
+        "category": "CtrlZebra"
+      },
+      {
         "command": "ctrlZebra.askAboutSelection",
         "title": "Ask about Selection",
         "category": "CtrlZebra",

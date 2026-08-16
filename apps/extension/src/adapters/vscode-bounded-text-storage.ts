@@ -16,6 +16,11 @@ export interface VscodeBoundedTextStorageOptions {
   readonly isFileNotFound: (error: unknown) => boolean;
 }
 
+export interface VscodeRootEntryCleanupReport {
+  readonly deleted: number;
+  readonly failed: number;
+}
+
 /**
  * Extension-private bounded UTF-8 storage over the VS Code FileSystem port.
  * Domain stores retain ownership of persistence semantics; this module owns
@@ -127,6 +132,47 @@ export class VscodeBoundedTextStorage {
         throw error;
       }
     }
+  }
+
+  async clearRootEntries(
+    excludedNames: readonly string[],
+    maxEntries = 10_000,
+  ): Promise<VscodeRootEntryCleanupReport> {
+    let entries: readonly [string, FileType][];
+    try {
+      entries = await this.#fileSystem.readDirectory(this.#root);
+    } catch (error) {
+      if (this.#isFileNotFound(error)) {
+        return { deleted: 0, failed: 0 };
+      }
+      throw error;
+    }
+    if (entries.length > maxEntries) {
+      throw new RangeError(`Storage root exceeds the ${maxEntries}-entry limit.`);
+    }
+
+    const excluded = new Set(excludedNames);
+    let deleted = 0;
+    let failed = 0;
+    for (const [name] of entries) {
+      if (excluded.has(name)) {
+        continue;
+      }
+      try {
+        assertPathSegment(name);
+        await this.#fileSystem.delete(this.#joinPath(this.#root, name), {
+          recursive: true,
+          useTrash: false,
+        });
+        deleted += 1;
+      } catch (error) {
+        if (this.#isFileNotFound(error)) {
+          continue;
+        }
+        failed += 1;
+      }
+    }
+    return { deleted, failed };
   }
 
   async appendText(path: PersistencePath, content: string, maxTotalBytes: number): Promise<void> {

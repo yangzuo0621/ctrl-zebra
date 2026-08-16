@@ -402,6 +402,22 @@ describe("MCP connection controller", () => {
     expect(controller.getToolSnapshot()).toBeDefined();
   });
 
+  it("holds an exclusive disconnect gate until local-data cleanup releases it", async () => {
+    const harness = createHarness();
+    const controller = new McpConnectionController(harness.values);
+    await controller.connect();
+
+    const release = await controller.acquireExclusive();
+    await expect(controller.connect()).resolves.toMatchObject({ status: "failed" });
+    expect(harness.createPort).toHaveBeenCalledOnce();
+
+    release();
+    await expect(controller.connect()).resolves.toMatchObject({
+      status: "connected",
+      generation: 2,
+    });
+  });
+
   it("keeps unconfirmed termination failed and blocks process reuse", async () => {
     const harness = createHarness();
     harness.client.disconnect.mockResolvedValue({

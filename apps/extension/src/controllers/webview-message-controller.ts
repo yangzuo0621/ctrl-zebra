@@ -9,6 +9,7 @@ import {
 import type { ChatRunner } from "./chat-runner.js";
 import type { CheckpointActions } from "./checkpoint-actions.js";
 import type { EditorContextWebviewActions } from "./editor-context-entry.js";
+import type { LocalDataClearController } from "./local-data-clear.js";
 import { type McpPromptActions, McpPromptPreviewCancelledError } from "./mcp-prompt-actions.js";
 import { type McpResourceActions, McpResourceReadCancelledError } from "./mcp-resource-actions.js";
 import type { McpWebviewActions } from "./mcp-webview-actions.js";
@@ -32,9 +33,16 @@ interface WebviewViewLifetime {
   onDidDispose(listener: () => void): DisposableResource;
 }
 
+export type PostWebviewMessage = (message: ExtensionToWebviewMessage) => void;
+
 export interface ApprovalUiActions {
   showDiff(requestId: string, approvalId: string): void;
   decide(requestId: string, approvalId: string, decision: ApprovalDecisionIntent): void;
+}
+
+export interface LocalDataClearUiActions {
+  readonly controller: LocalDataClearController;
+  readonly request: (requestId: string, post: PostWebviewMessage) => void;
 }
 
 function createPong(requestId: string): ExtensionToWebviewMessage {
@@ -61,6 +69,7 @@ interface BindWebviewMessageControllerOptions {
   readonly openExternalLink?: (href: string) => void;
   readonly editorContextActions?: EditorContextWebviewActions;
   readonly workspaceFileActions?: WorkspaceFileReferenceActions;
+  readonly localDataClear?: LocalDataClearUiActions;
 }
 
 export function bindWebviewMessageController({
@@ -79,6 +88,7 @@ export function bindWebviewMessageController({
   openExternalLink,
   editorContextActions,
   workspaceFileActions,
+  localDataClear,
 }: BindWebviewMessageControllerOptions): void {
   let disposed = false;
   const post = (message: ExtensionToWebviewMessage) => {
@@ -111,6 +121,21 @@ export function bindWebviewMessageController({
   const checkpointMessages = new WebviewCheckpointMessageHandler(post, checkpointActions);
   mcpActions?.bind(post);
   workspaceFileActions?.bind(post);
+  const localDataClearLockDisposal = localDataClear?.controller.registerOperationLock(async () => {
+    const releaseRunLock = await runMessages.acquireLocalDataClearLock();
+    try {
+      checkpointMessages.cancel();
+      editorContextActions?.clearForSessionSwitch();
+      resourceActions?.clearInput();
+      promptActions?.clearInput();
+      workspaceFileActions?.clearInput();
+      mcpActions?.clearTransientState();
+      return releaseRunLock;
+    } catch (error) {
+      releaseRunLock();
+      throw error;
+    }
+  }, "running");
 
   const messageSubscription = channel.onDidReceiveMessage((message) => {
     const result = webviewToExtensionMessageSchema.safeParse(message);
@@ -119,6 +144,9 @@ export function bindWebviewMessageController({
     }
 
     const data = result.data;
+    if (data.type !== "webview/clear-local-data" && localDataClear?.controller.isRunning) {
+      return;
+    }
     switch (data.type) {
       case "webview/ping":
         post(createPong(data.requestId));
@@ -346,6 +374,9 @@ export function bindWebviewMessageController({
           sessionMessages.clear(data.requestId);
         }
         return;
+      case "webview/clear-local-data":
+        localDataClear?.request(data.requestId, post);
+        return;
       case "webview/list-checkpoints":
         if (!sessionMessages.isRestoring()) {
           checkpointMessages.list(data.requestId);
@@ -402,6 +433,7 @@ export function bindWebviewMessageController({
     editorContextActions?.dispose();
     workspaceFileActions?.dispose();
     providerOnboarding?.dispose();
+    localDataClearLockDisposal?.();
     messageSubscription.dispose();
     disposalSubscription?.dispose();
     disposalSubscription = undefined;

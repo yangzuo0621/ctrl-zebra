@@ -10,6 +10,7 @@ import {
   ProviderConfigurationError,
   type ProviderId,
 } from "../adapters/provider-configuration.js";
+import { ProviderApiKeyOperationCoordinator } from "./provider-api-key-command.js";
 
 type ProviderConfigurationById = {
   readonly [Provider in ProviderId]: Extract<
@@ -57,6 +58,7 @@ interface SelectModelGatewayOptions {
   readonly configuration: ProviderConfiguration;
   readonly requiredCapabilities: readonly ProviderCapability[];
   readonly secrets: ProviderApiKeySecretReader;
+  readonly providerApiKeyCoordinator?: ProviderApiKeyOperationCoordinator;
   readonly factories: ProviderGatewayFactories;
 }
 
@@ -64,12 +66,14 @@ export async function selectModelGateway({
   configuration,
   requiredCapabilities,
   secrets,
+  providerApiKeyCoordinator,
   factories,
 }: SelectModelGatewayOptions): Promise<ModelGateway> {
   const gateway = await createProviderGateway({
     configuration,
     requiredCapabilities,
     secrets,
+    providerApiKeyCoordinator,
     factories,
   });
 
@@ -80,6 +84,7 @@ async function createProviderGateway({
   configuration,
   requiredCapabilities,
   secrets,
+  providerApiKeyCoordinator,
   factories,
 }: SelectModelGatewayOptions): Promise<ModelGateway> {
   const missingCapabilities = requiredCapabilities.filter(
@@ -91,19 +96,27 @@ async function createProviderGateway({
 
   if (configuration.provider === "openai") {
     const factory = requireProviderFactory(configuration.provider, factories.openai);
-    const apiKey = await readRequiredApiKey(configuration.provider, secrets);
+    const apiKey = await readRequiredApiKey(
+      configuration.provider,
+      secrets,
+      providerApiKeyCoordinator,
+    );
     return factory({ configuration, apiKey });
   }
 
   if (configuration.provider === "gemini") {
     const factory = requireProviderFactory(configuration.provider, factories.gemini);
-    const apiKey = await readRequiredApiKey(configuration.provider, secrets);
+    const apiKey = await readRequiredApiKey(
+      configuration.provider,
+      secrets,
+      providerApiKeyCoordinator,
+    );
     return factory({ configuration, apiKey });
   }
 
   const factory = requireProviderFactory(configuration.provider, factories["openai-compatible"]);
   const apiKey = configuration.requiresApiKey
-    ? await readRequiredApiKey(configuration.provider, secrets)
+    ? await readRequiredApiKey(configuration.provider, secrets, providerApiKeyCoordinator)
     : undefined;
   return factory({ configuration, apiKey });
 }
@@ -121,8 +134,10 @@ function requireProviderFactory<Provider extends ProviderId>(
 async function readRequiredApiKey(
   provider: ProviderId,
   secrets: ProviderApiKeySecretReader,
+  providerApiKeyCoordinator: ProviderApiKeyOperationCoordinator | undefined,
 ): Promise<string> {
-  const apiKey = await secrets.read(provider);
+  const coordinator = providerApiKeyCoordinator ?? new ProviderApiKeyOperationCoordinator();
+  const apiKey = await coordinator.run(provider, () => secrets.read(provider));
   if (apiKey === undefined || apiKey.length === 0) {
     throw new MissingProviderApiKeyError(provider);
   }

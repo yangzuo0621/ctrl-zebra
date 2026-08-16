@@ -33,6 +33,22 @@ This document defines the React Webview constraints established before T0103. It
   retention/list operation finishes, and the returned Session list simply omits records removed before
   it was emitted.
 
+### Complete local-data clear (T2106)
+
+The Webview exposes one high-risk `Clear all CtrlZebra local data` action and sends only the strict
+`webview/clear-local-data` intent. It does not confirm through browser APIs or choose categories,
+paths, settings, Secret names, or storage roots. The Extension Host owns the modal confirmation and
+the all-data controller. While the request is pending, the chat store fences new Session/Run intents
+and the Host invalidates pending Resource, Prompt, editor, workspace-file, Checkpoint, and MCP view
+state before cleanup.
+
+The chat store correlates `extension/local-data-clear-result` by request ID. `cancelled` leaves the
+current projection unchanged. `completed` and `partial` clear the transcript, Session selector,
+Checkpoint/approval projection, MCP and Provider projection, editor context, workspace references,
+and pending restore/stream state; a partial result retains the fixed retry message. A stale clear
+result or late Run/restore/MCP message cannot recreate the cleared projection. The clear action is
+single-flight and a retry uses the Host's category report rather than optimistic Webview deletion.
+
 ## VS Code API Boundary
 
 - `acquireVsCodeApi()` is called in exactly one Webview-local adapter module when host messaging is introduced.

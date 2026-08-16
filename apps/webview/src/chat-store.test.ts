@@ -23,6 +23,7 @@ function createHarness(ids: string[] = ["request-1"]) {
     restoreSession: vi.fn(),
     deleteSession: vi.fn(),
     clearSessions: vi.fn(),
+    clearLocalData: vi.fn(),
     listCheckpoints: vi.fn(),
     restoreCheckpoint: vi.fn(),
     subscribe: () => () => {},
@@ -1233,6 +1234,82 @@ describe("chat reasoning store", () => {
       sessionSelectionId: undefined,
       sessionMutationPending: false,
     });
+  });
+
+  it("clears every Webview projection after a partial local-data result and fences late output", () => {
+    const harness = createHarness(["request-1", "clear-local-1"]);
+    startRun(harness);
+    harness.receive({
+      protocolVersion,
+      type: "extension/session-started",
+      requestId: "request-1",
+      sessionId: "session-1",
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/text-delta",
+      requestId: "request-1",
+      text: "Sensitive local transcript",
+    });
+    harness.flush();
+
+    expect(harness.store.getState().clearLocalData()).toBe(true);
+    expect(harness.host.clearLocalData).toHaveBeenCalledWith("clear-local-1");
+    expect(harness.store.getState()).toMatchObject({
+      localDataClearPending: true,
+      sessionMutationPending: true,
+    });
+
+    harness.receive({
+      protocolVersion,
+      type: "extension/local-data-clear-result",
+      requestId: "clear-local-1",
+      outcome: "partial",
+      categories: [{ category: "provider-secret", outcome: "failed", deleted: 0, failed: 1 }],
+      message: "Some Provider Secret data could not be cleared. Retry to continue.",
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/text-delta",
+      requestId: "request-1",
+      text: "Late output",
+    });
+
+    expect(harness.store.getState()).toMatchObject({
+      messages: [],
+      sessions: [],
+      selectedSessionId: undefined,
+      localDataClearPending: false,
+      sessionMutationPending: false,
+      sessionError: "Some Provider Secret data could not be cleared. Retry to continue.",
+      sessionAnnouncement: "Some CtrlZebra local data could not be cleared. Retry to continue.",
+      localDataClearCategories: [
+        { category: "provider-secret", outcome: "failed", deleted: 0, failed: 1 },
+      ],
+    });
+  });
+
+  it("retains the Webview projection when the high-risk confirmation is cancelled", () => {
+    const harness = createHarness(["request-1", "clear-local-1"]);
+    startRun(harness);
+    expect(harness.store.getState().clearLocalData()).toBe(true);
+    harness.receive({
+      protocolVersion,
+      type: "extension/local-data-clear-result",
+      requestId: "clear-local-1",
+      outcome: "cancelled",
+      categories: [],
+      message: "CtrlZebra local-data clearing was cancelled.",
+    });
+
+    expect(harness.store.getState()).toMatchObject({
+      messages: expect.any(Array),
+      localDataClearPending: false,
+      sessionMutationPending: false,
+      localDataClearCategories: [],
+      sessionAnnouncement: "CtrlZebra local-data clearing was cancelled.",
+    });
+    expect(harness.store.getState().messages).not.toHaveLength(0);
   });
 
   it("clears a partially deleted Session projection but retains it when storage is unavailable", () => {

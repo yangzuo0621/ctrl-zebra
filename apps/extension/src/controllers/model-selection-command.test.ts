@@ -8,6 +8,7 @@ import {
   registerModelSelectionCommand,
   selectModelCommandId,
 } from "./model-selection-command.js";
+import { ProviderApiKeyOperationCoordinator } from "./provider-api-key-command.js";
 
 describe("Model selection command", () => {
   it("loads the official OpenAI list, extracts only data IDs, and saves the chosen model", async () => {
@@ -134,6 +135,41 @@ describe("Model selection command", () => {
     expect(harness.showErrorMessage).toHaveBeenCalledWith(
       "No OpenAI API key is saved. Enter a model ID manually.",
     );
+  });
+
+  it("does not read the Provider Secret while the lifecycle coordinator is exclusive", async () => {
+    const coordinator = new ProviderApiKeyOperationCoordinator();
+    const release = await coordinator.acquireExclusive();
+    try {
+      const harness = createHarness({
+        configuration: { provider: "openai" },
+        manualModelId: "gpt-manual",
+      });
+
+      registerModelSelectionCommand({
+        ...harness.options,
+        providerApiKeyCoordinator: coordinator,
+      });
+      await harness.run();
+
+      expect(harness.options.secrets.read).not.toHaveBeenCalled();
+      expect(harness.updateModel).toHaveBeenCalledWith("gpt-manual");
+    } finally {
+      release();
+    }
+  });
+
+  it("cancels before Secret access when local-data clearing is running", async () => {
+    const harness = createHarness({
+      configuration: { provider: "openai" },
+      manualModelId: "gpt-manual",
+    });
+
+    registerModelSelectionCommand({ ...harness.options, isBlocked: () => true });
+    await harness.run();
+
+    expect(harness.options.secrets.read).not.toHaveBeenCalled();
+    expect(harness.updateModel).not.toHaveBeenCalled();
   });
 
   it.each([

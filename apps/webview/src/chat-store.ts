@@ -1,6 +1,7 @@
 import {
   type ExtensionToWebviewMessage,
   hasTokenUsage,
+  type LocalDataClearCategoryResult,
   maxReasoningBlockCodePoints,
   maxReasoningBlocksPerRun,
   maxReasoningBlockUtf8Bytes,
@@ -74,6 +75,8 @@ interface ChatState {
   readonly sessionSwitchPending: boolean;
   readonly restoring: boolean;
   readonly sessionMutationPending: boolean;
+  readonly localDataClearPending: boolean;
+  readonly localDataClearCategories: readonly LocalDataClearCategoryResult[];
   readonly deletingSessionId?: string;
   readonly sessionError?: string;
   readonly runError?: string;
@@ -90,6 +93,7 @@ interface ChatState {
   restoreSelectedSession(): boolean;
   deleteSession(sessionId: string): boolean;
   clearSessions(): boolean;
+  clearLocalData(): boolean;
   toggleReasoningBlock(messageId: string, blockId: string): void;
   announceReasoning(message: string): void;
   receive(message: ExtensionToWebviewMessage): void;
@@ -107,6 +111,7 @@ export interface ChatStoreOptions {
   readonly beforeSessionMutation?: () => void;
   readonly afterSessionDeleted?: (sessionId: string) => void;
   readonly afterSessionsCleared?: () => void;
+  readonly afterLocalDataCleared?: () => void;
   readonly afterSessionMutationFailed?: () => void;
 }
 
@@ -155,6 +160,7 @@ export function createChatStore({
   beforeSessionMutation,
   afterSessionDeleted,
   afterSessionsCleared,
+  afterLocalDataCleared,
   afterSessionMutationFailed,
 }: ChatStoreOptions): StoreApi<ChatState> {
   let pendingTextDelta = "";
@@ -165,6 +171,7 @@ export function createChatStore({
   let deleteRequestId: string | undefined;
   let deleteTargetSessionId: string | undefined;
   let clearRequestId: string | undefined;
+  let localDataClearRequestId: string | undefined;
   const mismatchedSessionRequests = new Set<string>();
   let stagedReasoningRestore: ReasoningRestoredMessage | undefined;
   let activeAssistantMessageId: string | undefined;
@@ -566,6 +573,8 @@ export function createChatStore({
       sessionSwitchPending: false,
       restoring: false,
       sessionMutationPending: false,
+      localDataClearPending: false,
+      localDataClearCategories: [],
       reasoningAnnouncement: "",
       sessionAnnouncement: "",
       submit(content) {
@@ -759,6 +768,7 @@ export function createChatStore({
           restoring: false,
           sessionMutationPending: false,
           deletingSessionId: undefined,
+          localDataClearCategories: [],
           sessionError: undefined,
           runError: undefined,
           usage: undefined,
@@ -866,6 +876,29 @@ export function createChatStore({
         });
         beforeSessionMutation?.();
         host.clearSessions(clearRequestId);
+        return true;
+      },
+      clearLocalData() {
+        const state = get();
+        if (
+          state.localDataClearPending ||
+          state.sessionMutationPending ||
+          host.clearLocalData === undefined
+        ) {
+          return false;
+        }
+        listRequestId = undefined;
+        localDataClearRequestId = createRequestId();
+        set({
+          localDataClearPending: true,
+          sessionMutationPending: true,
+          deletingSessionId: undefined,
+          localDataClearCategories: [],
+          sessionError: undefined,
+          sessionAnnouncement: strings.chat.clearingLocalData,
+        });
+        beforeSessionMutation?.();
+        host.clearLocalData(localDataClearRequestId);
         return true;
       },
       toggleReasoningBlock(messageId, blockId) {
@@ -994,6 +1027,48 @@ export function createChatStore({
             sessionAnnouncement: strings.chat.sessionDeletionFailed,
           });
           afterSessionMutationFailed?.();
+          return;
+        }
+
+        if (
+          message.type === "extension/local-data-clear-result" &&
+          message.requestId === localDataClearRequestId
+        ) {
+          localDataClearRequestId = undefined;
+          if (message.outcome === "cancelled") {
+            set({
+              localDataClearPending: false,
+              sessionMutationPending: false,
+              localDataClearCategories: [],
+              sessionError: undefined,
+              sessionAnnouncement: strings.chat.localDataClearCancelled,
+            });
+            return;
+          }
+
+          clearRequestId = undefined;
+          deleteRequestId = undefined;
+          deleteTargetSessionId = undefined;
+          listRequestId = undefined;
+          restoreRequestId = undefined;
+          restoreTargetSessionId = undefined;
+          resetSessionProjection();
+          afterLocalDataCleared?.();
+          set({
+            localDataClearPending: false,
+            sessionMutationPending: false,
+            localDataClearCategories: message.categories,
+            deletingSessionId: undefined,
+            regeneratingMessageId: undefined,
+            editingMessageId: undefined,
+            sessionError: message.outcome === "partial" ? message.message : undefined,
+            runError: undefined,
+            usage: undefined,
+            sessionAnnouncement:
+              message.outcome === "partial"
+                ? strings.chat.localDataClearFailed
+                : strings.chat.localDataCleared,
+          });
           return;
         }
 
@@ -1281,6 +1356,7 @@ export function createChatStore({
         listRequestId = undefined;
         restoreRequestId = undefined;
         restoreTargetSessionId = undefined;
+        localDataClearRequestId = undefined;
         mismatchedSessionRequests.clear();
         stagedReasoningRestore = undefined;
         activeAssistantMessageId = undefined;
@@ -1292,7 +1368,12 @@ export function createChatStore({
         editContent = undefined;
         set({ regeneratingMessageId: undefined });
         set({ editingMessageId: undefined });
-        set({ sessionMutationPending: false, deletingSessionId: undefined });
+        set({
+          sessionMutationPending: false,
+          localDataClearPending: false,
+          localDataClearCategories: [],
+          deletingSessionId: undefined,
+        });
         resetLiveReasoning();
       },
     };

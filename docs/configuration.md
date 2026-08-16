@@ -48,6 +48,25 @@ Sessions and owned Checkpoints removed, while partial storage failures report th
 remove all expired local data and can be retried by refreshing Session history. Cleanup changes no
 Protocol wire shape and requires no persisted-format migration.
 
+## Complete local-data clearing (T2106)
+
+The uninstall-before/device-handoff action clears the Extension's explicit values for these owned
+settings, at every configured user, workspace, workspace-folder, and language override scope:
+
+| Configuration group | Owned leaves cleared |
+|---|---|
+| `ctrlZebra.provider` | `id`, `model`, `endpoint`, `capabilities` |
+| `ctrlZebra.mcp` | `server` |
+| `ctrlZebra.sessionRetention` | `enabled`, `days` |
+| `ctrlZebra.editorContext` | `enabled` |
+
+Clearing restores registered defaults rather than deleting unrelated VS Code settings. It is separate
+from Session retention and does not run at activation, on restart, or silently during uninstall. The
+Host uses the same validated setting owners for cleanup and reports a configuration category failure
+if one scope cannot be removed; a retry safely repeats the remaining updates. Provider API keys are
+separate SecretStorage entries and are reported under `provider-secret`. The MCP process is
+disconnected before the configuration value is removed.
+
 ## Scope and ownership
 
 `ctrlZebra.mcp.server` is one optional, machine-scoped VS Code setting. The Extension Host is the

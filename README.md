@@ -242,7 +242,11 @@ Read the full [Privacy Notice](PRIVACY.md) and [security contract](docs/security
 - Local Session and Checkpoint retention defaults to 30 days, is configurable or disableable through
   `ctrlZebra.sessionRetention.enabled` and `ctrlZebra.sessionRetention.days`, and runs only when
   Session history is explicitly listed/refreshed. T2104 also provides explicit local delete controls;
-  retention never removes workspace files.
+  retention never removes workspace files. Before uninstall or device handoff, run `CtrlZebra: Clear
+  All Local Data` (or the Agent view action) and accept the modal high-risk confirmation. It clears
+  CtrlZebra-owned Sessions, Checkpoints, temporary/cache state, Provider keys, MCP/Provider settings,
+  and other local state; it never removes workspace files, user code, VS Code data outside CtrlZebra,
+  or other extensions. Partial failures are reported by category and can be retried safely.
 - Checkpoint restore is conflict-safe, not a merge system: changed or non-canonical targets block the
   entire restore.
 - Large files, binary files, command output, tool output, event logs, and model context are bounded
