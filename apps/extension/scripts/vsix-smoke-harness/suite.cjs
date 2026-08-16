@@ -144,7 +144,7 @@ async function settleNotificationCommand(command) {
   const deadline = Date.now() + 10_000;
   while (!settled && Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, 50));
-    await vscode.commands.executeCommand("workbench.action.closeMessages");
+    await vscode.commands.executeCommand("notifications.clearAll");
   }
   if (!settled) {
     throw new Error("The installed Provider check did not settle after closing its notification.");
