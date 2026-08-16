@@ -49,6 +49,12 @@ describe("MarkdownMessage", () => {
     expect(screen.getByText("const value = 1;")).toBeVisible();
   });
 
+  it("preserves an ordered list's explicit starting number", () => {
+    render(<MarkdownMessage content={["3. third", "4. fourth"].join("\n")} />);
+
+    expect(screen.getByRole("list")).toHaveAttribute("start", "3");
+  });
+
   it("keeps raw HTML and images inert", () => {
     const { container } = render(
       <MarkdownMessage
