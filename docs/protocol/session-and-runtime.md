@@ -88,6 +88,12 @@ new-Session behavior.
   its first accepted event. The Webview accepts it only for the active request and stores the
   confirmed Session identity; it never derives an identity from `requestId`, display state, or model
   output. A stale, duplicate, or mismatched event has no UI or ownership effect.
+- `extension/session-restored` keeps its existing strict restored-message shape and may carry the
+  additive optional boolean `session.readOnly`. The Host sets it only for a recognized pre-multiturn
+  `v1` Session whose history has a user message but no `session.status-changed` event. The Webview
+  renders that history without modifying it and disables submit, edit, and regeneration until the
+  user chooses explicit `webview/new-chat`; the marker never authorizes continuation or changes the
+  persistence format/version.
 - `extension/session-deleted` contains the envelope and the exact deleted `sessionId`.
   `extension/sessions-cleared` contains the envelope and a bounded `deletedCount`. The correlated
   `extension/session-deletion-error` contains `code: "not-found" | "partial" | "unavailable"`

@@ -71,6 +71,7 @@ interface ChatState {
   readonly editingMessageId?: string;
   readonly sessions: readonly SessionSummary[];
   readonly selectedSessionId?: string;
+  readonly readOnly: boolean;
   readonly sessionSelectionId?: string;
   readonly sessionSwitchPending: boolean;
   readonly restoring: boolean;
@@ -548,6 +549,7 @@ export function createChatStore({
               sessionSelectionId: undefined,
               sessionSwitchPending: false,
               usage: undefined,
+              readOnly: false,
               runError: undefined,
               regeneratingMessageId: undefined,
               editingMessageId: undefined,
@@ -570,6 +572,7 @@ export function createChatStore({
       editingMessageId: undefined,
       usage: undefined,
       sessions: [],
+      readOnly: false,
       sessionSwitchPending: false,
       restoring: false,
       sessionMutationPending: false,
@@ -584,6 +587,7 @@ export function createChatStore({
           restoreRequestId !== undefined ||
           state.sessionMutationPending ||
           state.sessionSwitchPending ||
+          state.readOnly ||
           content.trim().length === 0
         ) {
           return false;
@@ -635,6 +639,7 @@ export function createChatStore({
           restoreRequestId !== undefined ||
           state.sessionMutationPending ||
           state.sessionSwitchPending ||
+          state.readOnly ||
           state.selectedSessionId === undefined
         ) {
           return false;
@@ -677,6 +682,7 @@ export function createChatStore({
           restoreRequestId !== undefined ||
           state.sessionMutationPending ||
           state.sessionSwitchPending ||
+          state.readOnly ||
           state.selectedSessionId === undefined ||
           content.trim().length === 0 ||
           content.length > 1_000_000 ||
@@ -772,6 +778,7 @@ export function createChatStore({
           sessionError: undefined,
           runError: undefined,
           usage: undefined,
+          readOnly: false,
           reasoningAnnouncement: "",
           sessionAnnouncement: strings.chat.newChatReady,
         });
@@ -960,6 +967,7 @@ export function createChatStore({
             selectedSessionId: message.sessionId,
             sessionSelectionId: message.sessionId,
             sessionSwitchPending: false,
+            readOnly: false,
             sessionError: undefined,
             sessionAnnouncement: strings.chat.currentSessionConfirmed,
           });
@@ -1124,6 +1132,7 @@ export function createChatStore({
             sessionSelectionId: message.session.sessionId,
             sessionSwitchPending: false,
             restoring: false,
+            readOnly: message.session.readOnly === true,
             usage: message.session.usage,
             reasoningAnnouncement: "",
             sessionError: message.session.eventLogTailDamaged

@@ -252,8 +252,10 @@ export {
   DuplicateSessionError,
   InconsistentSessionRecordError,
   InMemorySessionRepository,
+  isLegacyReadOnlySession,
   maxSessionRecords,
   PersistedSessionRepository,
+  ReadOnlySessionError,
   SessionDeletionUnavailableError,
   SessionNotFoundError,
 } from "./session-repository.js";

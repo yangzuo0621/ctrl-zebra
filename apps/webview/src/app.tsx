@@ -132,6 +132,7 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
   const activeRequestId = useStore(store, (state) => state.activeRequestId);
   const sessions = useStore(store, (state) => state.sessions);
   const selectedSessionId = useStore(store, (state) => state.selectedSessionId);
+  const readOnly = useStore(store, (state) => state.readOnly);
   const sessionSelectionId = useStore(store, (state) => state.sessionSelectionId);
   const sessionSwitchPending = useStore(store, (state) => state.sessionSwitchPending);
   const restoring = useStore(store, (state) => state.restoring);
@@ -530,6 +531,11 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
             {restoring ? (
               <p className={styles.sessionStatus}>{strings.app.restoringSession}</p>
             ) : null}
+            {readOnly ? (
+              <p className={styles.sessionStatus} role="status">
+                {strings.chat.readOnlySession}
+              </p>
+            ) : null}
           </section>
           <CheckpointPanel store={checkpointStore} />
         </section>
@@ -605,7 +611,10 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
                       onChange={(event) => setEditingDraft(event.target.value)}
                       rows={3}
                       disabled={
-                        activeRequestId !== undefined || restoring || sessionMutationPending
+                        activeRequestId !== undefined ||
+                        restoring ||
+                        sessionMutationPending ||
+                        readOnly
                       }
                     />
                     <div className={styles.messageActions}>
@@ -616,6 +625,7 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
                           activeRequestId !== undefined ||
                           restoring ||
                           sessionMutationPending ||
+                          readOnly ||
                           sessionSwitchPending ||
                           editingDraft.trim().length === 0
                         }
@@ -628,7 +638,10 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
                         size="sm"
                         onClick={cancelEditing}
                         disabled={
-                          activeRequestId !== undefined || restoring || sessionMutationPending
+                          activeRequestId !== undefined ||
+                          restoring ||
+                          sessionMutationPending ||
+                          readOnly
                         }
                       >
                         {strings.chat.cancelEdit}
@@ -651,6 +664,7 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
                         activeRequestId !== undefined ||
                         restoring ||
                         sessionMutationPending ||
+                        readOnly ||
                         sessionSwitchPending ||
                         selectedSessionId === undefined ||
                         editingMessageId !== undefined
@@ -674,6 +688,7 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
                         activeRequestId !== undefined ||
                         restoring ||
                         sessionMutationPending ||
+                        readOnly ||
                         regeneratingMessageId !== undefined ||
                         selectedSessionId === undefined
                       }
@@ -758,7 +773,9 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
               onCompositionStart={() => setIsComposing(true)}
               onCompositionEnd={() => setIsComposing(false)}
               rows={3}
-              disabled={activeRequestId !== undefined || restoring || sessionMutationPending}
+              disabled={
+                activeRequestId !== undefined || restoring || sessionMutationPending || readOnly
+              }
             />
             {workspaceFileSearchPending ? (
               <p className={styles.composerHint}>{strings.workspaceFiles.reading}</p>
@@ -794,6 +811,7 @@ export function App({ host: providedHost, createRequestId }: AppProps) {
                     activeRequestId !== undefined ||
                     restoring ||
                     sessionMutationPending ||
+                    readOnly ||
                     sessionSwitchPending ||
                     draft.trim().length === 0 ||
                     !editorContextCanSend ||

@@ -748,6 +748,7 @@ export const restoredSessionSchema = z.strictObject({
   status: sessionStatusSchema,
   messages: z.array(z.union([userMessageSchema, assistantMessageSchema])).max(10_000),
   eventLogTailDamaged: z.boolean(),
+  readOnly: z.boolean().optional(),
   usage: tokenUsageSchema.optional(),
 });
 

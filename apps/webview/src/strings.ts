@@ -404,6 +404,8 @@ export const strings = {
     recoveredEventLog: "Recovered through the last valid event.",
     truncatedFollowUp: "The response was truncated before completion. Ask a follow-up to continue.",
     sessionRestored: "Session restored.",
+    readOnlySession:
+      "This older Session is read-only. Its history is preserved; start a new chat to continue.",
     sessionListUnavailable: "Session list unavailable.",
     deletingSession: "Deleting Session…",
     clearingSessions: "Clearing saved Sessions…",

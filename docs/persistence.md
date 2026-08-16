@@ -257,12 +257,18 @@ or migration is added by T2103.
 - Existing format `v1` Sessions written before Run identity support, including legacy single-turn
   Sessions, remain readable without in-place migration. A reader treats recognized legacy events that
   lack Run identity as one deterministic legacy Run and applies the same ordered projection rules.
+  A recognized pre-multiturn Session is identified by at least one persisted user message and no
+  `session.status-changed` event. It opens as a read-only historical projection: its source files,
+  manifest metadata, and event sequence remain unchanged, and no continuation, regeneration, or edit
+  may append events or update status. The restored projection carries the bounded `readOnly` marker
+  so the Webview can preserve history while directing the user to `New chat`.
   Unsupported, missing, or mismatched format versions remain isolated as unsupported/corrupt; they are
   never guessed as the current format. New persistence fields or strict event payloads require an
   explicit compatibility fixture and owning task.
 - Recovery normalizes active statuses to `interrupted`, preserves `completed`, `truncated`, `cancelled`, `failed`,
   and existing `interrupted`, and performs no model, Tool, approval, or Provider action. An explicit
-  later submit may reset a recovered Session to a new Run; recovery itself never resumes work.
+  later submit may reset a recovered writable Session to a new Run; a read-only legacy Session remains
+  historical and cannot be continued. Recovery itself never resumes work.
 
 ### Session resource ceilings
 
@@ -338,8 +344,14 @@ do not mutate recovered state.
   incompatibility requires a new version directory and an explicit migration that reads the old
   format and writes a complete new-format session.
 - Migration must not modify the source session in place. The new session becomes visible only after
-  all data files and its manifest have been committed successfully. Automatic migration is not part
-  of T0601.
+  all data files and its manifest have been committed successfully. T2203 uses the read-only fallback
+  for the recognized pre-multiturn v1 difference because its exact lifecycle boundary cannot be
+  inferred safely; it creates no destination Session and therefore cannot expose a partial migrated
+  Session. No automatic migration or source rewrite is performed.
+- The read-only fallback is a bounded read/validation path. Cancellation, a read or projection failure,
+  and an unavailable store leave the source untouched; the fallback performs no rollback write because
+  it has no destination. Explicit Session deletion and clear-all remain the only allowed mutations of
+  that historical source.
 - Reasoning events do not change the version `1` directory layout, manifest, JSONL envelope, Chat
   Message schema, or meaning of an existing event. The event envelope intentionally admits later
   dotted event types, so this is an additive version `1` extension rather than a structural or
@@ -373,8 +385,10 @@ do not mutate recovered state.
   out of `interrupted` is legal.
 - On recovery, `idle`, `preparing`, `streaming`, `awaiting_approval`, and `executing_tool` are written
   back as `interrupted`. `completed`, `truncated`, `cancelled`, `failed`, and `interrupted` remain unchanged.
-- Recovery may read history and update the manifest status only. It never resumes a model request,
-  consumes an approval, executes a tool, or repeats any other persisted side effect.
+- Recovery may read history and update the manifest status only for a writable Session. For a recognized
+  read-only legacy Session it projects `interrupted` when the source status is active but does not write
+  that recovery-only status back. It never resumes a model request, consumes an approval, executes a
+  tool, or repeats any other persisted side effect.
 - Recovery may project committed reasoning events for display, including bounded partial blocks and
   truncation state. It never resumes a reasoning stream, calls a Provider, completes an open block,
   regenerates omitted text, inserts reasoning into model context, or emits live reasoning deltas.

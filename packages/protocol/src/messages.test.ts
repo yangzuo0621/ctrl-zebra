@@ -499,10 +499,25 @@ describe("Webview protocol messages", () => {
         },
       ],
     } as const;
+    const restored = {
+      protocolVersion,
+      type: "extension/session-restored",
+      requestId: restoreRequest.requestId,
+      session: {
+        sessionId: "session-1",
+        status: "completed",
+        eventLogTailDamaged: false,
+        readOnly: true,
+        messages: [],
+      },
+    } as const;
 
     expect(webviewToExtensionMessageSchema.parse(listRequest)).toEqual(listRequest);
     expect(webviewToExtensionMessageSchema.parse(restoreRequest)).toEqual(restoreRequest);
     expect(extensionToWebviewMessageSchema.parse(listResponse)).toEqual(listResponse);
+    expect(
+      extensionToWebviewMessageSchema.parse(JSON.parse(JSON.stringify(restored)) as unknown),
+    ).toEqual(restored);
   });
 
   it.each([
