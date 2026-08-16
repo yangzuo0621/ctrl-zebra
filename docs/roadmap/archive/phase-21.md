@@ -1,5 +1,16 @@
 # 阶段 21：对话交互与会话数据控制
 
+> **归档状态：阶段性归档校验通过**
+>
+> - 归档日期：2026-08-16
+> - 完成任务：T2101–T2106；任务已通过 [PR #240](https://github.com/yangzuo0621/ctrl-zebra/pull/240)（squash merge `aa58c326941e4a5534fa881b0150d8e57a13945b`）、[PR #242](https://github.com/yangzuo0621/ctrl-zebra/pull/242)（`cd6956f81bd759298acbd7e69e581acc6295b9ad`）、[PR #244](https://github.com/yangzuo0621/ctrl-zebra/pull/244)（`15121a30ddeda7004ab41bfa17efd9550e6e3427`）、[PR #245](https://github.com/yangzuo0621/ctrl-zebra/pull/245)（`bd5c5595da1971b7e4e5003d62a6c2ba9de6e0d3`）、[PR #248](https://github.com/yangzuo0621/ctrl-zebra/pull/248)（`dea09405579a302d2427b53b4f3e9cf6e2d2e276`）和 [PR #250](https://github.com/yangzuo0621/ctrl-zebra/pull/250)（`fc5951776bc80862a3b0413d93c7d44f6df655cf`）合并到 `main`。
+> - 阶段完成基线：`fc5951776bc80862a3b0413d93c7d44f6df655cf`（归档校验开始时 `main` 与 `origin/main` 均已包含 T2106 完成状态，工作区 clean）。
+> - 阶段 21 归档门禁 PR：本次归档 PR；阶段 22 的 T2201 只在本 PR 合并后可开始。
+> - 阶段门禁：重新生成和编辑重发创建新的 Run/分支结果，不重复旧 Tool side effect、复用审批或篡改源事件；工作区文件引用只读取已选工作区内有界文本并在发送前可见；会话删除、全部清空和保留策略覆盖 Session、Checkpoint、临时文件和索引记录且不静默处理运行中数据；清除全部本地 CtrlZebra 数据覆盖已清单化的 CtrlZebra-owned 状态，部分失败可诊断并安全重试，不删除工作区文件、用户代码、VS Code 全局数据或其他扩展状态。
+> - 跨边界一致性：`docs/architecture/context-and-session.md`、`docs/architecture/lifecycle.md`、`docs/protocol/session-and-runtime.md`、`docs/protocol/ide-context.md`、`docs/security.md`、`docs/persistence.md`、`docs/configuration.md`、`docs/ux.md`、`docs/webview.md`、`PRIVACY.md`、Protocol Schema、Core/Extension storage and recovery adapters、Webview session/file-reference/local-data projections 保持分支 Run、事件源、文件 URI/Trust/预算、删除/保留/清除、取消、恢复、秘密和不可信内容边界一致。
+> - 验证证据：T2101–T2106 聚焦测试、`pnpm run test:unit`、`pnpm run typecheck`、`pnpm run check`、Extension/Webview build、`pnpm run test:integration`、`pnpm run package:vsix`、`pnpm run smoke:vsix`、`git diff --check` 以及对应 PR 的 Ubuntu、macOS、Windows CI 均通过；非交互环境未执行需要真实 VS Code/用户数据的手工卸载路径。
+> - 后续门禁：Phase 21 归档合入前不得启动 T2201；归档后执行点为 T2201。
+
 ## 1. 阶段目标
 
 在多轮 Session 已稳定的基础上补齐重新生成、编辑重发和工作区文件引用，并让用户能够删除会话、
