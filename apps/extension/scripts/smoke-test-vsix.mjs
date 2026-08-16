@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { access, mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve, sep } from "node:path";
+import { basename, dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
@@ -83,6 +83,7 @@ try {
   const log = await readFile(logPath, "utf8");
   for (const event of [
     "extension_activated",
+    "provider_connection_check",
     "mcp_connection_failed",
     "agent_view_first_displayed",
   ]) {
@@ -91,7 +92,28 @@ try {
     }
   }
 
-  console.log(`VSIX smoke test passed for ${artifactPath}`);
+  console.log(
+    JSON.stringify(
+      {
+        status: "passed",
+        artifact: basename(artifactPath),
+        platform: process.platform,
+        extension: `${manifest.publisher}.${manifest.name}@${manifest.version}`,
+        checks: [
+          "installed-isolated-profile",
+          "activation",
+          "provider-configuration",
+          "provider-connection",
+          "mcp-configuration-gate",
+          "deletion-command-registration",
+          "agent-view",
+          "structured-log",
+        ],
+      },
+      null,
+      2,
+    ),
+  );
 } finally {
   await rm(profileRoot, { recursive: true, force: true });
 }

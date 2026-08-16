@@ -12,6 +12,7 @@
     "release:verify": "node ./scripts/verify-release.mjs",
     "release:update-audit": "node ./scripts/verify-release.mjs --update-audit",
     "smoke:vsix": "node ./apps/extension/scripts/smoke-test-vsix.mjs",
+    "test:marketplace": "node ./scripts/check-marketplace.mjs",
     "test:docs": "node ./scripts/check-governance-docs.mjs",
     "test:dependabot": "node ./scripts/check-dependabot-config.mjs",
     "test": "pnpm run test:unit && pnpm run test:integration",

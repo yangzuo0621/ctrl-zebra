@@ -6,6 +6,7 @@ const extensionDevelopmentPath = resolve(dirname(fileURLToPath(import.meta.url))
 const repositoryRoot = resolve(extensionDevelopmentPath, "..", "..");
 const extensionTestsPath = resolve(extensionDevelopmentPath, "dist", "test", "suite", "index.cjs");
 const ollamaSmokeModel = process.env.CTRL_ZEBRA_OLLAMA_SMOKE_MODEL;
+const marketplaceSmoke = process.env.CTRL_ZEBRA_MARKETPLACE_SMOKE;
 const launchArgs = [
   repositoryRoot,
   "--disable-extensions",
@@ -14,6 +15,7 @@ const launchArgs = [
 ];
 const extensionTestsEnv = {
   ...(ollamaSmokeModel === undefined ? {} : { CTRL_ZEBRA_OLLAMA_SMOKE_MODEL: ollamaSmokeModel }),
+  ...(marketplaceSmoke === undefined ? {} : { CTRL_ZEBRA_MARKETPLACE_SMOKE: marketplaceSmoke }),
 };
 
 try {

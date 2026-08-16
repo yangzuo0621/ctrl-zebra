@@ -1,7 +1,7 @@
 {
   "name": "ctrl-zebra",
   "displayName": "CtrlZebra",
-  "description": "A workspace agent for VS Code.",
+  "description": "A local-first workspace agent with reviewable file and command approvals for VS Code.",
   "version": "0.1.1",
   "publisher": "ctrl-zebra",
   "license": "MIT",
@@ -18,6 +18,12 @@
     "developer-tools"
   ],
   "icon": "media/ctrl-zebra.png",
+  "galleryBanner": {
+    "color": "#10161f",
+    "theme": "dark"
+  },
+  "markdown": "github",
+  "qna": false,
   "pricing": "Free",
   "type": "module",
   "repository": {
@@ -37,6 +43,9 @@
     "dist/webview/main.js",
     "media/ctrl-zebra.png",
     "media/ctrl-zebra.svg",
+    "media/marketplace/agent-overview.png",
+    "media/marketplace/provider-setup.png",
+    "media/marketplace/safe-tools.png",
     "README.md"
   ],
   "engines": {

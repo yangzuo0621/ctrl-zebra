@@ -38,6 +38,17 @@ be restored with their local Session.
 Repository maintainers can create a verified local artifact with `pnpm package:vsix`. See
 [the packaging contract](docs/packaging.md) for provenance and content checks.
 
+## Marketplace preview
+
+CtrlZebra keeps model access, workspace tools, and approvals local to the desktop VS Code
+Extension. The listing screenshots use invented values only and show the reviewable Agent surface:
+
+![CtrlZebra Agent overview](https://raw.githubusercontent.com/yangzuo0621/ctrl-zebra/main/apps/extension/media/marketplace/agent-overview.png)
+
+![Provider setup](https://raw.githubusercontent.com/yangzuo0621/ctrl-zebra/main/apps/extension/media/marketplace/provider-setup.png)
+
+![Safe tools and approvals](https://raw.githubusercontent.com/yangzuo0621/ctrl-zebra/main/apps/extension/media/marketplace/safe-tools.png)
+
 ## Quick start with a Provider
 
 1. Open VS Code Settings and set **CtrlZebra › Provider: Id** to `openai`, `gemini`, or
@@ -220,6 +231,14 @@ context, tool definitions, and tool results. Tool results can contain workspace 
 writes and commands remain local unless the approved command itself communicates externally.
 
 Read the full [Privacy Notice](PRIVACY.md) and [security contract](docs/security.md).
+
+## Privacy, support, and release links
+
+- [Privacy Notice](PRIVACY.md) explains local storage, Provider data flow, and the external MCP boundary.
+- [Support and bug reports](https://github.com/yangzuo0621/ctrl-zebra/issues) are handled in the public issue tracker.
+- [Security Policy](SECURITY.md) describes private vulnerability reporting.
+- [Contributing](CONTRIBUTING.md) documents the development and pull-request workflow.
+- [Changelog](CHANGELOG.md) records repository changes and release notes.
 
 ## Known limitations
 

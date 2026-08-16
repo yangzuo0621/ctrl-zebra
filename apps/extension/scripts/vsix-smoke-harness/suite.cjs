@@ -1,3 +1,5 @@
+const { createServer } = require("node:http");
+
 const vscode = require("vscode");
 
 exports.run = async () => {
@@ -11,14 +13,55 @@ exports.run = async () => {
     throw new Error("The installed CtrlZebra extension did not activate.");
   }
 
-  const setting = vscode.workspace.getConfiguration("ctrlZebra.mcp");
+  const commands = await vscode.commands.getCommands(true);
+  for (const command of [
+    "ctrlZebra.checkProviderConnection",
+    "ctrlZebra.clearLocalData",
+    "ctrlZebra.deleteOpenAIApiKey",
+    "ctrlZebra.deleteGeminiApiKey",
+    "ctrlZebra.deleteOpenAICompatibleApiKey",
+  ]) {
+    if (!commands.includes(command)) {
+      throw new Error(`The installed extension is missing the ${command} lifecycle command.`);
+    }
+  }
+
+  const providerServer = await startProviderMetadataServer();
+  const providerSetting = vscode.workspace.getConfiguration("ctrlZebra.provider");
+  const mcpSetting = vscode.workspace.getConfiguration("ctrlZebra.mcp");
   try {
-    await setting.update(
+    await providerSetting.update("id", "openai-compatible", vscode.ConfigurationTarget.Global);
+    await providerSetting.update("model", "marketplace-smoke", vscode.ConfigurationTarget.Global);
+    await providerSetting.update(
+      "endpoint",
+      providerServer.endpoint,
+      vscode.ConfigurationTarget.Global,
+    );
+    await providerSetting.update(
+      "capabilities",
+      ["text-streaming", "tool-calling"],
+      vscode.ConfigurationTarget.Global,
+    );
+    const providerReport = await vscode.commands.executeCommand(
+      "ctrlZebra.checkProviderConnection",
+    );
+    if (
+      providerReport?.outcome !== "completed" ||
+      providerReport?.provider !== "openai-compatible" ||
+      providerReport?.modelId !== "marketplace-smoke"
+    ) {
+      throw new Error("The installed extension did not complete the loopback Provider check.");
+    }
+    if (providerServer.requestCount() !== 1) {
+      throw new Error("The installed Provider check did not make exactly one metadata request.");
+    }
+
+    await mcpSetting.update(
       "server",
       {
         version: 1,
-        serverId: "vsix_fixture",
-        displayName: "VSIX fixture",
+        serverId: "marketplace_smoke",
+        displayName: "Marketplace smoke",
         command: "",
         args: [],
       },
@@ -34,8 +77,56 @@ exports.run = async () => {
     }
   } finally {
     await vscode.commands.executeCommand("ctrlZebra.disconnectMcpServer");
-    await setting.update("server", undefined, vscode.ConfigurationTarget.Global);
+    await mcpSetting.update("server", undefined, vscode.ConfigurationTarget.Global);
+    await providerSetting.update("capabilities", undefined, vscode.ConfigurationTarget.Global);
+    await providerSetting.update("endpoint", undefined, vscode.ConfigurationTarget.Global);
+    await providerSetting.update("model", undefined, vscode.ConfigurationTarget.Global);
+    await providerSetting.update("id", undefined, vscode.ConfigurationTarget.Global);
+    await providerServer.close();
   }
 
   await vscode.commands.executeCommand("ctrlZebra.agentView.focus");
 };
+
+async function startProviderMetadataServer() {
+  let requests = 0;
+  const server = createServer((request, response) => {
+    if (
+      request.method !== "GET" ||
+      request.url !== "/v1/models/marketplace-smoke" ||
+      request.headers.authorization !== undefined
+    ) {
+      response.writeHead(400, { "content-type": "application/json" });
+      response.end('{"error":"invalid-request"}');
+      return;
+    }
+    requests += 1;
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end('{"id":"marketplace-smoke"}');
+  });
+  await new Promise((resolve, reject) => {
+    const onError = (error) => reject(error);
+    server.once("error", onError);
+    server.listen(0, "127.0.0.1", () => {
+      server.off("error", onError);
+      resolve();
+    });
+  });
+  const address = server.address();
+  if (address === null || typeof address === "string") {
+    await closeServer(server);
+    throw new Error("The installed smoke Provider did not bind to loopback TCP.");
+  }
+  return {
+    endpoint: `http://127.0.0.1:${address.port}/v1`,
+    requestCount: () => requests,
+    close: () => closeServer(server),
+  };
+}
+
+async function closeServer(server) {
+  if (!server.listening) return;
+  await new Promise((resolve, reject) => {
+    server.close((error) => (error === undefined ? resolve() : reject(error)));
+  });
+}

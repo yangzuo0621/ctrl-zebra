@@ -9,13 +9,19 @@ The extension manifest owns one explicit `files` allowlist. The package contains
 
 - the bundled Extension Host entry point;
 - the production Webview bundle and its static assets;
-- the extension icon and other declared media;
+- the extension icon and three reviewed, sanitized Marketplace screenshots;
 - the extension README, MIT license, and package manifest; and
 - generated build metadata containing the exact source Git commit.
 
 The allowlist is authoritative; do not add a `.vscodeignore` alongside it. Before packaging, `vsce
 ls` must be compared with the repository-owned expected-file policy. An unexpected file is a failed
 package, even when it would be harmless at runtime.
+
+Marketplace screenshots are static package media, not runtime captures. They must contain only
+invented values, remain bounded PNG files, pass `pnpm test:marketplace`, and be named explicitly in
+both the manifest and archive policies. Captured workspaces, conversations, Provider responses,
+credentials, user-data, logs, fixtures, and caches remain forbidden even when intended as listing
+evidence.
 
 ## Source maps and dependencies
 
@@ -95,7 +101,10 @@ manual release action.
   `.artifacts/`.
 - `pnpm smoke:vsix -- <path-to-vsix>` installs that exact artifact into temporary isolated VS Code
   user-data and extensions directories, activates the installed extension, opens the Agent view,
-  checks its structured log, and removes the temporary profile.
+  checks loopback Provider configuration, MCP restrictions, lifecycle command registration and the
+  structured log, then removes the temporary profile.
+- `pnpm test:marketplace` validates the listing metadata, README links/parity, reviewed icon and
+  screenshot bounds, and their exact package inclusion without contacting the Marketplace.
 
 The repository and packaged extension declare MIT and contain identical license text. The official
 command does not use `--skip-license`; `vsce` and the independent archive verifier must both observe
