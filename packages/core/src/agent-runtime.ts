@@ -7,6 +7,8 @@ import {
   jsonValueSchema,
   type McpPromptConfirmation,
   type McpResourceAttachment,
+  type RunTokenBudgetConfiguration,
+  type RunTokenBudgetSnapshot,
   type SessionId,
   type SessionStatus,
   type ToolCall,
@@ -40,6 +42,7 @@ import {
   type ModelMessage,
 } from "./model-gateway.js";
 import { hasExactKeys, isPlainRecord } from "./record-validation.js";
+import { InvalidRunTokenBudgetError, RunTokenBudget } from "./run-token-budget.js";
 import { SessionStateMachine, type SessionStatusChangedEvent } from "./session-state-machine.js";
 import { allocateTokenBudget, maxModelContextWindowTokens } from "./token-budget.js";
 import type { ToolApprovalOperation, ToolApprovalWorkflow } from "./tool-approval.js";
@@ -67,6 +70,12 @@ export interface AgentUsageEvent extends DomainEvent {
   readonly type: "agent.usage";
   readonly sessionId: SessionId;
   readonly usage: import("@ctrl-zebra/protocol").TokenUsage;
+}
+
+export interface AgentRunBudgetEvent extends DomainEvent {
+  readonly type: "agent.run-budget";
+  readonly sessionId: SessionId;
+  readonly budget: RunTokenBudgetSnapshot;
 }
 
 export interface AgentReasoningStartEvent extends DomainEvent {
@@ -113,6 +122,7 @@ export type AgentToolStateEvent =
 export type AgentRuntimeEvent =
   | AgentTextDeltaEvent
   | AgentUsageEvent
+  | AgentRunBudgetEvent
   | AgentReasoningEvent
   | AgentToolStateEvent
   | AgentApprovalStateEvent
@@ -175,6 +185,7 @@ export interface AgentRuntimeOptions {
   readonly initialSessionStatus?: SessionStatus;
   readonly createRunId?: () => CheckpointRunId;
   readonly diagnosticSink?: AgentRuntimeDiagnosticSink;
+  readonly runTokenBudget?: RunTokenBudgetConfiguration;
 }
 
 export interface AgentRuntimeRunOptions {
@@ -212,6 +223,13 @@ export class InvalidModelUsageError extends Error {
   constructor() {
     super("ModelGateway emitted invalid token usage.");
     this.name = "InvalidModelUsageError";
+  }
+}
+
+export class RunTokenBudgetExceededError extends Error {
+  constructor(readonly budget: RunTokenBudgetSnapshot) {
+    super("The Run token budget was reached.");
+    this.name = "RunTokenBudgetExceededError";
   }
 }
 
@@ -262,6 +280,7 @@ export class AgentRuntime {
   readonly #initialSessionStatus: SessionStatus;
   readonly #createRunId: () => CheckpointRunId;
   readonly #diagnosticSink: AgentRuntimeDiagnosticSink | undefined;
+  readonly #runTokenBudgetConfiguration: RunTokenBudgetConfiguration | undefined;
   #session: SessionStateMachine | undefined;
   #sessionId: SessionId | undefined;
 
@@ -296,6 +315,20 @@ export class AgentRuntime {
     this.#initialSessionStatus = options.initialSessionStatus ?? "idle";
     this.#createRunId = options.createRunId ?? createDefaultRunId;
     this.#diagnosticSink = options.diagnosticSink;
+    if (options.runTokenBudget === undefined) {
+      this.#runTokenBudgetConfiguration = undefined;
+    } else {
+      try {
+        this.#runTokenBudgetConfiguration = new RunTokenBudget(
+          options.runTokenBudget,
+        ).configuration;
+      } catch (error) {
+        if (error instanceof InvalidRunTokenBudgetError) {
+          throw error;
+        }
+        throw new InvalidRunTokenBudgetError();
+      }
+    }
   }
 
   async run(
@@ -310,6 +343,10 @@ export class AgentRuntime {
       session.beginRun(runOwner);
       signal.throwIfAborted();
       const runId = this.#createRunId();
+      const runBudget =
+        this.#runTokenBudgetConfiguration === undefined
+          ? undefined
+          : new RunTokenBudget(this.#runTokenBudgetConfiguration);
       signal.throwIfAborted();
       const history = await this.#loadHistory(userMessage.sessionId, signal);
       signal.throwIfAborted();
@@ -331,6 +368,7 @@ export class AgentRuntime {
           reasoningIds,
           toolSteps,
           repetitionDetector,
+          runBudget,
         );
         messages = [...response.messages];
         if (response.outcome === "truncated") {
@@ -355,6 +393,12 @@ export class AgentRuntime {
         signal.throwIfAborted();
         this.#emitToolResult(userMessage.sessionId, response.toolCall, toolResult);
         signal.throwIfAborted();
+        this.#observeBudgetEstimate(
+          userMessage.sessionId,
+          signal,
+          runBudget,
+          this.#tokenCounter.count({ role: "tool", result: toolResult }),
+        );
         messages.push(
           { role: "assistant", toolCall: response.toolCall },
           { role: "tool", result: toolResult },
@@ -377,6 +421,13 @@ export class AgentRuntime {
       if (isCancellation(error, signal)) {
         if (isActiveStatus(session.status)) {
           session.transitionTo("cancelled");
+        }
+        return;
+      }
+
+      if (error instanceof RunTokenBudgetExceededError) {
+        if (isActiveStatus(session.status)) {
+          session.transitionTo("budget-exceeded");
         }
         return;
       }
@@ -449,7 +500,14 @@ export class AgentRuntime {
     reasoningIds: RunReasoningIds,
     toolSteps: number,
     repetitionDetector: ToolRepetitionDetector,
+    runBudget: RunTokenBudget | undefined,
   ): Promise<ModelStepResult> {
+    this.#observeBudgetEstimate(
+      sessionId,
+      signal,
+      runBudget,
+      estimateModelMessages(messages, this.#tokenCounter),
+    );
     const first = await this.#streamModel(
       messages,
       sessionId,
@@ -458,6 +516,7 @@ export class AgentRuntime {
       reasoningIds,
       toolSteps,
       repetitionDetector,
+      runBudget,
     );
     if (first.outcome !== "overflow") {
       return { ...first, messages };
@@ -471,6 +530,12 @@ export class AgentRuntime {
     }
 
     signal.throwIfAborted();
+    this.#observeBudgetEstimate(
+      sessionId,
+      signal,
+      runBudget,
+      estimateModelMessages(pruned.messages, this.#tokenCounter),
+    );
     const retry = await this.#streamModel(
       pruned.messages,
       sessionId,
@@ -479,6 +544,7 @@ export class AgentRuntime {
       reasoningIds,
       toolSteps,
       repetitionDetector,
+      runBudget,
     );
     signal.throwIfAborted();
     if (retry.outcome === "overflow") {
@@ -496,6 +562,7 @@ export class AgentRuntime {
     reasoningIds: RunReasoningIds,
     toolSteps: number,
     repetitionDetector: ToolRepetitionDetector,
+    runBudget: RunTokenBudget | undefined,
   ): Promise<ModelStreamResult> {
     let toolCall: ToolCall | undefined;
     let hasMeaningfulText = false;
@@ -520,6 +587,14 @@ export class AgentRuntime {
         emittedEvent = true;
 
         if (event.type === "text.delta") {
+          this.#observeBudgetEstimate(
+            sessionId,
+            signal,
+            runBudget,
+            event.text.length === 0
+              ? 0
+              : this.#tokenCounter.count({ role: "assistant", content: event.text }),
+          );
           if (event.text.trim() !== "") {
             hasMeaningfulText = true;
           }
@@ -547,6 +622,12 @@ export class AgentRuntime {
           if (event.blockId !== openReasoningBlock || runtimeBlockId === undefined) {
             throw new Error("ModelGateway emitted a malformed reasoning lifecycle.");
           }
+          this.#observeBudgetEstimate(
+            sessionId,
+            signal,
+            runBudget,
+            this.#tokenCounter.count({ role: "assistant", content: event.text }),
+          );
           this.#eventSink.emit({
             type: "agent.reasoning-delta",
             sessionId,
@@ -579,6 +660,7 @@ export class AgentRuntime {
               usage: normalizeTokenUsage(usageResult.data),
             });
             signal.throwIfAborted();
+            this.#observeBudgetUsage(sessionId, signal, runBudget, usageResult.data);
           }
         } else if (event.type === "tool.call") {
           if (!offerTools) {
@@ -599,6 +681,12 @@ export class AgentRuntime {
             );
           }
 
+          this.#observeBudgetEstimate(
+            sessionId,
+            signal,
+            runBudget,
+            this.#tokenCounter.count({ role: "assistant", toolCall: event.call }),
+          );
           toolCall = event.call;
           this.#emitToolState(sessionId, event.call, "pending");
           signal.throwIfAborted();
@@ -694,6 +782,51 @@ export class AgentRuntime {
     }
 
     return this.#executeToolImplementation(sessionId, runId, toolCall, tool, input, signal);
+  }
+
+  #observeBudgetEstimate(
+    sessionId: SessionId,
+    signal: AbortSignal,
+    runBudget: RunTokenBudget | undefined,
+    tokens: number,
+  ): void {
+    if (runBudget === undefined) {
+      return;
+    }
+    signal.throwIfAborted();
+    this.#handleBudgetObservation(sessionId, signal, runBudget.observeEstimate(tokens));
+  }
+
+  #observeBudgetUsage(
+    sessionId: SessionId,
+    signal: AbortSignal,
+    runBudget: RunTokenBudget | undefined,
+    usage: import("@ctrl-zebra/protocol").TokenUsage,
+  ): void {
+    if (runBudget === undefined) {
+      return;
+    }
+    signal.throwIfAborted();
+    this.#handleBudgetObservation(sessionId, signal, runBudget.observeUsage(usage));
+  }
+
+  #handleBudgetObservation(
+    sessionId: SessionId,
+    signal: AbortSignal,
+    observation: ReturnType<RunTokenBudget["observeEstimate"]>,
+  ): void {
+    if (observation.outcome === "none") {
+      return;
+    }
+    this.#eventSink.emit({
+      type: "agent.run-budget",
+      sessionId,
+      budget: observation.snapshot,
+    });
+    signal.throwIfAborted();
+    if (observation.outcome === "exceeded") {
+      throw new RunTokenBudgetExceededError(observation.snapshot);
+    }
   }
 
   async #executeApprovalRequiredTool(

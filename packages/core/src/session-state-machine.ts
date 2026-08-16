@@ -4,20 +4,22 @@ import type { DomainEvent, EventSink } from "./events.js";
 
 const legalTransitions = {
   idle: ["preparing"],
-  preparing: ["streaming", "cancelled", "failed"],
+  preparing: ["streaming", "cancelled", "budget-exceeded", "failed"],
   streaming: [
     "awaiting_approval",
     "executing_tool",
     "completed",
     "truncated",
     "cancelled",
+    "budget-exceeded",
     "failed",
   ],
-  awaiting_approval: ["streaming", "executing_tool", "cancelled", "failed"],
-  executing_tool: ["streaming", "cancelled", "failed"],
+  awaiting_approval: ["streaming", "executing_tool", "cancelled", "budget-exceeded", "failed"],
+  executing_tool: ["streaming", "cancelled", "budget-exceeded", "failed"],
   completed: [],
   truncated: [],
   cancelled: [],
+  "budget-exceeded": [],
   failed: [],
   interrupted: [],
 } as const satisfies Record<SessionStatus, readonly SessionStatus[]>;
@@ -27,6 +29,7 @@ const runResetStatuses = new Set<SessionStatus>([
   "completed",
   "truncated",
   "cancelled",
+  "budget-exceeded",
   "failed",
   "interrupted",
 ]);
@@ -105,6 +108,7 @@ export class SessionStateMachine {
       status === "completed" ||
       status === "truncated" ||
       status === "cancelled" ||
+      status === "budget-exceeded" ||
       status === "failed"
     ) {
       this.#runOwner = undefined;

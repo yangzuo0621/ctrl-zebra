@@ -11,6 +11,7 @@ export const sessionStatusSchema = z.enum([
   "completed",
   "truncated",
   "cancelled",
+  "budget-exceeded",
   "failed",
   "interrupted",
 ]);

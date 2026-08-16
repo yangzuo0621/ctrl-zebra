@@ -64,6 +64,10 @@ import {
   readProviderSelectionConfiguration,
 } from "./adapters/provider-configuration.js";
 import {
+  readRunBudgetConfiguration,
+  runBudgetSettingSection,
+} from "./adapters/run-budget-configuration.js";
+import {
   readSessionRetentionConfiguration,
   sessionRetentionSettingSection,
 } from "./adapters/session-retention-configuration.js";
@@ -943,6 +947,8 @@ export function activate(context: ExtensionContext): void {
   }
 
   const chatRunner = createSelectingChatRunner({
+    readRunTokenBudget: () =>
+      readRunBudgetConfiguration(workspace.getConfiguration(runBudgetSettingSection)),
     diagnosticSink: {
       emit: (diagnostic) => {
         logger.error(getAgentRuntimeDiagnosticLogEntry(diagnostic));

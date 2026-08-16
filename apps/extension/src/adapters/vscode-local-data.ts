@@ -3,6 +3,7 @@ import type { ConfigurationTarget, Memento } from "vscode";
 import type { ApiKeySecretStorage } from "./api-key-secret-storage.js";
 import { mcpServerSettingName, mcpServerSettingSection } from "./mcp-server-configuration.js";
 import { providerIds, providerSettingNames } from "./provider-configuration.js";
+import { runBudgetSettingNames, runBudgetSettingSection } from "./run-budget-configuration.js";
 import {
   sessionRetentionSettingNames,
   sessionRetentionSettingSection,
@@ -24,6 +25,10 @@ export const ctrlZebraConfigurationEntries = [
   },
   ...Object.values(sessionRetentionSettingNames).map((name) => ({
     section: sessionRetentionSettingSection,
+    name,
+  })),
+  ...Object.values(runBudgetSettingNames).map((name) => ({
+    section: runBudgetSettingSection,
     name,
   })),
   {

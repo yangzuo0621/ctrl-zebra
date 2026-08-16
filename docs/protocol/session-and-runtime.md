@@ -161,6 +161,26 @@ Usage shows an explicit unavailable state instead of an estimate or fabricated z
 stale, mismatched, malformed, or post-terminal Usage messages are ignored without persistence or UI
 side effects.
 
+## Run Token Budget Messages
+
+The Core may emit a dedicated `extension/run-budget` message when a Run reaches its configured
+warning or hard token limit. Its strict snapshot contains bounded `estimatedTokens`, optional
+`actualTokens`, `effectiveTokens`, `warningTokens`, and `maxTokens`, plus `source: "estimate" | "actual"`.
+Estimates are the Stage 15 local heuristic safety signal; `actual` values are Provider Usage. Neither
+value is a price, cost estimate, or Provider bill.
+
+`ctrlZebra.runBudget.maxTokens` and `ctrlZebra.runBudget.warningTokens` are read by the Extension at
+Run start. The warning is emitted once when the effective count reaches the warning threshold. At
+the hard limit the Core emits source-specific exceeded state and transitions the Session to the
+independent terminal status `budget-exceeded`. The Runtime checks cancellation immediately before
+and after budget observation, so a user cancellation wins a simultaneous boundary. No subsequent
+model request or Tool step is started after the exceeded transition; a required Tool result may be
+persisted before the boundary is observed.
+
+The terminal status is recoverable only through the normal explicit `beginRun` reset gate. The
+latest valid run-budget event is projected in `extension/session-restored`; malformed, non-monotonic,
+or post-exceeded events within a Run make the Session corrupt rather than being guessed or reordered.
+
 Reasoning text is well-formed Unicode and each delta contains 1–8,192 Unicode code points and at
 most 32,768 UTF-8 bytes. The Extension collector also enforces these cumulative ceilings without
 first constructing the complete value:
@@ -227,8 +247,9 @@ metadata bags are forbidden.
   terminal `truncated` without a run error; the Webview labels the retained text as incomplete.
   Cancellation emits only `cancelled` and never an error message.
 - The run error category is a closed set: `authentication`, `network`, `rate-limit`, `context`,
-  `tool`, and `internal`. The Extension maps trusted error types to these categories; unknown
-  failures use `internal`.
+  `budget`, `tool`, and `internal`. The Extension maps trusted error types to these categories;
+  unknown failures use `internal`. The normal budget boundary is represented by the terminal
+  `budget-exceeded` status and does not require a run-error message.
 - A structured Provider context-window rejection is normalized as `context-overflow`, mapped to the
   safe `context` UI category, and may trigger at most one Core-owned reduced-context retry. A second
   overflow or an unreducible protected message is terminal; ordinary `invalid-request` never enters
@@ -242,12 +263,13 @@ metadata bags are forbidden.
   `extension/run-error` represents only a terminal run failure and does not replace Tool Result
   details or turn a recoverable Tool failure into a failed run.
 - Cancellation emits only the correlated `cancelled` terminal status and never a run error. After
-  truncation, cancellation, failure, interruption, Session replacement, or disposal, the Extension
-  closes the event gate: no later Host-to-Webview or Webview-to-Host message, text delta, reasoning
+  truncation, cancellation, budget exhaustion, failure, interruption, Session replacement, or
+  disposal, the Extension closes the event gate: no later Host-to-Webview or Webview-to-Host
+  message, text delta, reasoning
   event, Tool Result, retry, approval response, or side effect is delivered. If a user presses a
   cancel control, its handler first updates only local interaction state synchronously, then attempts
   one cancel intent in that same event turn; if the gate is already closed, it posts no intent. It
-  must not wait for or synthesize a Host outcome. A failed or interrupted Run
+  must not wait for or synthesize a Host outcome. A failed, budget-exceeded, or interrupted Run
   may display its retained partial answer, but that partial answer is not model history; the next Run
   receives the user prompt and only complete, validated Tool pairs from the ordered persisted
   projection.

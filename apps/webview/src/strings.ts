@@ -50,6 +50,7 @@ export const strings = {
       completed: "Response complete.",
       truncated: "Response truncated.",
       cancelled: "Response cancelled.",
+      "budget-exceeded": "Run token limit reached.",
       failed: "Response failed.",
       interrupted: "Session was interrupted by a restart.",
     } satisfies Record<"idle" | "interrupted" | RunStatus, string>,
@@ -62,6 +63,7 @@ export const strings = {
       completed: "Completed",
       truncated: "Truncated",
       cancelled: "Cancelled",
+      "budget-exceeded": "Run token limit reached",
       failed: "Failed",
       interrupted: "Interrupted",
     } satisfies Record<SessionStatus, string>,
@@ -74,6 +76,8 @@ export const strings = {
     messageFallback: {
       cancelled: "Cancelled before a response was received.",
       truncated: "The response was truncated before a complete answer was received.",
+      budgetExceeded:
+        "The Run token safety limit was reached before a complete answer was received.",
       failed: "No response was received.",
       waiting: "Waiting for response…",
     },
@@ -359,6 +363,11 @@ export const strings = {
     output: "Output",
     total: "Total",
     unknown: "—",
+    runBudgetWarning: "Run token warning",
+    runBudgetExceeded: "Run token limit reached",
+    estimated: "Estimated",
+    actual: "Provider actual",
+    limit: "Limit",
   },
   tool: {
     cardLabel: "Tool",
@@ -383,6 +392,8 @@ export const strings = {
   },
   chat: {
     usageLimit: "Provider usage exceeded the supported Session limit.",
+    runBudgetExceeded:
+      "This Run reached its token safety limit. Start a follow-up Run to continue; the limit is not a Provider bill.",
     startNewSession: "Starting a new Session.",
     continueSession: "Continuing the current Session.",
     regenerationStarted: "Regenerating this response using the same user prompt and prior history.",

@@ -87,7 +87,7 @@ record is restored or persisted separately.
   reached a normal `completed` outcome, and complete assistant Tool Call/Tool Result pairs whose call
   ID and name match. Reasoning, status, approval, usage, summary, attachment, and UI-source events
   never become model messages.
-- A truncated, cancelled, failed, or recovery-interrupted Run keeps its user message for the next Run. Partial or
+- A truncated, cancelled, budget-exceeded, failed, or recovery-interrupted Run keeps its user message for the next Run. Partial or
   unconfirmed assistant text is discarded. A Tool Call/Result pair committed before the terminal
   outcome may remain in order; an open call, orphan result, or mismatched pair is never injected and
   never receives a synthetic result.
@@ -155,11 +155,11 @@ record is restored or persisted separately.
 
 - Session status changes go through the Core state machine; callers and tools do not mutate or
   bypass the current status.
-- Legal live transitions are `idle → preparing`; `preparing → streaming | cancelled | failed`;
-  `streaming → awaiting_approval | executing_tool | completed | truncated | cancelled | failed`;
-  `awaiting_approval → streaming | executing_tool | cancelled | failed`; and
-  `executing_tool → streaming | cancelled | failed`.
-- `completed`, `truncated`, `cancelled`, and `failed` are distinct terminal outcomes for the most recent Run.
+- Legal live transitions are `idle → preparing`; `preparing → streaming | cancelled | budget-exceeded | failed`;
+  `streaming → awaiting_approval | executing_tool | completed | truncated | cancelled | budget-exceeded | failed`;
+  `awaiting_approval → streaming | executing_tool | cancelled | budget-exceeded | failed`; and
+  `executing_tool → streaming | cancelled | budget-exceeded | failed`.
+- `completed`, `truncated`, `cancelled`, `budget-exceeded`, and `failed` are distinct terminal outcomes for the most recent Run.
   They have no ordinary outgoing transitions. An explicit Core-owned `beginRun` reset gate may move
   any of those outcomes to `preparing` for one newly allocated Run; it is not a status mutation that
   resumes the prior Run.

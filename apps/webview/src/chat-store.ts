@@ -11,6 +11,7 @@ import {
   mergeTokenUsage as mergeProviderTokenUsage,
   type ReasoningRestoredMessage,
   type RunStatus,
+  type RunTokenBudgetSnapshot,
   type SessionSummary,
   type TokenUsage,
   type ToolCall,
@@ -84,6 +85,7 @@ interface ChatState {
   readonly reasoningAnnouncement: string;
   readonly sessionAnnouncement: string;
   readonly usage?: DisplayTokenUsage;
+  readonly runBudget?: RunTokenBudgetSnapshot;
   submit(content: string): boolean;
   regenerate(messageId: string): boolean;
   editMessage(messageId: string, content: string): boolean;
@@ -549,6 +551,7 @@ export function createChatStore({
               sessionSelectionId: undefined,
               sessionSwitchPending: false,
               usage: undefined,
+              runBudget: undefined,
               readOnly: false,
               runError: undefined,
               regeneratingMessageId: undefined,
@@ -571,6 +574,7 @@ export function createChatStore({
       regeneratingMessageId: undefined,
       editingMessageId: undefined,
       usage: undefined,
+      runBudget: undefined,
       sessions: [],
       readOnly: false,
       sessionSwitchPending: false,
@@ -625,6 +629,7 @@ export function createChatStore({
           activeRequestId: requestId,
           runError: undefined,
           usage: state.usage,
+          runBudget: undefined,
           reasoningAnnouncement: "",
           sessionAnnouncement:
             sessionId === undefined ? strings.chat.startNewSession : strings.chat.continueSession,
@@ -669,6 +674,7 @@ export function createChatStore({
           activeRequestId: requestId,
           regeneratingMessageId: messageId,
           runError: undefined,
+          runBudget: undefined,
           reasoningAnnouncement: "",
           sessionAnnouncement: strings.chat.regenerationStarted,
         });
@@ -717,6 +723,7 @@ export function createChatStore({
           activeRequestId: requestId,
           editingMessageId: messageId,
           runError: undefined,
+          runBudget: undefined,
           reasoningAnnouncement: "",
           sessionAnnouncement: strings.chat.editingStarted,
         });
@@ -778,6 +785,7 @@ export function createChatStore({
           sessionError: undefined,
           runError: undefined,
           usage: undefined,
+          runBudget: undefined,
           readOnly: false,
           reasoningAnnouncement: "",
           sessionAnnouncement: strings.chat.newChatReady,
@@ -1124,6 +1132,7 @@ export function createChatStore({
               message.session.status === "completed" ||
               message.session.status === "truncated" ||
               message.session.status === "cancelled" ||
+              message.session.status === "budget-exceeded" ||
               message.session.status === "failed" ||
               message.session.status === "interrupted"
                 ? message.session.status
@@ -1134,12 +1143,17 @@ export function createChatStore({
             restoring: false,
             readOnly: message.session.readOnly === true,
             usage: message.session.usage,
+            runBudget: message.session.runBudget,
             reasoningAnnouncement: "",
             sessionError: message.session.eventLogTailDamaged
               ? strings.chat.recoveredEventLog
               : undefined,
             runError:
-              message.session.status === "truncated" ? strings.chat.truncatedFollowUp : undefined,
+              message.session.status === "truncated"
+                ? strings.chat.truncatedFollowUp
+                : message.session.status === "budget-exceeded"
+                  ? strings.chat.runBudgetExceeded
+                  : undefined,
             sessionAnnouncement: strings.chat.sessionRestored,
             regeneratingMessageId: undefined,
             editingMessageId: undefined,
@@ -1179,6 +1193,7 @@ export function createChatStore({
             (message.status === "completed" ||
               message.status === "truncated" ||
               message.status === "cancelled" ||
+              message.status === "budget-exceeded" ||
               message.status === "failed")
           ) {
             mismatchedSessionRequests.delete(message.requestId);
@@ -1206,6 +1221,13 @@ export function createChatStore({
         if (message.type === "extension/token-usage") {
           if (state.status === "preparing" || state.status === "streaming") {
             applyTokenUsage(message.usage);
+          }
+          return;
+        }
+
+        if (message.type === "extension/run-budget") {
+          if (state.status === "preparing" || state.status === "streaming") {
+            set({ runBudget: message.budget });
           }
           return;
         }
@@ -1316,6 +1338,7 @@ export function createChatStore({
             message.status === "completed" ||
             message.status === "truncated" ||
             message.status === "cancelled" ||
+            message.status === "budget-exceeded" ||
             message.status === "failed"
           ) {
             if (message.status !== "completed" && regenerationBackup !== undefined) {
@@ -1352,6 +1375,9 @@ export function createChatStore({
               set({
                 runError: strings.chat.truncatedFollowUp,
               });
+            }
+            if (message.status === "budget-exceeded") {
+              set({ runError: strings.chat.runBudgetExceeded });
             }
           } else {
             set({ status: message.status });

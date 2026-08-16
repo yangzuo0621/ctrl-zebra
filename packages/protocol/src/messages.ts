@@ -40,6 +40,7 @@ import {
   reasoningRunLimitDataSchema,
   restoredReasoningSchema,
 } from "./reasoning.js";
+import { runTokenBudgetSnapshotSchema } from "./run-token-budget.js";
 import { sessionIdSchema, sessionStatusSchema, sessionSummarySchema } from "./session.js";
 import { utf8ByteLength } from "./text-primitives.js";
 import { toolCallSchema, toolErrorResultSchema, toolSuccessResultSchema } from "./tool.js";
@@ -606,6 +607,12 @@ export const tokenUsageMessageSchema = z.strictObject({
   usage: tokenUsageSchema,
 });
 
+export const runTokenBudgetMessageSchema = z.strictObject({
+  ...protocolEnvelopeSchema.shape,
+  type: z.literal("extension/run-budget"),
+  budget: runTokenBudgetSnapshotSchema,
+});
+
 export const reasoningStartMessageSchema = z.strictObject({
   ...protocolEnvelopeSchema.shape,
   type: z.literal("extension/reasoning-start"),
@@ -662,6 +669,7 @@ export const runStatusSchema = z.enum([
   "completed",
   "truncated",
   "cancelled",
+  "budget-exceeded",
   "failed",
 ]);
 
@@ -683,6 +691,7 @@ export const runErrorCodeSchema = z.enum([
   "network",
   "rate-limit",
   "context",
+  "budget",
   "tool",
   "internal",
 ]);
@@ -750,6 +759,7 @@ export const restoredSessionSchema = z.strictObject({
   eventLogTailDamaged: z.boolean(),
   readOnly: z.boolean().optional(),
   usage: tokenUsageSchema.optional(),
+  runBudget: runTokenBudgetSnapshotSchema.optional(),
 });
 
 export const sessionRestoredMessageSchema = z.strictObject({
@@ -851,6 +861,7 @@ export const extensionToWebviewMessageSchema = z.union([
   providerActionMessageSchema,
   textDeltaMessageSchema,
   tokenUsageMessageSchema,
+  runTokenBudgetMessageSchema,
   reasoningStartMessageSchema,
   reasoningDeltaMessageSchema,
   reasoningEndMessageSchema,
@@ -952,6 +963,7 @@ export type ApprovalDecisionIntent = z.infer<typeof approvalDecisionIntentSchema
 export type ApprovalDecisionMessage = z.infer<typeof approvalDecisionMessageSchema>;
 export type TextDeltaMessage = z.infer<typeof textDeltaMessageSchema>;
 export type TokenUsageMessage = z.infer<typeof tokenUsageMessageSchema>;
+export type RunTokenBudgetMessage = z.infer<typeof runTokenBudgetMessageSchema>;
 export type ReasoningStartMessage = z.infer<typeof reasoningStartMessageSchema>;
 export type ReasoningDeltaMessage = z.infer<typeof reasoningDeltaMessageSchema>;
 export type ReasoningEndMessage = z.infer<typeof reasoningEndMessageSchema>;

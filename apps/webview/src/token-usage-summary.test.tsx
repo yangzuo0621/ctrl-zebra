@@ -33,4 +33,27 @@ describe("TokenUsageSummary", () => {
 
     expect(screen.getByText("Unavailable for this response.")).toBeVisible();
   });
+
+  it("shows estimate and actual token guardrail state without calling it a bill", () => {
+    render(
+      <TokenUsageSummary
+        usage={undefined}
+        status="budget-exceeded"
+        runBudget={{
+          state: "exceeded",
+          source: "actual",
+          maxTokens: 100,
+          warningTokens: 80,
+          estimatedTokens: 70,
+          actualTokens: 100,
+          effectiveTokens: 100,
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Run token limit reached")).toBeVisible();
+    expect(screen.getByText("Estimated: 70 / Limit: 100")).toBeVisible();
+    expect(screen.getByText("Provider actual: 100")).toBeVisible();
+    expect(screen.queryByText(/bill/i)).toBeNull();
+  });
 });

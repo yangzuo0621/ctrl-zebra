@@ -7,9 +7,11 @@ import {
   InvalidHistoryBudgetError,
   InvalidModelHistoryError,
   InvalidModelMessageTokenCountError,
+  InvalidRunTokenBudgetError,
   MaxToolStepsExceededError,
   ModelGatewayError,
   ReadOnlySessionError,
+  RunTokenBudgetExceededError,
   ToolExecutionError,
   ToolRepetitionDetectedError,
   ToolUnavailableError,
@@ -22,6 +24,7 @@ import {
   ProviderConfigurationError,
   type ProviderConfigurationErrorCode,
 } from "../adapters/provider-configuration.js";
+import { RunBudgetConfigurationError } from "../adapters/run-budget-configuration.js";
 import {
   MissingProviderApiKeyError,
   ProviderAdapterUnavailableError,
@@ -39,6 +42,8 @@ const messages = {
   "rate-limit": "The model provider rate limit was reached. Wait a moment, then try again.",
   context:
     "The conversation exceeds the model context limit. Start a new chat or shorten the request.",
+  budget:
+    "This Run reached its token safety limit. Start a follow-up Run to continue; the limit is not a Provider bill.",
   tool: "The agent stopped because tool execution could not continue. Review the tool results and try again.",
   internal:
     "CtrlZebra encountered an internal error. Try again or reload the window if it continues.",
@@ -118,6 +123,10 @@ export function mapRunErrorToUi(error: unknown): RunErrorDto {
     };
   }
 
+  if (error instanceof RunBudgetConfigurationError || error instanceof InvalidRunTokenBudgetError) {
+    return { code: "configuration", message: messages.configuration };
+  }
+
   if (error instanceof ModelGatewayError && error.code === "context-overflow") {
     return { code: "context", message: messages.context };
   }
@@ -135,6 +144,10 @@ export function mapRunErrorToUi(error: unknown): RunErrorDto {
       code: "tool",
       message: `The agent stopped after reaching the ${error.maxToolSteps}-step tool limit. No additional tool was run.`,
     };
+  }
+
+  if (error instanceof RunTokenBudgetExceededError) {
+    return { code: "budget", message: messages.budget };
   }
 
   if (error instanceof UnexpectedToolCallError) {
@@ -182,6 +195,14 @@ function classifyRunFailureForLog(error: unknown): string {
 
   if (error instanceof ProviderConfigurationError) {
     return `provider-${error.code}`;
+  }
+
+  if (error instanceof RunBudgetConfigurationError || error instanceof InvalidRunTokenBudgetError) {
+    return "run-budget-configuration";
+  }
+
+  if (error instanceof RunTokenBudgetExceededError) {
+    return "run-budget-exceeded";
   }
 
   if (error instanceof ApiKeySecretStorageError) {

@@ -25,21 +25,30 @@ export class EditRelationCorruptError extends Error {
 
 const legalTransitions: Readonly<Record<SessionStatus, readonly SessionStatus[]>> = {
   idle: ["preparing", "interrupted"],
-  preparing: ["streaming", "cancelled", "failed", "interrupted"],
+  preparing: ["streaming", "cancelled", "budget-exceeded", "failed", "interrupted"],
   streaming: [
     "awaiting_approval",
     "executing_tool",
     "completed",
     "truncated",
     "cancelled",
+    "budget-exceeded",
     "failed",
     "interrupted",
   ],
-  awaiting_approval: ["streaming", "executing_tool", "cancelled", "failed", "interrupted"],
-  executing_tool: ["streaming", "cancelled", "failed", "interrupted"],
+  awaiting_approval: [
+    "streaming",
+    "executing_tool",
+    "cancelled",
+    "budget-exceeded",
+    "failed",
+    "interrupted",
+  ],
+  executing_tool: ["streaming", "cancelled", "budget-exceeded", "failed", "interrupted"],
   completed: ["preparing"],
   truncated: ["preparing"],
   cancelled: ["preparing"],
+  "budget-exceeded": ["preparing"],
   failed: ["preparing"],
   interrupted: ["preparing"],
 };
@@ -48,6 +57,7 @@ const terminalStatuses = new Set<SessionStatus>([
   "completed",
   "truncated",
   "cancelled",
+  "budget-exceeded",
   "failed",
   "interrupted",
 ]);
@@ -436,6 +446,7 @@ function isCompletedRun(
       currentStatus === "completed" ||
       currentStatus === "truncated" ||
       currentStatus === "cancelled" ||
+      currentStatus === "budget-exceeded" ||
       currentStatus === "failed" ||
       currentStatus === "interrupted"
     ) {

@@ -20,6 +20,7 @@ import {
   maxReasoningBlockUtf8Bytes,
   maxReasoningRunCodePoints,
   maxReasoningRunUtf8Bytes,
+  maxTokenCount,
   measureReasoningText,
   mergeTokenUsage,
   persistedReasoningEventPayloadSchema,
@@ -27,7 +28,9 @@ import {
   type RestoredSession,
   restoredReasoningSchema,
   restoredSessionSchema,
+  runTokenBudgetSnapshotSchema,
   type SessionSummary,
+  sessionStatusSchema,
   type TokenUsage,
   tokenUsageSchema,
   userMessageSchema,
@@ -236,6 +239,7 @@ export function createSessionRecoveryActions(
           eventLogTailDamaged: record.eventLogTailDamaged,
           ...(record.readOnly === true ? { readOnly: true } : {}),
           usage: recoverUsage(record),
+          runBudget: recoverRunBudget(record),
         }),
         reasoning: recoverReasoning(record),
       };
@@ -448,6 +452,74 @@ function recoverUsage(record: SessionRecord): TokenUsage | undefined {
   }
 
   return usage === undefined || !hasTokenUsage(usage) ? undefined : usage;
+}
+
+function recoverRunBudget(
+  record: SessionRecord,
+): import("@ctrl-zebra/protocol").RunTokenBudgetSnapshot | undefined {
+  let latest: import("@ctrl-zebra/protocol").RunTokenBudgetSnapshot | undefined;
+  let current: import("@ctrl-zebra/protocol").RunTokenBudgetSnapshot | undefined;
+  let runClosed = true;
+  for (const persisted of record.events) {
+    if (persisted.event.type === "session.status-changed") {
+      const data = persisted.event.data;
+      if (
+        typeof data !== "object" ||
+        data === null ||
+        !("status" in data) ||
+        !sessionStatusSchema.safeParse(data.status).success
+      ) {
+        throw new SessionRecoveryError("corrupt");
+      }
+      if (data.status === "preparing") {
+        current = undefined;
+        runClosed = false;
+      } else if (
+        data.status === "completed" ||
+        data.status === "truncated" ||
+        data.status === "cancelled" ||
+        data.status === "budget-exceeded" ||
+        data.status === "failed" ||
+        data.status === "interrupted"
+      ) {
+        if (data.status === "budget-exceeded" && current?.state !== "exceeded") {
+          throw new SessionRecoveryError("corrupt");
+        }
+        runClosed = true;
+      }
+      continue;
+    }
+    if (persisted.event.type !== "session.run-budget") {
+      continue;
+    }
+    const parsed = runTokenBudgetSnapshotSchema.safeParse(persisted.event.data);
+    if (!parsed.success || runClosed) {
+      throw new SessionRecoveryError("corrupt");
+    }
+    const next = parsed.data;
+    const actualOverflow =
+      next.source === "actual" &&
+      next.actualTokens === undefined &&
+      next.effectiveTokens === maxTokenCount;
+    if (current !== undefined) {
+      if (
+        current.state === "exceeded" ||
+        next.state === "warning" ||
+        current.maxTokens !== next.maxTokens ||
+        current.warningTokens !== next.warningTokens ||
+        next.effectiveTokens < current.effectiveTokens ||
+        next.estimatedTokens < current.estimatedTokens ||
+        (current.actualTokens !== undefined &&
+          ((next.actualTokens === undefined && !actualOverflow) ||
+            (next.actualTokens !== undefined && next.actualTokens < current.actualTokens)))
+      ) {
+        throw new SessionRecoveryError("corrupt");
+      }
+    }
+    current = next;
+    latest = next;
+  }
+  return latest;
 }
 
 interface RecoveredBlock {

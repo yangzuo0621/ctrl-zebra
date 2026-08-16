@@ -913,6 +913,19 @@ describe("bindWebviewMessageController", () => {
             usage: { inputTokens: 12, outputTokens: 4, totalTokens: 16 },
           });
           emit({
+            type: "agent.run-budget",
+            sessionId: "session-1",
+            budget: {
+              state: "warning",
+              source: "actual",
+              maxTokens: 100,
+              warningTokens: 80,
+              estimatedTokens: 70,
+              actualTokens: 80,
+              effectiveTokens: 80,
+            },
+          });
+          emit({
             type: "session.reasoning-start",
             sessionId: "session-other",
             blockId: "mismatched",
@@ -1014,6 +1027,20 @@ describe("bindWebviewMessageController", () => {
         type: "extension/token-usage",
         requestId: "request-1",
         usage: { inputTokens: 12, outputTokens: 4, totalTokens: 16 },
+      },
+      {
+        protocolVersion,
+        type: "extension/run-budget",
+        requestId: "request-1",
+        budget: {
+          state: "warning",
+          source: "actual",
+          maxTokens: 100,
+          warningTokens: 80,
+          estimatedTokens: 70,
+          actualTokens: 80,
+          effectiveTokens: 80,
+        },
       },
       {
         protocolVersion,

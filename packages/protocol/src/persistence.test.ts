@@ -98,6 +98,35 @@ describe("persistence format", () => {
     ).toBe(false);
   });
 
+  it("strictly validates bounded Run budget snapshots", () => {
+    expect(
+      persistedEventPayloadSchema.parse({
+        type: "session.run-budget",
+        data: {
+          state: "exceeded",
+          source: "estimate",
+          maxTokens: 100,
+          warningTokens: 80,
+          estimatedTokens: 100,
+          effectiveTokens: 100,
+        },
+      }),
+    ).toBeDefined();
+    expect(
+      persistedEventPayloadSchema.safeParse({
+        type: "session.run-budget",
+        data: {
+          state: "warning",
+          source: "estimate",
+          maxTokens: 100,
+          warningTokens: 80,
+          estimatedTokens: 1,
+          effectiveTokens: 1,
+        },
+      }).success,
+    ).toBe(false);
+  });
+
   it("strictly validates regeneration relations without storing replacement text", () => {
     const relation = {
       type: "session.regeneration",

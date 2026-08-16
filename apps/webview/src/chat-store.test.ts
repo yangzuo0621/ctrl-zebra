@@ -376,6 +376,60 @@ describe("chat reasoning store", () => {
     expect(harness.store.getState().usage).toBeUndefined();
   });
 
+  it("projects a warning and fences late events after a Run token limit", () => {
+    const harness = createHarness();
+    startRun(harness);
+    const warning = {
+      state: "warning" as const,
+      source: "estimate" as const,
+      maxTokens: 100,
+      warningTokens: 80,
+      estimatedTokens: 80,
+      effectiveTokens: 80,
+    };
+    harness.receive({
+      protocolVersion,
+      type: "extension/run-budget",
+      requestId: "request-1",
+      budget: warning,
+    });
+    expect(harness.store.getState().runBudget).toEqual(warning);
+
+    const exceeded = {
+      ...warning,
+      state: "exceeded" as const,
+      source: "actual" as const,
+      actualTokens: 100,
+      estimatedTokens: 85,
+      effectiveTokens: 100,
+    };
+    harness.receive({
+      protocolVersion,
+      type: "extension/run-budget",
+      requestId: "request-1",
+      budget: exceeded,
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/run-status",
+      requestId: "request-1",
+      status: "budget-exceeded",
+    });
+    harness.receive({
+      protocolVersion,
+      type: "extension/run-budget",
+      requestId: "request-1",
+      budget: { ...exceeded, actualTokens: 101, effectiveTokens: 101 },
+    });
+
+    expect(harness.store.getState().status).toBe("budget-exceeded");
+    expect(harness.store.getState().runError).toBe(
+      "This Run reached its token safety limit. Start a follow-up Run to continue; the limit is not a Provider bill.",
+    );
+    expect(harness.store.getState().runBudget).toEqual(exceeded);
+    expect(harness.store.getState().activeRequestId).toBeUndefined();
+  });
+
   it("removes an empty completed lifecycle and defensively truncates oversized blocks", () => {
     const harness = createHarness();
     startRun(harness);

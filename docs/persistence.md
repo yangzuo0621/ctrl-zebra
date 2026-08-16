@@ -164,7 +164,7 @@ written and how they rebuild repository state.
   pairs. Reasoning, status, approval, usage, summary, MCP attachment metadata, Webview-only source
   fields, and the T1901 IDE read-only Tool projections are excluded from model history. A retained
   ordinary Tool pair is one indivisible unit.
-- A `truncated`, `cancelled`, `failed`, or recovery-`interrupted` Run keeps its user message. Partial or empty
+- A `truncated`, `cancelled`, `budget-exceeded`, `failed`, or recovery-`interrupted` Run keeps its user message. Partial or empty
   assistant text is not injected. A complete Tool pair committed before the terminal outcome may be
   retained; an open call, orphan Result, duplicate call ID, or mismatched call/name pair is dropped
   only when it is the expected unfinished tail and otherwise makes the Session corrupt. No synthetic
@@ -187,7 +187,7 @@ written and how they rebuild repository state.
   text and its Tool pairs remain in the source log but are omitted from the projected history/display.
   The replacement user event is source-only and is not shown as a duplicate prompt. Until the
   replacement reaches normal `completed`, the old answer stays visible and remains the projected
-  answer; cancellation, failure, truncation, a damaged tail, or an incomplete relation preserves it
+  answer; cancellation, budget exhaustion, failure, truncation, a damaged tail, or an incomplete relation preserves it
   and omits partial replacement output. A malformed or orphaned relation makes the Session corrupt
   rather than guessed.
 
@@ -265,7 +265,7 @@ or migration is added by T2103.
   Unsupported, missing, or mismatched format versions remain isolated as unsupported/corrupt; they are
   never guessed as the current format. New persistence fields or strict event payloads require an
   explicit compatibility fixture and owning task.
-- Recovery normalizes active statuses to `interrupted`, preserves `completed`, `truncated`, `cancelled`, `failed`,
+- Recovery normalizes active statuses to `interrupted`, preserves `completed`, `truncated`, `cancelled`, `budget-exceeded`, `failed`,
   and existing `interrupted`, and performs no model, Tool, approval, or Provider action. An explicit
   later submit may reset a recovered writable Session to a new Run; a read-only legacy Session remains
   historical and cannot be continued. Recovery itself never resumes work.
@@ -333,6 +333,20 @@ recovered projection is sent with `extension/session-restored`; live `extension/
 events are used only while the matching Run is preparing or streaming, and late or duplicate events
 do not mutate recovered state.
 
+#### Run token budget events
+
+The Extension persists each warning or exceeded budget transition as the additive version `1` event
+`session.run-budget`. Its strict data is the bounded Run token budget snapshot: estimates and actual
+Provider Usage remain separate fields, and no price, billing, SDK metadata, or raw response is
+stored. The shared Protocol schema requires `effectiveTokens` to equal the greatest observed count;
+warning snapshots must reach `warningTokens`, and exceeded snapshots must reach `maxTokens`.
+
+Recovery accepts at most one warning followed by one exceeded snapshot within each status-delimited
+Run. A malformed, non-monotonic, duplicate warning, or event after exceeded in the same Run marks the
+Session corrupt. The latest valid snapshot across Runs is returned as `restoredSession.runBudget`, and a recovered
+`budget-exceeded` status is displayed as a terminal, user-recoverable Run outcome. Budget events
+remain outside model history and never resume a Provider request or Tool operation.
+
 ## Compatibility and migration
 
 - Readers select a decoder from the version directory and then require the manifest version to
@@ -384,7 +398,8 @@ do not mutate recovered state.
   `preparing` for a fresh Run with new cancellation and resource ownership; no other live transition
   out of `interrupted` is legal.
 - On recovery, `idle`, `preparing`, `streaming`, `awaiting_approval`, and `executing_tool` are written
-  back as `interrupted`. `completed`, `truncated`, `cancelled`, `failed`, and `interrupted` remain unchanged.
+  back as `interrupted`. `completed`, `truncated`, `cancelled`, `budget-exceeded`, `failed`, and
+  `interrupted` remain unchanged.
 - Recovery may read history and update the manifest status only for a writable Session. For a recognized
   read-only legacy Session it projects `interrupted` when the source status is active but does not write
   that recovery-only status back. It never resumes a model request, consumes an approval, executes a

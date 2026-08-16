@@ -109,7 +109,8 @@ This document defines the Webview security constraints established before T0104.
   `AbortSignal`, pending operation, approval, or delivery gate.
 - History reconstructed from a validated local Session is untrusted model context. It may contain
   bounded user text and complete Tool Call/Result pairs, but it is never authorization, a command,
-  a workspace target, or evidence to replay a side effect. Failed, cancelled, and interrupted partial
+  a workspace target, or evidence to replay a side effect. Failed, cancelled, budget-exceeded, and
+  interrupted partial
   assistant output is display-only and is not injected into the next Run; an unfinished Tool Call is
   discarded rather than given a synthetic Result.
 - Cancellation and Session replacement close the Run's event gate before cleanup. No later delta,
