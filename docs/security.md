@@ -1344,7 +1344,9 @@ RSS bytes, and a closed Run status).
 - Version and enum values are closed, malformed values become `unknown` or `[REDACTED]`, and corrupt
   objects/getters fail closed without copying arbitrary properties. Error entries and integer fields
   have fixed limits; the serialized UTF-8 document has a 64 KiB ceiling. The preview DTO uses the
-  same validated document, so the user sees the exact bounded content before saving.
+  same validated document and exact compact serialization, so the user sees the exact bounded bytes
+  before saving. Runtime `runStatus` comes from host-owned lifecycle callbacks; the Host does not
+  infer it from Webview state and reports `unknown` when that state is no longer observable.
 - The selected VS Code save target is shown only as a bounded UI label. It is not copied into the
   document. The user must confirm after reviewing both target and content; closing the save dialog or
   pressing Cancel performs no write. A write failure produces a fixed local status and never exposes

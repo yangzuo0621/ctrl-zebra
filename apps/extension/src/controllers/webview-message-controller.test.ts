@@ -21,6 +21,7 @@ describe("bindWebviewMessageController", () => {
     let messageListener: ((message: unknown) => void) | undefined;
     let editArguments: unknown[] | undefined;
     const postedMessages: unknown[] = [];
+    const runStatuses: string[] = [];
     bindWebviewMessageController({
       channel: {
         onDidReceiveMessage(listener) {
@@ -47,6 +48,7 @@ describe("bindWebviewMessageController", () => {
         },
       },
       reportRunFailure: () => {},
+      reportRunStatus: (status) => runStatuses.push(status),
     });
 
     messageListener?.({
@@ -82,6 +84,8 @@ describe("bindWebviewMessageController", () => {
       requestId: "request-edit",
       status: "preparing",
     });
+    expect(runStatuses).toContain("preparing");
+    expect(runStatuses).toContain("streaming");
   });
 
   it("does not report or publish refresh cancellation, but reports unexpected failures", async () => {

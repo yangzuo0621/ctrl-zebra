@@ -19,6 +19,7 @@ export interface DiagnosticsExportState {
   readonly exportId?: string;
   readonly target?: string;
   readonly document?: DiagnosticsExportDocument;
+  readonly content?: string;
   readonly message?: string;
   readonly announcement: string;
   start(): boolean;
@@ -55,6 +56,7 @@ export function createDiagnosticsExportStore(
         exportId: undefined,
         target: undefined,
         document: undefined,
+        content: undefined,
         message: undefined,
         announcement: strings.diagnosticsExport.preparing,
       });
@@ -106,6 +108,7 @@ export function createDiagnosticsExportStore(
         exportId: undefined,
         target: undefined,
         document: undefined,
+        content: undefined,
         message: undefined,
         announcement: "",
       });
@@ -120,6 +123,7 @@ export function createDiagnosticsExportStore(
           exportId: message.exportId,
           target: message.target,
           document: message.document,
+          content: message.content,
           message: undefined,
           announcement: strings.diagnosticsExport.ready,
         });
@@ -135,6 +139,7 @@ export function createDiagnosticsExportStore(
         exportId: undefined,
         target: undefined,
         document: undefined,
+        content: undefined,
         message: message.message,
         announcement:
           message.status === "completed"
@@ -146,7 +151,15 @@ export function createDiagnosticsExportStore(
     },
     dispose() {
       disposed = true;
-      set({ status: "idle", requestId: undefined, exportId: undefined, document: undefined });
+      set({
+        status: "idle",
+        requestId: undefined,
+        exportId: undefined,
+        target: undefined,
+        document: undefined,
+        content: undefined,
+        message: undefined,
+      });
     },
   }));
 }

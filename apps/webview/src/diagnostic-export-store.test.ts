@@ -17,6 +17,7 @@ const document = {
     runStatus: "idle" as const,
   },
 };
+const content = `${JSON.stringify(document)}\n`;
 
 describe("diagnostics export store", () => {
   it("requires an explicit preview confirmation before posting a save", () => {
@@ -38,6 +39,7 @@ describe("diagnostics export store", () => {
       exportId: "export-1",
       target: "file:///tmp/diagnostics.json",
       document,
+      content,
     });
 
     expect(store.getState().status).toBe("ready");
@@ -60,6 +62,7 @@ describe("diagnostics export store", () => {
       exportId: "export-2",
       target: "file:///tmp/diagnostics.json",
       document,
+      content,
     });
 
     expect(store.getState().cancel()).toBe(true);

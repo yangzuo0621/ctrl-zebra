@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { DiagnosticsExportController } from "./diagnostic-export.js";
 
-function createInput() {
+function createInput(runStatus: "idle" | "streaming" = "idle") {
   return {
     extensionVersion: "0.1.1",
     vscodeVersion: "1.125.0",
@@ -11,7 +11,7 @@ function createInput() {
     provider: "openai",
     errors: [],
     mcp: { status: "unconfigured", generation: 0 },
-    runtime: { activationDurationMs: 1, memoryBytes: 2, runStatus: "idle" },
+    runtime: { activationDurationMs: 1, memoryBytes: 2, runStatus },
   };
 }
 
@@ -50,6 +50,19 @@ describe("DiagnosticsExportController", () => {
     controller.confirm("request-1", "export-1", post);
     await Promise.resolve();
     expect(writes).toHaveLength(1);
+    const preview = post.mock.calls
+      .map(([message]) => message)
+      .find(
+        (
+          message,
+        ): message is Extract<
+          ExtensionToWebviewMessage,
+          { type: "extension/diagnostics-export-preview"; status: "ready" }
+        > => message.type === "extension/diagnostics-export-preview" && message.status === "ready",
+      );
+    expect(preview).toBeDefined();
+    expect(new TextDecoder().decode(writes[0])).toBe(preview?.content);
+    expect(new TextEncoder().encode(preview?.content)).toEqual(writes[0]);
     expect(new TextDecoder().decode(writes[0])).not.toContain("target");
     expect(post).toHaveBeenLastCalledWith(
       expect.objectContaining({ status: "completed", requestId: "request-1" }),
@@ -73,6 +86,27 @@ describe("DiagnosticsExportController", () => {
     expect(post).toHaveBeenLastCalledWith(
       expect.objectContaining({ status: "cancelled", code: "no-target" }),
     );
+  });
+
+  it("exports the current non-idle Run status in the preview", async () => {
+    const post = vi.fn<(message: ExtensionToWebviewMessage) => void>();
+    const controller = new DiagnosticsExportController({
+      createId: () => "export-active",
+      readInput: () => createInput("streaming"),
+      target: {
+        chooseTarget: async () => "target",
+        formatTarget: () => "target",
+        writeFile: vi.fn(),
+      },
+    });
+
+    controller.request("request-active", post);
+    await Promise.resolve();
+    const ready = post.mock.calls.at(-1)?.[0];
+    if (ready?.type !== "extension/diagnostics-export-preview" || ready.status !== "ready") {
+      throw new Error("Expected an active diagnostics preview.");
+    }
+    expect(ready.document.runtime.runStatus).toBe("streaming");
   });
 
   it("keeps cancellation separate from a write failure", async () => {

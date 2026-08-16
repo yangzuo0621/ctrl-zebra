@@ -17,7 +17,7 @@ import type { McpWebviewActions } from "./mcp-webview-actions.js";
 import type { ProviderOnboardingController } from "./provider-onboarding-controller.js";
 import type { SessionRecoveryActions } from "./session-recovery.js";
 import { WebviewCheckpointMessageHandler } from "./webview-checkpoint-message-handler.js";
-import { WebviewRunMessageHandler } from "./webview-run-message-handler.js";
+import { type HostRunStatus, WebviewRunMessageHandler } from "./webview-run-message-handler.js";
 import { WebviewSessionMessageHandler } from "./webview-session-message-handler.js";
 import type { WorkspaceFileReferenceActions } from "./workspace-file-reference-actions.js";
 
@@ -63,6 +63,7 @@ interface BindWebviewMessageControllerOptions {
   readonly sessionActions?: SessionRecoveryActions;
   readonly checkpointActions?: CheckpointActions;
   readonly reportRunFailure?: (error: unknown) => void;
+  readonly reportRunStatus?: (status: HostRunStatus) => void;
   readonly resourceActions?: McpResourceActions;
   readonly promptActions?: McpPromptActions;
   readonly mcpActions?: McpWebviewActions;
@@ -83,6 +84,7 @@ export function bindWebviewMessageController({
   sessionActions,
   checkpointActions,
   reportRunFailure = () => {},
+  reportRunStatus = () => {},
   resourceActions,
   promptActions,
   mcpActions,
@@ -110,6 +112,7 @@ export function bindWebviewMessageController({
     chatRunner,
     approvalActions,
     reportRunFailure,
+    reportRunStatus,
   );
   const sessionMessages = new WebviewSessionMessageHandler(
     post,

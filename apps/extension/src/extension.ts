@@ -163,6 +163,7 @@ import {
 } from "./controllers/run-error-mapper.js";
 import { createSessionRecoveryActions } from "./controllers/session-recovery.js";
 import { ToolApprovalWorkflowRouter } from "./controllers/tool-approval-workflow.js";
+import type { HostRunStatus } from "./controllers/webview-run-message-handler.js";
 import {
   selectCommandEnvironment,
   WorkspaceCommandExecutor,
@@ -201,6 +202,7 @@ export function activate(context: ExtensionContext): void {
       window.showWarningMessage(message, options, item),
   });
   let diagnosticsExport: DiagnosticsExportController;
+  let currentRunStatus: HostRunStatus = "idle";
   const mcpConnection = new McpConnectionController({
     readConfiguration() {
       const settings = workspace.getConfiguration(mcpServerSettingSection);
@@ -287,7 +289,7 @@ export function activate(context: ExtensionContext): void {
             : { negotiatedVersion: mcp.connection.protocolVersion }),
           ...(mcp.error === undefined ? {} : { errorCategory: "mcp" }),
         },
-        runtime: toDiagnosticsRuntime(performanceBaseline.getSnapshot(), "idle"),
+        runtime: toDiagnosticsRuntime(performanceBaseline.getSnapshot(), currentRunStatus),
       };
     },
     target: createVscodeDiagnosticsExportPort(
@@ -1378,6 +1380,9 @@ export function activate(context: ExtensionContext): void {
         const failure = getRunFailureLogEntry(error);
         diagnosticsExport.recordErrorCategory(classifyDiagnosticsErrorCategory(failure.errorCode));
         logger.error(failure);
+      },
+      reportRunStatus: (status) => {
+        currentRunStatus = status;
       },
       createResourceActions: () =>
         new McpResourceActions({ connection: mcpConnection, createId: randomUUID }),

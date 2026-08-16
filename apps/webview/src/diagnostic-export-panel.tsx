@@ -11,8 +11,7 @@ interface DiagnosticsExportPanelProps {
 
 export function DiagnosticsExportPanel({ store }: DiagnosticsExportPanelProps) {
   const state = useStore(store);
-  const documentText =
-    state.document === undefined ? "" : `${JSON.stringify(state.document, null, 2)}\n`;
+  const documentText = state.content ?? "";
   const isBusy = state.status === "preparing" || state.status === "exporting";
 
   return (

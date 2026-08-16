@@ -6,7 +6,10 @@ import {
 } from "./approval.js";
 import { assistantMessageSchema, messageIdSchema, userMessageSchema } from "./chat-message.js";
 import { checkpointIdSchema, checkpointSummarySchema } from "./checkpoint.js";
-import { diagnosticsExportDocumentSchema } from "./diagnostics-export.js";
+import {
+  diagnosticsExportDocumentSchema,
+  maxDiagnosticsExportBytes,
+} from "./diagnostics-export.js";
 import { ideTextContextSchema } from "./ide-context.js";
 import {
   mcpCatalogSequenceSchema,
@@ -226,36 +229,56 @@ export const diagnosticsExportTargetSchema = z
     "The export target must not contain control characters.",
   );
 
-export const diagnosticsExportPreviewMessageSchema = z.discriminatedUnion("status", [
-  z.strictObject({
-    ...protocolEnvelopeSchema.shape,
-    type: z.literal("extension/diagnostics-export-preview"),
-    status: z.literal("ready"),
-    exportId: requestIdSchema,
-    target: diagnosticsExportTargetSchema,
-    document: diagnosticsExportDocumentSchema,
-  }),
-  z.strictObject({
-    ...protocolEnvelopeSchema.shape,
-    type: z.literal("extension/diagnostics-export-preview"),
-    status: z.literal("completed"),
-    message: z.string().min(1).max(256),
-  }),
-  z.strictObject({
-    ...protocolEnvelopeSchema.shape,
-    type: z.literal("extension/diagnostics-export-preview"),
-    status: z.literal("cancelled"),
-    code: z.enum(["user-cancelled", "no-target"]),
-    message: z.string().min(1).max(256),
-  }),
-  z.strictObject({
-    ...protocolEnvelopeSchema.shape,
-    type: z.literal("extension/diagnostics-export-preview"),
-    status: z.literal("error"),
-    code: z.enum(["invalid-state", "too-large", "write-failed", "unavailable"]),
-    message: z.string().min(1).max(256),
-  }),
-]);
+const diagnosticsExportPreviewContentSchema = z
+  .string()
+  .min(1)
+  .max(maxDiagnosticsExportBytes)
+  .refine((value) => value.isWellFormed(), "The export content must contain well-formed Unicode.")
+  .refine(
+    (value) => utf8ByteLength(value) <= maxDiagnosticsExportBytes,
+    "The export content exceeds its serialized byte limit.",
+  );
+
+export const diagnosticsExportPreviewMessageSchema = z
+  .discriminatedUnion("status", [
+    z.strictObject({
+      ...protocolEnvelopeSchema.shape,
+      type: z.literal("extension/diagnostics-export-preview"),
+      status: z.literal("ready"),
+      exportId: requestIdSchema,
+      target: diagnosticsExportTargetSchema,
+      document: diagnosticsExportDocumentSchema,
+      content: diagnosticsExportPreviewContentSchema,
+    }),
+    z.strictObject({
+      ...protocolEnvelopeSchema.shape,
+      type: z.literal("extension/diagnostics-export-preview"),
+      status: z.literal("completed"),
+      message: z.string().min(1).max(256),
+    }),
+    z.strictObject({
+      ...protocolEnvelopeSchema.shape,
+      type: z.literal("extension/diagnostics-export-preview"),
+      status: z.literal("cancelled"),
+      code: z.enum(["user-cancelled", "no-target"]),
+      message: z.string().min(1).max(256),
+    }),
+    z.strictObject({
+      ...protocolEnvelopeSchema.shape,
+      type: z.literal("extension/diagnostics-export-preview"),
+      status: z.literal("error"),
+      code: z.enum(["invalid-state", "too-large", "write-failed", "unavailable"]),
+      message: z.string().min(1).max(256),
+    }),
+  ])
+  .superRefine((message, context) => {
+    if (message.status === "ready" && message.content !== `${JSON.stringify(message.document)}\n`) {
+      context.addIssue({
+        code: "custom",
+        message: "The diagnostics preview content must match the compact document serialization.",
+      });
+    }
+  });
 
 export const submitMessageSchema = z.strictObject({
   ...protocolEnvelopeSchema.shape,

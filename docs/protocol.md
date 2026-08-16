@@ -24,9 +24,11 @@ authoritative source for the exact wire contracts.
 The Webview sends `webview/diagnostics-export` with a request ID, then may send the exact
 `webview/diagnostics-export-confirm` or `webview/diagnostics-export-cancel` pair only after a
 `extension/diagnostics-export-preview` with a matching export ID. A `ready` preview contains the
-bounded target display label and the strict `DiagnosticsExportDocument`; terminal messages contain
-only fixed status codes and bounded product text. Unknown fields, stale IDs, unsupported enum values,
-raw errors, and unbounded text are rejected at the Protocol boundary.
+bounded target display label, the strict `DiagnosticsExportDocument`, and `content`, the exact compact
+JSON-plus-newline serialization that the Host will write. The Protocol rejects content that does not
+match that document byte representation; terminal messages contain only fixed status codes and bounded
+product text. Unknown fields, stale IDs, unsupported enum values, raw errors, and unbounded text are
+rejected at the Protocol boundary.
 
 `DiagnosticsExportDocument` is an allowlisted local support projection: extension/VS Code/platform
 versions, a closed Provider type, aggregated closed error categories, MCP status/generation and

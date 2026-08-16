@@ -204,6 +204,16 @@ describe("Webview protocol messages", () => {
       requestId: request.requestId,
       exportId: "export-1",
     } as const;
+    const document = {
+      formatVersion: 1,
+      extensionVersion: "0.1.1",
+      vscodeVersion: "1.125.0",
+      platform: "linux",
+      provider: "openai",
+      errors: [],
+      mcp: { status: "unconfigured", generation: 0 },
+      runtime: { activationDurationMs: 1, memoryBytes: 2, runStatus: "idle" },
+    } as const;
     const preview = {
       protocolVersion,
       type: "extension/diagnostics-export-preview",
@@ -211,16 +221,8 @@ describe("Webview protocol messages", () => {
       status: "ready",
       exportId: confirm.exportId,
       target: "file:///tmp/diagnostics.json",
-      document: {
-        formatVersion: 1,
-        extensionVersion: "0.1.1",
-        vscodeVersion: "1.125.0",
-        platform: "linux",
-        provider: "openai",
-        errors: [],
-        mcp: { status: "unconfigured", generation: 0 },
-        runtime: { activationDurationMs: 1, memoryBytes: 2, runStatus: "idle" },
-      },
+      document,
+      content: `${JSON.stringify(document)}\n`,
     } as const;
 
     expect(webviewToExtensionMessageSchema.parse(request)).toEqual(request);
@@ -230,6 +232,12 @@ describe("Webview protocol messages", () => {
       extensionToWebviewMessageSchema.safeParse({
         ...preview,
         document: { ...preview.document, endpoint: "https://example.invalid?key=secret" },
+      }).success,
+    ).toBe(false);
+    expect(
+      extensionToWebviewMessageSchema.safeParse({
+        ...preview,
+        content: `${JSON.stringify(preview.document, null, 2)}\n`,
       }).success,
     ).toBe(false);
   });

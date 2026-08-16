@@ -69,7 +69,12 @@ conversation content and does not create background work during activation.
 
 - The host-independent Protocol owns the strict diagnostics document and preview/request message
   schemas. The diagnostics builder owns the allowlist, redaction, aggregation, and UTF-8 bound;
-  `PerformanceBaselineRecorder` supplies the existing bounded activation/display/RSS snapshot.
+  `PerformanceBaselineRecorder` supplies the existing bounded activation/display/RSS snapshot. The
+  `ready` preview carries the exact compact serialization returned by that builder, including its
+  trailing newline, so the rendered content and confirmed bytes cannot diverge.
+- The Extension receives Run status only from the host-owned `WebviewRunMessageHandler` lifecycle
+  callbacks. It records the emitted status (including active non-idle states); after view disposal,
+  the unobservable state is represented as `unknown` rather than inferred from Webview state.
 - `vscode-diagnostics-export.ts` is the only VS Code adapter. It owns the save dialog options,
   `Uri` display formatting, and `workspace.fs.writeFile` call. The selected target remains an opaque
   adapter value until the user confirms; only a bounded display label crosses to the Webview.

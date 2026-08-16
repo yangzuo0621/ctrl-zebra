@@ -23,6 +23,7 @@ import {
   bindWebviewMessageController,
   type LocalDataClearUiActions,
 } from "./controllers/webview-message-controller.js";
+import type { HostRunStatus } from "./controllers/webview-run-message-handler.js";
 import type { WorkspaceFileReferenceActions } from "./controllers/workspace-file-reference-actions.js";
 
 export const agentViewId = "ctrlZebra.agentView";
@@ -104,6 +105,7 @@ class AgentViewProvider implements WebviewViewProvider {
       sessionActions: this.options.sessionActions,
       checkpointActions: this.options.checkpointActions,
       reportRunFailure: this.options.reportRunFailure,
+      reportRunStatus: this.options.reportRunStatus,
       resourceActions: this.options.createResourceActions?.(),
       promptActions: this.options.createPromptActions?.(),
       mcpActions: this.options.createMcpActions?.(),
@@ -130,6 +132,7 @@ interface AgentViewProviderOptions {
   readonly reportDeliveryFailure?: () => void;
   readonly reportDisplay?: () => void;
   readonly reportRunFailure?: (error: unknown) => void;
+  readonly reportRunStatus?: (status: HostRunStatus) => void;
   readonly createResourceActions?: () => McpResourceActions;
   readonly createPromptActions?: () => McpPromptActions;
   readonly createMcpActions?: () => McpWebviewActions;

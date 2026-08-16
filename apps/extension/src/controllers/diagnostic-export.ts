@@ -251,6 +251,7 @@ export class DiagnosticsExportController {
         exportId: this.#pending.exportId,
         target: displayTarget,
         document: serialized.document,
+        content: serialized.json,
       });
     } catch {
       this.#pending = undefined;
