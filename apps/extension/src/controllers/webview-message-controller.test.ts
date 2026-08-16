@@ -500,6 +500,50 @@ describe("bindWebviewMessageController", () => {
     ]);
   });
 
+  it("ignores Session history refresh while a Run is active", async () => {
+    let messageListener: ((message: unknown) => void) | undefined;
+    const list = vi.fn(async () => []);
+    bindWebviewMessageController({
+      channel: {
+        onDidReceiveMessage(listener) {
+          messageListener = listener;
+          return { dispose() {} };
+        },
+        postMessage() {
+          return Promise.resolve(true);
+        },
+      },
+      lifetime: { onDidDispose: () => ({ dispose() {} }) },
+      reportDeliveryFailure: () => {},
+      chatRunner: {
+        run(_content, signal) {
+          return new Promise<void>((resolve) =>
+            signal.addEventListener("abort", () => resolve(), { once: true }),
+          );
+        },
+      },
+      sessionActions: {
+        list,
+        async restore() {
+          throw new Error("unused");
+        },
+      },
+    });
+
+    messageListener?.({
+      protocolVersion,
+      type: "webview/submit",
+      requestId: "run-active",
+      content: "Keep this Run active.",
+    });
+    messageListener?.({ protocolVersion, type: "webview/list-sessions", requestId: "list-active" });
+    await Promise.resolve();
+    expect(list).not.toHaveBeenCalled();
+
+    messageListener?.({ protocolVersion, type: "webview/cancel", requestId: "run-active" });
+    await Promise.resolve();
+  });
+
   it("rejects a stale Session restore before it can become deletable", async () => {
     let messageListener: ((message: unknown) => void) | undefined;
     const restored: string[] = [];
@@ -659,6 +703,7 @@ describe("bindWebviewMessageController", () => {
       requestId: "run-1",
     });
 
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
     messageListener?.({ protocolVersion, type: "webview/list-sessions", requestId: "list-1" });
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
     messageListener?.({

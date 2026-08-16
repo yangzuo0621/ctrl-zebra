@@ -239,7 +239,10 @@ Read the full [Privacy Notice](PRIVACY.md) and [security contract](docs/security
   cloud service integration.
 - Sessions interrupted by an Extension Host restart are restored as `interrupted`; model requests,
   approvals, and tools are never resumed automatically.
-- Session and Checkpoint retention has no automatic pruning policy or in-product delete control.
+- Local Session and Checkpoint retention defaults to 30 days, is configurable or disableable through
+  `ctrlZebra.sessionRetention.enabled` and `ctrlZebra.sessionRetention.days`, and runs only when
+  Session history is explicitly listed/refreshed. T2104 also provides explicit local delete controls;
+  retention never removes workspace files.
 - Checkpoint restore is conflict-safe, not a merge system: changed or non-canonical targets block the
   entire restore.
 - Large files, binary files, command output, tool output, event logs, and model context are bounded

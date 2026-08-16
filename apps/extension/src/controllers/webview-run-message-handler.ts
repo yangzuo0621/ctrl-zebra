@@ -182,6 +182,10 @@ export class WebviewRunMessageHandler {
   }
 
   canStart(): boolean {
+    return !this.#disposed && this.#activeRun === undefined;
+  }
+
+  canListSessions(): boolean {
     return !this.#disposed && this.#activeRun === undefined && this.#settlingRuns.size === 0;
   }
 

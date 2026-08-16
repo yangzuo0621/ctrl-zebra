@@ -44,7 +44,7 @@ export interface SessionRepository {
 }
 
 export interface SessionCatalog {
-  listSessionIds(maxEntries?: number): Promise<readonly string[]>;
+  listSessionIds(): Promise<readonly string[]>;
   /** Removes the exact encoded Session directory. */
   deleteSession?(sessionId: unknown): Promise<boolean>;
   /** Removes all Session directories, including directories with damaged manifests. */
@@ -202,7 +202,7 @@ export class PersistedSessionRepository implements SessionRepository {
 
   async list(): Promise<readonly SessionSummary[]> {
     const summaries: SessionSummary[] = [];
-    const sessionIds = await this.#catalog.listSessionIds(maxSessionRecords);
+    const sessionIds = await this.#catalog.listSessionIds();
     if (sessionIds.length > maxSessionRecords) {
       throw new RangeError(
         `Persisted Session count exceeds the ${maxSessionRecords}-Session limit.`,
@@ -218,7 +218,7 @@ export class PersistedSessionRepository implements SessionRepository {
   }
 
   async listRetentionCandidates(): Promise<readonly SessionRetentionCandidate[]> {
-    const sessionIds = await this.#catalog.listSessionIds(maxSessionRecords);
+    const sessionIds = await this.#catalog.listSessionIds();
     if (sessionIds.length > maxSessionRecords) {
       throw new RangeError(
         `Persisted Session count exceeds the ${maxSessionRecords}-Session limit.`,

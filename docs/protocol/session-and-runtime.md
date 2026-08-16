@@ -59,6 +59,11 @@ new-Session behavior.
   removes every Session directory and committed/temporary Checkpoint record under the CtrlZebra
   persistence root. It emits `extension/sessions-cleared` only when all categories finish; otherwise
   it emits `extension/session-deletion-error` with a retryable `partial` or `unavailable` outcome.
+- `webview/list-sessions` remains the strict existing list intent and `extension/session-list` keeps its
+  existing Session summary shape. On that explicit history request, the Host may perform T2105's
+  bounded local retention pass before emitting the list; removed Sessions are omitted from that
+  response. The request is ignored while a Run is active or settling, and retention feedback is a
+  Host-local fixed notification rather than a new Protocol message or raw storage error.
 - `extension/session-started` is a strict Host-to-Webview event containing `{ protocolVersion,
   type: "extension/session-started", requestId, sessionId }`. The Host emits it once, after the
   requested Session has been validated or a new Session has been allocated and the Run has produced

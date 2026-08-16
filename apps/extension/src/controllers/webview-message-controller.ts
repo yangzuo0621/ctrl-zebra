@@ -307,7 +307,7 @@ export function bindWebviewMessageController({
         }
         return;
       case "webview/list-sessions":
-        if (runMessages.canStart() && !sessionMessages.isRestoring()) {
+        if (runMessages.canListSessions() && !sessionMessages.isRestoring()) {
           sessionMessages.list(data.requestId);
         }
         return;

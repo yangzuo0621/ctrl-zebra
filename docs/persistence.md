@@ -65,6 +65,33 @@ attempt. A storage error is never reported as full success: the result identifie
 and leaves the operation safe to retry. Recovery/list readers must not expose a Session after its
 directory has been removed, and a stale restore result must not recreate its Webview projection.
 
+## Automatic Session retention (T2105)
+
+Automatic local retention is enabled by default for 30 days and is controlled by the machine-scoped
+`ctrlZebra.sessionRetention.enabled` and `ctrlZebra.sessionRetention.days` settings. The duration is an
+integer from 1 through 3,650 and represents 24-hour UTC days. The Host compares the manifest's existing
+`updatedAt` timestamp with the injected clock cutoff using `<=`; no new timestamp or persisted field is
+introduced. Session metadata updates and committed events already advance `updatedAt`.
+
+Retention runs only as part of an explicit Session history list/refresh. It scans at most 10,000 catalog
+entries and reads only bounded manifest metadata; it does not load event logs or run at activation. When
+disabled, no retention candidate or Checkpoint scan occurs. `idle`, `preparing`, `streaming`,
+`awaiting_approval`, and `executing_tool` candidates are protected because recovery or a live Run may
+still own their data. The Host also blocks history listing while a Run is active or settling.
+
+An expired Session is removed through the existing exact encoded Session-directory deletion, then its
+owned Checkpoints are removed by one bounded scan of `checkpoints/v1`. Only a validated Checkpoint whose
+`sessionId` exactly matches a successfully removed Session is attributable; committed and matching
+atomic-write temporary files are included. Invalid, unreadable, or unattributable records remain in
+place and contribute to a bounded failure report. Cleanup is local-only and never removes workspace
+files, user code, Provider secrets, or another Extension's storage.
+
+The cleanup report counts scanned, expired, protected, removed, and failed entries. A storage failure
+does not turn earlier removals into a false all-success result; remaining data is safe to retry on the
+next explicit history refresh. Cancellation stops before the next candidate or storage operation and
+does not suppress the existing recovery/deletion safety gates. The v1 persisted format and Session
+summary wire projection remain unchanged.
+
 ## File responsibilities
 
 ### `manifest.json`
@@ -417,8 +444,8 @@ restore semantics, or record limits requires a new persisted-format decision and
 
 Checkpoints are local recovery data and may contain workspace source text. They follow the existing
 secret exclusion rules and must not enter model context, Webview state, logs, telemetry, or approval
-presentation. T2001 introduces no retention duration, pruning rule, quota eviction, or automatic
-deletion policy; such a policy requires separately planned work.
+presentation. T2105's retention policy is the only automatic Session/Checkpoint cleanup path: it is
+disabled by the machine setting, bounded, ownership-checked, and never applies to workspace files.
 
 ## Secret exclusion
 

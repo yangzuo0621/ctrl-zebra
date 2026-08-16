@@ -41,9 +41,12 @@ The Extension Host stores data using VS Code-owned facilities on the user's mach
   executable details, environment values, raw protocol messages, stderr, Server errors, and process
   handles are not copied into Session storage, Webview state, model context, or logs.
 
-CtrlZebra currently has no automatic Session or Checkpoint retention period, pruning policy, or
-in-product delete control. Data remains subject to VS Code's extension-storage lifecycle and any
-manual storage management performed by the user.
+Session and Checkpoint data remain local to VS Code extension storage. Automatic local cleanup is
+enabled by default for 30 days and is configurable or disableable with the machine-scoped
+`ctrlZebra.sessionRetention.enabled` and `ctrlZebra.sessionRetention.days` settings. It runs only
+after an explicit Session history list/refresh, removes expired Sessions and safely attributable owned
+Checkpoints, and never removes workspace files. Explicit local delete and clear-all controls remain
+available; neither automatic nor explicit cleanup sends data to CtrlZebra or a remote service.
 
 ## Data sent to a configured model provider
 
@@ -180,7 +183,8 @@ the full text of a deleted file. It never contains proposed after-content, appro
 previews, raw URI authority, credentials, or command data. Checkpoints and temporary Diff documents
 remain local to VS Code storage/Host memory, are not model context, and are not logged or sent to the
 Webview as unrestricted content. A create/delete/rename restore is explicit and hash/scope checked;
-there is no automatic rollback or retention/pruning policy.
+there is no automatic rollback. T2105 separately provides settings-controlled local retention for
+expired Sessions and safely attributable Checkpoints.
 
 `search_files` remains literal substring search by default. A user/model must explicitly select
 `mode: "regex"` to request the bounded RE2-compatible dialect. Patterns and scanned text stay

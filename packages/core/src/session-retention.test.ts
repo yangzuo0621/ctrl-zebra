@@ -29,6 +29,16 @@ describe("Session retention", () => {
     expect(report.expired).toBe(2);
     expect(report.deletedSessions).toBe(2);
     expect(deleted).toEqual(["boundary", "older"]);
+
+    const utcRepository = createRepository(candidates);
+    const utcReport = await cleanupExpiredSessions(utcRepository.repository, undefined, {
+      policy: { enabled: true, days: defaultSessionRetentionDays },
+      now: () => new Date("2026-08-16T00:00:00.000Z"),
+      signal: new AbortController().signal,
+      candidates,
+    });
+    expect(utcReport.cutoffAt).toBe(report.cutoffAt);
+    expect(utcRepository.deleted).toEqual(deleted);
   });
 
   it("does not scan or delete anything when automatic cleanup is disabled", async () => {
