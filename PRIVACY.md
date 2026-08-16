@@ -8,9 +8,10 @@ service that a user chooses to run through a command.
 
 ## Data controller and contact
 
-CtrlZebra is an open-source project maintained by Zuo Yang. Privacy questions and security reports
-can be submitted through the repository's GitHub issue tracker. Do not include API keys, private
-source code, prompts, logs, or other sensitive data in a public issue.
+CtrlZebra is an open-source project maintained by Zuo Yang. Privacy questions can be submitted
+through the repository's GitHub issue tracker. Security reports must use the private
+vulnerability-reporting path in [SECURITY.md](SECURITY.md). Do not include API keys, private source
+code, prompts, logs, or other sensitive data in a public issue or security report.
 
 ## Data CtrlZebra does not collect
 
@@ -207,8 +208,8 @@ third-party service.
 
 Credentials must be entered only through a supported password-masked command. Users should not paste
 credentials, private source, prompts, or logs into public issues. Security-sensitive reports should
-be shared privately with the maintainer when a private reporting channel is available on the
-repository.
+be submitted through the [Security Policy](SECURITY.md)'s private vulnerability-reporting path, not
+through a public issue or pull request. Do not include secrets or private user data in a report.
 
 ## Changes to this notice
 
