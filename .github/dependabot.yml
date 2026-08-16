@@ -1,0 +1,42 @@
+version: 2
+updates:
+  # Dependabot represents pnpm through the npm ecosystem and updates the manifest
+  # together with the committed pnpm-lock.yaml. CI verifies the lockfile with
+  # --frozen-lockfile before an update can be merged.
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: sunday
+      time: "06:00"
+      timezone: UTC
+    target-branch: main
+    versioning-strategy: increase
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        applies-to: version-updates
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
+  # Keep Action revisions immutable while Dependabot proposes reviewed SHA updates.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: sunday
+      time: "06:00"
+      timezone: UTC
+    target-branch: main
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        applies-to: version-updates
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch

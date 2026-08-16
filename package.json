@@ -11,6 +11,7 @@
     "package:vsix": "node ./apps/extension/scripts/package-vsix.mjs",
     "smoke:vsix": "node ./apps/extension/scripts/smoke-test-vsix.mjs",
     "test:docs": "node ./scripts/check-governance-docs.mjs",
+    "test:dependabot": "node ./scripts/check-dependabot-config.mjs",
     "test": "pnpm run test:unit && pnpm run test:integration",
     "test:coverage": "vitest run --coverage",
     "test:integration": "pnpm --filter ./apps/extension run test:integration",
