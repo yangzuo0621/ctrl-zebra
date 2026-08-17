@@ -4,8 +4,8 @@ CtrlZebra is a local-first workspace agent for desktop Visual Studio Code. It st
 can inspect a selected workspace, proposes file edits with reviewable approval, runs commands only
 after an exact single-use approval, and keeps local Sessions and recovery Checkpoints.
 
-Phase 1 is intended for evaluation. Read the [known limitations](#known-limitations) before using it
-on important work.
+CtrlZebra is currently in preview preparation (Phase 22). Read the [known limitations](#known-limitations)
+before using it on important work.
 
 ## Requirements
 

@@ -91,13 +91,13 @@
 
 ## 5. 阶段规格索引
 
-阶段 0–21 已完成，任务/PR/日期见[已完成任务历史](roadmap/archive/completed-tasks.md)，完整任务正文
-均已按阶段归档。常规执行不读取这些归档。阶段 22 已规划，等待开始。
+阶段 0–21 已完成，阶段 22 处于进行中（T2201–T2206 已完成，T2207–T2208 待开始）。任务/PR/日期见[已完成任务历史](roadmap/archive/completed-tasks.md)，完整任务正文
+均已按阶段归档。常规执行不读取这些归档。
 
 | 阶段 | 状态 | 详细规格 |
 |---|---|---|
 | 21 | 已完成 | [阶段 21 归档](roadmap/archive/phase-21.md) |
-| 22 | 已规划 | [阶段 22：Preview 与 GA 工程就绪](roadmap/phases/phase-22.md) |
+| 22 | 进行中 | [阶段 22：Preview 与 GA 工程就绪](roadmap/phases/phase-22.md) |
 
 ## 6. 后续能力候选顺序
 

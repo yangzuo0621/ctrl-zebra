@@ -43,14 +43,14 @@
 ## 3. 候选组合与建议窗口
 
 下表只列仍未完全处置、需要后续评估或明确窗口的机会；已晋升/已完成项目移入第 4 节台账。窗口
-是规划建议，不改变当前执行点；T2001 已按单独授权进入 docs-only 约束阶段。
+是规划建议，不改变当前执行点。
 
 | 机会 | 类型 | 优先级 | 建议窗口或依赖 | 状态 |
 |---|---|---:|---|---|
 | [EO-009 Markdown renderer](#eo-009-markdown-renderer) | Buy re-evaluation | P3 | 先证明净收益并通过基线变更控制 | `暂缓` |
 | [EO-010 Targeted Zod reuse](#eo-010-targeted-zod-reuse) | 已有依赖复用 | P2 | 随拥有 schema 的任务分 tranche | `已发现` |
 | [EO-011 Provider token counting](#eo-011-provider-token-counting) | Buy / 实验 | P3 | 先有准确度或预算缺陷数据 | `暂缓` |
-| [EO-012 MCP SDK-native negotiation](#eo-012-mcp-sdk-native-negotiation) | Buy / 已有依赖深化 | P0 | MCP 再次演进前优先评估；不阻塞 Phase 20 | `评估中` |
+| [EO-012 MCP SDK-native negotiation](#eo-012-mcp-sdk-native-negotiation) | Buy / 已有依赖深化 | P0 | MCP 再次演进前优先评估；不阻塞后续路线图 | `评估中` |
 
 仍影响未来执行的关系是：
 
@@ -58,8 +58,8 @@
 EO-012 evidence ──→ independent maintenance decision
 ```
 
-EO-012 可独立于 Phase 20 评估；除非发现当前 negotiation 存在实际缺陷，否则不阻塞 T2001–T2005。
-EO-009 和 EO-011 不应阻塞 Phase 20–22。若验证 SDK-native negotiation 能保持现有安全语义，再晋升为
+EO-012 可独立评估；除非发现当前 negotiation 存在实际缺陷，否则不阻塞路线图推进。
+EO-009 和 EO-011 不应阻塞 Phase 22 收尾。若验证 SDK-native negotiation 能保持现有安全语义，再晋升为
 独立 maintenance。
 
 ## 4. 已晋升/已完成台账
