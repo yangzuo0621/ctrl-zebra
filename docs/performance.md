@@ -56,18 +56,18 @@ written. All temporary paths are bounded and removed after each sample.
 
 ## Initial recorded distribution
 
-Measured on 2026-08-20 at corrected benchmark revision `d48e5af403718826aa2e42dafe6a0e0a82707f09`,
+Measured on 2026-08-20 at corrected benchmark revision `739ac16ddbc5d0b03f6b5ea0dd0e0c5e1a090aad`,
 with 5 samples after 1 warmup: Windows x64, Node 24.19.0, VS Code 1.125.0.
 
 | Metric | Min | p50 | p95 | Max |
 |---|---:|---:|---:|---:|
-| Extension activation | 4 ms | 5 ms | 5 ms | 5 ms |
-| Webview first usable | 316 ms | 356 ms | 430 ms | 430 ms |
-| Long-session restore | 4 ms | 4 ms | 4 ms | 4 ms |
-| Large-workspace search | 272 ms | 317 ms | 328 ms | 328 ms |
-| MCP connection/catalog loading | 96 ms | 98 ms | 105 ms | 105 ms |
-| Steady-state Extension Host RSS | 251,879,424 B | 257,277,952 B | 264,929,280 B | 264,929,280 B |
-| Peak Extension Host RSS | 316,129,280 B | 319,836,160 B | 327,356,416 B | 327,356,416 B |
+| Extension activation | 4 ms | 5 ms | 6 ms | 6 ms |
+| Webview first usable | 360 ms | 367 ms | 392 ms | 392 ms |
+| Long-session restore | 4 ms | 4 ms | 5 ms | 5 ms |
+| Large-workspace search | 281 ms | 325 ms | 362 ms | 362 ms |
+| MCP connection/catalog loading | 101 ms | 104 ms | 111 ms | 111 ms |
+| Steady-state Extension Host RSS | 247,951,360 B | 250,269,696 B | 264,486,912 B | 264,486,912 B |
+| Peak Extension Host RSS | 312,999,936 B | 316,354,560 B | 327,430,144 B | 327,430,144 B |
 
 Artifact sizes from the same build were 566,712 B for the Webview bundle, 4,764,124 B compressed
 for the VSIX, and 8,548,719 B uncompressed. The existing packaging contract remains the hard 5 MiB
