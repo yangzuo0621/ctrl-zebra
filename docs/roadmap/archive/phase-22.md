@@ -1,5 +1,11 @@
 # 阶段 22：Preview 与 GA 工程就绪
 
+> **归档状态：阶段完成**
+>
+> - 归档日期：2026-08-20
+> - 完成任务：T2201–T2208；任务已通过 [PR #253](https://github.com/yangzuo0621/ctrl-zebra/pull/253)、[PR #255](https://github.com/yangzuo0621/ctrl-zebra/pull/255)、[PR #264](https://github.com/yangzuo0621/ctrl-zebra/pull/264)、[PR #265](https://github.com/yangzuo0621/ctrl-zebra/pull/265)、[PR #266](https://github.com/yangzuo0621/ctrl-zebra/pull/266)、[PR #267](https://github.com/yangzuo0621/ctrl-zebra/pull/267)、[PR #268](https://github.com/yangzuo0621/ctrl-zebra/pull/268) 和 [PR #271](https://github.com/yangzuo0621/ctrl-zebra/pull/271) 合并到 `main`。
+> - 阶段门禁：外部协作、依赖维护、数据升级、成本控制、脱敏诊断、性能基线、发布验证和三平台代表烟雾路径均已按本阶段规格建立并验证。
+
 ## 1. 阶段目标
 
 补齐外部协作、依赖维护、数据升级、成本控制、脱敏诊断、性能预算和可重复发布所需的工程能力，
