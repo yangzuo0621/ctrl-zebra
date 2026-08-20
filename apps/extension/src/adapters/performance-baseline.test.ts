@@ -21,6 +21,7 @@ describe("PerformanceBaselineRecorder", () => {
       activationDurationMs: 12,
       firstWebviewDisplayDurationMs: 51,
       memoryBytes: 52_428_802,
+      peakMemoryBytes: 52_428_802,
     });
 
     expect(info.mock.calls).toEqual([
@@ -67,12 +68,37 @@ describe("PerformanceBaselineRecorder", () => {
       activationDurationMs: 0,
       firstWebviewDisplayDurationMs: 0,
       memoryBytes: 0,
+      peakMemoryBytes: 0,
     });
 
     expect(info.mock.calls).toEqual([
       [expect.objectContaining({ durationMs: 0 })],
       [expect.objectContaining({ memoryBytes: 0 })],
       [expect.objectContaining({ durationMs: 0 })],
+    ]);
+  });
+
+  it("emits each completed sample without changing the public snapshot", () => {
+    const samples: unknown[] = [];
+    const recorder = new PerformanceBaselineRecorder({
+      startedAt: 10,
+      now: () => 20,
+      readRssBytes: () => 30,
+      logger: { info: vi.fn() },
+      onSample: (sample) => samples.push(sample),
+    });
+
+    recorder.recordActivationComplete();
+    recorder.recordFirstWebviewDisplay();
+
+    expect(samples).toEqual([
+      { activationDurationMs: 10, memoryBytes: 30, peakMemoryBytes: 30 },
+      {
+        activationDurationMs: 10,
+        firstWebviewDisplayDurationMs: 10,
+        memoryBytes: 30,
+        peakMemoryBytes: 30,
+      },
     ]);
   });
 });

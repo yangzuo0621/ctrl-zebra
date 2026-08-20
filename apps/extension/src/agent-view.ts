@@ -99,6 +99,7 @@ class AgentViewProvider implements WebviewViewProvider {
     bindWebviewMessageController({
       channel: webviewView.webview,
       lifetime: webviewView,
+      onReady: this.options.reportReady,
       reportDeliveryFailure: this.options.reportDeliveryFailure,
       chatRunner: this.options.chatRunner,
       approvalActions: this.options.approvalActions,
@@ -119,7 +120,6 @@ class AgentViewProvider implements WebviewViewProvider {
       localDataClear: this.options.localDataClear,
       diagnosticsExport: this.options.diagnosticsExport,
     });
-    this.options.reportDisplay?.();
   }
 }
 
@@ -130,7 +130,7 @@ interface AgentViewProviderOptions {
   readonly sessionActions?: SessionRecoveryActions;
   readonly checkpointActions?: CheckpointActions;
   readonly reportDeliveryFailure?: () => void;
-  readonly reportDisplay?: () => void;
+  readonly reportReady?: () => void;
   readonly reportRunFailure?: (error: unknown) => void;
   readonly reportRunStatus?: (status: HostRunStatus) => void;
   readonly createResourceActions?: () => McpResourceActions;

@@ -17,6 +17,27 @@ const idleChatRunner = {
 };
 
 describe("bindWebviewMessageController", () => {
+  it("reports Webview readiness on the post-mount ping handshake", () => {
+    let messageListener: ((message: unknown) => void) | undefined;
+    const onReady = vi.fn();
+    bindWebviewMessageController({
+      channel: {
+        onDidReceiveMessage(listener) {
+          messageListener = listener;
+          return { dispose() {} };
+        },
+        postMessage: () => Promise.resolve(true),
+      },
+      lifetime: { onDidDispose: () => ({ dispose() {} }) },
+      onReady,
+      chatRunner: idleChatRunner,
+    });
+
+    messageListener?.({ protocolVersion, type: "webview/ping", requestId: "ready-1" });
+
+    expect(onReady).toHaveBeenCalledOnce();
+  });
+
   it("routes a target-bound edit through the owned Session", async () => {
     let messageListener: ((message: unknown) => void) | undefined;
     let editArguments: unknown[] | undefined;

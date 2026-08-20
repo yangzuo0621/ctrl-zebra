@@ -11,25 +11,45 @@ export interface PerformanceBaselineSnapshot {
   readonly activationDurationMs: number;
   readonly firstWebviewDisplayDurationMs?: number;
   readonly memoryBytes: number;
+  readonly peakMemoryBytes?: number;
 }
+
+export type PerformanceBaselineSample = PerformanceBaselineSnapshot;
 
 export class PerformanceBaselineRecorder {
   readonly #startedAt: number;
   readonly #now: () => number;
   readonly #readRssBytes: () => number;
   readonly #logger: Pick<StructuredLogger, "info">;
+  readonly #onSample?: (sample: PerformanceBaselineSample) => void;
   #firstDisplayRecorded = false;
   #activationDurationMs = 0;
   #firstWebviewDisplayDurationMs: number | undefined;
+  #peakMemoryBytes: number;
 
-  constructor({ startedAt, now, readRssBytes, logger }: PerformanceBaselineDependencies) {
+  constructor({
+    startedAt,
+    now,
+    readRssBytes,
+    logger,
+    onSample,
+  }: PerformanceBaselineDependencies & {
+    readonly onSample?: (sample: PerformanceBaselineSample) => void;
+  }) {
     this.#startedAt = normalizeInteger(startedAt);
     this.#now = now;
     this.#readRssBytes = readRssBytes;
     this.#logger = logger;
+    this.#onSample = onSample;
+    this.#peakMemoryBytes = normalizeInteger(this.#readRssBytes());
+    if (onSample !== undefined) {
+      const sampler = setInterval(() => this.#sampleMemory(), 5);
+      sampler.unref?.();
+    }
   }
 
   recordActivationComplete(): void {
+    this.#sampleMemory();
     this.#activationDurationMs = this.#elapsedMilliseconds();
     this.#logger.info({
       event: "extension_activated",
@@ -43,6 +63,7 @@ export class PerformanceBaselineRecorder {
       outcome: "success",
       memoryBytes: normalizeInteger(this.#readRssBytes()),
     });
+    this.#onSample?.(this.getSnapshot());
   }
 
   recordFirstWebviewDisplay(): void {
@@ -51,6 +72,7 @@ export class PerformanceBaselineRecorder {
     }
 
     this.#firstDisplayRecorded = true;
+    this.#sampleMemory();
     this.#firstWebviewDisplayDurationMs = this.#elapsedMilliseconds();
     this.#logger.info({
       event: "agent_view_first_displayed",
@@ -58,16 +80,23 @@ export class PerformanceBaselineRecorder {
       outcome: "success",
       durationMs: this.#firstWebviewDisplayDurationMs,
     });
+    this.#onSample?.(this.getSnapshot());
   }
 
   getSnapshot(): PerformanceBaselineSnapshot {
+    this.#sampleMemory();
     return {
       activationDurationMs: this.#activationDurationMs,
       ...(this.#firstWebviewDisplayDurationMs === undefined
         ? {}
         : { firstWebviewDisplayDurationMs: this.#firstWebviewDisplayDurationMs }),
       memoryBytes: normalizeInteger(this.#readRssBytes()),
+      peakMemoryBytes: this.#peakMemoryBytes,
     };
+  }
+
+  #sampleMemory(): void {
+    this.#peakMemoryBytes = Math.max(this.#peakMemoryBytes, normalizeInteger(this.#readRssBytes()));
   }
 
   #elapsedMilliseconds(): number {

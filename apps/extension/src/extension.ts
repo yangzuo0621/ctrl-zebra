@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { appendFileSync } from "node:fs";
 import { realpath } from "node:fs/promises";
 import { performance } from "node:perf_hooks";
 import { env, memoryUsage, platform } from "node:process";
@@ -175,11 +176,17 @@ import { createWorkspaceTrustPolicy } from "./controllers/workspace-trust-policy
 export function activate(context: ExtensionContext): void {
   const activationStartedAt = performance.now();
   const logger = createStructuredLogger(window.createOutputChannel("CtrlZebra", { log: true }));
+  const performanceOutput =
+    env.CTRL_ZEBRA_PERFORMANCE_BENCHMARK === "1" ? env.CTRL_ZEBRA_PERFORMANCE_OUTPUT : undefined;
   const performanceBaseline = new PerformanceBaselineRecorder({
     startedAt: activationStartedAt,
     now: () => performance.now(),
     readRssBytes: () => memoryUsage.rss(),
     logger,
+    onSample:
+      performanceOutput === undefined
+        ? undefined
+        : (sample) => appendFileSync(performanceOutput, `${JSON.stringify(sample)}\n`, "utf8"),
   });
   const secrets = createProviderApiKeySecretReader(context.secrets);
   const providerApiKeyPresence = createProviderApiKeyPresenceReader(context.secrets);
@@ -1375,7 +1382,7 @@ export function activate(context: ExtensionContext): void {
           errorCode: "delivery_failed",
         });
       },
-      reportDisplay: () => performanceBaseline.recordFirstWebviewDisplay(),
+      reportReady: () => performanceBaseline.recordFirstWebviewDisplay(),
       reportRunFailure: (error) => {
         const failure = getRunFailureLogEntry(error);
         diagnosticsExport.recordErrorCategory(classifyDiagnosticsErrorCategory(failure.errorCode));
