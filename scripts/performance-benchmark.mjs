@@ -148,8 +148,10 @@ async function readBundleBytes() {
 async function packageForSizeMeasurement() {
   const artifactPath = join(dirname(outputPath), "performance-size.vsix");
   const vsce = join(repositoryRoot, "node_modules", "@vscode", "vsce", "vsce");
+  const metadataPath = join(extensionRoot, "dist", "package", "build-metadata.json");
+  await mkdir(dirname(metadataPath), { recursive: true });
   await writeFile(
-    join(extensionRoot, "dist", "package", "build-metadata.json"),
+    metadataPath,
     `${JSON.stringify({ schemaVersion: 1, commit: (await git(["rev-parse", "HEAD"])).trim(), version: extensionManifest.version })}\n`,
     "utf8",
   );
