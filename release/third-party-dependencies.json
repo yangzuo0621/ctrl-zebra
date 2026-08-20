@@ -2,36 +2,36 @@
   "schemaVersion": 1,
   "product": "ctrl-zebra",
   "version": "0.1.1",
-  "sourceCommit": "fa670385f53089f2218029369b2d31670446192c",
+  "sourceCommit": "02df70138a348eca08286961352c2555ee8bc093",
   "packages": [
     {
       "name": "@ai-sdk/gateway",
-      "version": "4.0.21",
+      "version": "4.0.51",
       "license": "Apache-2.0"
     },
     {
       "name": "@ai-sdk/google",
-      "version": "4.0.17",
+      "version": "4.0.43",
       "license": "Apache-2.0"
     },
     {
       "name": "@ai-sdk/openai-compatible",
-      "version": "3.0.11",
+      "version": "3.0.30",
       "license": "Apache-2.0"
     },
     {
       "name": "@ai-sdk/openai",
-      "version": "4.0.15",
+      "version": "4.0.41",
       "license": "Apache-2.0"
     },
     {
       "name": "@ai-sdk/provider-utils",
-      "version": "5.0.10",
+      "version": "5.0.27",
       "license": "Apache-2.0"
     },
     {
       "name": "@ai-sdk/provider",
-      "version": "4.0.3",
+      "version": "4.0.7",
       "license": "Apache-2.0"
     },
     {
@@ -61,7 +61,7 @@
     },
     {
       "name": "ai",
-      "version": "7.0.29",
+      "version": "7.0.64",
       "license": "Apache-2.0"
     },
     {
@@ -117,6 +117,11 @@
     {
       "name": "shebang-regex",
       "version": "3.0.0",
+      "license": "MIT"
+    },
+    {
+      "name": "undici",
+      "version": "7.28.0",
       "license": "MIT"
     },
     {

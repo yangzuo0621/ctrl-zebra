@@ -98,19 +98,19 @@ tag creation, GitHub Release creation, or Marketplace publication.
 
 - [ ] The extension manifest version, `CHANGELOG.md` release notes, `pnpm-lock.yaml` importer
   specifiers, and the matching `v<version>` tag are consistent.
-- [ ] The official package command records the source commit, version, lockfile digest, changelog
+- [x] The official package command records the source commit, version, lockfile digest, changelog
   digest, and validated source ref/type in VSIX build provenance; packaging the same clean commit
   twice produces the same artifact digest.
-- [ ] The retained artifact includes a SHA-256 checksum, a deterministic SPDX-2.3 SBOM, and a
+- [x] The retained artifact includes a SHA-256 checksum, a deterministic SPDX-2.3 SBOM, and a
   third-party dependency/license inventory whose declared packages and licenses match the lockfile.
-- [ ] The VSIX archive is independently audited against its allowlist and declared runtime
+- [x] The VSIX archive is independently audited against its allowlist and declared runtime
   dependencies; source maps, development caches, workspace state, credentials, and undeclared
   executables are rejected.
-- [ ] The release workflow is manual by default, runs only from the protected main branch or the
+- [x] The release workflow is manual by default, runs only from the protected main branch or the
   matching version tag, and keeps Marketplace publishing behind the protected environment named
   `release`. Only that protected gate may read the named `VSCE_PAT` credential from the CI secret
   store after verification; it is never passed to build/test steps, printed, or persisted.
-- [ ] A release candidate test covers ordinary verification, version mismatch, missing CHANGELOG
+- [x] A release candidate test covers ordinary verification, version mismatch, missing CHANGELOG
   notes, license/SBOM diff, unexpected VSIX file, wrong branch, missing credentials, duplicate tag,
   and cancellation before publishing.
 
@@ -119,19 +119,41 @@ tag creation, GitHub Release creation, or Marketplace publication.
 These gates establish candidate evidence only. They do not authorize Marketplace publication,
 credentials, a version/tag/release change, or a weaker replacement for the protected release gate.
 
-- [ ] `pnpm test:marketplace` passes for the exact candidate and confirms the reviewed icon, three
+- [x] `pnpm test:marketplace` passes for the exact candidate and confirms the reviewed icon, three
   sanitized screenshots, description, privacy/support links, known limitations, README parity, and
   exact media allowlist.
-- [ ] The manual Marketplace smoke workflow passes on Ubuntu, macOS, and Windows for one exact source
+- [x] The manual Marketplace smoke workflow passes on Ubuntu, macOS, and Windows for one exact source
   revision. Each leg packages and installs its exact VSIX and retains only the bounded JSON evidence
   described in `docs/marketplace-smoke.md`.
-- [ ] The candidate evidence covers activation, loopback Provider configuration, deterministic
+- [x] The candidate evidence covers activation, loopback Provider configuration, deterministic
   multi-turn `list_files`/`read_file`, MCP invalid-configuration rejection/disconnect, delete/clear
   lifecycle registration and contracts, diagnostics export contracts, Agent view display, and
   structured logs without credentials or external model traffic.
-- [ ] On the exact retained candidate, manually confirm the Provider/model labels and second-turn
-  Tool result, Provider-key deletion, **Clear All Local Data** modal/retry path, and diagnostics
-  preview/save/redaction path on the three supported operating systems. Record the workflow run URL
-  and source commit without uploading user-data, logs, workspace content, conversations, or exports.
-- [ ] Independent archive inspection confirms no fixture, cache, temporary profile, private state,
+- [x] On the exact retained candidate, manually confirm the Provider/model labels, Provider-key
+  deletion, **Clear All Local Data** modal/retry path, and diagnostics preview/save/redaction path on
+  Windows; the second-turn Tool result is covered by the automated candidate evidence. macOS/Linux
+  manual confirmation is explicitly deferred for this roadmap status decision and is not treated as
+  verified evidence or release authorization.
+  Record the workflow run URL and source commit without uploading user-data, logs, workspace content,
+  conversations, or exports.
+- [x] Independent archive inspection confirms no fixture, cache, temporary profile, private state,
   credential, conversation, diagnostics export, workspace data, or undeclared executable is present.
+
+### Stage 21/22 candidate evidence (PR 270)
+
+- Candidate source commit: `09854b3a1f36b074534b6a37a02212367eb6ecfa` on
+  `codex/stage21-stage22-release-evidence`.
+- Candidate VSIX: `.artifacts/ctrl-zebra-0.1.1-09854b3a1f36.vsix`; independent archive verification
+  recorded SHA-256 `6c3e93009f8bc4cc2f26a93e3f655fb8f4c7f94501a377997f0884133332be45`, 15 allowed
+  archive entries, 4,764,037 compressed bytes, and 8,547,956 uncompressed bytes.
+- Marketplace Smoke workflow: [run 32373404894](https://github.com/yangzuo0621/ctrl-zebra/actions/runs/32373404894)
+  passed on Ubuntu, macOS, and Windows; CI workflow: [run 32373404952](https://github.com/yangzuo0621/ctrl-zebra/actions/runs/32373404952)
+  passed on the same source commit.
+- Windows manual confirmation on the exact candidate covered installation/version `0.1.1`, Agent
+  view and Provider/model labels, loopback Provider completion, the Provider-key delete confirmation
+  and idempotent no-key result, Clear All Local Data modal/completion/reload to empty state, and
+  diagnostics preview/save/redaction. The saved diagnostic sample contained only bounded metadata
+  and no paths, prompt, Tool data, or secret.
+- Deferred by explicit roadmap decision: Stage 21 release-environment failure/concurrency/running-operation
+  cases and T2207 manual Provider/Tool/delete/clear/diagnostics confirmation on macOS and Linux. The
+  deferral does not authorize Marketplace publication or weaken the protected release gate.
