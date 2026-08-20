@@ -241,6 +241,7 @@ function parseOptions(args) {
   const values = { runs: defaultRuns, warmups: defaultWarmups, output: defaultOutput };
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
+    if (argument === "--") continue;
     if (argument === "--runs") values.runs = parsePositiveInteger(args[++index], "--runs");
     else if (argument === "--warmups")
       values.warmups = parseNonNegativeInteger(args[++index], "--warmups");
