@@ -93,9 +93,9 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "${RUNNER_OS}" == "Linux" ]]; then
-            xvfb-run -a pnpm smoke:vsix -- "${{ steps.artifact.outputs.path }}"
+            xvfb-run -a pnpm smoke:vsix "${{ steps.artifact.outputs.path }}"
           else
-            pnpm smoke:vsix -- "${{ steps.artifact.outputs.path }}"
+            pnpm smoke:vsix "${{ steps.artifact.outputs.path }}"
           fi
 
       - name: Record bounded smoke evidence
