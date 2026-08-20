@@ -28,6 +28,7 @@ jobs:
     env:
       CTRL_ZEBRA_MARKETPLACE_SMOKE: "1"
       SOURCE_DATE_EPOCH: "0"
+      CTRL_ZEBRA_SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
     steps:
       - name: Check out immutable source
@@ -35,6 +36,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up pnpm
         uses: pnpm/action-setup@b0f76dfb45f55f8421693e4803ac7bb65143bd34 # v6
@@ -56,10 +58,19 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          package_environment=()
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            package_environment=(
+              "GITHUB_SHA=${CTRL_ZEBRA_SOURCE_SHA}"
+              "GITHUB_EVENT_NAME=workflow_dispatch"
+              "GITHUB_REF=refs/heads/${GITHUB_HEAD_REF}"
+              "GITHUB_REF_TYPE=branch"
+            )
+          fi
           if [[ "${RUNNER_OS}" == "Linux" ]]; then
-            xvfb-run -a pnpm package:vsix
+            env "${package_environment[@]}" xvfb-run -a pnpm package:vsix
           else
-            pnpm package:vsix
+            env "${package_environment[@]}" pnpm package:vsix
           fi
 
       - name: Locate exact VSIX
@@ -92,12 +103,12 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p .artifacts/marketplace-smoke
-          node -e "const fs=require('node:fs'); const path=require('node:path'); const value={schemaVersion:1,task:'T2207',sourceCommit:process.env.GITHUB_SHA,runnerOs:process.env.RUNNER_OS,marketplaceMetadata:'passed',deterministicProviderTools:'passed',deletionAndDiagnosticsContracts:'passed',installedVsixSmoke:'passed',containsPrivateState:false}; fs.writeFileSync(path.join('.artifacts','marketplace-smoke',process.env.RUNNER_OS+'.json'),JSON.stringify(value,null,2)+'\n');"
+          node -e "const fs=require('node:fs'); const path=require('node:path'); const value={schemaVersion:1,task:'T2207',sourceCommit:process.env.CTRL_ZEBRA_SOURCE_SHA,runnerOs:process.env.RUNNER_OS,marketplaceMetadata:'passed',deterministicProviderTools:'passed',deletionAndDiagnosticsContracts:'passed',installedVsixSmoke:'passed',containsPrivateState:false}; fs.writeFileSync(path.join('.artifacts','marketplace-smoke',process.env.RUNNER_OS+'.json'),JSON.stringify(value,null,2)+'\n');"
 
       - name: Upload smoke evidence
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: ctrl-zebra-marketplace-smoke-${{ runner.os }}-${{ github.sha }}
+          name: ctrl-zebra-marketplace-smoke-${{ runner.os }}-${{ env.CTRL_ZEBRA_SOURCE_SHA }}
           path: .artifacts/marketplace-smoke/*.json
           if-no-files-found: error
           retention-days: 30
@@ -110,7 +121,7 @@ jobs:
             echo
             echo "Runner: \`${RUNNER_OS}\`"
             echo
-            echo "Source commit: \`${GITHUB_SHA}\`"
+            echo "Source commit: \`${CTRL_ZEBRA_SOURCE_SHA}\`"
             echo
             echo "Marketplace metadata, deterministic Provider/Tool multi-turn integration, deletion/diagnostics controller contracts, exact VSIX installation, activation, Provider configuration, MCP restriction, lifecycle commands, and structured logging passed."
             echo
