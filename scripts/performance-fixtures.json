@@ -5,14 +5,21 @@
     "filesPerDirectory": 24,
     "linesPerFile": 12,
     "matchingLine": 7,
+    "expectedFileCount": 192,
+    "expectedMatchCount": 192,
     "query": "CTRL_ZEBRA_PERFORMANCE_MATCH"
   },
   "session": {
     "turnCount": 20,
     "assistantDeltasPerTurn": 6,
+    "expectedEventCount": 140,
+    "expectedMessageCount": 40,
     "deltaText": "bounded assistant fixture output"
   },
   "mcp": {
-    "protocolMode": "modern-only"
+    "protocolMode": "modern-only",
+    "expectedTools": 3,
+    "expectedResources": 2,
+    "expectedPrompts": 2
   }
 }

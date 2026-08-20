@@ -11,6 +11,7 @@ export interface PerformanceBaselineSnapshot {
   readonly activationDurationMs: number;
   readonly firstWebviewDisplayDurationMs?: number;
   readonly memoryBytes: number;
+  readonly peakMemoryBytes?: number;
 }
 
 export type PerformanceBaselineSample = PerformanceBaselineSnapshot;
@@ -24,6 +25,7 @@ export class PerformanceBaselineRecorder {
   #firstDisplayRecorded = false;
   #activationDurationMs = 0;
   #firstWebviewDisplayDurationMs: number | undefined;
+  #peakMemoryBytes: number;
 
   constructor({
     startedAt,
@@ -39,9 +41,15 @@ export class PerformanceBaselineRecorder {
     this.#readRssBytes = readRssBytes;
     this.#logger = logger;
     this.#onSample = onSample;
+    this.#peakMemoryBytes = normalizeInteger(this.#readRssBytes());
+    if (onSample !== undefined) {
+      const sampler = setInterval(() => this.#sampleMemory(), 5);
+      sampler.unref?.();
+    }
   }
 
   recordActivationComplete(): void {
+    this.#sampleMemory();
     this.#activationDurationMs = this.#elapsedMilliseconds();
     this.#logger.info({
       event: "extension_activated",
@@ -64,6 +72,7 @@ export class PerformanceBaselineRecorder {
     }
 
     this.#firstDisplayRecorded = true;
+    this.#sampleMemory();
     this.#firstWebviewDisplayDurationMs = this.#elapsedMilliseconds();
     this.#logger.info({
       event: "agent_view_first_displayed",
@@ -75,13 +84,19 @@ export class PerformanceBaselineRecorder {
   }
 
   getSnapshot(): PerformanceBaselineSnapshot {
+    this.#sampleMemory();
     return {
       activationDurationMs: this.#activationDurationMs,
       ...(this.#firstWebviewDisplayDurationMs === undefined
         ? {}
         : { firstWebviewDisplayDurationMs: this.#firstWebviewDisplayDurationMs }),
       memoryBytes: normalizeInteger(this.#readRssBytes()),
+      peakMemoryBytes: this.#peakMemoryBytes,
     };
+  }
+
+  #sampleMemory(): void {
+    this.#peakMemoryBytes = Math.max(this.#peakMemoryBytes, normalizeInteger(this.#readRssBytes()));
   }
 
   #elapsedMilliseconds(): number {

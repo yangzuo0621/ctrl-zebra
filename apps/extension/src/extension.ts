@@ -1382,7 +1382,7 @@ export function activate(context: ExtensionContext): void {
           errorCode: "delivery_failed",
         });
       },
-      reportDisplay: () => performanceBaseline.recordFirstWebviewDisplay(),
+      reportReady: () => performanceBaseline.recordFirstWebviewDisplay(),
       reportRunFailure: (error) => {
         const failure = getRunFailureLogEntry(error);
         diagnosticsExport.recordErrorCategory(classifyDiagnosticsErrorCategory(failure.errorCode));

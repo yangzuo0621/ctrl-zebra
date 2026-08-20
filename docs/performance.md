@@ -27,23 +27,28 @@ credentials, MCP transcript, or authorization data.
 ## Fixed fixtures and measurement points
 
 The versioned fixture definition is `scripts/performance-fixtures.json`. The benchmark generates a
-temporary workspace with 8 directories × 24 text files × 12 lines (192 files), a 20-turn session with
-6 assistant deltas per turn, and the existing deterministic local MCP Server with its modern protocol
-catalog. All temporary paths are bounded and removed after each sample.
+temporary workspace with 8 directories × 24 text files × 12 lines (192 files and 192 expected
+matches), a 20-turn session with 6 assistant deltas per turn (140 events and 40 restored messages),
+and the existing deterministic local MCP Server with its modern protocol catalog (3 Tools, 2
+Resources, and 2 Prompts). Every expected cardinality is asserted before a successful sample is
+written. All temporary paths are bounded and removed after each sample.
 
 - **Extension activation** starts at the existing `activate()` entry timing and ends after normal
   registration/composition. The existing `PerformanceBaselineRecorder` supplies the value.
-- **Webview first usable** ends at the first Agent Webview resolve/display callback. Later displays do
-  not replace the first sample.
+- **Webview first usable** ends when the mounted React App sends the existing explicit
+  `webview/ping` readiness handshake. The Extension records that signal after the view is bound;
+  later displays do not replace the first sample.
 - **Long-session restore** measures the existing `createSessionRecoveryActions().restore()` projection
   over the fixed session event stream.
-- **Large-workspace search** measures the existing bounded `search_files` Tool through the real VS Code
-  workspace-file adapter, including file listing and bounded reads.
+- **Large-workspace search** measures the existing bounded `search_files` Tool through the production
+  `WorkspaceScope`, `WorkspaceFileLister`, `WorkspaceFileReader`, and `WorkspaceSearchFiles` path,
+  including canonicalization, containment validation, VS Code file listing, and bounded reads.
 - **MCP connection/catalog loading** measures real stdio process startup, protocol negotiation, and
   Tools/Resources/Prompts catalog discovery through the existing controlled client and fixture.
-- **Steady-state/peak memory** uses Extension Host RSS. Peak is the maximum sample after activation,
-  restore, search, and MCP catalog loading; it includes VS Code and other Extension Host overhead and
-  is not an allocation profile.
+- **Steady-state/peak memory** uses Extension Host RSS. Steady state is sampled after the ready Webview
+  has been idle separately and before fixture operations. Peak is sampled continuously during the
+  Webview, restore, search, and MCP operations, plus a benchmark-only sampler covering activation;
+  it includes VS Code and other Extension Host overhead and is not an allocation profile.
 - **Webview bundle size** is the combined byte size of `main.js` and `main.css` after the production
   Vite build.
 - **VSIX size** is the compressed archive size after the existing selected-file and archive allowlist

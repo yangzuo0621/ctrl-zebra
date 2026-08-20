@@ -57,6 +57,7 @@ function createPong(requestId: string): ExtensionToWebviewMessage {
 interface BindWebviewMessageControllerOptions {
   readonly channel: WebviewMessageChannel;
   readonly lifetime: WebviewViewLifetime;
+  readonly onReady?: () => void;
   readonly reportDeliveryFailure?: () => void;
   readonly chatRunner: ChatRunner;
   readonly approvalActions?: ApprovalUiActions;
@@ -78,6 +79,7 @@ interface BindWebviewMessageControllerOptions {
 export function bindWebviewMessageController({
   channel,
   lifetime,
+  onReady,
   reportDeliveryFailure = () => {},
   chatRunner,
   approvalActions,
@@ -155,6 +157,7 @@ export function bindWebviewMessageController({
     }
     switch (data.type) {
       case "webview/ping":
+        onReady?.();
         post(createPong(data.requestId));
         mcpActions?.refresh(data.requestId);
         return;

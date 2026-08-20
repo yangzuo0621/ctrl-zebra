@@ -21,6 +21,7 @@ describe("PerformanceBaselineRecorder", () => {
       activationDurationMs: 12,
       firstWebviewDisplayDurationMs: 51,
       memoryBytes: 52_428_802,
+      peakMemoryBytes: 52_428_802,
     });
 
     expect(info.mock.calls).toEqual([
@@ -67,6 +68,7 @@ describe("PerformanceBaselineRecorder", () => {
       activationDurationMs: 0,
       firstWebviewDisplayDurationMs: 0,
       memoryBytes: 0,
+      peakMemoryBytes: 0,
     });
 
     expect(info.mock.calls).toEqual([
@@ -90,11 +92,12 @@ describe("PerformanceBaselineRecorder", () => {
     recorder.recordFirstWebviewDisplay();
 
     expect(samples).toEqual([
-      { activationDurationMs: 10, memoryBytes: 30 },
+      { activationDurationMs: 10, memoryBytes: 30, peakMemoryBytes: 30 },
       {
         activationDurationMs: 10,
         firstWebviewDisplayDurationMs: 10,
         memoryBytes: 30,
+        peakMemoryBytes: 30,
       },
     ]);
   });

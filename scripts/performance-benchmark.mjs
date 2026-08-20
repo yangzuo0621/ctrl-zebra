@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -56,6 +56,7 @@ for (let index = 0; index < options.runs; index += 1) {
   await runIntegration(label, resultPath, extensionPath);
   samples.push(JSON.parse(await readFile(resultPath, "utf8")));
 }
+const cardinalities = verifyCardinalities(samples);
 
 const bundleBytes = await readBundleBytes();
 const vsix = await packageForSizeMeasurement();
@@ -73,6 +74,7 @@ const report = {
     source: (await git(["rev-parse", "HEAD"])).trim(),
   },
   fixture,
+  cardinalities,
   distributions: summarize(samples),
   sizes: {
     webviewBundleBytes: bundleBytes,
@@ -121,12 +123,15 @@ if (failures.length > 0) {
 }
 
 async function runIntegration(label, resultPath, extensionPath) {
+  const actualResultPath = resultPath ?? join(dirname(outputPath), `${label}.discarded.json`);
+  const actualExtensionPath = extensionPath ?? join(tmpdir(), `ctrl-zebra-${label}.jsonl`);
+  await rm(actualResultPath, { force: true });
+  await rm(actualExtensionPath, { force: true });
   const env = {
     ...process.env,
     CTRL_ZEBRA_PERFORMANCE_BENCHMARK: "1",
-    CTRL_ZEBRA_PERFORMANCE_RESULT:
-      resultPath ?? join(dirname(outputPath), `${label}.discarded.json`),
-    CTRL_ZEBRA_PERFORMANCE_OUTPUT: extensionPath ?? join(tmpdir(), `ctrl-zebra-${label}.jsonl`),
+    CTRL_ZEBRA_PERFORMANCE_RESULT: actualResultPath,
+    CTRL_ZEBRA_PERFORMANCE_OUTPUT: actualExtensionPath,
   };
   await runPnpm(["test:integration"], env);
 }
@@ -175,6 +180,18 @@ function summarize(samples) {
   return Object.fromEntries(
     names.map((name) => [name, distribution(samples.map(({ metrics }) => metrics[name]))]),
   );
+}
+
+function verifyCardinalities(samples) {
+  const first = samples[0]?.cardinalities;
+  if (first === undefined) throw new Error("Performance samples must include cardinalities.");
+  const expected = JSON.stringify(first);
+  for (let index = 1; index < samples.length; index += 1) {
+    if (JSON.stringify(samples[index]?.cardinalities) !== expected) {
+      throw new Error(`Performance sample ${index + 1} cardinalities differ from sample 1.`);
+    }
+  }
+  return first;
 }
 
 function distribution(values) {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
@@ -12,6 +12,7 @@ import { persistenceFormatVersion } from "@ctrl-zebra/protocol";
 import * as vscode from "vscode";
 
 import fixture from "../../../../../scripts/performance-fixtures.json";
+import { createLocalWorkspaceUriCanonicalizer } from "../../adapters/canonicalize-local-workspace-uri.js";
 import { NodeMcpStdioPort } from "../../adapters/mcp-stdio-port.js";
 import { findWorkspaceFiles } from "../../adapters/vscode-workspace-find-files.js";
 import {
@@ -19,6 +20,9 @@ import {
   readWorkspaceFilePrefix,
 } from "../../adapters/vscode-workspace-read-file.js";
 import { WorkspaceFileLister } from "../../adapters/workspace-file-lister.js";
+import { WorkspaceFileReader } from "../../adapters/workspace-file-reader.js";
+import { WorkspaceScope } from "../../adapters/workspace-scope.js";
+import { WorkspaceSearchFiles } from "../../adapters/workspace-search-files.js";
 import { agentViewId } from "../../agent-view.js";
 import { createSessionRecoveryActions } from "../../controllers/session-recovery.js";
 
@@ -58,42 +62,68 @@ export async function verifyPerformanceBenchmark(): Promise<void> {
   const fixtureRoot = await mkdtemp(join(tmpdir(), "ctrl-zebra-performance-workspace-"));
   let peakMemoryBytes = process.memoryUsage().rss;
   try {
-    await createWorkspaceFixture(fixtureRoot);
     const extensionSample = await readExtensionSample(extensionSamplePath);
-    peakMemoryBytes = Math.max(peakMemoryBytes, extensionSample.memoryBytes);
+    peakMemoryBytes = Math.max(peakMemoryBytes, extensionSample.peakMemoryBytes);
 
-    await vscode.commands.executeCommand(`${agentViewId}.focus`);
-    const displayedSample = await readExtensionSample(extensionSamplePath, true);
-    peakMemoryBytes = Math.max(peakMemoryBytes, displayedSample.memoryBytes);
+    await createWorkspaceFixture(fixtureRoot);
+    const webview = await measureOperation(async () => {
+      await vscode.commands.executeCommand(`${agentViewId}.focus`);
+      return readExtensionSample(extensionSamplePath, true);
+    });
+    const displayedSample = webview.value;
+    assert.ok(
+      displayedSample.firstWebviewDisplayDurationMs !== undefined,
+      "The Webview readiness sample must include a duration.",
+    );
+    peakMemoryBytes = Math.max(peakMemoryBytes, webview.peakMemoryBytes);
+    const steadyStateMemoryBytes = await readIdleSteadyStateMemory();
 
     const session = await measureSessionRestore();
-    peakMemoryBytes = Math.max(peakMemoryBytes, process.memoryUsage().rss);
     const search = await measureWorkspaceSearch(fixtureRoot);
-    peakMemoryBytes = Math.max(peakMemoryBytes, process.memoryUsage().rss);
     const mcp = await measureMcpCatalogLoad();
-    peakMemoryBytes = Math.max(peakMemoryBytes, process.memoryUsage().rss);
+    peakMemoryBytes = Math.max(
+      peakMemoryBytes,
+      session.peakMemoryBytes,
+      search.peakMemoryBytes,
+      mcp.peakMemoryBytes,
+    );
+
+    const cardinalities = {
+      workspaceFiles: search.fileCount,
+      searchMatches: search.matchCount,
+      sessionEvents: session.eventCount,
+      restoredMessages: session.messageCount,
+      mcpTools: mcp.toolCount,
+      mcpResources: mcp.resourceCount,
+      mcpPrompts: mcp.promptCount,
+    };
+    assert.deepEqual(
+      cardinalities,
+      {
+        workspaceFiles: fixture.workspace.expectedFileCount,
+        searchMatches: fixture.workspace.expectedMatchCount,
+        sessionEvents: fixture.session.expectedEventCount,
+        restoredMessages: fixture.session.expectedMessageCount,
+        mcpTools: fixture.mcp.expectedTools,
+        mcpResources: fixture.mcp.expectedResources,
+        mcpPrompts: fixture.mcp.expectedPrompts,
+      },
+      "Performance fixture cardinalities must match the bounded contract.",
+    );
 
     const result: PerformanceBenchmarkResult = {
       schemaVersion: 1,
       fixtureVersion: fixture.schemaVersion,
       metrics: {
         extensionActivationMs: extensionSample.activationDurationMs,
-        webviewFirstUsableMs: displayedSample.firstWebviewDisplayDurationMs ?? 0,
+        webviewFirstUsableMs: displayedSample.firstWebviewDisplayDurationMs,
         sessionRestoreMs: session.durationMs,
         workspaceSearchMs: search.durationMs,
         mcpCatalogLoadMs: mcp.durationMs,
-        steadyStateMemoryBytes: process.memoryUsage().rss,
+        steadyStateMemoryBytes,
         peakMemoryBytes,
       },
-      cardinalities: {
-        workspaceFiles: search.fileCount,
-        searchMatches: search.matchCount,
-        sessionEvents: session.eventCount,
-        restoredMessages: session.messageCount,
-        mcpTools: mcp.toolCount,
-        mcpResources: mcp.resourceCount,
-        mcpPrompts: mcp.promptCount,
-      },
+      cardinalities,
     };
     await mkdir(dirname(resultPath), { recursive: true });
     await writeFile(resultPath, `${JSON.stringify(result)}\n`, "utf8");
@@ -123,29 +153,45 @@ async function createWorkspaceFixture(root: string): Promise<void> {
 
 async function measureWorkspaceSearch(rootPath: string) {
   const root = vscode.Uri.file(rootPath);
-  const lister = new WorkspaceFileLister(
+  const scope = new WorkspaceScope(
     root,
-    { validate: async (uri) => uri },
-    findWorkspaceFiles,
+    createLocalWorkspaceUriCanonicalizer(realpath, vscode.Uri.file),
   );
-  const workspace = {
-    findFiles: (request: Parameters<typeof lister.findFiles>[0], signal: AbortSignal) =>
-      lister.findFiles(request, signal),
-    readFile: ({ path, maxBytes }: { path: string; maxBytes: number }, signal: AbortSignal) =>
-      readWorkspaceFilePrefix(joinWorkspacePath(root, path), maxBytes, signal),
-  };
+  const lister = new WorkspaceFileLister(root, scope, findWorkspaceFiles);
+  const reader = new WorkspaceFileReader(root, scope, joinWorkspacePath, readWorkspaceFilePrefix);
+  await assert.rejects(
+    () => reader.readFile({ path: "../outside.txt", maxBytes: 1 }, new AbortController().signal),
+    /outside the selected workspace/u,
+  );
+  let fileCount = 0;
+  const workspace = new WorkspaceSearchFiles(
+    {
+      async findFiles(request, signal) {
+        const files = await lister.findFiles(request, signal);
+        fileCount = files.length;
+        return files;
+      },
+    },
+    reader,
+  );
   const tool = createSearchFilesTool(workspace);
   const input = tool.parseInput({
     query: fixture.workspace.query,
     glob: "**/*",
     maxResults: 200,
   });
-  const startedAt = performance.now();
-  const output = await tool.execute(input, { signal: new AbortController().signal });
+  const measurement = await measureOperation(async () => {
+    const startedAt = performance.now();
+    const output = await tool.execute(input, { signal: new AbortController().signal });
+    return {
+      durationMs: elapsedMilliseconds(startedAt),
+      matchCount: output.output.matches.length,
+    };
+  });
   return {
-    durationMs: elapsedMilliseconds(startedAt),
-    fileCount: fixture.workspace.directoryCount * fixture.workspace.filesPerDirectory,
-    matchCount: output.output.matches.length,
+    ...measurement.value,
+    fileCount,
+    peakMemoryBytes: measurement.peakMemoryBytes,
   };
 }
 
@@ -191,12 +237,18 @@ async function measureSessionRestore() {
     async () => repository,
     () => new Date("2026-08-20T00:02:00.000Z"),
   );
-  const startedAt = performance.now();
-  const projection = await actions.restore(sessionId);
+  const measurement = await measureOperation(async () => {
+    const startedAt = performance.now();
+    const projection = await actions.restore(sessionId);
+    return {
+      durationMs: elapsedMilliseconds(startedAt),
+      eventCount: sequence,
+      messageCount: projection.session.messages.length,
+    };
+  });
   return {
-    durationMs: elapsedMilliseconds(startedAt),
-    eventCount: sequence,
-    messageCount: projection.session.messages.length,
+    ...measurement.value,
+    peakMemoryBytes: measurement.peakMemoryBytes,
   };
 }
 
@@ -224,19 +276,22 @@ async function measureMcpCatalogLoad() {
     server: { serverId: "local_fixture", displayName: "Local fixture" },
     generation: 1,
   } as const;
-  const startedAt = performance.now();
   try {
-    const connected = await client.connect();
-    assert.equal(connected.kind, "connected");
-    const tools = await client.discoverTools(context);
-    const resources = await client.discoverResources(context);
-    const prompts = await client.discoverPrompts(context);
-    return {
-      durationMs: elapsedMilliseconds(startedAt),
-      toolCount: tools.tools.length,
-      resourceCount: resources.resources.length,
-      promptCount: prompts.prompts.length,
-    };
+    const measurement = await measureOperation(async () => {
+      const startedAt = performance.now();
+      const connected = await client.connect();
+      assert.equal(connected.kind, "connected");
+      const tools = await client.discoverTools(context);
+      const resources = await client.discoverResources(context);
+      const prompts = await client.discoverPrompts(context);
+      return {
+        durationMs: elapsedMilliseconds(startedAt),
+        toolCount: tools.tools.length,
+        resourceCount: resources.resources.length,
+        promptCount: prompts.prompts.length,
+      };
+    });
+    return { ...measurement.value, peakMemoryBytes: measurement.peakMemoryBytes };
   } finally {
     await client.disconnect();
     await rm(directory, { recursive: true, force: true });
@@ -255,6 +310,7 @@ async function readExtensionSample(path: string, requireDisplay = false) {
             activationDurationMs: number;
             firstWebviewDisplayDurationMs?: number;
             memoryBytes: number;
+            peakMemoryBytes: number;
           },
       );
     const sample = requireDisplay
@@ -268,6 +324,28 @@ async function readExtensionSample(path: string, requireDisplay = false) {
   throw new Error(
     `Timed out waiting for ${requireDisplay ? "Webview" : "activation"} performance sample at ${path}.`,
   );
+}
+
+async function measureOperation<T>(operation: () => Promise<T>) {
+  let peakMemoryBytes = process.memoryUsage().rss;
+  const sampleMemory = () => {
+    peakMemoryBytes = Math.max(peakMemoryBytes, process.memoryUsage().rss);
+  };
+  const sampler = setInterval(sampleMemory, 1);
+  sampler.unref?.();
+  try {
+    const value = await operation();
+    sampleMemory();
+    return { value, peakMemoryBytes };
+  } finally {
+    clearInterval(sampler);
+    sampleMemory();
+  }
+}
+
+async function readIdleSteadyStateMemory(): Promise<number> {
+  await new Promise((resolveWait) => setTimeout(resolveWait, 100));
+  return process.memoryUsage().rss;
 }
 
 function elapsedMilliseconds(startedAt: number): number {
