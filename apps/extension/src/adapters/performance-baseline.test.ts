@@ -75,4 +75,27 @@ describe("PerformanceBaselineRecorder", () => {
       [expect.objectContaining({ durationMs: 0 })],
     ]);
   });
+
+  it("emits each completed sample without changing the public snapshot", () => {
+    const samples: unknown[] = [];
+    const recorder = new PerformanceBaselineRecorder({
+      startedAt: 10,
+      now: () => 20,
+      readRssBytes: () => 30,
+      logger: { info: vi.fn() },
+      onSample: (sample) => samples.push(sample),
+    });
+
+    recorder.recordActivationComplete();
+    recorder.recordFirstWebviewDisplay();
+
+    expect(samples).toEqual([
+      { activationDurationMs: 10, memoryBytes: 30 },
+      {
+        activationDurationMs: 10,
+        firstWebviewDisplayDurationMs: 10,
+        memoryBytes: 30,
+      },
+    ]);
+  });
 });

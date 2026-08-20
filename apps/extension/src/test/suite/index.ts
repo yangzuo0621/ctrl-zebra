@@ -4,6 +4,7 @@ import { verifyDiffPresenter } from "./diff-presenter.test.js";
 import { verifyMarketplaceSmoke } from "./marketplace-smoke.test.js";
 import { verifyMcpLifecycle } from "./mcp-lifecycle.test.js";
 import { verifyOllamaReadonlyToolSmoke } from "./ollama-readonly-tool-smoke.test.js";
+import { verifyPerformanceBenchmark } from "./performance-benchmark.test.js";
 import { verifyReadonlyToolRegistration } from "./readonly-tool-registry.test.js";
 import { verifySessionStorage } from "./session-storage.test.js";
 
@@ -16,4 +17,5 @@ export async function run(): Promise<void> {
   await verifyMcpLifecycle();
   await verifyMarketplaceSmoke();
   await verifyOllamaReadonlyToolSmoke();
+  await verifyPerformanceBenchmark();
 }

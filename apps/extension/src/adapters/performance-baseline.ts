@@ -13,20 +13,32 @@ export interface PerformanceBaselineSnapshot {
   readonly memoryBytes: number;
 }
 
+export type PerformanceBaselineSample = PerformanceBaselineSnapshot;
+
 export class PerformanceBaselineRecorder {
   readonly #startedAt: number;
   readonly #now: () => number;
   readonly #readRssBytes: () => number;
   readonly #logger: Pick<StructuredLogger, "info">;
+  readonly #onSample?: (sample: PerformanceBaselineSample) => void;
   #firstDisplayRecorded = false;
   #activationDurationMs = 0;
   #firstWebviewDisplayDurationMs: number | undefined;
 
-  constructor({ startedAt, now, readRssBytes, logger }: PerformanceBaselineDependencies) {
+  constructor({
+    startedAt,
+    now,
+    readRssBytes,
+    logger,
+    onSample,
+  }: PerformanceBaselineDependencies & {
+    readonly onSample?: (sample: PerformanceBaselineSample) => void;
+  }) {
     this.#startedAt = normalizeInteger(startedAt);
     this.#now = now;
     this.#readRssBytes = readRssBytes;
     this.#logger = logger;
+    this.#onSample = onSample;
   }
 
   recordActivationComplete(): void {
@@ -43,6 +55,7 @@ export class PerformanceBaselineRecorder {
       outcome: "success",
       memoryBytes: normalizeInteger(this.#readRssBytes()),
     });
+    this.#onSample?.(this.getSnapshot());
   }
 
   recordFirstWebviewDisplay(): void {
@@ -58,6 +71,7 @@ export class PerformanceBaselineRecorder {
       outcome: "success",
       durationMs: this.#firstWebviewDisplayDurationMs,
     });
+    this.#onSample?.(this.getSnapshot());
   }
 
   getSnapshot(): PerformanceBaselineSnapshot {

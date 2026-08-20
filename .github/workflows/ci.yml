@@ -73,3 +73,7 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      - name: Performance baseline benchmark (Ubuntu)
+        if: ${{ matrix.run-integration }}
+        run: xvfb-run -a pnpm benchmark:performance -- --runs 3 --warmups 1

@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "workspace": {
+    "directoryCount": 8,
+    "filesPerDirectory": 24,
+    "linesPerFile": 12,
+    "matchingLine": 7,
+    "query": "CTRL_ZEBRA_PERFORMANCE_MATCH"
+  },
+  "session": {
+    "turnCount": 20,
+    "assistantDeltasPerTurn": 6,
+    "deltaText": "bounded assistant fixture output"
+  },
+  "mcp": {
+    "protocolMode": "modern-only"
+  }
+}
