@@ -113,3 +113,25 @@ tag creation, GitHub Release creation, or Marketplace publication.
 - [ ] A release candidate test covers ordinary verification, version mismatch, missing CHANGELOG
   notes, license/SBOM diff, unexpected VSIX file, wrong branch, missing credentials, duplicate tag,
   and cancellation before publishing.
+
+## Stage 22 Marketplace materials and smoke addendum (T2207)
+
+These gates establish candidate evidence only. They do not authorize Marketplace publication,
+credentials, a version/tag/release change, or a weaker replacement for the protected release gate.
+
+- [ ] `pnpm test:marketplace` passes for the exact candidate and confirms the reviewed icon, three
+  sanitized screenshots, description, privacy/support links, known limitations, README parity, and
+  exact media allowlist.
+- [ ] The manual Marketplace smoke workflow passes on Ubuntu, macOS, and Windows for one exact source
+  revision. Each leg packages and installs its exact VSIX and retains only the bounded JSON evidence
+  described in `docs/marketplace-smoke.md`.
+- [ ] The candidate evidence covers activation, loopback Provider configuration, deterministic
+  multi-turn `list_files`/`read_file`, MCP invalid-configuration rejection/disconnect, delete/clear
+  lifecycle registration and contracts, diagnostics export contracts, Agent view display, and
+  structured logs without credentials or external model traffic.
+- [ ] On the exact retained candidate, manually confirm the Provider/model labels and second-turn
+  Tool result, Provider-key deletion, **Clear All Local Data** modal/retry path, and diagnostics
+  preview/save/redaction path on the three supported operating systems. Record the workflow run URL
+  and source commit without uploading user-data, logs, workspace content, conversations, or exports.
+- [ ] Independent archive inspection confirms no fixture, cache, temporary profile, private state,
+  credential, conversation, diagnostics export, workspace data, or undeclared executable is present.

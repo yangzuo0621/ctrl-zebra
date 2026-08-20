@@ -66,6 +66,27 @@ workflow.
   repository contents, versions, commits, tags, releases, or Marketplace state.
 - Packaging jobs have a 20-minute limit and do not cancel another packaging run for the same ref.
 
+## Marketplace Smoke Workflow
+
+- `.github/workflows/marketplace-smoke.yml` is manual-only and runs the exact selected revision on
+  `ubuntu-latest`, `macos-latest`, and `windows-latest` with `fail-fast: false`.
+- Every leg validates listing metadata/assets, runs the official clean-worktree package command with
+  the deterministic Marketplace integration enabled, and installs/smokes that exact VSIX in an
+  isolated profile. Linux uses Xvfb; macOS and Windows use their native desktop runners.
+- The deterministic integration uses a bounded loopback OpenAI-compatible Server without a key. It
+  covers Provider selection, `list_files`, `read_file`, and Session continuation without external
+  network or cloud dependencies. The installed harness separately checks activation, Provider
+  metadata connection, MCP configuration rejection/disconnect, lifecycle command registration,
+  Agent view display, and structured logs.
+- The full unit suite remains part of `pnpm package:vsix`, so deletion, local-data clear, diagnostics
+  export, redaction, cancellation, and save-port contracts run on each matrix leg.
+- Each leg retains only a bounded JSON evidence file for 30 days. It contains the task, exact source
+  commit, runner OS, stable pass labels, and a false private-state marker; it excludes the temporary
+  profile, logs, fixtures, caches, workspace data, Provider content, conversations, and credentials.
+- The workflow has `contents: read`, uses no secrets, and cannot publish, tag, release, push, or
+  modify Marketplace state. See `docs/marketplace-smoke.md` for the evidence map and required
+  release-candidate UI confirmation.
+
 ## Installation and Caching
 
 - Dependency installation must explicitly run `pnpm install --frozen-lockfile`.
