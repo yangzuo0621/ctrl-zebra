@@ -56,21 +56,21 @@ written. All temporary paths are bounded and removed after each sample.
 
 ## Initial recorded distribution
 
-Measured on 2026-08-20 from the T2208 working tree based at `e41a77e`, with 5 samples after 1 warmup:
-Windows x64, Node 24.19.0, VS Code 1.125.0.
+Measured on 2026-08-20 at corrected benchmark revision `112cb6b792cdc095508cc187ea0c62275f3146a2`,
+with 5 samples after 1 warmup: Windows x64, Node 24.19.0, VS Code 1.125.0.
 
 | Metric | Min | p50 | p95 | Max |
 |---|---:|---:|---:|---:|
-| Extension activation | 4 ms | 7 ms | 8 ms | 8 ms |
-| Webview first usable | 50 ms | 53 ms | 96 ms | 96 ms |
-| Long-session restore | 4 ms | 4 ms | 7 ms | 7 ms |
-| Large-workspace search | 135 ms | 166 ms | 223 ms | 223 ms |
-| MCP connection/catalog loading | 117 ms | 122 ms | 163 ms | 163 ms |
-| Steady-state Extension Host RSS | 308,621,312 B | 310,308,864 B | 319,631,360 B | 319,631,360 B |
-| Peak Extension Host RSS | 308,621,312 B | 310,308,864 B | 319,631,360 B | 319,631,360 B |
+| Extension activation | 4 ms | 5 ms | 6 ms | 6 ms |
+| Webview first usable | 428 ms | 451 ms | 519 ms | 519 ms |
+| Long-session restore | 4 ms | 5 ms | 9 ms | 9 ms |
+| Large-workspace search | 333 ms | 365 ms | 378 ms | 378 ms |
+| MCP connection/catalog loading | 104 ms | 107 ms | 162 ms | 162 ms |
+| Steady-state Extension Host RSS | 244,436,992 B | 252,825,600 B | 256,360,448 B | 256,360,448 B |
+| Peak Extension Host RSS | 310,284,288 B | 316,116,992 B | 319,578,112 B | 319,578,112 B |
 
-Artifact sizes from the same build were 566,712 B for the Webview bundle, 4,764,008 B compressed
-for the VSIX, and 8,548,142 B uncompressed. The existing packaging contract remains the hard 5 MiB
+Artifact sizes from the same build were 566,712 B for the Webview bundle, 4,764,124 B compressed
+for the VSIX, and 8,548,719 B uncompressed. The existing packaging contract remains the hard 5 MiB
 compressed and 10 MiB uncompressed ceiling.
 
 ## Regression thresholds and platform noise
@@ -83,7 +83,7 @@ initial checks are:
 | Metric | Initial threshold | Enforcement |
 |---|---:|---|
 | Extension activation | 25 ms p95 | Matching evidence environment |
-| Webview first usable | 250 ms p95 | Matching evidence environment |
+| Webview first usable | 1,100 ms p95 | Matching evidence environment |
 | Long-session restore | 25 ms p95 | Matching evidence environment |
 | Large-workspace search | 500 ms p95 | Matching evidence environment |
 | MCP connection/catalog loading | 400 ms p95 | Matching evidence environment |

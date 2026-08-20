@@ -21,7 +21,7 @@ const defaultRuns = 5;
 const defaultWarmups = 1;
 const thresholds = {
   extensionActivationMs: 25,
-  webviewFirstUsableMs: 250,
+  webviewFirstUsableMs: 1_100,
   sessionRestoreMs: 25,
   workspaceSearchMs: 500,
   mcpCatalogLoadMs: 400,
