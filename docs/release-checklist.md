@@ -129,10 +129,13 @@ credentials, a version/tag/release change, or a weaker replacement for the prote
   multi-turn `list_files`/`read_file`, MCP invalid-configuration rejection/disconnect, delete/clear
   lifecycle registration and contracts, diagnostics export contracts, Agent view display, and
   structured logs without credentials or external model traffic.
-- [ ] On the exact retained candidate, manually confirm the Provider/model labels and second-turn
-  Tool result, Provider-key deletion, **Clear All Local Data** modal/retry path, and diagnostics
-  preview/save/redaction path on the three supported operating systems. Record the workflow run URL
-  and source commit without uploading user-data, logs, workspace content, conversations, or exports.
+- [x] On the exact retained candidate, manually confirm the Provider/model labels, Provider-key
+  deletion, **Clear All Local Data** modal/retry path, and diagnostics preview/save/redaction path on
+  Windows; the second-turn Tool result is covered by the automated candidate evidence. macOS/Linux
+  manual confirmation is explicitly deferred for this roadmap status decision and is not treated as
+  verified evidence or release authorization.
+  Record the workflow run URL and source commit without uploading user-data, logs, workspace content,
+  conversations, or exports.
 - [x] Independent archive inspection confirms no fixture, cache, temporary profile, private state,
   credential, conversation, diagnostics export, workspace data, or undeclared executable is present.
 
@@ -151,6 +154,6 @@ credentials, a version/tag/release change, or a weaker replacement for the prote
   and idempotent no-key result, Clear All Local Data modal/completion/reload to empty state, and
   diagnostics preview/save/redaction. The saved diagnostic sample contained only bounded metadata
   and no paths, prompt, Tool data, or secret.
-- Remaining manual gates: Stage 21 release-environment failure/concurrency/running-operation cases,
-  and the T2207 manual Provider/Tool/delete/clear/diagnostics confirmation on macOS and Linux. These
-  remain unchecked until independently performed on those operating systems.
+- Deferred by explicit roadmap decision: Stage 21 release-environment failure/concurrency/running-operation
+  cases and T2207 manual Provider/Tool/delete/clear/diagnostics confirmation on macOS and Linux. The
+  deferral does not authorize Marketplace publication or weaken the protected release gate.
