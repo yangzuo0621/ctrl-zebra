@@ -7,13 +7,13 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@ai-sdk/google": "4.0.43",
-    "@ai-sdk/openai": "4.0.41",
-    "@ai-sdk/openai-compatible": "3.0.30",
+    "@ai-sdk/google": "4.0.54",
+    "@ai-sdk/openai": "4.0.50",
+    "@ai-sdk/openai-compatible": "3.0.39",
     "@ctrl-zebra/core": "workspace:*",
-    "ai": "7.0.64"
+    "ai": "7.0.83"
   },
   "devDependencies": {
-    "@types/node": "26.2.0"
+    "@types/node": "26.4.0"
   }
 }
