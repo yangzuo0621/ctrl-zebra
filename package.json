@@ -23,11 +23,11 @@
     "typecheck": "pnpm --recursive exec tsc --noEmit"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.8",
-    "@vitest/coverage-v8": "4.1.10",
+    "@biomejs/biome": "2.5.10",
+    "@vitest/coverage-v8": "4.1.11",
     "@vscode/vsce": "3.9.2",
     "typescript": "7.0.2",
-    "vitest": "4.1.10",
+    "vitest": "4.1.11",
     "yauzl": "3.4.0"
   }
 }
