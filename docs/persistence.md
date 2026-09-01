@@ -86,10 +86,10 @@ atomic-write temporary files are included. Invalid, unreadable, or unattributabl
 place and contribute to a bounded failure report. Cleanup is local-only and never removes workspace
 files, user code, Provider secrets, or another Extension's storage.
 
-The persistence result reports bounded scanned, removed, and failed storage entries. A storage failure
-does not turn earlier removals into a false all-success result; remaining data is safe to retry on the
-next explicit history refresh. The v1 persisted format and Session summary wire projection remain
-unchanged.
+The cleanup report retains bounded `scanned`, `expired`, `protected`, `removed`, and `failed` entry
+counts for Host feedback. A storage failure does not turn earlier removals into a false all-success
+result; remaining data is safe to retry on the next explicit history refresh. The v1 persisted format
+and Session summary wire projection remain unchanged.
 
 ## Complete local-data clearing (T2106)
 

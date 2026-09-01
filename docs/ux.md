@@ -402,17 +402,20 @@ Diff 查看完整的有界 before/after 内容：创建是空文件到完整内�
   Disabled cleanup is silent. The UI never exposes raw paths, storage errors, or Checkpoint attribution
   details.
 - Running or recovery-owned Sessions are not silently deleted. The returned list omits records removed
-  before it was emitted, while malformed or unattributable Checkpoints remain available for a later
-  retry and no workspace file is affected.
+  before it was emitted. Once history refresh starts, its lifecycle lock blocks a new submission until
+  cleanup and list projection finish. Malformed or unattributable Checkpoints remain available for a
+  later retry and no workspace file is affected.
 - 卸载或设备交接前，Session 抽屉提供显眼的高风险 `Clear all CtrlZebra local data` 动作，
   Command Palette 同时提供 `CtrlZebra: Clear All Local Data`。按钮旁明确列出 Sessions、
   Checkpoints、临时文件、缓存、Provider keys、MCP/Provider 设置和其他 CtrlZebra 本地状态；
   [Security](security.md#complete-local-data-clearing-t2106) 与 [Persistence](persistence.md#complete-local-data-clearing-t2106)
   分别拥有安全和存储范围。Host 必须再次显示模态警告，明确说明工作区文件、用户代码、
   CtrlZebra 之外的 VS Code 数据和其他扩展不会被删除，Webview 不使用浏览器确认替代 Host 确认。
-- 清除期间按钮、会话操作和发送入口显示进行中状态。取消保留当前投影；完成或部分失败按
-  Host 结果清除已失效的会话、Checkpoint、审批、MCP、Provider 和文件引用投影，并提供同一
-  动作重试。迟到消息不恢复旧内容，重启不会自动续跑清除。
+- 清除期间按钮、会话操作和发送入口显示进行中状态；Host 先取消并等待运行/资源清理，再顺序
+  处理各类别。完成显示固定成功文案；取消保留当前投影；部分失败按类别报告并提供同一动作
+  重试。成功或部分结果都会清除当前会话、Checkpoint、审批、MCP、Provider 和文件引用投影，
+  以免界面继续显示已经清除的数据；迟到消息不恢复旧内容。重启不会自动续跑清除，用户可
+  再次执行同一动作完成剩余类别。
 - 最新一条已完成助手回复提供带作用范围说明的“重新生成”按钮，明确使用原用户问题和此前
   已完成历史；旧回复在新 Run 成功前保持可见。按钮在运行、恢复、会话切换或目标不再是最新
   回复时禁用。重新生成创建新的 Run，不重复旧 Tool 副作用或审批；取消、失败、截断和迟到
