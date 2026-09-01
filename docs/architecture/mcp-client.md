@@ -6,10 +6,10 @@ The long-term decision and rejected alternatives are recorded in
 second Agent Runtime.
 
 [ADR 0002](../adr/0002-mcp-dual-era-stdio-compatibility.md) approves the stage 18 extension for
-explicit modern-only/dual stdio compatibility. T1804 records the cross-boundary contract and
-configuration migration in this document. The current Extension runtime applies the reviewed
-mode-aware lifecycle. The user-visible setting and versioned representation are owned by the
-[configuration contract](../configuration.md).
+explicit modern-only/dual stdio compatibility. T1804 records the cross-boundary contract in this
+document. Configuration migration and the user-visible setting/versioned representation are owned
+by the [configuration contract](../configuration.md). The current Extension runtime applies the
+reviewed mode-aware lifecycle.
 
 ### Package and dependency ownership
 
