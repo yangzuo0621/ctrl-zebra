@@ -27,20 +27,21 @@ This document defines the React Webview constraints established before T0103. It
   discard staged data and leave the current projection intact. A restored `interrupted` Session is
   display-only until the user explicitly submits a new Run.
 - Session history listing remains a Host-owned projection. An explicit list/refresh may trigger the
-  Host's bounded, settings-controlled T2105 retention pass; the Webview never chooses retention days,
-  supplies a cleanup target, or receives a new cleanup protocol message. Listing is ignored while a
-  Run is active or settling. Once listing starts, the Host lifecycle lock blocks a new Run until the
-  retention/list operation finishes, and the returned Session list simply omits records removed before
-  it was emitted.
+  Host's settings-controlled retention pass; the Webview never chooses retention settings, supplies a
+  cleanup target, or receives a cleanup protocol message. The retention and deletion rules are owned
+  by [Persistence](persistence.md#automatic-session-retention-t2105) and [Security](security.md#automatic-session-retention-t2105).
+  Listing is ignored while a Run is active or settling, and the returned list omits records removed
+  before it was emitted.
 
 ### Complete local-data clear (T2106)
 
 The Webview exposes one high-risk `Clear all CtrlZebra local data` action and sends only the strict
 `webview/clear-local-data` intent. It does not confirm through browser APIs or choose categories,
 paths, settings, Secret names, or storage roots. The Extension Host owns the modal confirmation and
-the all-data controller. While the request is pending, the chat store fences new Session/Run intents
-and the Host invalidates pending Resource, Prompt, editor, workspace-file, Checkpoint, and MCP view
-state before cleanup.
+the all-data controller; scope and cleanup semantics live in [Security](security.md#complete-local-data-clearing-t2106),
+[Persistence](persistence.md#complete-local-data-clearing-t2106), and [Configuration](configuration.md#complete-local-data-clearing-t2106).
+While the request is pending, the chat store fences new Session/Run intents and the Host invalidates
+pending Resource, Prompt, editor, workspace-file, Checkpoint, and MCP view state before cleanup.
 
 The chat store correlates `extension/local-data-clear-result` by request ID. `cancelled` leaves the
 current projection unchanged. `completed` and `partial` clear the transcript, Session selector,
@@ -445,14 +446,14 @@ remaining states.
   instruction. Webview restoration may retain only presentation choices such as an expanded catalog
   section; it does not retain a connected flag, capability, approval, generation, preview, or Server
   content as authoritative state.
-- The connection snapshot always carries the validated configured mode (`modern-only` or `dual`). It
-  carries `negotiated: { era, version }` only for a connected state, where the closed pairs are
-  `modern / 2026-07-28` and `legacy / 2025-11-25`. Connecting, disconnecting, disconnected, and
-  failed states expose neither a selected era nor usable capabilities. The store never infers a
-  negotiated value from the configured mode, diagnostics, catalog contents, or a prior connection.
+- The connection snapshot carries the validated configured mode and, only after a connected
+  handshake, the Host-provided negotiated projection. The Webview renders these validated facts and
+  never infers them from mode, diagnostics, catalogs, or a prior connection. Their closed values and
+  wire combinations are owned by [Protocol](protocol/mcp-configuration-and-resources.md#dual-era-configuration-and-negotiated-projection-t1804).
 - A version-1 configuration is presented as modern-only until the user explicitly migrates it to
-  version 2. The browser cannot edit the setting object or request migration by carrying a command,
-  environment, credential, raw JSON, or mode override; `open-settings` remains a Host-owned intent.
+  version 2. The [configuration contract](configuration.md#explicit-migration-and-change-behavior)
+  owns migration; the browser cannot edit the setting object or carry a mode override, command,
+  environment, or credential. `open-settings` remains a Host-owned intent.
 
 MCP descriptors, annotations, Tool results, Resources, and Prompts are rendered through React text
 interpolation. They never reach `dangerouslySetInnerHTML`, the answer Markdown renderer, command or
@@ -537,25 +538,19 @@ diagnostic announcement or recovery control.
 ### Dual-era display and migration (T1804/T1807)
 
 The Webview renders the mode selected in settings and the negotiated era/version returned by the
-Host. A live `dual` connection still uses the same workspace trust, exact startup approval, process
-cleanup, and generation fences as modern-only; no Webview message can override the mode or request a
-hidden reconnect.
+Host. The Host remains the owner of workspace trust, startup approval, process cleanup, generation
+fences, negotiation, and migration; the Webview cannot override the mode or request a hidden reconnect.
 
 The Webview renders configured mode as a setting fact and negotiated era/version as a successful
-connection fact. It uses fixed localized labels for `modern-only`, `dual`, `modern / 2026-07-28`, and
-`legacy / 2025-11-25`; it never renders SDK enums, raw discovery/initialize data, probe timing,
-fallback attempts, or a guessed era. A version-1 setting is described as modern-only and exposes an
-`Open settings` path for the explicit migration to version 2; no Webview message carries a mode
-override or a configuration object.
+connection fact. It uses fixed localized labels and never renders SDK enums, raw discovery/initialize
+data, probe timing, fallback attempts, or a guessed era. A version-1 setting is described as
+modern-only and exposes an `Open settings` path for explicit migration; no Webview message carries a
+mode override or a configuration object.
 
 The connection card keeps the configured mode visible while `connecting`, but shows no negotiated
-version or capabilities until `connected`. A failed connection exposes only the stable error,
-closed supported-version list, and fixed next action. DiscoverResult and recognized modern JSON-RPC
-errors are modern-locked; a missing/unsupported controlled `2026-07-28` produces only
-`protocol-incompatible` and never a legacy/fallback hint. Syntactically/structurally malformed or
-shape-validation-failing response/error renders `malformed-message`; structurally valid but outside
-the closed recognized-modern/defined-non-modern classifications (including unknown future or
-otherwise unclassified values) renders `protocol-incompatible`; neither renders a fallback hint.
+version or capabilities until `connected`. A failed connection exposes only the validated stable
+error, supported-version projection, and fixed next action. The Webview renders the Protocol and Host
+classification it receives; it does not reproduce the negotiation matrix or infer a fallback result.
 Disconnect, cancellation, trust loss, cleanup failure, generation change, or configuration staleness
 clears the negotiated pair and all dependent catalog/recovery state synchronously. This is a
 presentation rule; the Extension remains the sole owner of negotiation, migration, process cleanup,
