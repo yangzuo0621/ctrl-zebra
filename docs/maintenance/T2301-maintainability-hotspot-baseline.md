@@ -154,7 +154,7 @@ package/domain ownership.
 | Item | Current evidence | Disposition |
 |---|---|---|
 | EO-001 Provider endpoint policy | One `providerEndpointPolicy` definition; configuration and connection-check callers both use it. | No regression; do not reopen. |
-| EO-002 Extension test support | One package-local `createTestUri` support class and one Webview `createWebviewHostFixture`; consumers import those fixtures. | No second equivalent fixture owner found; do not reopen. |
+| EO-002 Extension test support | One package-local `createTestUri` support function and one Webview `createWebviewHostFixture`; consumers import those fixtures. | No second equivalent fixture owner found; do not reopen. |
 | EO-003 IDE source projection | One `ideSourceProjector` used by diagnostics, language-services, and editor-context adapters. | No regression; adapter-specific collection/error mapping stays local. |
 | EO-004 Bounded text persistence | One `VscodeBoundedTextStorage` used by Session, Checkpoint, workspace-local, and global-local storage composition. | No duplicate bounded persistence I/O owner found. |
 | EO-005 MCP catalog refresh | One `collectMcpCatalogPages` and one `McpCatalogRefresh`; Tool, Resource, and Prompt paths each use them. | No repeated cursor/refresh coordinator found. |
