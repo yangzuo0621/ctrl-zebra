@@ -184,7 +184,7 @@ tests, documents, and manifests; “code owners” are workspace apps/packages t
 | Change | Revision | Files | Production | Tests | Docs | Manifests | Workspace code owners |
 |---|---|---:|---:|---:|---:|---:|---|
 | T2204 Run token guardrails | `4b77801` | 44 | 22 | 13 | 8 | 1 | Extension, Webview, Core, Protocol (4) |
-| T2205 Diagnostics export | `cad6ee2` | 40 | 19 | 11 | 9 | 0 | Extension, Webview, Protocol (3) |
+| T2205 Diagnostics export | `cad6ee2` | 40 | 20 | 11 | 9 | 0 | Extension, Webview, Protocol (3) |
 | EO-007 Package-local primitives | `53bc57b` | 80 | 56 | 22 | 2 | 0 | Extension, Webview, Builtin Tools, Core, MCP Client, Protocol, Providers (7) |
 
 T2306 should compare directionally against changes of similar semantic breadth, not expect every
