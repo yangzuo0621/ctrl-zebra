@@ -141,71 +141,54 @@ This document defines the Webview security constraints established before T0104.
   encoded directory name, Checkpoint target, or wildcard. The Host records selection only after the
   exact ID appeared in its latest Session list, revalidates the selected/owned Session immediately
   before cleanup, and never falls back to another Session.
-- A Session delete covers its manifest, messages, events, reasoning projection, atomic-write
-  temporary files, and every Checkpoint that the Host can safely attribute to the exact Session.
-  Clear-all covers every CtrlZebra Session and Checkpoint file in the versioned persistence root,
-  including damaged or unattributable records. Neither action touches workspace files, source code,
-  VS Code global storage outside the CtrlZebra persistence root, Provider secrets, MCP settings, or
-  another Extension's data; those categories belong to T2106.
+- The [Persistence Contract](persistence.md#session-deletion-and-local-history-clearing-t2104) owns
+  which records are removed and how partial cleanup is represented. This security boundary limits
+  the target to CtrlZebra persistence data: workspace files, source code, unrelated VS Code storage,
+  Provider secrets, MCP settings, and another Extension's data are never in scope.
 - If a target Session owns an active Run, the Host closes that Run's delivery/event gate first,
   issues exactly one cancellation, and waits for its owned async work and cleanup to settle before
   deleting persisted data. Cancellation is not converted into a failure. After the gate closes,
   no delta, reasoning event, Tool Result, retry, approval response, persistence append, or stale
   restore result may reach the deleted Session or Webview.
-- Persistence deletion is idempotent and retryable. A missing target is a safe no-op only when the
-  Host can establish that no target data remains. File-system, corruption, or attribution failures
-  are reported as `partial`/`unavailable` and never as full success; successful categories remain
-  deleted and a later retry may finish the remainder. Error surfaces contain stable bounded text and
-  diagnostic correlation only, never paths, file names derived from content, message text, source,
-  or raw storage exceptions.
+- Storage, corruption, or attribution failures remain bounded `partial`/`unavailable` outcomes and
+  never expose paths, content, or raw storage exceptions. Successful categories remain deleted and
+  the operation is safe to retry.
 
 ### Automatic Session retention (T2105)
 
-- Retention settings are untrusted machine configuration. The Extension Host validates the boolean
-  enable flag and the integer day range before constructing a Core policy; Webview messages, model
-  output, persisted Sessions, and workspace data cannot supply or override it. Disabled cleanup does
-  not select persistence or scan candidate metadata.
-- Cleanup is Host-triggered only by an explicit Session history list/refresh and uses an injected clock
-  plus a bounded 10,000-manifest scan. It never runs during activation. The exact UTC timestamp cutoff
-  is inclusive, so timezone formatting cannot change whether a record is expired.
-- Running and recovery-owned data is protected. `idle`, `preparing`, `streaming`,
-  `awaiting_approval`, and `executing_tool` candidates are never removed by the retention pass, and the
-  Host refuses a history request while a Run is active or settling. After a history request claims the
-  lifecycle lock, a new Run is blocked until the complete retention/list operation finishes. Session
-  deletion and Checkpoint attribution remain exact-ID operations under the existing trusted
-  extension-storage root.
-- Checkpoint cleanup deletes only records whose validated `sessionId` exactly matches a Session that
-  was removed by the retention pass. Invalid, unreadable, or unattributable records are retained rather
-  than guessed, including atomic-write temporary files that cannot be attributed safely. Workspace
-  files, source code, settings, secrets, and other extension data are outside the retention target.
-- Every candidate and storage operation observes the owned cancellation signal. Cancellation stops
-  further work and leaves later records for retry; it is not reported as success or as a raw failure.
-  Storage and parse failures produce bounded counts and fixed user-safe feedback without raw paths,
-  content, exception text, or identifiers derived from persisted data.
+- Retention settings are untrusted machine configuration. The [configuration contract](configuration.md#session-retention-settings-t2105)
+  owns their names, scopes, bounds, and defaults; Webview messages, model output, persisted Sessions,
+  and workspace data cannot supply or override them.
+- The [Session retention lifecycle](architecture/context-and-session.md#session-retention-lifecycle-t2105)
+  owns the explicit list/refresh trigger, UTC cutoff, protected states, locking, cancellation, and
+  cleanup result; the [Persistence Contract](persistence.md#automatic-session-retention-t2105) owns
+  bounded storage scanning, exact Checkpoint attribution, and retryable storage behavior. Security
+  requires that retention never runs during activation and never targets workspace files, source code,
+  settings, secrets, or other extension data.
+- Invalid, unreadable, or unattributable records are retained rather than guessed. Storage and parse
+  failures produce bounded counts and fixed user-safe feedback without raw paths, content, exception
+  text, or identifiers derived from persisted data.
 
 ### Complete local-data clearing (T2106)
 
-- `ctrlZebra.clearLocalData` and the Agent view's `Clear all CtrlZebra local data` action share one
-  Host controller. The Host presents a modal warning that names the permanent scope before any
-  cancellation or storage call. The Webview's `confirm: true` is only an intent marker; it is never
-  treated as confirmation authority. Dismissal emits a correlated `cancelled` result and performs no
-  mutation.
-- The controller is single-flight and acquires every registered operation lock before cleanup. The
-  Run lock closes the event gate, cancels once, and waits for all active/settling work. The MCP lock
-  aborts connection work and holds an exclusive disconnect gate; a termination-unconfirmed result
-  fails closed before durable cleanup. Provider Secret operations are excluded until all categories
-  settle. Resource, Prompt, editor, workspace-reference, Checkpoint, and transient MCP projections
-  are invalidated before the first durable category.
-- The Host deletes only the exact three Provider Secret names owned by the current Provider adapters,
-  exact registered CtrlZebra configuration leaves, the current Extension's Mementos, and the two
-  Extension-owned storage roots. The workspace storage scan excludes the Session/Checkpoint roots
-  because their stores own those directories. No workspace URI, user-code path, VS Code global data
-  outside CtrlZebra, or other Extension storage enters the operation.
-- Categories run in fixed order and continue after a category error. Reports contain only bounded
-  category names, deleted/failed counts, and fixed text; raw SecretStorage, filesystem, configuration,
-  or process errors never cross Protocol. A partial result is never success, retains a retry path, and
-  successful categories remain idempotently cleared. Late Run, restore, MCP, or projection messages
-  are fenced after the clear result, and a restart never resumes the interrupted clear implicitly.
+- `ctrlZebra.clearLocalData` and the Agent view action share one Host controller. The Host presents a
+  modal warning naming the permanent scope before cancellation or storage; Webview `confirm: true` is
+  only an intent marker, never confirmation authority. Dismissal performs no mutation.
+- The controller is single-flight and acquires every registered operation lock before cleanup. The Run
+  lock closes the event gate, cancels once, and waits for active/settling work; the MCP lock aborts
+  connection work and holds an exclusive disconnect gate. An unconfirmed termination fails closed
+  before durable cleanup. Provider Secret operations remain excluded until all categories settle, and
+  Resource, Prompt, editor, workspace-reference, Checkpoint, and transient MCP projections are
+  invalidated before the first durable category.
+- The [configuration contract](configuration.md#complete-local-data-clearing-t2106) owns the exact
+  setting leaves. The [Persistence Contract](persistence.md#complete-local-data-clearing-t2106) owns
+  Session, Checkpoint, and Extension-storage cleanup. Security limits the combined operation to
+  CtrlZebra-owned data and excludes workspace files, user code, unrelated VS Code data, and other
+  extensions.
+- Results contain only bounded category names, counts, and fixed text. A partial result is never
+  success, successful categories remain retry-safe, and late Run, restore, MCP, or projection
+  messages remain fenced; raw SecretStorage, filesystem, configuration, and process errors never
+  cross Protocol.
 
 ## Tool Input and Output
 
@@ -571,31 +554,17 @@ risk calls to avoid the matrix is forbidden.
 
 ## Checkpoint and restore boundary
 
-- Every Agent file mutation is bound to one immutable Checkpoint owned by the exact Session and Run
-  that requested it. Model output, Webview input, and a later Run cannot choose an existing
-  Checkpoint ID, change its ownership, replace its targets, or alter its before-content or hashes.
-- The host computes lowercase SHA-256 hashes from the exact UTF-8 text at the workspace boundary.
-  `beforeHash` covers the text captured immediately before the write and `afterHash` covers the
-  exact proposed text. Persisted or client-supplied hashes are never trusted as proof of current
-  workspace state; the host recomputes them for application and recovery checks.
-- The complete Checkpoint is durably committed before any file in the bound operation is changed.
-  If validation or persistence fails, no write is attempted. One Checkpoint covers all files in a
-  semantic multi-file operation, and both application and restoration use one host-atomic workspace
-  operation so a subset is never intentionally authorized or restored.
-- Restore is allowed only for an explicit user request and only after every current target remains
-  in the selected trusted workspace, resolves to the recorded canonical identity, and hashes to its
-  `afterHash`. The host repeats those checks immediately before the atomic restore. Any mismatch,
-  missing target, scope failure, canonicalization failure, binary content, or read failure produces
-  a conflict and leaves every file unchanged.
-- Restore writes only the bounded before-content already present in the selected Checkpoint. It does
-  not accept replacement content, merge instructions, extra targets, or force flags from the model
-  or Webview. Successful restoration is verified against every `beforeHash`; failures use safe
-  diagnostics that do not disclose file contents.
-- Before-content is sensitive local workspace data. It is excluded from model context, Webview
-  state, approval presentation, logs, telemetry, diagnostics, snapshots, and fixtures except for
-  deterministic fake test content. Checkpoints never contain credentials or other forbidden
-  persistence data. T0801 introduces no automatic rollback policy; T2105 separately owns bounded,
-  settings-controlled retention of expired local Sessions and safely attributable Checkpoints.
+The [Persistence Contract](persistence.md#checkpoint-durability-and-recovery) is the canonical owner
+of Checkpoint layout, record shape, durable-before-side-effect ordering, all-target recovery, format
+compatibility, and retention. This security boundary adds the non-negotiable rules: a Checkpoint is
+bound to the exact Session/Run and immutable operation; model/Webview input cannot choose its identity,
+targets, hashes, replacement content, extra targets, or force flag; and restore is explicit, scoped to
+the selected trusted workspace, revalidated immediately before the atomic operation, and conflict-safe.
+
+Checkpoint before-content is sensitive local workspace data. It is excluded from model context,
+Webview state, approval presentation, logs, telemetry, diagnostics, snapshots, and fixtures except for
+deterministic fake test content. Checkpoints never contain credentials or other forbidden persistence
+data.
 
 ### File lifecycle mutation boundary (T2001)
 
@@ -1282,26 +1251,14 @@ environment, URI query/fragment, credentials, or arbitrary Server metadata.
 
 ### T1804–T1807 dual-era negotiation and information boundary
 
-The configured mode is a user choice, not a Server capability. Version `1` settings remain
-`modern-only`; version `2` requires an explicit `protocolMode`. `modern-only` accepts only
-`2026-07-28`. `dual` accepts exactly `2026-07-28` and `2025-11-25`, always over the same local
-`stdio` process port and with the same approved executable operation.
+The [configuration contract](configuration.md#versioned-representation) owns the configured mode,
+version representation, and migration choice. This security section owns the fact that mode is not a
+Server capability and cannot broaden the same approved local `stdio` executable operation.
 
-- A `dual` connection begins with one bounded `server/discover` probe. Only a specification-
-  classified non-modern response or bounded timeout can enter one legacy `initialize` /
-  `notifications/initialized` exchange. A well-formed `DiscoverResult` locks modern: a bounded
-  advertised `2026-07-28` continues modern, while a missing/unsupported advertised version fails
-  `protocol-incompatible` without fallback. A recognized modern JSON-RPC error also locks modern: a
-  controlled advertised `2026-07-28` continues/selects modern, while a missing/unsupported version
-  fails `protocol-incompatible` without fallback. After independent overflow checks, a
-  syntactically/structurally malformed or shape-validation-failing response/error maps to
-  `malformed-message`; a structurally valid response/error outside the closed recognized-modern or
-  defined non-modern classifications (including unknown future or otherwise unclassified values)
-  maps to `protocol-incompatible`. Neither is a downgrade oracle. Message/stream overflow remains
-  `limit-exceeded`; cancellation, process exit, trust loss, or cleanup failure is terminal and cannot
-  become a downgrade oracle. The probe request and correlation state are closed before an eligible
-  fallback, and the generation gate drops all late probe data. The closed decision matrix in
-  Architecture is authoritative; this section mirrors its stable outcome boundary.
+- The [Architecture decision matrix](architecture/mcp-schema-and-discovery.md#closed-modern-first-fallback-decision-matrix-t1804)
+  is the sole owner of probe/fallback eligibility, response classification, and late-probe ordering.
+  Security requires that malformed, unsupported, cancelled, trust-lost, exited, or cleanup-failed
+  connections never become a downgrade oracle and that no late data crosses the generation gate.
 - No capability, catalog, Tool, Resource, Prompt, approval, persistence, or Webview state is
   available until the selected handshake has validated its exact closed version. Both eras expose
   only the reviewed Tools, Resources, Resource Templates, Prompts, and list-change behavior. Roots,
@@ -1315,11 +1272,10 @@ The configured mode is a user choice, not a Server capability. Version `1` setti
 - Negotiated era is not authorization. The same Workspace Trust, startup approval, exact Tool
   approval, generation, cancellation, limits, and process-tree cleanup apply in both eras. Legacy
   annotations cannot lower `execute` risk or create remembered permission.
-- Completed operations may persist bounded provenance `{ configuredMode, negotiatedEra,
-  negotiatedVersion }`; failed attempts, probe timing, fallback state, command/args/cwd/environment,
-  credentials, SDK/JSON-RPC errors, and Server output remain volatile. Recovery treats provenance as
-  historical display data and never starts, reconnects, probes, renegotiates, retries, or authorizes
-  an operation.
+- [Persistence](persistence.md#mcp-persistence-projection) owns the exact historical provenance
+  record and recovery rules. Security requires that failed attempts, probe timing, fallback state,
+  command/args/cwd/environment, credentials, SDK/JSON-RPC errors, and Server output remain volatile;
+  provenance is never an authorization or reconnect instruction.
 
 The T1804–T1807 implementation applies these rules end to end: configuration parsing and Protocol
 schemas normalize the closed modes, the controlled lifecycle owns negotiation, and deterministic

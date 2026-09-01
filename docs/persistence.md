@@ -1,7 +1,10 @@
 # Persistence Contract
 
-This document defines the durable session format introduced by T0601. Persistence adapters must
-treat every value read from storage as untrusted and validate it before constructing Core values.
+This document is the canonical owner for durable layout, records, cleanup, recovery, compatibility,
+and persistence fixtures. Persistence adapters must treat every value read from storage as untrusted
+and validate it before constructing Core values. Setting names, scopes, bounds, and defaults remain
+owned by the [configuration contract](configuration.md); security and UI projection rules stay in
+[Security](security.md) and [Webview](webview.md).
 
 ## Storage layout and format version
 
@@ -67,18 +70,14 @@ directory has been removed, and a stale restore result must not recreate its Web
 
 ## Automatic Session retention (T2105)
 
-Automatic local retention is enabled by default for 30 days and is controlled by the machine-scoped
-`ctrlZebra.sessionRetention.enabled` and `ctrlZebra.sessionRetention.days` settings. The duration is an
-integer from 1 through 3,650 and represents 24-hour UTC days. The Host compares the manifest's existing
-`updatedAt` timestamp with the injected clock cutoff using `<=`; no new timestamp or persisted field is
-introduced. Session metadata updates and committed events already advance `updatedAt`.
-
-Retention runs only as part of an explicit Session history list/refresh. It scans at most 10,000 catalog
-entries and reads only bounded manifest metadata; it does not load event logs or run at activation. When
-disabled, no retention candidate or Checkpoint scan occurs. `idle`, `preparing`, `streaming`,
-`awaiting_approval`, and `executing_tool` candidates are protected because recovery or a live Run may
-still own their data. The Host also blocks history listing while a Run is active or settling and holds
-the lifecycle lock across the complete asynchronous list/retention operation before allowing a new Run.
+Automatic local retention uses the machine-scoped `ctrlZebra.sessionRetention.enabled` and
+`ctrlZebra.sessionRetention.days` settings defined by the [configuration contract](configuration.md#session-retention-settings-t2105).
+The [Session retention lifecycle](architecture/context-and-session.md#session-retention-lifecycle-t2105)
+owns calculation, explicit list/refresh triggering, protected states, locking, cancellation, and the
+cleanup result. This section owns the persistence facets: the manifest's existing `updatedAt` is
+compared with the injected clock cutoff using `<=`; no new timestamp or persisted field is introduced.
+Session metadata updates and committed events already advance `updatedAt`. Candidate collection reads
+at most 10,000 bounded manifest records and does not load event logs.
 
 An expired Session is removed through the existing exact encoded Session-directory deletion, then its
 owned Checkpoints are removed by one bounded scan of `checkpoints/v1`. Only a validated Checkpoint whose
@@ -87,21 +86,20 @@ atomic-write temporary files are included. Invalid, unreadable, or unattributabl
 place and contribute to a bounded failure report. Cleanup is local-only and never removes workspace
 files, user code, Provider secrets, or another Extension's storage.
 
-The cleanup report counts scanned, expired, protected, removed, and failed entries. A storage failure
-does not turn earlier removals into a false all-success result; remaining data is safe to retry on the
-next explicit history refresh. Cancellation stops before the next candidate or storage operation and
-does not suppress the existing recovery/deletion safety gates. The v1 persisted format and Session
-summary wire projection remain unchanged.
+The cleanup report retains bounded `scanned`, `expired`, `protected`, `removed`, and `failed` entry
+counts for Host feedback. A storage failure does not turn earlier removals into a false all-success
+result; remaining data is safe to retry on the next explicit history refresh. The v1 persisted format
+and Session summary wire projection remain unchanged.
 
 ## Complete local-data clearing (T2106)
 
 Complete clearing is an explicit Host-owned data-control operation for uninstall or device handoff;
-it does not introduce a persisted-format migration. Its fixed order is: establish the running-operation
-cancellation gate, clear Sessions, clear Checkpoints, clear temporary files, reset transient caches,
-delete the three exact Provider Secret names, remove explicit CtrlZebra Provider/retention/editor
-configuration values, remove the exact MCP configuration value, and clear CtrlZebra Extension Mementos.
-The operation is single-flight: concurrent requests share one result, and a later request retries the
-remaining data after a partial result.
+it does not introduce a persisted-format migration. This section owns the Session, Checkpoint, and
+Extension-owned storage cleanup portions. The exact configuration leaves are defined by the
+[configuration contract](configuration.md#complete-local-data-clearing-t2106); operation locks,
+confirmation, SecretStorage, process, and redaction boundaries are defined by
+[Security](security.md#complete-local-data-clearing-t2106). The operation is single-flight and a
+later request retries the remaining data after a partial result.
 
 Session and Checkpoint stores retain ownership of their versioned directories. The Extension's
 workspace `storageUri` root cleanup removes only direct entries outside `sessions` and `checkpoints`,
@@ -110,14 +108,12 @@ artifacts. Missing roots are empty and safe to retry. The latter is Extension-sc
 global data outside CtrlZebra, workspace files, user code, and another Extension's storage are never
 targets. Mementos are cleared only through the current Extension's `globalState` and `workspaceState`.
 
-Before any durable cleanup, the Host closes the Webview event gates, cancels and settles active Runs,
-invalidates Resource/Prompt/editor/workspace projections, disconnects MCP, and holds Provider Secret
-operation exclusion through the complete cleanup. An MCP termination-unconfirmed result fails closed
-before storage cleanup. Each of the nine categories returns bounded deleted/failed counts; one category
-failure does not suppress later categories, and no partial result is reported as complete. A restart
-does not resume work or recreate deleted state: remaining data is discoverable on the next explicit
-clear request and can be safely retried. This operation is the uninstall-before path, not automatic
-cleanup or workspace deletion.
+Before any durable storage cleanup, the Host has applied the cancellation and invalidation gates from
+[Security](security.md#complete-local-data-clearing-t2106). Each storage category returns bounded
+deleted/failed counts; one category failure does not suppress later storage categories, and no partial
+result is reported as complete. A restart does not resume work or recreate deleted state: remaining
+data is discoverable on the next explicit clear request and can be safely retried. This operation is
+the uninstall-before path, not automatic cleanup or workspace deletion.
 
 ## File responsibilities
 

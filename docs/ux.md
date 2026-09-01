@@ -390,26 +390,27 @@ Diff 查看完整的有界 before/after 内容：创建是空文件到完整内�
   A partial or unavailable cleanup shows a stable retry action and never claims that all data was
   deleted; already removed records stay removed on retry.
 - Automatic local retention is configured in VS Code machine settings, not as a hidden Webview action.
-  It defaults to 30 days, can be disabled with `ctrlZebra.sessionRetention.enabled`, and uses the
-  integer `ctrlZebra.sessionRetention.days` range `1..3650`. It runs only after the user explicitly
-  requests Session history or refreshes that list; opening the view or activating the Extension does
-  not cause a cleanup scan.
-- A completed cleanup that removes data shows the fixed safe feedback
-  “Automatic cleanup removed N expired Session(s) and M owned Checkpoint(s).” A partial cleanup shows
-  “Automatic Session cleanup could not remove all expired local data. Retry by refreshing Session
-  history.” If the policy or local store is unavailable, the fixed next step is “Automatic Session
-  cleanup is unavailable. Retry by refreshing Session history.” Disabled cleanup is silent.
-- Running or recovery-owned Sessions are never silently deleted. The Host protects `idle`,
-  `preparing`, `streaming`, `awaiting_approval`, and `executing_tool` states and ignores a list request
-  while a Run is active or settling. Once history refresh starts, its lifecycle lock blocks a new
-  submission until cleanup and list projection finish. Removed Sessions are filtered from the current
-  list projection; malformed or unattributable Checkpoints remain available for a later retry and no
-  workspace file is affected.
+  The setting catalog and bounds are owned by [Configuration](configuration.md#session-retention-settings-t2105);
+  lifecycle behavior is owned by [Session retention Architecture](architecture/context-and-session.md#session-retention-lifecycle-t2105),
+  while storage behavior and safe retry semantics are owned by [Persistence](persistence.md#automatic-session-retention-t2105).
+  The user-visible rule is that cleanup occurs only after an explicit Session history request or list
+  refresh; opening the view or activating the Extension does not cause a scan.
+- A completed cleanup shows the fixed safe feedback “Automatic cleanup removed N expired Session(s) and
+  M owned Checkpoint(s).” A partial cleanup shows “Automatic Session cleanup could not remove all
+  expired local data. Retry by refreshing Session history.” If the policy or local store is unavailable,
+  the fixed next step is “Automatic Session cleanup is unavailable. Retry by refreshing Session history.”
+  Disabled cleanup is silent. The UI never exposes raw paths, storage errors, or Checkpoint attribution
+  details.
+- Running or recovery-owned Sessions are not silently deleted. The returned list omits records removed
+  before it was emitted. Once history refresh starts, its lifecycle lock blocks a new submission until
+  cleanup and list projection finish. Malformed or unattributable Checkpoints remain available for a
+  later retry and no workspace file is affected.
 - 卸载或设备交接前，Session 抽屉提供显眼的高风险 `Clear all CtrlZebra local data` 动作，
   Command Palette 同时提供 `CtrlZebra: Clear All Local Data`。按钮旁明确列出 Sessions、
   Checkpoints、临时文件、缓存、Provider keys、MCP/Provider 设置和其他 CtrlZebra 本地状态；
-  Host 必须再次显示模态警告。警告明确说明工作区文件、用户代码、CtrlZebra 之外的 VS Code
-  数据和其他扩展不会被删除，Webview 不使用浏览器确认替代 Host 确认。
+  [Security](security.md#complete-local-data-clearing-t2106) 与 [Persistence](persistence.md#complete-local-data-clearing-t2106)
+  分别拥有安全和存储范围。Host 必须再次显示模态警告，明确说明工作区文件、用户代码、
+  CtrlZebra 之外的 VS Code 数据和其他扩展不会被删除，Webview 不使用浏览器确认替代 Host 确认。
 - 清除期间按钮、会话操作和发送入口显示进行中状态；Host 先取消并等待运行/资源清理，再顺序
   处理各类别。完成显示固定成功文案；取消保留当前投影；部分失败按类别报告并提供同一动作
   重试。成功或部分结果都会清除当前会话、Checkpoint、审批、MCP、Provider 和文件引用投影，
