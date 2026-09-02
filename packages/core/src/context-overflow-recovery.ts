@@ -1,10 +1,9 @@
 import {
-  InvalidModelMessageTokenCountError,
+  estimateModelMessages,
   type ModelMessageTokenCounter,
   pruneModelHistory,
 } from "./history-pruner.js";
 import type { ModelMessage } from "./model-gateway.js";
-import { maxModelContextWindowTokens } from "./token-budget.js";
 
 /** The public recovery helper is deliberately limited to one retry. */
 export const maxContextOverflowRecoveryAttempts = 1;
@@ -71,7 +70,7 @@ export async function recoverFromContextOverflow<Result>(
     request.maxHistoryTokens,
     dependencies.tokenCounter,
   );
-  const initialEstimate = estimateMessages(request.messages, dependencies.tokenCounter);
+  const initialEstimate = estimateModelMessages(request.messages, dependencies.tokenCounter);
   if (pruned.estimatedTokens >= initialEstimate) {
     throw new ContextOverflowRecoveryExhaustedError(0, "no-reduction");
   }
@@ -92,22 +91,4 @@ export async function recoverFromContextOverflow<Result>(
     maxContextOverflowRecoveryAttempts,
     "retry-limit",
   );
-}
-
-function estimateMessages(
-  messages: readonly ModelMessage[],
-  tokenCounter: ModelMessageTokenCounter,
-): number {
-  return messages.reduce((total, message) => {
-    const tokens = tokenCounter.count(message);
-    if (
-      !Number.isSafeInteger(tokens) ||
-      tokens < 0 ||
-      tokens > maxModelContextWindowTokens ||
-      !Number.isSafeInteger(total + tokens)
-    ) {
-      throw new InvalidModelMessageTokenCountError();
-    }
-    return total + tokens;
-  }, 0);
 }
