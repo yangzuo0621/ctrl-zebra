@@ -70,11 +70,11 @@
 
 - 总任务：154
 - 已完成：152
-- 进行中：0
+- 进行中：1
 - 受阻：0
-- 待开始：2
-- 当前执行：无
-- 下一任务：T2305
+- 待开始：1
+- 当前执行：T2305
+- 下一任务：T2306
 - 最后更新：2026-09-02
 - 已完成历史：[已完成任务历史](roadmap/archive/completed-tasks.md)（常规执行无需读取）
 
@@ -83,13 +83,13 @@
 | 阶段 | 任务 | 状态 |
 |---|---|---|
 | 23 | T2302 收敛文档 Hot Context 与 Single Source of Truth | 已完成 |
-| 23 | T2305 收敛 Extension Composition Root 与 Feature Wiring | 待开始 |
+| 23 | T2305 收敛 Extension Composition Root 与 Feature Wiring | 进行中 |
 | 23 | T2306 建立 Architecture Fitness Checks 并验证收敛结果 | 待开始 |
 
 ### 当前任务
 
 - 阶段 22 已完成。
-- 阶段 23 进行中，当前无进行中任务；下一任务为 T2305。
+- 阶段 23 进行中，当前进行中任务为 T2305；下一任务为 T2306。
 
 ## 5. 阶段规格索引
 

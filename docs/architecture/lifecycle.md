@@ -22,6 +22,10 @@ remaining local state is handled by a new explicit request. Uninstall documentat
 run this action before removing the Extension, while VS Code global data outside CtrlZebra, workspace
 files, user code, and other Extension state remain outside its ownership.
 
+The same controller owns the explicit confirmation, fixed Protocol result projection, and terminal
+Host notification for command and Webview callers. `extension.ts` supplies the VS Code prompt and
+notification ports plus the concrete category operations; it does not implement a second clear flow.
+
 ## Disposable Ownership
 
 - Every command, provider, event listener, watcher, timer, stream, child process, and other long-lived resource has exactly one lifecycle owner.
@@ -50,6 +54,20 @@ files, user code, and other Extension state remain outside its ownership.
 - Adapters handle host-specific registration, URI conversion, cancellation, errors, and resource disposal. They do not own Agent business decisions.
 - Controllers coordinate a user interaction through internal ports. They must not leak VS Code types into Core or Protocol contracts.
 - `extension.ts` may construct adapters and controllers but must not become an alternate location for their behavior.
+
+## Feature-local Host wiring
+
+- `createVsCodeFileMutationApprovalWorkflows` owns the complete VS Code binding for file edit,
+  workspace edit, create, delete, and rename approvals: canonical revalidation, Diff presentation,
+  Checkpoint-before-apply construction, Trust recheck, and conflict mapping. It starts no work during
+  activation and owns no approval state. It transfers the five workflows to
+  `ToolApprovalWorkflowRouter` and the Diff Presenter to `ExtensionContext.subscriptions`.
+- `VsCodeEditorContext` owns Host availability classification and opaque source fingerprinting.
+  `EditorContextEntryController` owns asynchronous transition fencing and view state; `extension.ts`
+  only forwards VS Code editor/document events.
+- `WorkspaceFileReferenceController` owns the set of view-local reference actions, removes disposed
+  children, broadcasts document/root/Trust boundary changes, and disposes remaining children
+  idempotently. `extension.ts` owns only the VS Code event registrations.
 
 ## Lazy Initialization
 

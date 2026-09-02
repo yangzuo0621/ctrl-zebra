@@ -34,6 +34,49 @@ function createOperations(
 }
 
 describe("LocalDataClearController", () => {
+  it("owns confirmation and the exact Webview result projection", async () => {
+    const confirm = vi.fn(async () => false);
+    const notifyInformation = vi.fn();
+    const notifyWarning = vi.fn();
+    const operations = createOperations();
+    const controller = new LocalDataClearController(operations, {
+      confirm,
+      notifyInformation,
+      notifyWarning,
+    });
+    const post = vi.fn();
+
+    await expect(controller.request("request-1", post)).resolves.toBeUndefined();
+    expect(confirm).toHaveBeenCalledWith(
+      expect.stringContaining("permanently deletes"),
+      "Clear CtrlZebra data",
+    );
+    expect(post).toHaveBeenCalledWith({
+      protocolVersion: 1,
+      type: "extension/local-data-clear-result",
+      requestId: "request-1",
+      outcome: "cancelled",
+      categories: [],
+      message: "CtrlZebra local-data clearing was cancelled.",
+    });
+    expect(operations.clearSessions).not.toHaveBeenCalled();
+
+    confirm.mockResolvedValue(true);
+    post.mockClear();
+    await expect(controller.request("request-2", post)).resolves.toMatchObject({
+      outcome: "completed",
+    });
+    expect(post).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "extension/local-data-clear-result",
+        requestId: "request-2",
+        outcome: "completed",
+      }),
+    );
+    expect(notifyInformation).toHaveBeenCalledWith("CtrlZebra local data was cleared.");
+    expect(notifyWarning).not.toHaveBeenCalled();
+  });
+
   it("completes an empty state and reports every category", async () => {
     const controller = new LocalDataClearController(createOperations());
 

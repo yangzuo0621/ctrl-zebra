@@ -59,6 +59,54 @@ export interface WorkspaceFileReferenceActionsDependencies {
   readonly onDispose?: () => void;
 }
 
+type WorkspaceFileReferenceControllerDependencies = Omit<
+  WorkspaceFileReferenceActionsDependencies,
+  "onDispose"
+>;
+
+/** Owns every view-local reference controller and broadcasts Host boundary changes to them. */
+export class WorkspaceFileReferenceController {
+  readonly #dependencies: WorkspaceFileReferenceControllerDependencies;
+  readonly #actions = new Set<WorkspaceFileReferenceActions>();
+  #disposed = false;
+
+  constructor(dependencies: WorkspaceFileReferenceControllerDependencies) {
+    this.#dependencies = dependencies;
+  }
+
+  createActions(): WorkspaceFileReferenceActions {
+    if (this.#disposed) {
+      throw new Error("Workspace file reference controller has been disposed.");
+    }
+    let actions: WorkspaceFileReferenceActions | undefined;
+    actions = new WorkspaceFileReferenceActions({
+      ...this.#dependencies,
+      onDispose: () => {
+        if (actions !== undefined) this.#actions.delete(actions);
+      },
+    });
+    this.#actions.add(actions);
+    return actions;
+  }
+
+  notifyChanged(uri: Uri, reason: WorkspaceFileReferenceStaleReason): void {
+    if (this.#disposed) return;
+    for (const actions of this.#actions) actions.notifyChanged(uri, reason);
+  }
+
+  clearForBoundaryChange(reason: Exclude<WorkspaceFileReferenceClearReason, "removed">): void {
+    if (this.#disposed) return;
+    for (const actions of this.#actions) actions.clearForBoundaryChange(reason);
+  }
+
+  dispose(): void {
+    if (this.#disposed) return;
+    this.#disposed = true;
+    for (const actions of [...this.#actions]) actions.dispose();
+    this.#actions.clear();
+  }
+}
+
 interface ReferenceState {
   readonly requestedUri: Uri;
   readonly canonicalUri: Uri;

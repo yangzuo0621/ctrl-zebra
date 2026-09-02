@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto";
-
 import type {
   EditorContextMessage,
   EditorContextRefreshMessage,
@@ -27,44 +25,6 @@ export type EditorContextClearReason =
   | "trust-lost"
   | "workspace-changed"
   | "editor-unavailable";
-
-export interface EditorContextSourceFingerprintInput {
-  readonly scheme: string;
-  readonly authority: string;
-  readonly path: string;
-  readonly documentVersion: number;
-  readonly languageId: string;
-  readonly range?: {
-    readonly start: { readonly line: number; readonly character: number };
-    readonly end: { readonly line: number; readonly character: number };
-  };
-}
-
-/**
- * Returns a bounded opaque source identity for transition fencing. The raw URI
- * identity is consumed only by the hash operation and never retained or sent.
- */
-export function createEditorContextSourceFingerprint(
-  input: EditorContextSourceFingerprintInput,
-): string {
-  const range =
-    input.range === undefined
-      ? ""
-      : `${input.range.start.line}:${input.range.start.character}:${input.range.end.line}:${input.range.end.character}`;
-  return createHash("sha256")
-    .update(
-      [
-        input.scheme,
-        input.authority,
-        input.path,
-        input.documentVersion,
-        input.languageId,
-        range,
-      ].join("\u0000"),
-      "utf8",
-    )
-    .digest("hex");
-}
 
 export interface EditorContextMessageChannel {
   postMessage(message: ExtensionToWebviewMessage): PromiseLike<boolean>;
@@ -147,6 +107,7 @@ export class EditorContextEntryController {
   readonly #dependencies: EditorContextEntryDependencies;
   readonly #views = new Set<EditorViewState>();
   #nextViewGeneration = 0;
+  #transitionToken = 0;
   #disposed = false;
 
   constructor(dependencies: EditorContextEntryDependencies) {
@@ -241,8 +202,36 @@ export class EditorContextEntryController {
     }
   }
 
+  notifyHostTransition(reason: EditorContextTransitionReason, scope: EditorContextScope): void {
+    if (this.#disposed) return;
+    this.#transitionToken += 1;
+    const token = this.#transitionToken;
+    void Promise.resolve(this.#dependencies.getAvailability?.(scope)).then(
+      (availability) => {
+        if (this.#disposed || token !== this.#transitionToken) return;
+        if (availability === "untrusted-workspace") {
+          this.invalidate("trust-lost");
+        } else if (
+          availability === "unsupported-document" ||
+          availability === "outside-workspace" ||
+          availability === "no-editor"
+        ) {
+          this.invalidate("editor-unavailable");
+        } else {
+          this.notifyTransition([reason]);
+        }
+      },
+      () => {
+        if (!this.#disposed && token === this.#transitionToken) {
+          this.invalidate("editor-unavailable");
+        }
+      },
+    );
+  }
+
   invalidate(reason: EditorContextClearReason): void {
     if (this.#disposed) return;
+    this.#transitionToken += 1;
     for (const view of this.#views) {
       if (view.disposed) continue;
       this.#closeCapture(view);
