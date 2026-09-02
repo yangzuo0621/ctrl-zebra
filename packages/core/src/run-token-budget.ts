@@ -34,6 +34,57 @@ export class InvalidRunTokenEstimateError extends Error {
   }
 }
 
+export class RunTokenBudgetExceededError extends Error {
+  constructor(readonly budget: RunTokenBudgetSnapshot) {
+    super("The Run token budget was reached.");
+    this.name = "RunTokenBudgetExceededError";
+  }
+}
+
+/**
+ * Run-scoped enforcement around the accounting model. It preserves the cancellation-before-budget
+ * priority and emits each warning/exceeded snapshot before stopping the caller.
+ */
+export class RunTokenBudgetGuard {
+  readonly #budget: RunTokenBudget | undefined;
+  readonly #emit: (snapshot: RunTokenBudgetSnapshot) => void;
+
+  constructor(
+    configuration: RunTokenBudgetConfiguration | undefined,
+    emit: (snapshot: RunTokenBudgetSnapshot) => void,
+  ) {
+    this.#budget = configuration === undefined ? undefined : new RunTokenBudget(configuration);
+    this.#emit = emit;
+  }
+
+  observeEstimate(tokens: number, signal: AbortSignal): void {
+    if (this.#budget === undefined) {
+      return;
+    }
+    signal.throwIfAborted();
+    this.#handle(this.#budget.observeEstimate(tokens), signal);
+  }
+
+  observeUsage(usage: TokenUsage, signal: AbortSignal): void {
+    if (this.#budget === undefined) {
+      return;
+    }
+    signal.throwIfAborted();
+    this.#handle(this.#budget.observeUsage(usage), signal);
+  }
+
+  #handle(observation: RunTokenBudgetObservation, signal: AbortSignal): void {
+    if (observation.outcome === "none") {
+      return;
+    }
+    this.#emit(observation.snapshot);
+    signal.throwIfAborted();
+    if (observation.outcome === "exceeded") {
+      throw new RunTokenBudgetExceededError(observation.snapshot);
+    }
+  }
+}
+
 /**
  * Core-owned accounting for one Run. Estimates are conservative local signals; actual Provider
  * Usage is retained separately and never relabeled as an estimate or as a bill.

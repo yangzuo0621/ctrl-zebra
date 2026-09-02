@@ -1,5 +1,10 @@
+import { toolCallSchema, toolResultSchema } from "@ctrl-zebra/protocol";
 import type { ModelMessage, ModelToolCallMessage } from "./model-gateway.js";
+import { hasExactKeys, isPlainRecord } from "./record-validation.js";
 import { maxModelContextWindowTokens } from "./token-budget.js";
+
+const maxHistoryMessageCharacters = 1_000_000;
+const maxHistoryMessages = 10_000;
 
 export interface ModelMessageTokenCounter {
   count(message: ModelMessage): number;
@@ -106,6 +111,83 @@ export function pruneModelHistory(
     pruned: true,
     overBudget: estimatedTokens > maxTokens,
   };
+}
+
+/** Validates untrusted persisted history before it enters pruning or a Provider request. */
+export function validateModelHistory(history: unknown): readonly ModelMessage[] {
+  if (!Array.isArray(history) || history.length > maxHistoryMessages) {
+    throw new InvalidModelHistoryError();
+  }
+
+  const validated: ModelMessage[] = [];
+  for (let index = 0; index < history.length; index += 1) {
+    if (!Object.hasOwn(history, index)) {
+      throw new InvalidModelHistoryError();
+    }
+    validated.push(validateModelHistoryMessage(history[index]));
+  }
+  return validated;
+}
+
+/** Estimates a complete message sequence with the same bounded-count rules as pruning. */
+export function estimateModelMessages(
+  messages: readonly ModelMessage[],
+  tokenCounter: ModelMessageTokenCounter,
+): number {
+  return messages.reduce((total, message) => {
+    const tokens = tokenCounter.count(message);
+    if (
+      !Number.isSafeInteger(tokens) ||
+      tokens < 0 ||
+      tokens > maxModelContextWindowTokens ||
+      !Number.isSafeInteger(total + tokens)
+    ) {
+      throw new InvalidModelMessageTokenCountError();
+    }
+    return total + tokens;
+  }, 0);
+}
+
+function validateModelHistoryMessage(message: unknown): ModelMessage {
+  if (!isPlainRecord(message)) {
+    throw new InvalidModelHistoryError();
+  }
+
+  if (hasExactKeys(message, ["content", "role"])) {
+    if (
+      (message.role !== "user" && message.role !== "assistant") ||
+      typeof message.content !== "string" ||
+      message.content.length < 1 ||
+      message.content.length > maxHistoryMessageCharacters
+    ) {
+      throw new InvalidModelHistoryError();
+    }
+    return { role: message.role, content: message.content };
+  }
+
+  if (hasExactKeys(message, ["role", "toolCall"])) {
+    if (message.role !== "assistant") {
+      throw new InvalidModelHistoryError();
+    }
+    const toolCall = toolCallSchema.safeParse(message.toolCall);
+    if (!toolCall.success) {
+      throw new InvalidModelHistoryError();
+    }
+    return { role: "assistant", toolCall: toolCall.data };
+  }
+
+  if (hasExactKeys(message, ["result", "role"])) {
+    if (message.role !== "tool") {
+      throw new InvalidModelHistoryError();
+    }
+    const result = toolResultSchema.safeParse(message.result);
+    if (!result.success) {
+      throw new InvalidModelHistoryError();
+    }
+    return { role: "tool", result: result.data };
+  }
+
+  throw new InvalidModelHistoryError();
 }
 
 function pairToolMessages(messages: readonly ModelMessage[]): readonly ToolPair[] {

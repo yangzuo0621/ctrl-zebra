@@ -67,6 +67,29 @@ describe("Context Overflow Recovery", () => {
     expect(retry.retry).not.toHaveBeenCalled();
   });
 
+  it("does not retry identical messages when a later token estimate grows", async () => {
+    const retry = scriptedRetry([]);
+    let observations = 0;
+    const statefulCounter: ModelMessageTokenCounter = {
+      count: () => {
+        observations += 1;
+        return observations <= 2 ? 1 : 2;
+      },
+    };
+
+    await expect(
+      recoverFromContextOverflow(
+        {
+          messages: [text("system", "rules"), text("user", "current")],
+          maxHistoryTokens: 2,
+        },
+        { tokenCounter: statefulCounter, retry },
+        new AbortController().signal,
+      ),
+    ).rejects.toEqual(new ContextOverflowRecoveryExhaustedError(0, "no-reduction"));
+    expect(retry.retry).not.toHaveBeenCalled();
+  });
+
   it("propagates cancellation without starting another recovery step", async () => {
     const controller = new AbortController();
     const cancellation = new Error("cancel recovery");
