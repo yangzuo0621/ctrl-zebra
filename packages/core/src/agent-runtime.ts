@@ -1,24 +1,19 @@
 import type {
-  ApprovalRequest,
-  ApprovalStatus,
   CheckpointRunId,
   McpPromptConfirmation,
   McpResourceAttachment,
   RunTokenBudgetConfiguration,
-  RunTokenBudgetSnapshot,
   SessionId,
   SessionStatus,
   ToolCall,
-  ToolErrorResult,
   ToolResult,
-  ToolSuccessResult,
   UserMessage,
   WorkspaceFileReference,
 } from "@ctrl-zebra/protocol";
 import { shouldOfferWorkspaceTools } from "./agent-behavior-policy.js";
 import { BasicApprovalPolicy } from "./approval-policy.js";
 import { recoverFromContextOverflow } from "./context-overflow-recovery.js";
-import type { DomainEvent, EventSink } from "./events.js";
+import type { AgentRuntimeDiagnosticSink, AgentRuntimeEvent, EventSink } from "./events.js";
 import { projectExternalContext } from "./external-resource-context.js";
 import { defaultModelMessageTokenCounter } from "./heuristic-token-counter.js";
 import {
@@ -36,7 +31,7 @@ import {
   RunTokenBudgetExceededError,
   RunTokenBudgetGuard,
 } from "./run-token-budget.js";
-import { SessionStateMachine, type SessionStatusChangedEvent } from "./session-state-machine.js";
+import { SessionStateMachine } from "./session-state-machine.js";
 import { allocateTokenBudget, maxModelContextWindowTokens } from "./token-budget.js";
 import type { ToolApprovalWorkflow } from "./tool-approval.js";
 import { ToolCallExecution } from "./tool-call-execution.js";
@@ -46,106 +41,27 @@ import {
   ToolRepetitionDetector,
 } from "./tool-repetition-detector.js";
 
+export type {
+  AgentApprovalStateEvent,
+  AgentReasoningDeltaEvent,
+  AgentReasoningEndEvent,
+  AgentReasoningEvent,
+  AgentReasoningStartEvent,
+  AgentRunBudgetEvent,
+  AgentRuntimeDiagnostic,
+  AgentRuntimeDiagnosticPhase,
+  AgentRuntimeDiagnosticSink,
+  AgentRuntimeEvent,
+  AgentTextDeltaEvent,
+  AgentToolStateEvent,
+  AgentUsageEvent,
+} from "./events.js";
 export {
   InvalidModelUsageError,
   MaxToolStepsExceededError,
   UnexpectedToolCallError,
 } from "./model-turn-stream.js";
 export { RunTokenBudgetExceededError } from "./run-token-budget.js";
-
-export interface AgentTextDeltaEvent extends DomainEvent {
-  readonly type: "agent.text-delta";
-  readonly sessionId: SessionId;
-  readonly text: string;
-}
-
-export interface AgentUsageEvent extends DomainEvent {
-  readonly type: "agent.usage";
-  readonly sessionId: SessionId;
-  readonly usage: import("@ctrl-zebra/protocol").TokenUsage;
-}
-
-export interface AgentRunBudgetEvent extends DomainEvent {
-  readonly type: "agent.run-budget";
-  readonly sessionId: SessionId;
-  readonly budget: RunTokenBudgetSnapshot;
-}
-
-export interface AgentReasoningStartEvent extends DomainEvent {
-  readonly type: "agent.reasoning-start";
-  readonly sessionId: SessionId;
-  readonly blockId: string;
-}
-
-export interface AgentReasoningDeltaEvent extends DomainEvent {
-  readonly type: "agent.reasoning-delta";
-  readonly sessionId: SessionId;
-  readonly blockId: string;
-  readonly text: string;
-}
-
-export interface AgentReasoningEndEvent extends DomainEvent {
-  readonly type: "agent.reasoning-end";
-  readonly sessionId: SessionId;
-  readonly blockId: string;
-}
-
-export type AgentReasoningEvent =
-  | AgentReasoningStartEvent
-  | AgentReasoningDeltaEvent
-  | AgentReasoningEndEvent;
-
-interface AgentToolStateEventBase extends DomainEvent {
-  readonly type: "agent.tool-state";
-  readonly sessionId: SessionId;
-  readonly call: ToolCall;
-}
-
-export type AgentToolStateEvent =
-  | (AgentToolStateEventBase & { readonly status: "pending" | "running" })
-  | (AgentToolStateEventBase & {
-      readonly status: "success";
-      readonly result: ToolSuccessResult;
-    })
-  | (AgentToolStateEventBase & {
-      readonly status: "error";
-      readonly result: ToolErrorResult;
-    });
-
-export type AgentRuntimeEvent =
-  | AgentTextDeltaEvent
-  | AgentUsageEvent
-  | AgentRunBudgetEvent
-  | AgentReasoningEvent
-  | AgentToolStateEvent
-  | AgentApprovalStateEvent
-  | SessionStatusChangedEvent;
-
-export type AgentRuntimeDiagnosticPhase = "prepare-approval" | "execute-tool";
-
-/**
- * A local-only diagnostic. The cause is intentionally kept off the Runtime event stream so it
- * cannot enter persistence, Protocol DTOs, or the Webview projection.
- */
-export interface AgentRuntimeDiagnostic {
-  readonly type: "agent.internal-error";
-  readonly phase: AgentRuntimeDiagnosticPhase;
-  readonly sessionId: SessionId;
-  readonly runId: CheckpointRunId;
-  readonly toolCallId: ToolCall["id"];
-  readonly cause: unknown;
-}
-
-export interface AgentRuntimeDiagnosticSink {
-  emit(diagnostic: AgentRuntimeDiagnostic): void;
-}
-
-export interface AgentApprovalStateEvent extends DomainEvent {
-  readonly type: "agent.approval-state";
-  readonly sessionId: SessionId;
-  readonly approval: ApprovalRequest;
-  readonly status: ApprovalStatus;
-}
 
 export const defaultMaxToolSteps = 8;
 

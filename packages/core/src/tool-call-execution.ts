@@ -10,13 +10,13 @@ import {
   type ToolResult,
   toolResultSchema,
 } from "@ctrl-zebra/protocol";
+import type { BasicApprovalPolicy } from "./approval-policy.js";
 import type {
   AgentRuntimeDiagnostic,
   AgentRuntimeDiagnosticSink,
   AgentRuntimeEvent,
-} from "./agent-runtime.js";
-import type { BasicApprovalPolicy } from "./approval-policy.js";
-import type { EventSink } from "./events.js";
+  EventSink,
+} from "./events.js";
 import { jsonValuesEqual } from "./json-values.js";
 import type { SessionStateMachine } from "./session-state-machine.js";
 import type { ToolApprovalOperation, ToolApprovalWorkflow } from "./tool-approval.js";

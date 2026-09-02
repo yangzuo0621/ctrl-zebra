@@ -71,7 +71,7 @@ export async function recoverFromContextOverflow<Result>(
     dependencies.tokenCounter,
   );
   const initialEstimate = estimateModelMessages(request.messages, dependencies.tokenCounter);
-  if (pruned.estimatedTokens >= initialEstimate) {
+  if (!pruned.pruned || pruned.estimatedTokens >= initialEstimate) {
     throw new ContextOverflowRecoveryExhaustedError(0, "no-reduction");
   }
 

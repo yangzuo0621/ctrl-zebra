@@ -5,8 +5,7 @@ import {
   tokenUsageSchema,
 } from "@ctrl-zebra/protocol";
 import { agentSystemInstruction } from "./agent-behavior-policy.js";
-import type { AgentRuntimeEvent } from "./agent-runtime.js";
-import type { EventSink } from "./events.js";
+import type { AgentRuntimeEvent, EventSink } from "./events.js";
 import type { ModelMessageTokenCounter } from "./history-pruner.js";
 import {
   type FinishReason,

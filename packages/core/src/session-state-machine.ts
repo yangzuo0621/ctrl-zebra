@@ -1,6 +1,8 @@
 import type { SessionId, SessionStatus } from "@ctrl-zebra/protocol";
 
-import type { DomainEvent, EventSink } from "./events.js";
+import type { EventSink, SessionStatusChangedEvent } from "./events.js";
+
+export type { SessionStatusChangedEvent } from "./events.js";
 
 const legalTransitions = {
   idle: ["preparing"],
@@ -33,13 +35,6 @@ const runResetStatuses = new Set<SessionStatus>([
   "failed",
   "interrupted",
 ]);
-
-export interface SessionStatusChangedEvent extends DomainEvent {
-  readonly type: "session.status-changed";
-  readonly sessionId: SessionId;
-  readonly previousStatus: SessionStatus;
-  readonly status: SessionStatus;
-}
 
 export class InvalidSessionStatusTransitionError extends Error {
   readonly previousStatus: SessionStatus;
