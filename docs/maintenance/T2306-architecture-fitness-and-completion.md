@@ -22,6 +22,15 @@ policy, and requires no adapter or packaging change beyond the existing Node run
 cover parser boundaries and failure diagnostics; cancellation is not applicable because the checker is
 a bounded synchronous process.
 
+The complete-parser question was reassessed after review. TypeScript 7.0.2 is already available as a
+root development tool, so adopting its parser would not require a new package. It would, however,
+couple this small governance check to compiler AST/module-resolution APIs and still require a separate
+export graph to reason about package public boundaries. The current lexical scanner now covers the
+repository's supported source extensions, static/dynamic imports, `require`, default/namespace/named
+bindings, local aliases, and bounded local re-export traversal. A full compiler-backed parser is
+therefore not necessary for the confirmed Phase 23 invariants; it remains a follow-up only if the
+repository starts accepting syntax outside that supported set or a real false negative is found.
+
 Commands:
 
 ```text
@@ -156,10 +165,12 @@ Extension integration, coverage, performance, and build before merge.
 Local environment-sensitive evidence still records these caveats:
 
 - A full `pnpm test` rerun after the review fixes hit the existing Webview edit timeout: 205/206 files
-  and 2,175/2,176 tests passed. An earlier full run passed (206 files / 2,176 tests and Extension
-  integration), but the two full `pnpm test:coverage` runs each hit the existing 5-second
-  `heuristic-token-counter` timeout (one run also hit the existing Webview edit timeout). The targeted
-  tests pass; no timeout or coverage threshold was changed.
+  and 2,175/2,176 tests passed. The affected test passes alone in 1.75 seconds and all 29 tests in
+  `app.test.tsx` pass alone; the failure appears only under the full parallel unit suite, indicating
+  runner/resource contention rather than a product deadlock. The two full `pnpm test:coverage` runs
+  also hit the existing 5-second `heuristic-token-counter` timeout (one run included the Webview
+  timeout). A global timeout increase was not applied because repository rules prohibit masking races
+  with arbitrary timeout inflation; GitHub CI remains green with the existing timeout.
 - `pnpm benchmark:performance -- --runs 3 --warmups 1` completed its package/smoke measurement but
   failed the existing budgets locally for Webview first usable p95 (1,207 ms vs 1,100 ms) and workspace
   search p95 (649 ms vs 500 ms); the Ubuntu CI run passed the existing performance gate. No threshold
