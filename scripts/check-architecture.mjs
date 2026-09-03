@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
+import { builtinModules } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -28,24 +29,9 @@ const sdkOwners = Object.freeze([
   },
 ]);
 
-const nodeHostModules = new Set([
-  "assert",
-  "buffer",
-  "child_process",
-  "crypto",
-  "events",
-  "fs",
-  "module",
-  "net",
-  "os",
-  "path",
-  "process",
-  "stream",
-  "timers",
-  "url",
-  "util",
-  "worker_threads",
-]);
+const nodeHostModules = new Set(
+  builtinModules.map((moduleName) => moduleName.replace(/^node:/, "")),
+);
 
 const baselineHotspots = Object.freeze({
   production: Object.freeze({
@@ -240,6 +226,108 @@ function importsFrom(filePath) {
   return imports;
 }
 
+function sourceEntries(workspace, sourceFiles) {
+  return sourceFiles.flatMap((filePath) => {
+    const owner = [...workspace.values()].find((entry) => isWithin(entry.sourceRoot, filePath));
+    return owner === undefined ? [] : [{ filePath, owner }];
+  });
+}
+
+function declaredDependencies(manifest) {
+  return new Set([
+    ...Object.keys(manifest.dependencies ?? {}),
+    ...Object.keys(manifest.devDependencies ?? {}),
+    ...Object.keys(manifest.optionalDependencies ?? {}),
+    ...Object.keys(manifest.peerDependencies ?? {}),
+  ]);
+}
+
+function resolveLocalModule(filePath, specifier) {
+  if (!specifier.startsWith(".")) return null;
+  const base = path.resolve(path.dirname(filePath), specifier);
+  const sourceBase = base.replace(/\.(?:js|jsx|mjs|cjs)$/, "");
+  for (const candidate of [
+    base,
+    sourceBase,
+    `${sourceBase}.ts`,
+    `${sourceBase}.tsx`,
+    path.join(sourceBase, "index.ts"),
+    path.join(sourceBase, "index.tsx"),
+  ]) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
+function sdkSpecifiersFromReexports(filePath, visited = new Set()) {
+  if (visited.has(filePath)) return new Set();
+  visited.add(filePath);
+  const source = stripComments(fs.readFileSync(filePath, "utf8"));
+  const specifiers = new Set();
+  const exportFromPattern = /\bexport\s+(?:type\s+)?(?:\*|\{[^}]*\})\s+from\s+["']([^"']+)["']/g;
+  for (const match of source.matchAll(exportFromPattern)) {
+    const specifier = match[1];
+    const sdk = sdkOwners.find((candidate) => {
+      const prefix = candidate.prefix.endsWith("/") ? candidate.prefix : `${candidate.prefix}/`;
+      return specifier === candidate.prefix || specifier.startsWith(prefix);
+    });
+    if (sdk !== undefined) {
+      specifiers.add(specifier);
+      continue;
+    }
+    const localModule = resolveLocalModule(filePath, specifier);
+    if (localModule !== null) {
+      for (const nested of sdkSpecifiersFromReexports(localModule, visited)) {
+        specifiers.add(nested);
+      }
+    }
+  }
+
+  const sdkImportedBindings = new Map();
+  const sdkImportPattern = /\bimport\s+(?:type\s+)?\{([^}]*)\}\s+from\s+["']([^"']+)["']/g;
+  for (const match of source.matchAll(sdkImportPattern)) {
+    const sdk = sdkOwners.find((candidate) => {
+      const prefix = candidate.prefix.endsWith("/") ? candidate.prefix : `${candidate.prefix}/`;
+      return match[2] === candidate.prefix || match[2].startsWith(prefix);
+    });
+    if (sdk === undefined) continue;
+    for (const binding of match[1].split(",")) {
+      const localName = binding
+        .trim()
+        .split(/\s+as\s+/)
+        .at(-1);
+      if (localName !== undefined && localName !== "") {
+        sdkImportedBindings.set(localName, match[2]);
+      }
+    }
+  }
+  const localExportPattern = /\bexport\s+(?:type\s+)?\{([^}]*)\}(?!\s+from)/g;
+  for (const match of source.matchAll(localExportPattern)) {
+    for (const binding of match[1].split(",")) {
+      const exportedName = binding.trim().split(/\s+as\s+/)[0];
+      if (sdkImportedBindings.has(exportedName)) {
+        specifiers.add(sdkImportedBindings.get(exportedName));
+      }
+    }
+  }
+  return specifiers;
+}
+
+function publicEntryFiles(workspace) {
+  const entries = new Set();
+  for (const packageInfo of workspace.values()) {
+    const rootExport = packageInfo.manifest.exports?.["."];
+    const exportPath =
+      typeof rootExport === "string"
+        ? rootExport
+        : (rootExport?.import ?? rootExport?.default ?? rootExport?.types);
+    entries.add(
+      path.resolve(packageInfo.root, typeof exportPath === "string" ? exportPath : "src/index.ts"),
+    );
+  }
+  return entries;
+}
+
 function workspaceTarget(specifier, workspace) {
   for (const entry of workspace.values()) {
     if (specifier === entry.name || specifier.startsWith(`${entry.name}/`)) return entry;
@@ -250,9 +338,7 @@ function workspaceTarget(specifier, workspace) {
 function packageEdges(root, workspace, sourceFiles, failures) {
   const edges = new Map([...workspace.keys()].map((owner) => [owner, new Set()]));
   const actualImports = [];
-  for (const filePath of sourceFiles) {
-    const importer = [...workspace.values()].find((entry) => isWithin(entry.sourceRoot, filePath));
-    if (importer === undefined) continue;
+  for (const { filePath, owner: importer } of sourceEntries(workspace, sourceFiles)) {
     for (const imported of importsFrom(filePath)) {
       const target = workspaceTarget(imported.specifier, workspace);
       if (target !== null && target.owner !== importer.owner) {
@@ -272,10 +358,7 @@ function packageEdges(root, workspace, sourceFiles, failures) {
               `import ${target.name} from its public entry point instead`,
           );
         }
-        const declared = new Set([
-          ...Object.keys(importer.manifest.dependencies ?? {}),
-          ...Object.keys(importer.manifest.devDependencies ?? {}),
-        ]);
+        const declared = declaredDependencies(importer.manifest);
         if (!declared.has(target.name)) {
           failures.push(
             `${relativeTo(importer.root, filePath)}:${imported.line}: ${target.name} is imported by ${importer.name} ` +
@@ -300,10 +383,7 @@ function packageEdges(root, workspace, sourceFiles, failures) {
   }
 
   for (const importer of workspace.values()) {
-    const declared = new Set([
-      ...Object.keys(importer.manifest.dependencies ?? {}),
-      ...Object.keys(importer.manifest.devDependencies ?? {}),
-    ]);
+    const declared = declaredDependencies(importer.manifest);
     for (const targetName of declared) {
       const target = workspaceTarget(targetName, workspace);
       if (target === null || target.owner === importer.owner) continue;
@@ -345,9 +425,8 @@ function findCycles(edges) {
 }
 
 function checkSdkBoundaries(workspace, sourceFiles, failures) {
-  for (const filePath of sourceFiles) {
-    const importer = [...workspace.values()].find((entry) => isWithin(entry.sourceRoot, filePath));
-    if (importer === undefined) continue;
+  const publicEntries = publicEntryFiles(workspace);
+  for (const { filePath, owner: importer } of sourceEntries(workspace, sourceFiles)) {
     for (const imported of importsFrom(filePath)) {
       const sdk = sdkOwners.find((candidate) => {
         const prefix = candidate.prefix.endsWith("/") ? candidate.prefix : `${candidate.prefix}/`;
@@ -361,7 +440,7 @@ function checkSdkBoundaries(workspace, sourceFiles, failures) {
             `CtrlZebra-owned contracts instead`,
         );
       }
-      if (path.basename(filePath) === "index.ts" || path.basename(filePath) === "index.tsx") {
+      if (publicEntries.has(filePath)) {
         failures.push(
           `${relativeTo(importer.root, filePath)}:${imported.line}: public package entry imports ${sdk.label} ` +
             `${imported.specifier}; re-export only CtrlZebra-owned types from the public boundary`,
@@ -369,13 +448,26 @@ function checkSdkBoundaries(workspace, sourceFiles, failures) {
       }
     }
   }
+  for (const filePath of publicEntries) {
+    if (!fs.existsSync(filePath)) continue;
+    const leakedSdkSpecifiers = sdkSpecifiersFromReexports(filePath);
+    if (leakedSdkSpecifiers.size === 0) continue;
+    const owner = [...workspace.values()].find((entry) => isWithin(entry.root, filePath));
+    if (owner === undefined) continue;
+    failures.push(
+      `${relativeTo(owner.root, filePath)}: public package entry transitively re-exports ${[...leakedSdkSpecifiers].join(", ")}; ` +
+        `keep SDK types and failures private to the owning adapter and expose CtrlZebra-owned contracts instead`,
+    );
+  }
 }
 
 function checkCoreHostIsolation(workspace, sourceFiles, failures) {
   const core = workspace.get("core");
   if (core === undefined) return;
-  const coreFiles = sourceFiles.filter((filePath) => isWithin(core.sourceRoot, filePath));
-  for (const filePath of coreFiles) {
+  const coreFiles = sourceEntries(workspace, sourceFiles).filter(
+    ({ owner }) => owner.owner === "core",
+  );
+  for (const { filePath } of coreFiles) {
     for (const imported of importsFrom(filePath)) {
       const isNodeHostImport =
         imported.specifier.startsWith("node:") ||
@@ -505,20 +597,58 @@ function countLines(filePath) {
   );
 }
 
+function isGeneratedPath(relative) {
+  return (
+    /(^|\/)(generated|gen|__generated__)(?:\/|\.|$)/i.test(relative) ||
+    /\.(?:generated|gen)\.(?:ts|tsx|md)$/i.test(relative)
+  );
+}
+
+function collectDeletedPathRegressions(root) {
+  try {
+    const output = execFileSync(
+      "git",
+      [
+        "log",
+        "--no-renames",
+        "--diff-filter=D",
+        "--name-only",
+        "--format=",
+        "471f9177961c06ec8d6d7965a2b79890615523c2..HEAD",
+        "--",
+        "apps",
+        "packages",
+        "docs",
+      ],
+      { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+    );
+    return [...new Set(output.split(/\r?\n/).filter(Boolean))].filter((relative) =>
+      fs.existsSync(path.join(root, relative)),
+    );
+  } catch {
+    return null;
+  }
+}
+
 function collectAdvisory(root, workspace, sourceFiles) {
   const production = sourceFiles.filter(
     (filePath) =>
       !/\.test\.(?:ts|tsx)$/.test(filePath) &&
       !relativeTo(root, filePath).split("/").includes("test") &&
-      !relativeTo(root, filePath).split("/").includes("fixtures"),
+      !relativeTo(root, filePath).split("/").includes("fixtures") &&
+      !isGeneratedPath(relativeTo(root, filePath)),
   );
-  const tests = sourceFiles.filter((filePath) => /\.test\.(?:ts|tsx)$/.test(filePath));
+  const tests = sourceFiles.filter(
+    (filePath) =>
+      /\.test\.(?:ts|tsx)$/.test(filePath) && !isGeneratedPath(relativeTo(root, filePath)),
+  );
   const documents = collectFiles(path.join(root, "docs"), (filePath) => {
     const relative = relativeTo(root, filePath);
     return (
       /\.md$/.test(filePath) &&
       !relative.startsWith("docs/roadmap/archive/") &&
-      !relative.startsWith("docs/reviews/")
+      !relative.startsWith("docs/reviews/") &&
+      !isGeneratedPath(relative)
     );
   });
   function ranked(files, threshold) {
@@ -604,6 +734,7 @@ function collectAdvisory(root, workspace, sourceFiles) {
     baselineComparison,
     duplicateCandidates: duplicateCandidates.slice(0, 10),
     changedSinceBaseline,
+    deletedPathRegressions: collectDeletedPathRegressions(root),
   };
 }
 
@@ -649,6 +780,9 @@ function formatAdvisory(advisory) {
   );
   lines.push(
     `- representative change surface since T2301: ${advisory.changedSinceBaseline === null ? "unavailable in this checkout" : `${advisory.changedSinceBaseline.length} changed paths (directional only)`}`,
+  );
+  lines.push(
+    `- deleted-path regressions since T2301: ${advisory.deletedPathRegressions === null ? "unavailable in this checkout" : advisory.deletedPathRegressions.length === 0 ? "none" : advisory.deletedPathRegressions.join(", ")}`,
   );
   lines.push(
     `- conservative cross-owner duplicate candidates: ${advisory.duplicateCandidates.length === 0 ? "none" : `${advisory.duplicateCandidates.length} (inspect ownership before acting)`}`,

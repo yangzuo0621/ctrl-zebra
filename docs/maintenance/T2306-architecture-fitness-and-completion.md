@@ -8,11 +8,19 @@ package direction. The implementation is `scripts/check-architecture.mjs`; it us
 library, the checked-in workspace manifests, source imports, package entry points, the roadmap index,
 and (for advisory context only) the existing Git checkout.
 
-Build-vs-Buy was completed before implementation. The standard library is sufficient for bounded
-directory traversal, JSON/Markdown checks, import extraction, graph traversal, and the built-in
-`node:test` runner. Existing Biome, pnpm, TypeScript, and Git checks remain in place. No general
-static-analysis dependency or platform would add enough signal to justify its runtime, configuration,
-license, VSIX, and maintenance cost for these seven deterministic rules.
+Build-vs-Buy was completed before implementation. The evaluation order was: Node standard library or
+VS Code API, existing dependencies, an official SDK, maintained third-party libraries, then
+self-implementation. Node's standard library was selected for bounded directory traversal,
+JSON/Markdown checks, import extraction, graph traversal, builtin-module enumeration, Git evidence,
+and the built-in `node:test` runner. Existing Biome, pnpm, TypeScript, and Git checks remain in place;
+none provides a repository-local package-boundary and roadmap-owner rule with the required diagnostics.
+There is no applicable official SDK. A maintained static-analysis platform was considered but rejected:
+it would add configuration, runtime, license, CI and VSIX/toolchain maintenance without improving these
+finite import/manifest/table decisions. Self-implementation keeps the checker behind a repository
+script boundary, has no third-party types or failures, does not own product cancellation or security
+policy, and requires no adapter or packaging change beyond the existing Node runner. The fixture tests
+cover parser boundaries and failure diagnostics; cancellation is not applicable because the checker is
+a bounded synchronous process.
 
 Commands:
 
@@ -58,6 +66,7 @@ These signals are printed as warnings/review context and never cause CI failure:
 | Test hotspot | 900 physical lines, just below T2301's smallest named test hotspot | Reports test files only and retains focused suites as separate files. |
 | Document hotspot | 600 physical lines, aligned with T2301's `persistence.md` / `ux.md` distribution | Excludes roadmap archives and cold review snapshots. |
 | Significant hotspot regression | More than both 32 lines and 10% above the T2301 snapshot for a named path | A one-line documentation movement is not a regression warning. Missing/deleted paths are reported in the comparison data, not failed. |
+| Deleted-path regression | A path deleted after the T2301 revision is present again at the current revision | Git history is advisory-only; shallow checkouts report unavailable, and the signal never fails CI. |
 | Conservative similarity signal | Exact three-line normalized blocks occurring across distinct workspace owners | Ignores comments, imports/exports, generated/test/fixture paths, trivial punctuation, and package-local repetition. It requires ownership review before any change. |
 | Change surface | Count of paths changed since the T2301 revision when that Git revision exists | Directional only; shallow clones report unavailable. No package-touch or file-count budget is enforced. |
 
@@ -138,20 +147,26 @@ Extension hotspots with task evidence improved, the large runtime test boundary 
 document ownership narrowed without conflicting copies, and unchanged hotspots have explicit retention
 reasons or an opportunity-ledger entry.
 
-The overall Phase 23 completion gate is **not declared complete in this checkout** because two existing
-environment-sensitive gates still need owner follow-up:
+The overall Phase 23 completion gate remains pending until this PR is merged, as required by the
+roadmap status owner. GitHub Actions is the cross-platform verification authority for this revision;
+the PR must remain green across architecture checks, fixture tests, lint, typecheck, unit tests,
+Extension integration, coverage, performance, and build before merge.
 
-- `pnpm test` passed on the second full run (206 files / 2,176 tests and Extension integration), but
-  the two full `pnpm test:coverage` runs each hit the existing 5-second
+Local environment-sensitive evidence still records these caveats:
+
+- A full `pnpm test` rerun after the review fixes hit the existing Webview edit timeout: 205/206 files
+  and 2,175/2,176 tests passed. An earlier full run passed (206 files / 2,176 tests and Extension
+  integration), but the two full `pnpm test:coverage` runs each hit the existing 5-second
   `heuristic-token-counter` timeout (one run also hit the existing Webview edit timeout). The targeted
   tests pass; no timeout or coverage threshold was changed.
 - `pnpm benchmark:performance -- --runs 3 --warmups 1` completed its package/smoke measurement but
-  failed the existing budgets for Webview first usable p95 (1,207 ms vs 1,100 ms) and workspace search
-  p95 (649 ms vs 500 ms). No threshold was changed and no functionality was removed.
+  failed the existing budgets locally for Webview first usable p95 (1,207 ms vs 1,100 ms) and workspace
+  search p95 (649 ms vs 500 ms); the Ubuntu CI run passed the existing performance gate. No threshold
+  was changed and no functionality was removed.
 - VSIX packaging/smoke was not run independently because the packaging command requires a clean
   worktree and the checkout contains the pre-existing user edit in `.codex/agents/task-executor.toml`.
   Extension integration smoke and repository build did pass.
 
-These are verification blockers, not authorization to expand Phase 23 or make metrics prettier. The
-roadmap status should remain pending until the repository owner reruns or separately resolves those
-existing gates under the normal PR/clean-worktree process.
+The VSIX packaging caveat remains a separate local verification gap, not authorization to expand Phase
+23 or make metrics prettier. The roadmap status should remain pending until the repository owner merges
+the PR under the normal process.
