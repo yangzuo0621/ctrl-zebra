@@ -77,9 +77,18 @@ version CHANGELOG.md SBOM protected environment VSIX Marketplace
 
 describe("release policy", () => {
   it("rejects candidate-specific evidence in the current release document", () => {
-    expect(() => validateReleaseDocument(`${releaseDocument}\nPR 270 candidate evidence`)).toThrow(
-      /candidate-specific historical evidence/,
-    );
+    for (const evidence of [
+      "source commit: 0123456789abcdef0123456789abcdef01234567",
+      "artifact ctrl-zebra-0.1.1-abcdef12.vsix",
+      "verified on 2026-07-22",
+      "workflow run 32373404894",
+      "PR 270 candidate evidence",
+      "Stage 22 addendum",
+    ]) {
+      expect(() => validateReleaseDocument(`${releaseDocument}\n${evidence}`)).toThrow(
+        /candidate-specific historical evidence/,
+      );
+    }
   });
 
   it("accepts a normal version, lockfile, release note, and release document", () => {

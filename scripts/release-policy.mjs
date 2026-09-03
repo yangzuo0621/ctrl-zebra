@@ -395,12 +395,16 @@ export function validateReleaseDocument(document) {
       throw new Error(`Release document is missing the ${requiredText} gate.`);
     }
   }
+  // Concrete commit, artifact, date, and Actions-run shapes are release evidence, not policy.
+  // Keep these bounds aligned with the formats emitted by Git and the release workflows.
   for (const forbiddenEvidence of [
+    /\b[0-9a-f]{40}\b/iu,
+    /\b[\w.-]+-\d+\.\d+\.\d+(?:-[\w.-]+)?\.vsix\b/iu,
+    /\b20\d{2}[-/]\d{2}[-/]\d{2}\b/u,
+    /(?:workflow\s+run|actions\/runs\/|run\s*#?)\s*\d{6,}/iu,
     /PR\s*270/iu,
     /Stage\s+\d+/iu,
     /candidate source commit/iu,
-    /Verification completed on \d{4}/u,
-    /workflow run\s+\d{8,}/iu,
   ]) {
     if (forbiddenEvidence.test(document)) {
       throw new Error("Release document contains candidate-specific historical evidence.");

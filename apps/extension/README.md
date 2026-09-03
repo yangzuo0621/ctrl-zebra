@@ -4,7 +4,7 @@ CtrlZebra is a local-first workspace agent for desktop Visual Studio Code. It st
 responses, reads a selected workspace, proposes reviewable file edits, runs commands only after an
 exact single-use approval, and keeps local Sessions and recovery Checkpoints.
 
-It is a preview extension. Read the [product scope](docs/product.md) and [known limitations](#known-limitations)
+It is a preview extension. Read the [product scope](https://github.com/yangzuo0621/ctrl-zebra/blob/main/docs/product.md) and [known limitations](#known-limitations)
 before using it on important work.
 
 ## Requirements
@@ -30,8 +30,8 @@ before using it on important work.
 2. Run **Extensions: Install from VSIX...** in VS Code and select the artifact.
 3. Open exactly one workspace folder and select the CtrlZebra icon in the Activity Bar.
 
-Maintainers can create a local artifact with `pnpm package:vsix`. The [release policy](docs/release.md)
-and [packaging contract](docs/packaging.md) define verification and content checks.
+Maintainers can create a local artifact with `pnpm package:vsix`. The [release policy](https://github.com/yangzuo0621/ctrl-zebra/blob/main/docs/release.md)
+and [packaging contract](https://github.com/yangzuo0621/ctrl-zebra/blob/main/docs/packaging.md) define verification and content checks.
 
 ## Quick start with a Provider
 
@@ -68,7 +68,7 @@ starts, reconnects, or resumes a Server automatically.
 MCP Tools are external `execute` operations and require a fresh exact approval for every call.
 Resources and Prompts are shown only after explicit user actions, and bounded results remain
 ordinary untrusted text. Version 1 is modern-only; version 2 explicitly selects modern-only or dual
-compatibility for the supported local protocol versions. See the [MCP contract](docs/mcp.md).
+compatibility for the supported local protocol versions. See the [MCP contract](https://github.com/yangzuo0621/ctrl-zebra/blob/main/docs/mcp.md).
 
 ## Safety and privacy
 
@@ -76,7 +76,7 @@ Workspace paths are canonicalized and confined to the selected workspace. File w
 require Trust and an exact approval; commands use direct process spawning without shell interpretation.
 Provider keys remain in SecretStorage. Prompts, relevant context, Tool definitions, and Tool results
 may be sent to the selected Provider, while Sessions, Checkpoints, and diagnostics remain local.
-See the [Privacy Notice](PRIVACY.md) and [security contract](docs/security.md).
+See the [Privacy Notice](https://github.com/yangzuo0621/ctrl-zebra/blob/main/PRIVACY.md) and [security contract](https://github.com/yangzuo0621/ctrl-zebra/blob/main/docs/security.md).
 
 ## Known limitations
 
@@ -97,26 +97,26 @@ See the [Privacy Notice](PRIVACY.md) and [security contract](docs/security.md).
 
 ## Documentation
 
-- [Product scope](docs/product.md)
-- [Architecture](docs/architecture.md)
-- [Configuration](docs/configuration.md)
-- [Security](docs/security.md)
-- [Persistence](docs/persistence.md)
-- [Protocol](docs/protocol.md)
-- [MCP](docs/mcp.md)
-- [UX](docs/ux.md)
-- [Development](docs/development.md)
-- [Testing](docs/testing.md)
-- [CI](docs/ci.md)
-- [Release](docs/release.md)
+- [Product scope](https://github.com/yangzuo0621/ctrl-zebra/blob/main/docs/product.md)
+- [Architecture](https://github.com/yangzuo0621/ctrl-zebra/blob/main/docs/architecture.md)
+- [Configuration](https://github.com/yangzuo0621/ctrl-zebra/blob/main/docs/configuration.md)
+- [Security](https://github.com/yangzuo0621/ctrl-zebra/blob/main/docs/security.md)
+- [Persistence](https://github.com/yangzuo0621/ctrl-zebra/blob/main/docs/persistence.md)
+- [Protocol](https://github.com/yangzuo0621/ctrl-zebra/blob/main/docs/protocol.md)
+- [MCP](https://github.com/yangzuo0621/ctrl-zebra/blob/main/docs/mcp.md)
+- [UX](https://github.com/yangzuo0621/ctrl-zebra/blob/main/docs/ux.md)
+- [Development](https://github.com/yangzuo0621/ctrl-zebra/blob/main/docs/development.md)
+- [Testing](https://github.com/yangzuo0621/ctrl-zebra/blob/main/docs/testing.md)
+- [CI](https://github.com/yangzuo0621/ctrl-zebra/blob/main/docs/ci.md)
+- [Release](https://github.com/yangzuo0621/ctrl-zebra/blob/main/docs/release.md)
 
 ## Privacy, support, and release links
 
-- [Privacy Notice](PRIVACY.md)
+- [Privacy Notice](https://github.com/yangzuo0621/ctrl-zebra/blob/main/PRIVACY.md)
 - [Support and bug reports](https://github.com/yangzuo0621/ctrl-zebra/issues)
-- [Security Policy](SECURITY.md)
-- [Contributing](CONTRIBUTING.md)
-- [Changelog](CHANGELOG.md)
+- [Security Policy](https://github.com/yangzuo0621/ctrl-zebra/blob/main/SECURITY.md)
+- [Contributing](https://github.com/yangzuo0621/ctrl-zebra/blob/main/CONTRIBUTING.md)
+- [Changelog](https://github.com/yangzuo0621/ctrl-zebra/blob/main/CHANGELOG.md)
 
 Marketplace publication remains a separate release action.
 
@@ -132,8 +132,8 @@ pnpm test
 pnpm build
 ```
 
-See the [contributor guide](CONTRIBUTING.md) for the development and pull-request workflow.
+See the [contributor guide](https://github.com/yangzuo0621/ctrl-zebra/blob/main/CONTRIBUTING.md) for the development and pull-request workflow.
 
 ## License
 
-CtrlZebra is licensed under the [MIT License](LICENSE). Copyright (c) 2026 Zuo Yang.
+CtrlZebra is licensed under the [MIT License](https://github.com/yangzuo0621/ctrl-zebra/blob/main/LICENSE). Copyright (c) 2026 Zuo Yang.

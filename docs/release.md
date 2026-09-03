@@ -27,8 +27,10 @@ pnpm test:unit
 pnpm build
 ```
 
-The Ubuntu release path also runs the Extension Development Host integration tests and coverage.
-The required checks and workflow-level policy are maintained in [CI Constraints](ci.md).
+The validation CI Ubuntu leg also runs the Extension Development Host integration tests and
+coverage. The release packaging command runs the release-required checks, integration tests, and
+build; it does not duplicate the CI-only coverage report. The required checks and workflow-level
+policy are maintained in [CI Constraints](ci.md).
 
 ## Version and changelog
 

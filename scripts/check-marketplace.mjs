@@ -74,11 +74,11 @@ for (const requiredText of [
   "## Privacy, support, and release links",
   "Known limitations",
   "Desktop VS Code only",
-  "[Privacy Notice](PRIVACY.md)",
+  "[Privacy Notice](https://github.com/yangzuo0621/ctrl-zebra/blob/main/PRIVACY.md)",
   "[Support and bug reports](https://github.com/yangzuo0621/ctrl-zebra/issues)",
-  "[Security Policy](SECURITY.md)",
-  "[Contributing](CONTRIBUTING.md)",
-  "[Changelog](CHANGELOG.md)",
+  "[Security Policy](https://github.com/yangzuo0621/ctrl-zebra/blob/main/SECURITY.md)",
+  "[Contributing](https://github.com/yangzuo0621/ctrl-zebra/blob/main/CONTRIBUTING.md)",
+  "[Changelog](https://github.com/yangzuo0621/ctrl-zebra/blob/main/CHANGELOG.md)",
   "Marketplace publication remains a separate release action",
 ]) {
   if (!rootReadme.includes(requiredText)) {
