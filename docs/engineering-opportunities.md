@@ -51,6 +51,7 @@
 | [EO-010 Targeted Zod reuse](#eo-010-targeted-zod-reuse) | 已有依赖复用 | P2 | 随拥有 schema 的任务分 tranche | `已发现` |
 | [EO-011 Provider token counting](#eo-011-provider-token-counting) | Buy / 实验 | P3 | 先有准确度或预算缺陷数据 | `暂缓` |
 | [EO-012 MCP SDK-native negotiation](#eo-012-mcp-sdk-native-negotiation) | Buy / 已有依赖深化 | P0 | MCP 再次演进前优先评估；不阻塞后续路线图 | `评估中` |
+| [EO-013 Webview chat-store responsibility density](#eo-013-webview-chat-store-responsibility-density) | 模块深化 | P2 | 需要独立 Webview 行为分区证据后再评估；不属于 Phase 23 | `暂缓` |
 
 仍影响未来执行的关系是：
 
@@ -61,6 +62,18 @@ EO-012 evidence ──→ independent maintenance decision
 EO-012 可独立评估；除非发现当前 negotiation 存在实际缺陷，否则不阻塞路线图推进。
 EO-009 和 EO-011 不应阻塞 Phase 22 收尾。若验证 SDK-native negotiation 能保持现有安全语义，再晋升为
 独立 maintenance。
+
+### EO-013 Webview chat-store responsibility density
+
+- **问题证据**：T2301 与 T2306 advisory 报告持续观测到 `apps/webview/src/chat-store.ts` 约 1,444
+  行，集中投影消息、推理、Tool/approval、Run 状态、usage/budget、regeneration、recovery 和
+  batching。
+- **当前判断**：暂缓。当前只有职责密度证据，没有第二套等价 store lifecycle，也没有 Phase 23
+  授权的 Webview production split。文件大小和 change frequency 不能单独授权抽象。
+- **重新评估触发**：新增 Webview capability 需要跨越两个以上稳定行为区，或 focused behavior
+  tests 证明现有 store 已成为不可定位的回归边界。
+- **约束**：先按真实 Webview 行为边界建立 focused suites；保持 Protocol-only Webview import
+  direction、消息投影顺序和恢复/approval 可观察语义；不得引入跨包 `common`/manager wrapper。
 
 ## 4. 已晋升/已完成台账
 

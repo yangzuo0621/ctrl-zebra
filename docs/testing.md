@@ -14,6 +14,9 @@ Do not move to a more expensive test layer when a lower-level test can fully pro
 ## Naming and Placement
 
 - Name test files `*.test.ts` or `*.test.tsx` and place them in the tested package's `src/` tree.
+- Repository-level governance and architecture fixture tests that exercise workspace manifests,
+  repository documents, or root scripts may use `scripts/*.test.mjs` with Node's built-in test
+  runner; they must remain deterministic, isolated, and clean up every temporary resource.
 - Describe observable behavior and conditions in test names instead of restating implementation details.
 - The shared Vitest configuration discovers `packages/*/src/**/*.test.ts`. Later tasks that introduce application test infrastructure own the corresponding application test configuration.
 - Do not permanently skip tests or commit a temporary skip without an owner, task or issue ID, reason, and removal condition.

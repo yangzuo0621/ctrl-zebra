@@ -1,6 +1,7 @@
 const { createServer } = require("node:http");
 
 const vscode = require("vscode");
+const { waitForStructuredLogEvent } = require("./log-wait.cjs");
 
 exports.run = async () => {
   const extension = vscode.extensions.getExtension("ctrl-zebra.ctrl-zebra");
@@ -86,6 +87,10 @@ exports.run = async () => {
   }
 
   await vscode.commands.executeCommand("ctrlZebra.agentView.focus");
+  await waitForStructuredLogEvent(
+    "agent_view_first_displayed",
+    process.env.CTRL_ZEBRA_SMOKE_USER_DATA_DIR,
+  );
 };
 
 async function startProviderMetadataServer() {
