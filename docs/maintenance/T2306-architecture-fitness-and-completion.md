@@ -164,14 +164,13 @@ Extension integration, coverage, performance, and build before merge.
 
 Local environment-sensitive evidence still records these caveats:
 
-- One full `pnpm test` rerun after the review fixes hit the existing Webview edit timeout: 205/206
-  files and 2,175/2,176 tests passed. The affected test passes alone in 1.75 seconds and all 29
-  tests in `app.test.tsx` pass alone; the failure appears only under the full parallel unit suite,
-  indicating runner/resource contention rather than a product deadlock. A subsequent full run passed
-  all 206 files and 2,176 tests. The two full `pnpm test:coverage` runs also hit the existing
-  5-second `heuristic-token-counter` timeout (one run included the Webview timeout). A global timeout
-  increase was not applied because repository rules prohibit masking races with arbitrary timeout
-  inflation; GitHub CI remains green with the existing timeout.
+- Full local unit runs remain environment-sensitive: after the smoke-log boundary tests were added,
+  `pnpm test` hit two existing Webview `app.test.tsx` 5-second timeouts (2,178/2,180 tests passed),
+  and a subsequent `pnpm test:unit` run hit one of the same timeouts (2,179/2,180 passed). The
+  affected test passes alone, and the latest GitHub Actions validation passed. This indicates runner
+  or resource contention rather than a product deadlock. The two full `pnpm test:coverage` runs also
+  hit the existing 5-second `heuristic-token-counter` timeout. A global timeout increase was not
+  applied because repository rules prohibit masking races with arbitrary timeout inflation.
 - `pnpm benchmark:performance -- --runs 3 --warmups 1` completed its package/smoke measurement but
   failed the existing budgets locally for Webview first usable p95 (1,207 ms vs 1,100 ms) and workspace
   search p95 (649 ms vs 500 ms); the Ubuntu CI run passed the existing performance gate. No threshold
