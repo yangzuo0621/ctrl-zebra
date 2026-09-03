@@ -2,36 +2,36 @@
   "schemaVersion": 1,
   "product": "ctrl-zebra",
   "version": "0.1.1",
-  "sourceCommit": "02df70138a348eca08286961352c2555ee8bc093",
+  "sourceCommit": "cdb1ed700a78db120ceafb112390a51b0fb6b2bc",
   "packages": [
     {
       "name": "@ai-sdk/gateway",
-      "version": "4.0.51",
+      "version": "4.0.67",
       "license": "Apache-2.0"
     },
     {
       "name": "@ai-sdk/google",
-      "version": "4.0.43",
+      "version": "4.0.54",
       "license": "Apache-2.0"
     },
     {
       "name": "@ai-sdk/openai-compatible",
-      "version": "3.0.30",
+      "version": "3.0.39",
       "license": "Apache-2.0"
     },
     {
       "name": "@ai-sdk/openai",
-      "version": "4.0.41",
+      "version": "4.0.50",
       "license": "Apache-2.0"
     },
     {
       "name": "@ai-sdk/provider-utils",
-      "version": "5.0.27",
+      "version": "5.0.32",
       "license": "Apache-2.0"
     },
     {
       "name": "@ai-sdk/provider",
-      "version": "4.0.7",
+      "version": "4.0.8",
       "license": "Apache-2.0"
     },
     {
@@ -61,7 +61,7 @@
     },
     {
       "name": "ai",
-      "version": "7.0.64",
+      "version": "7.0.83",
       "license": "Apache-2.0"
     },
     {
@@ -72,6 +72,11 @@
     {
       "name": "eventsource-parser",
       "version": "3.1.0",
+      "license": "MIT"
+    },
+    {
+      "name": "eventsource-parser",
+      "version": "3.1.1",
       "license": "MIT"
     },
     {
@@ -121,7 +126,7 @@
     },
     {
       "name": "undici",
-      "version": "7.28.0",
+      "version": "7.29.0",
       "license": "MIT"
     },
     {
