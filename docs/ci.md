@@ -1,19 +1,15 @@
 # CI Constraints
 
-This document defines the continuous integration constraints established by T0004 and required by subsequent tasks. The validation workflow verifies commands that already exist locally; it does not publish or deploy artifacts. A separate packaging workflow may retain a verified VSIX for manual release, subject to the constraints below.
+This document defines the current continuous-integration constraints. The validation workflow
+verifies repository commands; it does not publish or deploy artifacts. A separate packaging and
+release workflow may retain a verified VSIX for manual release, subject to the constraints below.
 
 ## Runtime and Triggers
 
 - Validation CI runs on a controlled GitHub-hosted matrix of `ubuntu-latest`, `macos-latest`, and
   `windows-latest`.
 - The Node.js runtime is pinned to `24.19.0` for every matrix leg.
-- The first T1503 PR attempt requested the nonexistent `24.13.3`; Actions run
-  `31316305029` failed during `Set up Node.js` on all three legs because the official
-  `actions/node-versions` manifest had no matching release or platform archive. The manifest and
-  Node release index list `24.19.0` as the current stable Node 24 release with Linux x64, macOS
-  arm64, and Windows x64 archives. Corrected run `31316592340` passed setup, installation,
-  checks, typecheck, unit tests, and build on all three legs; Ubuntu also passed integration and
-  coverage, while macOS and Windows explicitly skipped those Ubuntu-only steps.
+- The pinned Node.js runtime is available on the supported Linux, macOS, and Windows runners.
 - The root `package.json` `packageManager` field is the single source of truth for the pnpm version, currently `pnpm@11.11.0`.
 - The workflow runs for pushes to `main` and pull requests whose target branch is `main`.
 - Only the latest run for the same workflow and branch or pull request remains active; a newer run cancels an unfinished older run.
@@ -34,7 +30,7 @@ The Ubuntu leg additionally runs:
 
 - `xvfb-run -a pnpm test:integration`, because the Extension Development Host requires a display and
   the existing harness/package workflow is already verified on the Linux/Xvfb path;
-- `pnpm test:coverage`, retaining the single T1502 coverage gate without tripling the same unit-only
+- `pnpm test:coverage`, retaining one coverage gate without tripling the same unit-only
   report across the matrix.
 
 macOS and Windows still execute the complete node/jsdom unit suite and production build. Those tests
@@ -84,7 +80,7 @@ workflow.
   commit, runner OS, stable pass labels, and a false private-state marker; it excludes the temporary
   profile, logs, fixtures, caches, workspace data, Provider content, conversations, and credentials.
 - The workflow has `contents: read`, uses no secrets, and cannot publish, tag, release, push, or
-  modify Marketplace state. See `docs/marketplace-smoke.md` for the evidence map and required
+  modify Marketplace state. See [Release](release.md) for the evidence map and required
   release-candidate UI confirmation.
 
 ## Installation and Caching
@@ -130,11 +126,11 @@ corepack pnpm test:integration
 corepack pnpm test:coverage
 ```
 
-## T2206 reproducible release verification
+## Reproducible release verification
 
 `.github/workflows/release.yml` is a manual, verification-first workflow. It accepts the protected
 `main` branch or the exact `v<extension-version>` tag, checks the manifest/CHANGELOG/lockfile and
-release checklist, packages the VSIX twice, and fails if the two SHA-256 digests differ. A branch
+release policy, packages the VSIX twice, and fails if the two SHA-256 digests differ. A branch
 verification also fails when the matching release tag already exists. It retains
 the verified VSIX, checksum, third-party license inventory, and deterministic SPDX-2.3 SBOM as one
 artifact. The workflow is not a tag or version creator.

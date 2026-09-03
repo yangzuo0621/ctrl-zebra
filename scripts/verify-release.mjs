@@ -39,10 +39,7 @@ const args = parseArguments(process.argv.slice(2));
 
 const lockfile = await readFile(join(repositoryRoot, "pnpm-lock.yaml"), "utf8");
 const changelog = await readFile(join(repositoryRoot, "CHANGELOG.md"), "utf8");
-const releaseChecklist = await readFile(
-  join(repositoryRoot, "docs", "release-checklist.md"),
-  "utf8",
-);
+const releaseDocument = await readFile(join(repositoryRoot, "docs", "release.md"), "utf8");
 const commit = (await git(["rev-parse", "HEAD"])).trim();
 const version = String(manifest.version);
 const tag =
@@ -79,7 +76,7 @@ validateVersionConsistency({
   changelog,
   lockfile,
   extensionManifest: manifest,
-  releaseChecklist,
+  releaseDocument,
   requireReleaseNotes: Boolean(effectiveTag),
 });
 validateReleaseDocuments({

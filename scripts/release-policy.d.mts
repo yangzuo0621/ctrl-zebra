@@ -24,7 +24,7 @@ export function createSpdxDocument(input: {
 }): unknown;
 export function validateChangelogEntry(changelog: string, version: string): void;
 export function validateUnreleasedChangelog(changelog: string): void;
-export function validateReleaseChecklist(checklist: string): void;
+export function validateReleaseDocument(document: string): void;
 export function validateLockfileConsistency(input: {
   lockfile: string;
   importer?: string;
@@ -37,7 +37,7 @@ export function validateVersionConsistency(input: {
   changelog: string;
   lockfile: string;
   extensionManifest: Record<string, unknown>;
-  releaseChecklist: string;
+  releaseDocument: string;
   requireReleaseNotes?: boolean;
 }): void;
 export function validateBuildProvenance(metadata: unknown, expected: Record<string, string>): void;

@@ -15,6 +15,7 @@ import {
   validateCompatibleLicenses,
   validateDependencyInventoryFile,
   validatePublishPreconditions,
+  validateReleaseDocument,
   validateReleaseSource,
   validateSpdxDocument,
   validateSpdxExceptionCatalog,
@@ -58,13 +59,30 @@ const changelog = `# Changelog
 - A release note.
 `;
 
-const releaseChecklist = `## Stage 22 reproducible release addendum (T2206)
+const releaseDocument = `# Release
 
-version CHANGELOG SBOM protected environment VSIX
+## Preconditions
+## Quality gates
+## Version and changelog
+## Reproducible packaging
+## VSIX contents
+## SBOM and license audit
+## Smoke testing
+## Marketplace candidate validation
+## Protected publication
+## Explicit authorization boundary
+
+version CHANGELOG.md SBOM protected environment VSIX Marketplace
 `;
 
-describe("T2206 release policy", () => {
-  it("accepts a normal version, lockfile, release note, and checklist set", () => {
+describe("release policy", () => {
+  it("rejects candidate-specific evidence in the current release document", () => {
+    expect(() => validateReleaseDocument(`${releaseDocument}\nPR 270 candidate evidence`)).toThrow(
+      /candidate-specific historical evidence/,
+    );
+  });
+
+  it("accepts a normal version, lockfile, release note, and release document", () => {
     expect(() =>
       validateVersionConsistency({
         version: "1.2.3",
@@ -73,7 +91,7 @@ describe("T2206 release policy", () => {
         changelog,
         lockfile,
         extensionManifest: manifest,
-        releaseChecklist,
+        releaseDocument,
         requireReleaseNotes: true,
       }),
     ).not.toThrow();
@@ -87,7 +105,7 @@ describe("T2206 release policy", () => {
         changelog,
         lockfile,
         extensionManifest: manifest,
-        releaseChecklist,
+        releaseDocument,
       }),
     ).toThrow(/manifest version/);
 
@@ -99,7 +117,7 @@ describe("T2206 release policy", () => {
         changelog: changelog.replace("### Fixed\n\n- A release note.\n", ""),
         lockfile,
         extensionManifest: manifest,
-        releaseChecklist,
+        releaseDocument,
         requireReleaseNotes: true,
       }),
     ).toThrow(/no release notes/);
@@ -254,7 +272,7 @@ describe("T2206 release policy", () => {
         changelog: changelog.replace("## [1.2.3]", "## [1.2.4]"),
         lockfile,
         extensionManifest: manifest,
-        releaseChecklist,
+        releaseDocument,
         requireReleaseNotes: true,
       }),
     ).toThrow(/release notes/);

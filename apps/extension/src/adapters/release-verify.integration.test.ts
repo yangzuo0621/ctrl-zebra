@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 
 const execFile = promisify(execFileCallback);
 
-describe("T2206 release verification integration", () => {
+describe("release verification integration", () => {
   it("requires version-specific CHANGELOG notes for a detached matching tag", async () => {
     const temporaryDirectory = await mkdtemp(join(tmpdir(), "ctrl-zebra-release-"));
     const repositoryRoot = resolve(".");

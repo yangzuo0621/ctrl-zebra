@@ -130,7 +130,7 @@ for (const relativePath of requiredFiles) {
 requireText("SECURITY.md", reportUrl);
 requireText("SECURITY.md", "Do not open a public issue or pull request");
 requireText("SECURITY.md", "[product security contract](docs/security.md)");
-requireText("SECURITY.md", "[release checklist](docs/release-checklist.md)");
+requireText("SECURITY.md", "[release policy](docs/release.md)");
 requireText("CONTRIBUTING.md", "[Security Policy](SECURITY.md)");
 requireText("CONTRIBUTING.md", "pnpm test:docs");
 requireText("CONTRIBUTING.md", "[.github/CODEOWNERS](.github/CODEOWNERS)");

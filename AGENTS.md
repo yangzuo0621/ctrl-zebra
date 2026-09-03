@@ -25,7 +25,7 @@ Read only the documents required by the current work.
 | Workspace/approvals/commands/credentials | Applicable section of `docs/security.md` |
 | Persistence/checkpoints | `docs/persistence.md` plus applicable restore/security rules |
 | MCP | `docs/mcp.md`; add `docs/security.md` for security-sensitive MCP changes |
-| CI/packaging/release | `docs/ci.md`, `docs/packaging.md`, or `docs/release-checklist.md` |
+| CI/packaging/release | `docs/ci.md`, `docs/packaging.md`, or `docs/release.md` |
 | Implementation review | `docs/review-checklist.md` plus only documents required by the reviewed change |
 | Auto workflow | `.agents/skills/auto-workflow/SKILL.md` and the dispatched role Skill |
 
