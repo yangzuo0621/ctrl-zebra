@@ -451,7 +451,7 @@ remaining states.
   never infers them from mode, diagnostics, catalogs, or a prior connection. Their closed values and
   wire combinations are owned by [MCP](mcp.md#protocol-projections).
 - A version-1 configuration is presented as modern-only until the user explicitly migrates it to
-  version 2. The [configuration contract](configuration.md#explicit-migration-and-change-behavior)
+  version 2. The [MCP contract](mcp.md#configuration)
   owns migration; the browser cannot edit the setting object or carry a mode override, command,
   environment, or credential. `open-settings` remains a Host-owned intent.
 

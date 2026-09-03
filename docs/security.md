@@ -971,17 +971,14 @@ projection, and compatibility contract is owned by [MCP](mcp.md).
 
 ### External process and side effects
 
-- Startup is a distinct `execute` operation. Shell interpretation, command lines, profile loading,
-  variable or glob expansion, aliases, pipes, redirects, command substitution, and
-  model-/Server-selected executables are forbidden. The process receives only the allowlisted
-  environment; environment names and values are not shown, logged, persisted, or sent to the
-  Webview or model.
-- Stdout is exclusively the framed MCP channel. Non-protocol stdout is a malformed-message failure.
-  Stderr is bounded volatile diagnostic state and is never copied verbatim to logs, errors,
-  persistence, Webview, model context, or Tool Results.
-- Disconnect, cancellation, timeout, exit, failed negotiation, trust loss, or disposal closes the
-  delivery gate before aborting requests and terminating the complete process tree. Termination
-  must be confirmed; `termination-unconfirmed` blocks reuse.
+- A local stdio Server is not a sandbox: it runs with the user's operating-system authority and may
+  perform local or network side effects independent of its declarations. Startup therefore remains
+  a distinct approved `execute` operation, not an ordinary Tool Call or background action.
+- Server output, descriptors, schemas, annotations, notifications, stderr, and errors remain
+  untrusted external content. They are validated and bounded before any product projection, and raw
+  process details or third-party error text are not exposed through logs, persistence, or the UI.
+- Process lifecycle, cancellation, generation fencing, and termination behavior are defined by the
+  [MCP contract](mcp.md#connection-lifecycle); this document does not duplicate those mechanics.
 
 ### Tool approval and untrusted content
 

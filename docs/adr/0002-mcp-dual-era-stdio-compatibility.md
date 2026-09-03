@@ -18,20 +18,12 @@ CtrlZebra supports a user-visible per-Server mode with the closed values `modern
 Existing version 1 settings remain modern-only. Dual behavior requires explicit migration to version 2
 and explicit selection; upgrades never broaden an existing Server silently.
 
-- `modern-only` accepts only `2026-07-28` and never sends legacy `initialize`.
-- `dual` accepts exactly `2026-07-28` and `2025-11-25` over local stdio.
-- Every dual attempt makes one bounded `server/discover` probe first.
-- Only a specification-defined non-modern response or bounded probe timeout may enter one legacy
-  `initialize` / `notifications/initialized` exchange.
-- Recognized modern results and errors lock modern and never authorize fallback. Malformed or
-  validation-failing values are `malformed-message`; structurally valid unknown or unclassified
-  values are `protocol-incompatible`; overflow, cancellation, process exit, trust loss, and
-  cleanup failure are terminal. None authorizes fallback.
-- The probe is closed before fallback, late responses are rejected by the generation gate, and no
-  capability is published before the selected complete handshake succeeds.
-- Both eras use the same normalized startup identity, Workspace Trust, exact approval, process
-  containment, generation fence, Tool approval, capability restrictions, cancellation, and cleanup.
-  Negotiated era is evidence of a completed handshake, not a new authorization scope.
+The decision is to retain modern-only as the strict option and add an explicitly selected dual mode.
+Modern-only accepts only `2026-07-28`; dual supports exactly `2026-07-28` and `2025-11-25` over
+local stdio. Dual uses a controlled modern-first compatibility path and never turns arbitrary
+timeouts, malformed or unknown responses, overflow, cancellation, trust loss, or cleanup failure
+into an unrestricted downgrade. Negotiated era is evidence of a completed handshake, not a new
+authorization scope.
 
 The complete negotiation matrix, configuration representation, projections, and failure behavior
 are maintained in the [MCP contract](../mcp.md).
