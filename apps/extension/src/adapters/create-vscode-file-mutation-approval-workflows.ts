@@ -79,17 +79,8 @@ export function createVsCodeFileMutationApprovalWorkflows(
     assertCanonicalIdentity(canonical, serializedUri);
     return root.toString();
   };
-  const validateWorkspaceEditPlan = async (
-    plan: WorkspaceEditPlan,
-    signal: AbortSignal,
-  ): Promise<void> => {
-    const scope = createCurrentScope();
-    for (const file of plan.files) {
-      const canonical = await scope.validate(Uri.parse(file.uri, true), signal);
-      signal.throwIfAborted();
-      assertCanonicalIdentity(canonical, file.uri);
-    }
-  };
+  const validateWorkspaceEditPlan = (plan: WorkspaceEditPlan, signal: AbortSignal): Promise<void> =>
+    validateWorkspaceEditPlanWithScope(plan, createCurrentScope(), signal);
   const workflowDependencies = {
     createId: dependencies.createId,
     now: dependencies.now,
