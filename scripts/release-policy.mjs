@@ -369,16 +369,45 @@ export function validateUnreleasedChangelog(changelog) {
   validateChangelogEntry(changelog, "Unreleased");
 }
 
-export function validateReleaseChecklist(checklist) {
-  if (
-    typeof checklist !== "string" ||
-    !checklist.includes("## Stage 22 reproducible release addendum (T2206)")
-  ) {
-    throw new Error("Release checklist is missing the T2206 reproducible-release addendum.");
+export function validateReleaseDocument(document) {
+  if (typeof document !== "string") {
+    throw new Error("docs/release.md is missing or unreadable.");
   }
-  for (const requiredText of ["version", "CHANGELOG", "SBOM", "protected environment", "VSIX"]) {
-    if (!checklist.toLowerCase().includes(requiredText.toLowerCase())) {
-      throw new Error(`Release checklist is missing the T2206 ${requiredText} gate.`);
+  for (const requiredHeading of [
+    "# Release",
+    "## Preconditions",
+    "## Quality gates",
+    "## Version and changelog",
+    "## Reproducible packaging",
+    "## VSIX contents",
+    "## SBOM and license audit",
+    "## Smoke testing",
+    "## Marketplace candidate validation",
+    "## Protected publication",
+    "## Explicit authorization boundary",
+  ]) {
+    if (!document.includes(requiredHeading)) {
+      throw new Error(`Release document is missing ${requiredHeading}.`);
+    }
+  }
+  for (const requiredText of ["CHANGELOG.md", "SBOM", "protected", "VSIX", "Marketplace"]) {
+    if (!document.toLowerCase().includes(requiredText.toLowerCase())) {
+      throw new Error(`Release document is missing the ${requiredText} gate.`);
+    }
+  }
+  // Concrete commit, artifact, date, and Actions-run shapes are release evidence, not policy.
+  // Keep these bounds aligned with the formats emitted by Git and the release workflows.
+  for (const forbiddenEvidence of [
+    /\b[0-9a-f]{40}\b/iu,
+    /\b[\w.-]+-\d+\.\d+\.\d+(?:-[\w.-]+)?\.vsix\b/iu,
+    /\b20\d{2}[-/]\d{2}[-/]\d{2}\b/u,
+    /(?:workflow\s+run|actions\/runs\/|run\s*#?)\s*\d{6,}/iu,
+    /PR\s*270/iu,
+    /Stage\s+\d+/iu,
+    /candidate source commit/iu,
+  ]) {
+    if (forbiddenEvidence.test(document)) {
+      throw new Error("Release document contains candidate-specific historical evidence.");
     }
   }
 }
@@ -419,7 +448,7 @@ export function validateVersionConsistency({
   changelog,
   lockfile,
   extensionManifest,
-  releaseChecklist,
+  releaseDocument,
   requireReleaseNotes = Boolean(tag),
 }) {
   const expectedVersion = version ?? extensionVersion;
@@ -438,7 +467,7 @@ export function validateVersionConsistency({
   } else {
     validateUnreleasedChangelog(changelog);
   }
-  validateReleaseChecklist(releaseChecklist);
+  validateReleaseDocument(releaseDocument);
 }
 
 export function validateBuildProvenance(metadata, expected) {

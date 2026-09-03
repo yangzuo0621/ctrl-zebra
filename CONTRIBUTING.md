@@ -48,7 +48,7 @@ automatic release behavior without an explicitly authorized task.
 
 ## Branches, commits, and pull requests
 
-- Use a task-scoped branch such as `codex/t2201-governance-docs` for an Issue or maintenance change.
+- Use a task-scoped branch such as `codex/docs-maintenance` for an Issue or maintenance change.
 - Keep commits small enough to review and use an imperative summary. The pull-request template
   describes the accepted title format and the evidence expected for scope, reuse, security, and
   verification.
@@ -57,7 +57,7 @@ automatic release behavior without an explicitly authorized task.
 - Keep secrets and private user or workspace data out of commits, logs, fixtures, screenshots, and
   issue or pull-request descriptions.
 - A pull request is not approval to publish a VSIX, create a release, or change a version. Follow the
-  [release checklist](docs/release-checklist.md) for release-specific gates.
+  [release policy](docs/release.md) for release-specific gates.
 
 ## Ownership and review
 

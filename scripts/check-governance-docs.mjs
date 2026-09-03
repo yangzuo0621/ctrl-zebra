@@ -130,13 +130,22 @@ for (const relativePath of requiredFiles) {
 requireText("SECURITY.md", reportUrl);
 requireText("SECURITY.md", "Do not open a public issue or pull request");
 requireText("SECURITY.md", "[product security contract](docs/security.md)");
-requireText("SECURITY.md", "[release checklist](docs/release-checklist.md)");
+requireText("SECURITY.md", "[release policy](docs/release.md)");
 requireText("CONTRIBUTING.md", "[Security Policy](SECURITY.md)");
 requireText("CONTRIBUTING.md", "pnpm test:docs");
 requireText("CONTRIBUTING.md", "[.github/CODEOWNERS](.github/CODEOWNERS)");
-requireText("README.md", "[contributor guide](CONTRIBUTING.md)");
-requireText("README.md", "[Security Policy](SECURITY.md)");
-requireText("README.md", "[Changelog](CHANGELOG.md)");
+requireText(
+  "README.md",
+  "[contributor guide](https://github.com/yangzuo0621/ctrl-zebra/blob/main/CONTRIBUTING.md)",
+);
+requireText(
+  "README.md",
+  "[Security Policy](https://github.com/yangzuo0621/ctrl-zebra/blob/main/SECURITY.md)",
+);
+requireText(
+  "README.md",
+  "[Changelog](https://github.com/yangzuo0621/ctrl-zebra/blob/main/CHANGELOG.md)",
+);
 requireText("PRIVACY.md", "[Security Policy](SECURITY.md)");
 requireText(".github/pull_request_template.md", "[SECURITY.md](../SECURITY.md)");
 

@@ -1,7 +1,7 @@
 # VSIX Packaging Contract
 
-This contract is the T1004 constraint gate. It applies to every CtrlZebra VSIX intended for release
-or release-candidate smoke testing.
+This contract applies to every CtrlZebra VSIX intended for release or release-candidate smoke
+testing.
 
 ## Package boundary
 
@@ -110,7 +110,7 @@ The repository and packaged extension declare MIT and contain identical license 
 command does not use `--skip-license`; `vsce` and the independent archive verifier must both observe
 the packaged license.
 
-## T2206 release provenance and dependency audit
+## Release provenance and dependency audit
 
 The package command writes deterministic metadata at `dist/package/build-metadata.json` containing
 the full source commit, extension version, SHA-256 digests of `pnpm-lock.yaml` and `CHANGELOG.md`,

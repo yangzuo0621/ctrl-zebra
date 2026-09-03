@@ -47,4 +47,4 @@ it. The repository does not promise support for abandoned branches or modified d
 - The [contributor guide](CONTRIBUTING.md) defines issue, pull-request, and verification workflow.
 - The [product security contract](docs/security.md) owns implementation security invariants.
 - The [privacy notice](PRIVACY.md) describes local storage and external data flows.
-- The [release checklist](docs/release-checklist.md) owns release-gate requirements.
+- The [release policy](docs/release.md) owns release-gate requirements.
