@@ -164,21 +164,23 @@ Extension integration, coverage, performance, and build before merge.
 
 Local environment-sensitive evidence still records these caveats:
 
-- A full `pnpm test` rerun after the review fixes hit the existing Webview edit timeout: 205/206 files
-  and 2,175/2,176 tests passed. The affected test passes alone in 1.75 seconds and all 29 tests in
-  `app.test.tsx` pass alone; the failure appears only under the full parallel unit suite, indicating
-  runner/resource contention rather than a product deadlock. The two full `pnpm test:coverage` runs
-  also hit the existing 5-second `heuristic-token-counter` timeout (one run included the Webview
-  timeout). A global timeout increase was not applied because repository rules prohibit masking races
-  with arbitrary timeout inflation; GitHub CI remains green with the existing timeout.
+- One full `pnpm test` rerun after the review fixes hit the existing Webview edit timeout: 205/206
+  files and 2,175/2,176 tests passed. The affected test passes alone in 1.75 seconds and all 29
+  tests in `app.test.tsx` pass alone; the failure appears only under the full parallel unit suite,
+  indicating runner/resource contention rather than a product deadlock. A subsequent full run passed
+  all 206 files and 2,176 tests. The two full `pnpm test:coverage` runs also hit the existing
+  5-second `heuristic-token-counter` timeout (one run included the Webview timeout). A global timeout
+  increase was not applied because repository rules prohibit masking races with arbitrary timeout
+  inflation; GitHub CI remains green with the existing timeout.
 - `pnpm benchmark:performance -- --runs 3 --warmups 1` completed its package/smoke measurement but
   failed the existing budgets locally for Webview first usable p95 (1,207 ms vs 1,100 ms) and workspace
   search p95 (649 ms vs 500 ms); the Ubuntu CI run passed the existing performance gate. No threshold
   was changed and no functionality was removed.
-- VSIX packaging/smoke was not run independently because the packaging command requires a clean
-  worktree and the checkout contains the pre-existing user edit in `.codex/agents/task-executor.toml`.
-  Extension integration smoke and repository build did pass.
+- `pnpm package:vsix` and `pnpm smoke:vsix` passed for the exact `8546d09` artifact after temporarily
+  staging and stashing the pre-existing `.codex/agents/task-executor.toml` edit, then restoring it
+  with an unchanged SHA256. The reproducible package check and installed isolated-profile smoke both
+  passed; the smoke harness now waits for the actual Agent-view ready event with a bounded timeout.
 
-The VSIX packaging caveat remains a separate local verification gap, not authorization to expand Phase
-23 or make metrics prettier. The roadmap status should remain pending until the repository owner merges
-the PR under the normal process.
+The coverage-instrumentation and local performance caveats remain separate follow-up evidence, not
+authorization to expand Phase 23 or make metrics prettier. The roadmap status should remain pending
+until the repository owner merges the PR under the normal process.
