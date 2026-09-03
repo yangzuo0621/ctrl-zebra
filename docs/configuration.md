@@ -3,7 +3,7 @@
 This document owns user-facing setting names, scopes, types, bounds, defaults, validation, and
 explicit configuration migration/change behavior. The [Persistence Contract](persistence.md) owns
 durable records and cleanup semantics; [Security](security.md), [Protocol](protocol.md), and the
-applicable Architecture and Webview documents own their respective boundaries and projections.
+applicable Architecture and UX documents own their respective boundaries and projections.
 
 ## Editor context setting
 

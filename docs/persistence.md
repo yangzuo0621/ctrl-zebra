@@ -3,7 +3,7 @@
 This document owns durable layout, record validation, cleanup, recovery, and compatibility. Values
 read from storage are untrusted and are validated before Core values are constructed. Configuration
 owns setting names and bounds; [Security](security.md) owns data-exposure and authorization rules;
-[Protocol](protocol.md) and [Webview](ux.md) own boundary and presentation projections.
+[Protocol](protocol.md) owns cross-boundary contracts; [UX](ux.md) owns presentation projections.
 
 ## Storage layout and format version
 
