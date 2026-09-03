@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import type { IdeContextPort, ReadEditorContextInput } from "@ctrl-zebra/builtin-tools";
 import { EditorContextUnavailableError } from "@ctrl-zebra/builtin-tools";
 import {
@@ -16,7 +18,7 @@ import {
 } from "@ctrl-zebra/protocol";
 import type { Range, TextDocument, TextEditor, Uri } from "vscode";
 import { IdeSourceProjectionError, ideSourceProjector } from "./ide-source-projector.js";
-import type { WorkspaceScope } from "./workspace-scope.js";
+import { type WorkspaceScope, WorkspaceScopeError } from "./workspace-scope.js";
 
 export { EditorContextUnavailableError } from "@ctrl-zebra/builtin-tools";
 
@@ -28,6 +30,27 @@ export interface VsCodeEditorContextDependencies {
   readonly createScope: (root: Uri) => Pick<WorkspaceScope, "validate">;
   readonly isEnabled: () => boolean;
   readonly isTrusted?: () => boolean;
+}
+
+export type VsCodeEditorContextAvailability =
+  | "disabled"
+  | "no-editor"
+  | "no-selection"
+  | "untrusted-workspace"
+  | "unsupported-document"
+  | "outside-workspace"
+  | "unavailable";
+
+export interface EditorContextSourceFingerprintInput {
+  readonly scheme: string;
+  readonly authority: string;
+  readonly path: string;
+  readonly documentVersion: number;
+  readonly languageId: string;
+  readonly range?: {
+    readonly start: { readonly line: number; readonly character: number };
+    readonly end: { readonly line: number; readonly character: number };
+  };
 }
 
 interface CaptureSnapshot {
@@ -138,6 +161,56 @@ export class VsCodeEditorContext implements IdeContextPort {
     this.#assertOpen(signal);
     this.#assertOwner(snapshot);
     return result.data;
+  }
+
+  async getAvailability(
+    scope: ReadEditorContextInput["scope"],
+  ): Promise<VsCodeEditorContextAvailability | undefined> {
+    if (!this.#dependencies.isEnabled()) return "disabled";
+    if (this.#dependencies.isTrusted?.() === false) return "untrusted-workspace";
+    const editor = this.#dependencies.getActiveEditor();
+    if (editor === undefined) return "no-editor";
+    if (scope === "selection" && editor.selection === undefined) return "no-selection";
+    const document = editor.document;
+    if (document === undefined || document.uri === undefined || document.uri.scheme !== "file") {
+      return "unsupported-document";
+    }
+    const root = this.#dependencies.getSelectedRoot();
+    if (root === undefined) return "outside-workspace";
+    try {
+      await this.#dependencies
+        .createScope(root)
+        .validate(document.uri, new AbortController().signal);
+    } catch (error) {
+      if (error instanceof WorkspaceScopeError && error.code === "outside-workspace") {
+        return "outside-workspace";
+      }
+      if (error instanceof WorkspaceScopeError && error.code === "invalid-uri") {
+        return "unsupported-document";
+      }
+      return "unavailable";
+    }
+    return undefined;
+  }
+
+  getSourceFingerprint(scope: ReadEditorContextInput["scope"]): string | undefined {
+    const editor = this.#dependencies.getActiveEditor();
+    if (editor === undefined || editor.document === undefined) return undefined;
+    return createEditorContextSourceFingerprint({
+      scheme: editor.document.uri.scheme,
+      authority: editor.document.uri.authority,
+      path: editor.document.uri.path,
+      documentVersion: editor.document.version,
+      languageId: editor.document.languageId,
+      ...(scope === "selection" && editor.selection !== undefined
+        ? {
+            range: {
+              start: editor.selection.start,
+              end: editor.selection.end,
+            },
+          }
+        : {}),
+    });
   }
 
   dispose(): void {
@@ -312,6 +385,29 @@ export class VsCodeEditorContext implements IdeContextPort {
       throw new EditorContextUnavailableError();
     }
   }
+}
+
+/** Returns a bounded opaque identity without retaining or publishing the raw URI. */
+export function createEditorContextSourceFingerprint(
+  input: EditorContextSourceFingerprintInput,
+): string {
+  const range =
+    input.range === undefined
+      ? ""
+      : `${input.range.start.line}:${input.range.start.character}:${input.range.end.line}:${input.range.end.character}`;
+  return createHash("sha256")
+    .update(
+      [
+        input.scheme,
+        input.authority,
+        input.path,
+        input.documentVersion,
+        input.languageId,
+        range,
+      ].join("\u0000"),
+      "utf8",
+    )
+    .digest("hex");
 }
 
 function readSelection(editor: TextEditor): SelectionSnapshot {

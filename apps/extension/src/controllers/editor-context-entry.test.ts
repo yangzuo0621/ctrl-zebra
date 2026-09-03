@@ -6,8 +6,8 @@ import type {
 } from "@ctrl-zebra/protocol";
 import { describe, expect, it, vi } from "vitest";
 
+import { createEditorContextSourceFingerprint } from "../adapters/vscode-editor-context.js";
 import {
-  createEditorContextSourceFingerprint,
   EditorContextEntryController,
   type EditorContextMessageChannel,
 } from "./editor-context-entry.js";
@@ -24,6 +24,32 @@ const context: IdeTextContextDto = {
 };
 
 describe("EditorContextEntryController", () => {
+  it("owns asynchronous Host transition fencing and ignores stale availability", async () => {
+    const messages: ExtensionToWebviewMessage[] = [];
+    const availabilityResolvers: Array<(value: "untrusted-workspace" | undefined) => void> = [];
+    let availabilityReads = 0;
+    const controller = createController(messages, {
+      getAvailability: () => {
+        availabilityReads += 1;
+        if (availabilityReads === 1) return Promise.resolve(undefined);
+        return new Promise((resolve) => {
+          availabilityResolvers.push(resolve);
+        });
+      },
+    });
+    await controller.entry.ask("active-editor");
+
+    controller.entry.notifyHostTransition("document-changed", "active-editor");
+    controller.entry.notifyHostTransition("editor-changed", "active-editor");
+    availabilityResolvers[0]?.("untrusted-workspace");
+    await Promise.resolve();
+    expect(messages).toHaveLength(1);
+
+    availabilityResolvers[1]?.(undefined);
+    await vi.waitFor(() => expect(messages).toHaveLength(2));
+    expect(messages.at(-1)).toMatchObject({ status: "stale", reason: "editor-changed" });
+  });
+
   it("delivers one ready card and keeps the capture editable at the Host boundary", async () => {
     const messages: ExtensionToWebviewMessage[] = [];
     const controller = createController(messages);
@@ -462,6 +488,7 @@ function createController(
       scope: "selection" | "active-editor",
       signal: AbortSignal,
     ) => Promise<IdeTextContextDto>;
+    readonly getAvailability?: () => Promise<"untrusted-workspace" | undefined>;
   } = {},
 ) {
   const lifetime = { onDidDispose: (_listener: () => void) => ({ dispose() {} }) };
@@ -474,6 +501,7 @@ function createController(
   const entry = new EditorContextEntryController({
     readContext: overrides.readContext ?? (async () => context),
     isEnabled: () => true,
+    getAvailability: overrides.getAvailability,
     getSourceFingerprint: () => "source",
     createId: (() => {
       let next = 0;

@@ -5,9 +5,52 @@ import type { WorkspaceFindFiles } from "../adapters/workspace-file-lister.js";
 import type { ReadWorkspaceFilePrefix } from "../adapters/workspace-file-reader.js";
 import { WorkspaceScopeError } from "../adapters/workspace-scope.js";
 import { createTestUri as uri } from "../test/support/test-uri.js";
-import { WorkspaceFileReferenceActions } from "./workspace-file-reference-actions.js";
+import {
+  WorkspaceFileReferenceActions,
+  WorkspaceFileReferenceController,
+} from "./workspace-file-reference-actions.js";
 
 describe("WorkspaceFileReferenceActions", () => {
+  it("centralizes child ownership and broadcasts Host boundary changes", async () => {
+    const root = uri("/workspace/root");
+    const controller = new WorkspaceFileReferenceController({
+      getSelectedRoot: () => root,
+      createScope: () => ({ validate: async (target) => target }),
+      joinPath: (selectedRoot, path) => selectedRoot.with({ path: `${selectedRoot.path}/${path}` }),
+      findFiles: async () => [],
+      readPrefix: async () => ({
+        bytes: new TextEncoder().encode("hello"),
+        truncated: false,
+      }),
+      getFileFingerprint: async () => "same",
+      createId: (() => {
+        let index = 0;
+        return () => `ref-${++index}`;
+      })(),
+    });
+    const firstPosts: ExtensionToWebviewMessage[] = [];
+    const secondPosts: ExtensionToWebviewMessage[] = [];
+    const first = controller.createActions();
+    const second = controller.createActions();
+    first.bind((message) => firstPosts.push(message));
+    second.bind((message) => secondPosts.push(message));
+    first.read("read-1", "src/a.ts");
+    second.read("read-2", "src/a.ts");
+    await vi.waitFor(() => expect(firstPosts).toHaveLength(1));
+    await vi.waitFor(() => expect(secondPosts).toHaveLength(1));
+
+    controller.notifyChanged(uri("/workspace/root/src/a.ts"), "changed");
+    expect(firstPosts.at(-1)).toMatchObject({ status: "stale", reason: "changed" });
+    expect(secondPosts.at(-1)).toMatchObject({ status: "stale", reason: "changed" });
+
+    controller.clearForBoundaryChange("workspace-changed");
+    expect(firstPosts.at(-1)).toMatchObject({ status: "removed", reason: "workspace-changed" });
+    expect(secondPosts.at(-1)).toMatchObject({ status: "removed", reason: "workspace-changed" });
+    controller.dispose();
+    controller.dispose();
+    expect(() => controller.createActions()).toThrow("disposed");
+  });
+
   it("searches bounded workspace-relative paths in deterministic order", async () => {
     const root = uri("/workspace/root");
     const posts: ExtensionToWebviewMessage[] = [];

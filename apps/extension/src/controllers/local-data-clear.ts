@@ -1,3 +1,5 @@
+import { type ExtensionToWebviewMessage, protocolVersion } from "@ctrl-zebra/protocol";
+
 export const clearLocalDataCommandId = "ctrlZebra.clearLocalData";
 
 export const localDataClearCategories = [
@@ -61,18 +63,26 @@ export interface LocalDataClearOperations {
   readonly clearOtherLocalState: () => Promise<LocalDataClearCounts>;
 }
 
+export interface LocalDataClearInteraction {
+  readonly confirm: (message: string, confirmLabel: string) => Promise<boolean>;
+  readonly notifyInformation: (message: string) => void;
+  readonly notifyWarning: (message: string) => void;
+}
+
 /**
  * Coordinates the one destructive local-data operation. Callers register locks for live views or
  * other operation owners; the locks remain held until every cleanup category has settled.
  */
 export class LocalDataClearController {
   readonly #operations: LocalDataClearOperations;
+  readonly #interaction: LocalDataClearInteraction | undefined;
   readonly #runningOperationLocks = new Set<LocalDataOperationLock>();
   readonly #resourceOperationLocks = new Set<LocalDataOperationLock>();
   #inFlight: Promise<LocalDataClearReport> | undefined;
 
-  constructor(operations: LocalDataClearOperations) {
+  constructor(operations: LocalDataClearOperations, interaction?: LocalDataClearInteraction) {
     this.#operations = operations;
+    this.#interaction = interaction;
   }
 
   get isRunning(): boolean {
@@ -102,6 +112,53 @@ export class LocalDataClearController {
     });
     this.#inFlight = operation;
     return operation;
+  }
+
+  async request(
+    requestId?: string,
+    post?: (message: ExtensionToWebviewMessage) => void,
+  ): Promise<LocalDataClearReport | undefined> {
+    const interaction = this.#interaction;
+    if (interaction === undefined) {
+      throw new Error("Local-data clear interaction is unavailable.");
+    }
+    const confirmed = await interaction.confirm(clearConfirmationMessage, clearConfirmationLabel);
+    if (!confirmed) {
+      if (requestId !== undefined && post !== undefined) {
+        post({
+          protocolVersion,
+          type: "extension/local-data-clear-result",
+          requestId,
+          outcome: "cancelled",
+          categories: [],
+          message: "CtrlZebra local-data clearing was cancelled.",
+        });
+      }
+      return undefined;
+    }
+
+    const report = await this.run();
+    if (requestId !== undefined && post !== undefined) {
+      post({
+        protocolVersion,
+        type: "extension/local-data-clear-result",
+        requestId,
+        outcome: report.outcome,
+        categories: report.categories.map((category) => ({ ...category })),
+        message:
+          report.outcome === "completed"
+            ? "CtrlZebra local data was cleared."
+            : "Some CtrlZebra local data could not be cleared. Retry to continue.",
+      });
+    }
+    if (report.outcome === "completed") {
+      interaction.notifyInformation("CtrlZebra local data was cleared.");
+    } else {
+      interaction.notifyWarning(
+        "Some CtrlZebra local data could not be cleared. Retry the command to continue.",
+      );
+    }
+    return report;
   }
 
   async #run(): Promise<LocalDataClearReport> {
@@ -136,6 +193,10 @@ export class LocalDataClearController {
     }
   }
 }
+
+const clearConfirmationLabel = "Clear CtrlZebra data";
+const clearConfirmationMessage =
+  "This permanently deletes CtrlZebra Sessions, Checkpoints, temporary files, caches, Provider API keys, MCP/Provider settings, and other CtrlZebra local state. It does not delete workspace files, user code, VS Code data outside CtrlZebra, or other extensions. Continue?";
 
 async function runCategory(
   category: LocalDataClearCategory,

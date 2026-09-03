@@ -5,11 +5,32 @@ import type { TextDocument, TextEditor, TextLine, Uri } from "vscode";
 
 import { createTestUri as uri } from "../test/support/test-uri.js";
 import { VsCodeEditorContext } from "./vscode-editor-context.js";
-import { WorkspaceScope } from "./workspace-scope.js";
+import { WorkspaceScope, WorkspaceScopeError } from "./workspace-scope.js";
 
 type Validate = (target: Uri, signal: AbortSignal) => Promise<Uri>;
 
 describe("VsCodeEditorContext", () => {
+  it("owns Host availability classification without exposing VS Code values", async () => {
+    await expect(createAdapter(undefined).getAvailability("active-editor")).resolves.toBe(
+      "no-editor",
+    );
+    const editor = createEditor(createDocument("text", "/workspace/file.ts"));
+    await expect(
+      createAdapter(editor, { enabled: false }).getAvailability("active-editor"),
+    ).resolves.toBe("disabled");
+    await expect(
+      createAdapter(editor, { trusted: false }).getAvailability("active-editor"),
+    ).resolves.toBe("untrusted-workspace");
+    await expect(
+      createAdapter(editor, {
+        validate: async () => {
+          throw new WorkspaceScopeError("outside-workspace");
+        },
+      }).getAvailability("active-editor"),
+    ).resolves.toBe("outside-workspace");
+    expect(createAdapter(editor).getSourceFingerprint("active-editor")).toMatch(/^[a-f0-9]{64}$/u);
+  });
+
   it("projects the active document with a redacted workspace-relative URI", async () => {
     const document = createDocument("const answer = 42;", "/workspace/src/index.ts");
     const editor = createEditor(document, position(0, 0), position(0, 6));
@@ -275,6 +296,7 @@ function createAdapter(
   editor: TextEditor | undefined,
   overrides: {
     readonly enabled?: boolean;
+    readonly trusted?: boolean;
     readonly getActiveEditor?: () => TextEditor | undefined;
     readonly validate?: Validate;
   } = {},
@@ -293,7 +315,7 @@ function createAdapter(
     getSelectedRoot: () => root,
     createScope: () => ({ validate }),
     isEnabled: () => overrides.enabled ?? true,
-    isTrusted: () => true,
+    isTrusted: () => overrides.trusted ?? true,
   });
 }
 
