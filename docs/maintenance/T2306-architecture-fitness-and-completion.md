@@ -45,16 +45,16 @@ manifests, source import specifiers, public entry paths, or mechanically owned r
 | Package dependency direction and declared workspace edges | `AGENTS.md`, package manifests, owning package | Workspace manifest edges and actual `@ctrl-zebra/*` imports must be in the documented direction, and every actual edge must be declared by the importer. | The checked-in workspace is positive. Fixtures reject a `core -> providers` edge and an undeclared edge. |
 | Dependency cycles | Workspace package graph | A directed graph made from declared and actual workspace edges is acyclic; DFS returns a concrete cycle chain. | The checked-in graph is positive. A fixture creates `protocol -> core -> protocol`. |
 | Forbidden deep cross-package imports | Target package public `exports` entry | Cross-package imports must use the exact package name. Package subpaths and relative paths into another workspace owner fail. | The checked-in sources have no such import. Fixtures reject `@ctrl-zebra/core/src/internal.js` and a relative path into `packages/core`. |
-| Core host/vendor independence | `packages/core`, `AGENTS.md`, Core architecture docs | No `vscode`, `node:*`, Provider SDK, or MCP SDK import is allowed from Core. | The checked-in Core source is positive. A fixture rejects `vscode` and `@ai-sdk/openai` from Core; SDK owner diagnostics also identify the boundary. |
+| Core host/vendor independence | `packages/core`, `AGENTS.md`, Core architecture docs | No `vscode`, Node Host API, Provider SDK, or MCP SDK import or manifest dependency is allowed from Core. | The checked-in Core source and manifest are positive. Fixtures reject `vscode`, `node:fs`, bare `http`, `require("node:fs")`, `ai`, and `@ai-sdk/openai` from Core. |
 | Webview dependency direction | `apps/webview`, `protocol`, `AGENTS.md` | Webview source and manifest edges may use Protocol, but not Core, Providers, Builtin Tools, or MCP Client. | The checked-in Webview graph is positive. A fixture rejects a Webview -> Core import. |
-| SDK and third-party boundary isolation | Extension / Providers / MCP Client public owners | VS Code imports belong to Extension, Provider SDK imports belong to Providers, and MCP SDK imports belong to MCP Client. Public `index.ts` files may not directly import or re-export those SDK modules. | The checked-in ownership map is positive. A fixture rejects an Extension -> MCP SDK import and reports the public-entry leak. |
-| Roadmap status owner and active-phase indexing | `docs/implementation-plan.md`, phase spec, completed-task archive | Progress counts equal the completed archive plus active task table; active tasks have one active phase and a matching active spec; phase links exist; a task cannot be both active and archived. | The checked-in roadmap is positive. A fixture changes the pending count and fails with the expected owner/count repair. |
+| SDK and third-party boundary isolation | Extension / Providers / MCP Client public owners | VS Code imports belong to Extension, Provider SDK imports belong to Providers, and MCP SDK imports belong to MCP Client. Public entries may not directly or transitively re-export those SDK modules, including default, namespace, and local type aliases. | The checked-in ownership map is positive. Fixtures reject an Extension -> MCP SDK import and public-entry leaks through named, default, and aliased exports. |
+| Roadmap status owner and active-phase indexing | `docs/implementation-plan.md`, phase spec, completed-task archive | The canonical active-task section/table must exist; progress counts equal the completed archive plus parsed active tasks; active tasks have one active phase and a matching active spec; phase links exist; a task cannot be both active and archived. A phase may remain active while no task is currently in progress. | The checked-in roadmap is positive. Fixtures remove the canonical section and change the pending count, each failing with the expected owner/repair direction. |
 
-The SDK rule intentionally checks ownership and public-entry imports rather than attempting to infer
-TypeScript's complete structural type declarations. This is the stable high-value boundary: SDK
-imports, SDK failures, and adapters remain in their existing owner, while public entries expose only
-CtrlZebra-owned contracts. Typecheck and the package exports continue to validate the actual public
-surface.
+The SDK rule intentionally checks ownership and public-entry import/export bindings rather than
+attempting to infer TypeScript's complete structural type declarations. This is the stable high-value
+boundary: SDK imports, SDK failures, and adapters remain in their existing owner, while public entries
+expose only CtrlZebra-owned contracts. Typecheck and the package exports continue to validate the
+actual public surface.
 
 ## Advisory signals
 
@@ -68,10 +68,11 @@ These signals are printed as warnings/review context and never cause CI failure:
 | Significant hotspot regression | More than both 32 lines and 10% above the T2301 snapshot for a named path | A one-line documentation movement is not a regression warning. Missing/deleted paths are reported in the comparison data, not failed. |
 | Deleted-path regression | A path deleted after the T2301 revision is present again at the current revision | Git history is advisory-only; shallow checkouts report unavailable, and the signal never fails CI. |
 | Conservative similarity signal | Exact three-line normalized blocks occurring across distinct workspace owners | Ignores comments, imports/exports, generated/test/fixture paths, trivial punctuation, and package-local repetition. It requires ownership review before any change. |
-| Change surface | Count of paths changed since the T2301 revision when that Git revision exists | Directional only; shallow clones report unavailable. No package-touch or file-count budget is enforced. |
+| Change surface | Count and category breakdown of paths changed since the T2301 revision, with production/tests/docs/manifests and workspace owners compared directionally with T2204/T2205/EO-007 | Directional only; shallow clones report unavailable. No package-touch or file-count budget is enforced. |
 
-The report is deliberately small and bounded. A similarity match is not an abstraction decision, and a
-large file is not a refactor mandate.
+The report is deliberately small and bounded: advisory reads skip files above 4 MiB and similarity
+candidate collection caps at 100,000 unique blocks. A similarity match is not an abstraction decision,
+and a large file is not a refactor mandate.
 
 ## Phase 23 completion comparison
 

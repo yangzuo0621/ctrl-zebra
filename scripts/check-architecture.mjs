@@ -33,6 +33,13 @@ const nodeHostModules = new Set(
   builtinModules.map((moduleName) => moduleName.replace(/^node:/, "")),
 );
 
+const architectureSourcePattern = /\.(?:ts|tsx|js|jsx|mjs|cjs)$/;
+const coreForbiddenDependencies = Object.freeze(["vscode", "@types/vscode", "@types/node", "node"]);
+const advisoryLimits = Object.freeze({
+  maxFileBytes: 4 * 1024 * 1024,
+  maxDuplicateBlocks: 100_000,
+});
+
 const baselineHotspots = Object.freeze({
   production: Object.freeze({
     "apps/extension/src/extension.ts": 1448,
@@ -160,7 +167,7 @@ function collectFiles(directory, predicate) {
 
 function sourceFilesFor(workspace) {
   return [...workspace.values()].flatMap((entry) =>
-    collectFiles(entry.sourceRoot, (filePath) => /\.(?:ts|tsx)$/.test(filePath)),
+    collectFiles(entry.sourceRoot, (filePath) => architectureSourcePattern.test(filePath)),
   );
 }
 
@@ -210,17 +217,77 @@ function stripComments(source) {
   return result;
 }
 
+function readQuotedString(source, start) {
+  const quote = source[start];
+  if (quote !== '"' && quote !== "'") return null;
+  let value = "";
+  for (let index = start + 1; index < source.length; index += 1) {
+    const character = source[index];
+    if (character === "\\") {
+      if (index + 1 < source.length) value += source[++index];
+      continue;
+    }
+    if (character === quote) return { value, end: index + 1 };
+    value += character;
+  }
+  return null;
+}
+
 function importsFrom(filePath) {
   const source = stripComments(fs.readFileSync(filePath, "utf8"));
   const imports = [];
-  const patterns = [
-    /\b(?:from|import)\s*["']([^"']+)["']/g,
-    /\bimport\s*\(\s*["']([^"']+)["']\s*\)/g,
-  ];
-  for (const pattern of patterns) {
-    for (const match of source.matchAll(pattern)) {
-      const line = source.slice(0, match.index).split("\n").length;
-      imports.push({ specifier: match[1], line });
+  const isIdentifierCharacter = (character) => /[A-Za-z0-9_$]/.test(character ?? "");
+  const add = (specifier, index) => {
+    imports.push({ specifier, line: source.slice(0, index).split("\n").length });
+  };
+  for (let index = 0; index < source.length; ) {
+    const character = source[index];
+    if (character === '"' || character === "'" || character === "`") {
+      const quoted = character === "`" ? null : readQuotedString(source, index);
+      if (quoted !== null) {
+        index = quoted.end;
+      } else {
+        index += 1;
+        while (index < source.length && source[index] !== "`") {
+          if (source[index] === "\\") index += 1;
+          index += 1;
+        }
+        index += 1;
+      }
+      continue;
+    }
+    if (!/[A-Za-z_$]/.test(character)) {
+      index += 1;
+      continue;
+    }
+    const start = index;
+    index += 1;
+    while (isIdentifierCharacter(source[index])) index += 1;
+    const word = source.slice(start, index);
+    let cursor = index;
+    while (/\s/.test(source[cursor] ?? "")) cursor += 1;
+    if (word === "import" && source[cursor] === "(") {
+      cursor += 1;
+      while (/\s/.test(source[cursor] ?? "")) cursor += 1;
+      const quoted = readQuotedString(source, cursor);
+      if (quoted !== null) add(quoted.value, start);
+      continue;
+    }
+    if (word === "import" && (source[cursor] === '"' || source[cursor] === "'")) {
+      const quoted = readQuotedString(source, cursor);
+      if (quoted !== null) add(quoted.value, start);
+      continue;
+    }
+    if (word === "require" && source[cursor] === "(") {
+      cursor += 1;
+      while (/\s/.test(source[cursor] ?? "")) cursor += 1;
+      const quoted = readQuotedString(source, cursor);
+      if (quoted !== null) add(quoted.value, start);
+      continue;
+    }
+    if (word === "from" && (source[cursor] === '"' || source[cursor] === "'")) {
+      const quoted = readQuotedString(source, cursor);
+      if (quoted !== null) add(quoted.value, start);
     }
   }
   return imports;
@@ -251,12 +318,31 @@ function resolveLocalModule(filePath, specifier) {
     sourceBase,
     `${sourceBase}.ts`,
     `${sourceBase}.tsx`,
+    `${sourceBase}.js`,
+    `${sourceBase}.jsx`,
+    `${sourceBase}.mjs`,
+    `${sourceBase}.cjs`,
     path.join(sourceBase, "index.ts"),
     path.join(sourceBase, "index.tsx"),
+    path.join(sourceBase, "index.js"),
+    path.join(sourceBase, "index.jsx"),
+    path.join(sourceBase, "index.mjs"),
+    path.join(sourceBase, "index.cjs"),
   ]) {
     if (fs.existsSync(candidate)) return candidate;
   }
   return null;
+}
+
+function sdkForSpecifier(specifier) {
+  return sdkOwners.find((candidate) => {
+    const prefix = candidate.prefix.endsWith("/") ? candidate.prefix : `${candidate.prefix}/`;
+    return specifier === candidate.prefix || specifier.startsWith(prefix);
+  });
+}
+
+function escapedRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function sdkSpecifiersFromReexports(filePath, visited = new Set()) {
@@ -264,13 +350,11 @@ function sdkSpecifiersFromReexports(filePath, visited = new Set()) {
   visited.add(filePath);
   const source = stripComments(fs.readFileSync(filePath, "utf8"));
   const specifiers = new Set();
-  const exportFromPattern = /\bexport\s+(?:type\s+)?(?:\*|\{[^}]*\})\s+from\s+["']([^"']+)["']/g;
+  const exportFromPattern =
+    /\bexport\s+(?:type\s+)?(?:\*\s+as\s+[A-Za-z_$][\w$]*|\*|\{[^}]*\})\s+from\s+["']([^"']+)["']/g;
   for (const match of source.matchAll(exportFromPattern)) {
     const specifier = match[1];
-    const sdk = sdkOwners.find((candidate) => {
-      const prefix = candidate.prefix.endsWith("/") ? candidate.prefix : `${candidate.prefix}/`;
-      return specifier === candidate.prefix || specifier.startsWith(prefix);
-    });
+    const sdk = sdkForSpecifier(specifier);
     if (sdk !== undefined) {
       specifiers.add(specifier);
       continue;
@@ -286,10 +370,7 @@ function sdkSpecifiersFromReexports(filePath, visited = new Set()) {
   const sdkImportedBindings = new Map();
   const sdkImportPattern = /\bimport\s+(?:type\s+)?\{([^}]*)\}\s+from\s+["']([^"']+)["']/g;
   for (const match of source.matchAll(sdkImportPattern)) {
-    const sdk = sdkOwners.find((candidate) => {
-      const prefix = candidate.prefix.endsWith("/") ? candidate.prefix : `${candidate.prefix}/`;
-      return match[2] === candidate.prefix || match[2].startsWith(prefix);
-    });
+    const sdk = sdkForSpecifier(match[2]);
     if (sdk === undefined) continue;
     for (const binding of match[1].split(",")) {
       const localName = binding
@@ -301,6 +382,16 @@ function sdkSpecifiersFromReexports(filePath, visited = new Set()) {
       }
     }
   }
+  const defaultImportPattern =
+    /\bimport\s+(?:type\s+)?([A-Za-z_$][\w$]*)\s*(?:,\s*(?:\{[^}]*\}|\*\s+as\s+[A-Za-z_$][\w$]*))?\s+from\s+["']([^"']+)["']/g;
+  for (const match of source.matchAll(defaultImportPattern)) {
+    if (sdkForSpecifier(match[2]) !== undefined) sdkImportedBindings.set(match[1], match[2]);
+  }
+  const namespaceImportPattern =
+    /\bimport\s+(?:type\s+)?\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+["']([^"']+)["']/g;
+  for (const match of source.matchAll(namespaceImportPattern)) {
+    if (sdkForSpecifier(match[2]) !== undefined) sdkImportedBindings.set(match[1], match[2]);
+  }
   const localExportPattern = /\bexport\s+(?:type\s+)?\{([^}]*)\}(?!\s+from)/g;
   for (const match of source.matchAll(localExportPattern)) {
     for (const binding of match[1].split(",")) {
@@ -309,6 +400,15 @@ function sdkSpecifiersFromReexports(filePath, visited = new Set()) {
         specifiers.add(sdkImportedBindings.get(exportedName));
       }
     }
+  }
+  for (const [localName, specifier] of sdkImportedBindings) {
+    const escaped = escapedRegExp(localName);
+    const exportPatterns = [
+      new RegExp(`\\bexport\\s+default\\s+${escaped}\\b`),
+      new RegExp(`\\bexport\\s+type\\s+[A-Za-z_$][\\w$]*\\s*=\\s*${escaped}\\b`),
+      new RegExp(`\\bexport\\s+(?:const|let|var)\\s+[A-Za-z_$][\\w$]*\\s*=\\s*${escaped}\\b`),
+    ];
+    if (exportPatterns.some((pattern) => pattern.test(source))) specifiers.add(specifier);
   }
   return specifiers;
 }
@@ -464,6 +564,18 @@ function checkSdkBoundaries(workspace, sourceFiles, failures) {
 function checkCoreHostIsolation(workspace, sourceFiles, failures) {
   const core = workspace.get("core");
   if (core === undefined) return;
+  const coreManifestPath = path.join(core.root, "package.json");
+  for (const dependency of declaredDependencies(core.manifest)) {
+    const isNodeHostDependency =
+      coreForbiddenDependencies.includes(dependency) || nodeHostModules.has(dependency);
+    const sdk = sdkForSpecifier(dependency);
+    if (!isNodeHostDependency && sdk === undefined) continue;
+    const label = sdk?.label ?? "Node Host API";
+    failures.push(
+      `${relativeTo(core.root, coreManifestPath)}: packages/core declares ${dependency} (${label}); ` +
+        `remove the host/vendor dependency and keep Core dependent only on Core-owned contracts`,
+    );
+  }
   const coreFiles = sourceEntries(workspace, sourceFiles).filter(
     ({ owner }) => owner.owner === "core",
   );
@@ -504,7 +616,18 @@ function checkRoadmap(root, failures) {
     ),
   ];
   const activePhases = phaseRows.filter((match) => match[2] === "进行中");
-  const activeTaskSection = plan.split("### 活跃与待开始任务", 2)[1]?.split("## 5.", 1)[0] ?? "";
+  const activeTaskHeading = "### 活跃与待开始任务";
+  if (!plan.includes(activeTaskHeading)) {
+    failures.push(
+      "docs/implementation-plan.md: active-task status owner is missing; restore the canonical active-task section",
+    );
+  }
+  const activeTaskSection = plan.split(activeTaskHeading, 2)[1]?.split("## 5.", 1)[0] ?? "";
+  if (!activeTaskSection.includes("| 阶段 | 任务 | 状态 |")) {
+    failures.push(
+      "docs/implementation-plan.md: active-task status owner is malformed; restore the canonical task table header",
+    );
+  }
   const activeTasks = [
     ...activeTaskSection.matchAll(
       /^\|\s*(\d+)\s*\|\s*(T\d+)\s+[^|]+\|\s*(待开始|进行中|受阻)\s*\|$/gm,
@@ -591,10 +714,17 @@ function checkRoadmap(root, failures) {
 
 function countLines(filePath) {
   if (!fs.existsSync(filePath)) return null;
-  return (
-    fs.readFileSync(filePath, "utf8").split("\n").length -
-    (fs.readFileSync(filePath, "utf8").endsWith("\n") ? 1 : 0)
-  );
+  const stat = fs.statSync(filePath);
+  if (stat.size > advisoryLimits.maxFileBytes) return null;
+  const source = fs.readFileSync(filePath, "utf8");
+  return source.split("\n").length - (source.endsWith("\n") ? 1 : 0);
+}
+
+function readAdvisoryFile(filePath) {
+  if (!fs.existsSync(filePath) || fs.statSync(filePath).size > advisoryLimits.maxFileBytes) {
+    return null;
+  }
+  return fs.readFileSync(filePath, "utf8");
 }
 
 function isGeneratedPath(relative) {
@@ -633,14 +763,15 @@ function collectDeletedPathRegressions(root) {
 function collectAdvisory(root, workspace, sourceFiles) {
   const production = sourceFiles.filter(
     (filePath) =>
-      !/\.test\.(?:ts|tsx)$/.test(filePath) &&
+      !/\.test\.(?:ts|tsx|js|jsx|mjs|cjs)$/.test(filePath) &&
       !relativeTo(root, filePath).split("/").includes("test") &&
       !relativeTo(root, filePath).split("/").includes("fixtures") &&
       !isGeneratedPath(relativeTo(root, filePath)),
   );
   const tests = sourceFiles.filter(
     (filePath) =>
-      /\.test\.(?:ts|tsx)$/.test(filePath) && !isGeneratedPath(relativeTo(root, filePath)),
+      /\.test\.(?:ts|tsx|js|jsx|mjs|cjs)$/.test(filePath) &&
+      !isGeneratedPath(relativeTo(root, filePath)),
   );
   const documents = collectFiles(path.join(root, "docs"), (filePath) => {
     const relative = relativeTo(root, filePath);
@@ -675,12 +806,15 @@ function collectAdvisory(root, workspace, sourceFiles) {
 
   const duplicateCandidates = [];
   const blocks = new Map();
+  let duplicateScanCapped = false;
   for (const filePath of production) {
     const owner = [...workspace.values()].find((entry) =>
       isWithin(entry.sourceRoot, filePath),
     )?.owner;
     if (owner === undefined) continue;
-    const lines = stripComments(fs.readFileSync(filePath, "utf8"))
+    const source = readAdvisoryFile(filePath);
+    if (source === null) continue;
+    const lines = stripComments(source)
       .split("\n")
       .map((line) => line.trim());
     for (let index = 0; index + 2 < lines.length; index += 1) {
@@ -697,6 +831,10 @@ function collectAdvisory(root, workspace, sourceFiles) {
       const key = block;
       const existing = blocks.get(key) ?? [];
       if (!existing.some((entry) => entry.path === relativeTo(root, filePath))) {
+        if (blocks.size >= advisoryLimits.maxDuplicateBlocks) {
+          duplicateScanCapped = true;
+          break;
+        }
         existing.push({ path: relativeTo(root, filePath), owner });
         blocks.set(key, existing);
       }
@@ -727,15 +865,41 @@ function collectAdvisory(root, workspace, sourceFiles) {
     // Advisory only: shallow clones and source archives do not have the baseline revision.
   }
 
+  const changeSurface =
+    changedSinceBaseline === null ? null : summarizeChangeSurface(changedSinceBaseline);
+
   return {
     productionHotspots: ranked(production, advisoryThresholds.productionLines),
     testHotspots: ranked(tests, advisoryThresholds.testLines),
     documentHotspots: ranked(documents, advisoryThresholds.documentLines),
     baselineComparison,
     duplicateCandidates: duplicateCandidates.slice(0, 10),
+    duplicateScanCapped,
     changedSinceBaseline,
+    changeSurface,
     deletedPathRegressions: collectDeletedPathRegressions(root),
   };
+}
+
+function summarizeChangeSurface(relativePaths) {
+  const summary = {
+    files: relativePaths.length,
+    production: 0,
+    tests: 0,
+    documents: 0,
+    manifests: 0,
+    owners: new Set(),
+  };
+  for (const relativePath of relativePaths) {
+    const normalized = normalize(relativePath);
+    const ownerMatch = normalized.match(/^(?:apps|packages)\/([^/]+)\//);
+    if (ownerMatch !== null) summary.owners.add(ownerMatch[1]);
+    if (/^docs\//.test(normalized)) summary.documents += 1;
+    else if (/(?:^|\/)package\.json$/.test(normalized)) summary.manifests += 1;
+    else if (/\.test\.(?:ts|tsx|js|jsx|mjs|cjs)$/.test(normalized)) summary.tests += 1;
+    else if (/^(?:apps|packages)\//.test(normalized)) summary.production += 1;
+  }
+  return { ...summary, owners: [...summary.owners].sort() };
 }
 
 export function analyzeArchitecture(root = process.cwd()) {
@@ -779,13 +943,13 @@ function formatAdvisory(advisory) {
     `- T2301 hotspot regressions: ${regressions.length === 0 ? "none" : regressions.map((entry) => `${entry.path} (+${entry.delta})`).join(", ")}`,
   );
   lines.push(
-    `- representative change surface since T2301: ${advisory.changedSinceBaseline === null ? "unavailable in this checkout" : `${advisory.changedSinceBaseline.length} changed paths (directional only)`}`,
+    `- representative change surface since T2301: ${advisory.changeSurface === null ? "unavailable in this checkout" : `${advisory.changeSurface.files} paths; production=${advisory.changeSurface.production}, tests=${advisory.changeSurface.tests}, docs=${advisory.changeSurface.documents}, manifests=${advisory.changeSurface.manifests}, owners=${advisory.changeSurface.owners.length} (${advisory.changeSurface.owners.join(", ") || "none"}); compare with T2204=44/4, T2205=40/3, EO-007=80/7 (directional only)`}`,
   );
   lines.push(
     `- deleted-path regressions since T2301: ${advisory.deletedPathRegressions === null ? "unavailable in this checkout" : advisory.deletedPathRegressions.length === 0 ? "none" : advisory.deletedPathRegressions.join(", ")}`,
   );
   lines.push(
-    `- conservative cross-owner duplicate candidates: ${advisory.duplicateCandidates.length === 0 ? "none" : `${advisory.duplicateCandidates.length} (inspect ownership before acting)`}`,
+    `- conservative cross-owner duplicate candidates: ${advisory.duplicateCandidates.length === 0 ? "none" : `${advisory.duplicateCandidates.length} (inspect ownership before acting)`}${advisory.duplicateScanCapped ? "; scan capped at the advisory resource limit" : ""}`,
   );
   return lines.join("\n");
 }

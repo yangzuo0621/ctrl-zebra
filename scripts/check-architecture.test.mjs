@@ -133,12 +133,25 @@ test("rejects Host APIs and Provider SDKs from Core", () => {
       imports: {
         core: 'import "vscode";\nimport "node:fs";\nimport "http";\nimport "@ai-sdk/openai";\n',
       },
+      dependencies: { core: ["ai"] },
+      extraFiles: { core: { "host-api.mjs": 'require("node:fs");\n' } },
     },
     (root) => {
       assert.equal(failureFor(root, "VS Code API import vscode crosses"), true);
       assert.equal(failureFor(root, "packages/core imports node:fs"), true);
       assert.equal(failureFor(root, "packages/core imports http"), true);
       assert.equal(failureFor(root, "Provider SDK import @ai-sdk/openai crosses"), true);
+      assert.equal(failureFor(root, "packages/core declares ai"), true);
+      assert.equal(failureFor(root, "packages/core imports node:fs"), true);
+    },
+  );
+});
+
+test("ignores import-like text inside string literals", () => {
+  withFixture(
+    { imports: { core: "const message = 'use import \"@ctrl-zebra/providers\"';\n" } },
+    (root) => {
+      assert.deepEqual(analyzeArchitecture(root).failures, []);
     },
   );
 });
@@ -167,6 +180,44 @@ test("rejects SDK imports outside their owner and from public entries", () => {
       assert.equal(failureFor(root, "public package entry transitively re-exports ai"), true);
     },
   );
+  withFixture(
+    {
+      imports: { providers: 'export { default } from "./sdk-types.js";\n' },
+      extraFiles: {
+        providers: {
+          "sdk-types.ts": 'import sdk from "ai";\nexport default sdk;\n',
+        },
+      },
+    },
+    (root) => {
+      assert.equal(failureFor(root, "public package entry transitively re-exports ai"), true);
+    },
+  );
+  withFixture(
+    {
+      imports: { providers: 'export { default } from "./sdk-types.js";\n' },
+      extraFiles: {
+        providers: {
+          "sdk-types.ts":
+            'import type { LanguageModel } from "ai";\nexport type PublicModel = LanguageModel;\n',
+        },
+      },
+    },
+    (root) => {
+      assert.equal(failureFor(root, "public package entry transitively re-exports ai"), true);
+    },
+  );
+});
+
+test("requires the canonical roadmap active-task status owner", () => {
+  withFixture({}, (root) => {
+    const planPath = path.join(root, "docs", "implementation-plan.md");
+    fs.writeFileSync(
+      planPath,
+      fs.readFileSync(planPath, "utf8").replace("### 活跃与待开始任务", "### Task status removed"),
+    );
+    assert.equal(failureFor(root, "active-task status owner is missing"), true);
+  });
 });
 
 test("rejects roadmap status drift between active index and archive", () => {
