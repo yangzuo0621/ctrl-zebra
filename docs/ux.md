@@ -1,635 +1,207 @@
-# CtrlZebra 用户体验规范
-
-本文档定义桌面 VS Code Extension 的用户路径、信息架构、交互反馈、视觉层级和体验验收基线。React 状态所有权、VS Code API 边界、流式渲染约束和主题接入方式仍以 [Webview Guidelines](webview.md) 为准；协议、安全、持久化或模块边界发生变化时，必须同时更新对应的权威文档。
-
-## 1. 体验目标
-
-CtrlZebra 应让用户在不理解内部 Agent 状态机的情况下完成以下工作：
-
-1. 判断当前工作区和模型是否已经可以使用。
-2. 提出问题或代码任务，并持续理解系统正在做什么。
-3. 在产生副作用前理解操作、影响范围和恢复方式。
-4. 在失败、取消或重启后找到明确的下一步。
-5. 返回最近会话并继续工作，而不需要依赖时间戳猜测内容。
-
-界面优先服务当前对话和消息输入。会话管理、Checkpoint、诊断和设置是次级能力，不得在无相关状态时与主路径争夺注意力。
-
-### 1.1 产品语言与本地化策略（T1701）
-
-- Marketplace 的目标用户是国际 VS Code 用户，产品目标语言固定为英文（`en`）。Webview 的标题、
-  控件名称、状态、错误、帮助文本和屏幕阅读器播报必须使用同一套英文产品语言；不得在同一条用户路径
-  中混用未批准语言。
-- T1701 采用最小本地化策略：不引入运行时语言协商、本地化平台或额外依赖。所有静态 Webview 文案
-  由 `apps/webview/src/strings.ts` 单一拥有并按功能分组；组件、Feature Store 和 live region
-  只引用该模块的值或格式化函数。
-- 用户输入、模型输出、工作区路径、Server 名称及 Protocol 中已经验证的安全错误属于动态数据，按
-  原值显示，不伪造翻译或把动态内容写回字符串目录。Host/Provider 的固定错误在进入 Webview 前
-  已完成安全分类；Webview 仅使用稳定的产品文案和受界定的动态值。
-- 未来若增加语言，先在 `strings.ts` 外围增加显式 locale 选择和完整翻译覆盖，再更新本策略；在此
-  之前不得按组件、Provider 或屏幕阅读器单独切换语言。
-
-## 2. 核心用户路径
-
-### 2.1 首次成功对话
-
-路径：打开侧边栏 → 判断配置状态 → 完成必要配置 → 发送第一条消息 → 收到可见结果。
-
-- 未配置时显示缺失项、用途和直接可执行的下一步，不只显示错误代码。
-- 空状态提供少量与当前产品能力一致的示例，不暗示尚未支持的功能。
-- 工作区信任、凭据和模型配置的说明分层呈现，避免一次暴露全部技术细节。
-- 用户完成配置后无需重载 Webview 或重新输入草稿即可继续。
-
-#### Provider 可操作空状态（T1603）
-
-- Onboarding 从 Host 接收一个严格、非权威的 Provider 展示投影，只包含当前 Provider 的
-  `openai`、`gemini` 或 `openai-compatible` 标识，以及 `apiKeyConfigured` 和
-  `modelConfigured` 两个布尔值。界面可以据此明确显示“缺少 API key”“缺少模型 ID”或“已
-  配置”；不显示模型 ID、端点、Secret 名称、密钥任何部分或第三方响应。
-- 当 `apiKeyConfigured` 为 false 时显示“保存 API key”按钮；当 `modelConfigured` 为 false
-  时显示“选择模型”按钮。OpenAI-Compatible 的已验证本地 loopback 端点可以在没有 Secret
-  时报告 API key requirement 已满足。三个 Provider 都显示“打开设置”入口，以便修复端点、
-  能力或其他不在展示投影中的配置错误。T1603 Onboarding 不提供凭据轮换或删除入口；
-  T1604 的删除和轮换只通过 Host-owned Command Palette 命令发现和执行，不扩展 Webview
-  状态、Protocol 消息或 Onboarding action。
-- 状态矩阵必须保持可操作：
-
-  | Provider 状态 | API key | 模型 | 空状态必须说明和提供的操作 |
-  |---|---|---|---|
-  | 无配置 | 缺少 | 缺少 | 同时说明两项缺失；保存 API key、选择模型、打开设置 |
-  | 部分配置 | 缺少或已满足 | 缺少或已配置 | 只说明实际缺失项；保留对应修复操作和打开设置 |
-  | 已配置 | 已满足 | 已配置 | 说明可开始对话；仍提供选择模型和打开设置，不显示 Secret |
-
-- 保存、选择和设置动作由 Host 执行，Webview 只发送对应的严格意图消息。每个动作显示
-  已完成、已取消或失败的固定安全结果；取消不是失败，失败后保留原状态并保留可重试操作。
-  配置错误、SecretStorage 失败、模型发现不可用和未知失败分别使用稳定的下一步，不显示
-  原始错误、端点、授权材料或 Provider 响应。
-- T1604 的删除和轮换不进入上述 Onboarding action。Host Command Palette 命令在 storage 调用前
-  取消时保证没有调用和状态副作用；调用开始后不把取消伪装成可回滚结果。删除先执行 presence-only
-  查询：fulfilled `undefined` 仅表示 absent，显示固定 no-op 且不调用 delete；fulfilled 非 `undefined`
-  才表示 present 并允许一次 adapter delete；get rejected 为 unavailable，显示“状态无法确认”及固定
-  的重试或打开设置下一步，不调用 delete mutation。轮换输入验证后直接调用一次 adapter save（无现有
-  key 时等价首次保存，不做 presence preflight）。fulfilled 后显示对应的已提交/已删除结果；
-  mutation rejected 或 reconciliation unavailable 后显示“状态无法确认”，并仅使用 tri-state presence
-  reconciliation，不声称旧值仍在或已删除。Provider 身份可显示在删除确认中，但 Secret、长度、前后缀和
-  任何推断信息不可见。T1603 public status 的 unavailable 走 safe failure/retain-last-projection 路径，
-  不把 false 当事实。取消、dispose 或过期 generation 后不发布迟到通知或 status；底层不可取消的
-  SecretStorage Thenable 由 Host 等待结算并安全清理队列。
-- 空状态的所有按钮可仅用键盘操作，焦点顺序与视觉顺序一致；状态刷新或错误不得抢焦点。
-  动作结束后焦点返回触发按钮，触发按钮消失时只将焦点移到空状态标题。约 300px 窄侧栏、
-  200% 缩放、长本地化文案和四类 VS Code 主题下，缺失项、主要动作、错误和消息输入仍可见
-  且可用，状态不只靠颜色或图标表达。
-
-#### Provider 模型选择与手工降级
-
-- 用户从 Command Palette 明确执行 `CtrlZebra: Select Model` 后，Host 才读取当前 Provider
-  配置并开始选择流程；打开侧栏、恢复 Session、激活扩展或发送消息都不自动拉取模型列表。
-- OpenAI 和 Gemini 使用官方、无上下文的模型列表时显示 VS Code Quick Pick。列表项只展示
-  有界的 Provider 模型 ID；不显示响应原文、授权信息、端点查询参数或未经验证的能力/价格
-  标签。用户必须明确选择一项，不能静默采用第一项或隐式改变当前模型。
-- 没有 API key、列表为空、网络/超时、认证、响应格式或端点不满足官方保证时，界面说明发生
-  了什么并提供“手工输入模型 ID”。OpenAI-Compatible 以及所有自定义端点直接提供手工输入，
-  不因端点看起来兼容而自动联网。
-- 手工输入与 Quick Pick 选择使用相同的非空模型 ID 校验。取消 Quick Pick、取消输入或关闭
-  错误提示不写入设置、不显示成功消息，也不清除已有模型。
-- 只有用户提交有效选择后才更新模型设置；写入失败显示可重试的固定错误，保留旧模型和其他
-  Provider 配置。成功后显示当前 Provider 和模型 ID，但不显示 Secret 或原始第三方错误。
-- Quick Pick、输入框、手工降级和错误恢复均可全程键盘操作；列表刷新或错误不得无故移动焦点，
-  约 300px 侧栏中应保持主要对话操作可见。模型 ID 列表不是会话内容，不进入聊天消息或 Tool
-  卡片。
-
-#### Provider 连接检查（T1605）
-
-- 用户从 Command Palette 明确执行 `CtrlZebra: Check Provider Connection` 后，Host 才读取当前
-  Provider、模型和对应凭据并开始一次检查。打开侧栏、激活扩展、恢复 Session、发送消息或
-  Tool 运行都不会自动触发检查；检查也不扩展 Webview 或 Protocol。
-- 检查只验证无上下文的 Provider 模型元数据，不发送 prompt、工作区或会话内容，不携带 Tool
-  定义或调用 Tool，也不请求模型生成。结果按认证、模型存在性、流式输出、Tool Calling 和
-  所需能力分别显示“支持”“不支持”或“未知”；只有官方元数据或明确的无副作用探测能证明
-  支持/不支持，无法可靠判断时必须显示“未知”，不能把配置声明、模型名称、`generateContent`
-  或一次 HTTP 200 猜成能力事实。OpenAI 元数据没有 Tool Calling/流式字段，因此两项未知；
-  Gemini 只有严格有效且完整的 `supportedGenerationMethods` 含 `streamGenerateContent` 时才
-  显示流式支持，完整列表缺失时显示不支持，无法确认完整性时显示未知；Tool Calling 没有
-  官方字段时始终未知。OpenAI-Compatible 只对已验证配置端点按 `models/{encodedModelId}` 的
-  有界 GET 契约检查；远端仅使用现有配置要求的 Bearer 认证，loopback 无 key 时不发送认证，
-  不把 Provider 名称当作 OpenAI 行为。其最小响应必须是含匹配 `id` 的有界 JSON，能力全部
-  未知；专用 Provider 的自定义端点不探测并显示未知。所需能力任一不支持则不支持，全部支持
-  才支持，否则未知。
-- 结果消息只说明 Provider、模型和固定安全错误类别：配置错误、认证失败、模型不存在、限流、超时、
-  网络不可用、响应格式错误、已取消或未知。不得显示原始第三方错误、响应正文、请求头、
-  授权材料、Secret、端点 URL 或内部堆栈。自定义端点明确显示能力未知并提示用户按其服务文档
-  验证，不因“OpenAI-Compatible”名称假定 OpenAI 行为。
-- 检查有固定超时、无自动重试；取消后不显示成功，不发起后续请求，不写入配置。检查失败、
-  取消或未知均保留原 Provider、模型、能力和凭据状态，并提供“重试检查”或“打开设置”等
-  固定下一步。
-
-### 2.2 日常对话与代码任务
-
-路径：输入任务 → 观察生成和工具进度 → 必要时取消 → 阅读最终结果。
-
-- 输入区和当前对话始终是默认界面的视觉焦点。
-- 流式状态、取消入口和错误反馈位于用户当前关注区域附近。
-- 用户向上阅读后不得被流式更新强制滚动到底部；恢复自动跟随后要有明确操作。
-- 长回复、代码、路径和工具输出在窄侧栏中仍可阅读和复制。
-- 运行期间保留尚未发送的草稿；是否允许编辑下一条草稿由具体任务明确，但不得静默丢失输入。
-
-### 2.3 审批与副作用
-
-路径：Agent 提出操作 → 用户理解意图和影响 → 查看必要细节 → 批准或拒绝 → 确认结果及恢复方式。
-
-审批界面首先回答：
-
-1. Agent 想做什么？
-2. 会影响哪些文件、命令或资源？
-3. 风险是什么，批准后能否恢复？
-
-- 待审批卡片直接嵌入所属 Tool 卡内（Inline Approval Fusion），保持消息流就近呈现。
-- 呈现在不确定意图下决策所需的完整安全与交互要素：面向用户的操作动作摘要、格式化资源 URI、显性风险等级标识（如 `write`/`execute`）、Diff/不可变命令与有效时间限制；原始 Tool JSON 参数在待审批状态下被置换隐藏，以避免信息冗余并突出关键决策信息。
-- 完整命令、cwd、Diff 和安全要求仍按 [Security](security.md) 展示。体验优化只能调整信息层级，不能隐藏审批绑定所需的不可变操作详情。
-
-### 2.4 失败、中断与恢复
-
-路径：发生失败、取消、截断或重启 → 识别当前状态 → 采取重试、修正配置、恢复会话或查看诊断等操作。
-
-- 用户提示说明发生了什么、哪些操作未发生以及建议的下一步。
-- 响应因长度上限截断时，保留已显示文本并明确标记“未完成”；不得把它当作完整答案或继续执行
-  尚未开始的 Tool，用户可通过后续消息继续对话。
-- 错误不得只依靠颜色表达；可恢复状态与终止状态必须可区分。
-- 单次 Run 达到 Token 预警时，在 Usage 区域明确显示“Estimated”和阈值；达到硬上限时显示独立
-  的 `budget-exceeded` 终态，并同时展示可用的 Provider actual Usage。文案必须说明这是本地
-  Token 安全护栏而不是 Provider 账单；估算值不得显示为费用。
-- `budget-exceeded` 保留已提交的文本、Tool 结果和 Usage，停止后续 Model/Tool 循环；用户可通过
-  正常 follow-up Run 继续。恢复 Session 时重现最近的预算快照和终态，不自动重试或执行迟到副作用。
-- Checkpoint 只在存在相关恢复能力时进入主界面，并与产生修改的会话、Run 或文件建立清晰关联。
-- 恢复入口不得暗示可以覆盖用户在 Agent 修改后产生的内容。
-
-#### 用户主动的脱敏诊断导出（T2205）
-
-诊断导出是次级入口，只有用户点击“Export diagnostics”才开始；激活、打开侧栏、失败或
-重启都不会自动生成、上传或保存诊断。Host 先打开保存目标选择，再在 Webview 中显示目标和
-即将写入的完整有界 JSON。用户必须明确点击“Save file”；“Cancel”、关闭保存对话框或视图
-销毁都不写文件。
-
-- 预览只展示扩展/VS Code/平台版本、Provider 类型、稳定错误类别、MCP 状态和有界运行信息。
-  文案明确这是本地脱敏支持文件，不显示 Secret、授权头、端点凭据、命令参数、路径、工作区
-  内容、对话正文或原始第三方错误；保存目标只作为预览标签，不进入文件内容。
-- 成功、取消、目标未选择、无效状态、超限、保存不可用和写入失败使用不同的固定状态文本；
-  写入失败不显示原始文件系统错误，也不把取消伪装成成功。预览/结果使用独立的可读区域，
-  可用键盘完成打开、查看、保存和取消，状态不只依靠颜色表达。
-- 导出文件只通过 VS Code 本地文件 API 写入，不引入 telemetry、自动错误上传或网络目标。
-
-## 3. 信息架构
-
-默认侧边栏按以下优先级组织：
-
-1. 当前会话上下文和必要的全局操作。
-2. 对话记录、流式结果及与消息相关的 Tool 状态。
-3. 消息输入和当前 Run 操作。
-4. 只在需要决策时出现的审批或错误恢复操作。
-5. 会话历史、Checkpoint、设置和诊断等次级入口。
-
-规则：
-
-- 正常空闲聊天时不常驻显示无可用内容的 Checkpoint、审批或 Tool 区域。
-- 与某条消息或 Tool Call 相关的状态尽量就近呈现，不集中堆在页面底部。
-- 次级功能使用渐进披露；折叠不能隐藏当前必须处理的错误或审批。
-- 窄宽度下优先保持内容阅读和主要操作，不通过横向滚动维持桌面布局。
-
-## 4. 对话与输入
-
-### 4.1 消息呈现
-
-- 用户、Agent、Tool 和系统反馈通过语义、布局和标签区分，不能只依赖背景色。
-- 支持产品所需的 Markdown 子集时，必须安全处理标题、代码块、行内代码、列表、强调、引用、表格和链接；
-  原始 HTML、图片、裸 URL 自动链接和未批准 URI 保持不可执行的文本。
-- Markdown 链接只允许绝对 `http`/`https` 目标，并通过 Extension/VS Code 打开外链；Webview 不直接导航、
-  不打开工作区文件或命令，也不增加远程资源 CSP 来源。超长消息在解析前按既定代码点与 UTF-8 上限保留前缀并
-  显示稳定的缩短提示。
-- 代码与命令应支持键盘可达的复制操作；复制成功提供轻量且可访问的反馈。
-- 长文本允许选择，更新中的消息不得替换完整消息树或重置选择。
-- 空回复、取消前无内容、截断和失败无内容使用不同的固定提示。
-
-### 4.2 推理摘要
-
-- 界面统一使用“推理摘要”，并以“模型提供”或语义等价的来源说明与最终回答、Tool 卡和 Host
-  运行状态区分。不得使用“原始思维链”“隐藏推理”“完整思考过程”等表述。
-- 只有收到第一段非空、被保留的 reasoning 文本后才呈现区域；只有 start/end、空块或完全没有
-  reasoning 的 Run 不显示占位卡、错误或能力提示。
-- 推理摘要位于它所属的 Agent 回答附近，但保持独立语义和视觉层级，不混入回答正文，也不把
-  Tool 卡重排为统一活动时间线。多个块按源事件顺序呈现。
-- 新出现且正在流式生成的非空块默认展开，并显示克制的“正在生成摘要”状态。用户手动折叠后，
-  后续 delta、Tool 状态或 Run 状态不得强制重新展开。Run 完成、失败或取消时保持当时的展开
-  状态，不自动改变焦点或折叠选择；从持久化会话恢复的完整或部分块默认折叠。
-- 每个块使用带明确可访问名称和 `aria-expanded` 状态的键盘按钮控制展开/折叠。展开控件、复制
-  操作和截断说明必须仅使用键盘可达，焦点顺序与事件的视觉顺序一致。
-- 内容按纯文本安全渲染并允许选择、复制、换行和保留代码样式空白；不把 reasoning 解释为
-  Markdown、HTML、链接、命令或可执行动作。长单词和代码样式文本不得造成侧栏横向滚动。
-- 块级或 Run 级截断使用可见、非颜色唯一的固定说明。失败、取消、重启中断或损坏尾部留下的
-  有内容块标记为“部分摘要”；产品不暗示可以恢复、省略或补全剩余内容。
-- Live Region 只播报摘要开始、完成、部分结束或截断等离散状态，不播报每个 delta 或重复朗读
-  完整内容。流式更新不抢焦点、不重置选择，也不改变用户已离开底部时的滚动位置。
-
-### 4.3 Composer
-
-- 文本输入拥有明确的可访问名称，主要发送操作在常见侧栏宽度下始终可见。
-- 默认键盘约定为 `Enter` 发送、`Shift+Enter` 换行；若实现其他约定，必须在输入区附近说明。
-- 发送、停止、重试等动作随 Run 状态切换，避免同时展示互相矛盾的主要操作。
-- 禁用控件必须同时通过状态文字解释原因。
-- 草稿不得因配置跳转、会话刷新或非终止状态更新而意外丢失。
-- 提交当前会话时，Host 以当前 Session 身份续接；没有当前 Session 身份时才创建新会话。
-  用户不可在输入或 UI 状态中指定 Run 身份。
-- `New chat` 是显式、键盘可达且可读的主要管理动作。它清空当前消息投影、选中 Session、
-  待恢复投影和未发送的 Resource/Prompt 附件，但不删除已保存会话；下一次发送从新会话开始。
-  活动 Run、恢复或会话切换期间禁用该动作，并保留草稿。
-
-## IDE context and read-only Tool experience (T1901)
-
-IDE 上下文是用户可以看见、关闭和控制的普通上下文，不是隐藏的 System 指令。T1901 只建立
-体验约束；T1902–T1905 再实现具体读取、诊断、语言服务和编辑器入口。
-
-- `Editor context` 是显式用户控制。设置默认为关闭；开启后也只在用户明确附加活动编辑器或
-  选区时捕获，不能因为焦点、光标移动、打开文件或模型提示而静默注入。用户可以在发送前
-  `Remove`，也可以关闭设置；关闭、切换 Session 或 `New chat` 会清除未发送附件而保留草稿。
-- 附件卡在发送前显示固定的 `Editor context` 来源标签、工作区相对路径、语言提示、精确范围、
-  字符/Token 截断状态和文档是否 `Stale`。不显示主机绝对路径、原始 VS Code URI、Provider
-  对象或隐藏字段。显示文本与提交给 Model 的来源标记一致，来源标签只是 provenance，不是
-  指令或权限。
-- `selection` 始终显示用户选定的精确范围；折叠选区是带有 `text: ""` 和相同起止位置的有效
-  空快照，不自动回退到活动行/文件；无活动编辑器显示固定不可用状态。范围字符位置保持 VS
-  Code 的 UTF-16 code-unit 语义，不把 astral 字符误算为一个 code unit。
-- 活动编辑器、选区、工作区、Trust 或文档版本在捕获期间改变时，附件变为 `Stale`；界面必须
-  提供 `Refresh` 或明确的 `Use stale context` 决定，不能把旧快照当作当前内容发送。用户未作
-  决定前发送按钮保持禁用并说明原因。取消、关闭或迟到结果不产生隐藏 Toast、消息或重试。
-- 超限内容显示非颜色唯一的稳定 `Truncated` 说明和被触发的上限（字符、行、字节或 Token），
-  不用省略号伪装完整文本；IDE 文本的行上限明确为 2,000 个逻辑行，2000 行可完整保留，
-  第 2,001 行触发 `lines` 截断（LF、CRLF 和末尾换行按同一规则计数）。用户可以缩小选择或
-  刷新；不得从另一预算类别借用空间。验收 fixture 还覆盖全 astral 行的 UTF-16 exclusive end
-  `131,072`、落入 surrogate pair 的位置和超出实际行长的位置，分别验证 round-trip 与稳定拒绝。
-- 只读诊断与语言服务结果在所属消息/Tool 卡附近显示来源、范围、severity、符号/目标和稳定
-  `Stale`/`Truncated` 状态。Provider 消息按纯文本渲染，不解析 Markdown、HTML、链接或命令；
-  不显示 `Code Action`、编辑、执行或审批控件。工作区外/不可信/不可用结果显示固定可操作
-  状态，而不是原始 Provider 错误。混合结果中被工作区范围过滤的条目显示固定的
-  `Some results were omitted`/`Out of workspace` 状态，不显示被过滤路径；若全部结果被过滤或
-  Provider 形状无效，显示稳定 `No safe result available`（`invalid-output`），不伪装为空结果。
-- 符号列表兼容 `DocumentSymbol` 与 `SymbolInformation`：缺失的 `containerName`、`detail` 或
-  `selectionRange` 不显示占位文本，显式空字符串仍按真实值展示；嵌套符号以稳定扁平顺序呈现。
-- `get_diagnostics`、`find_definition`、`find_references` 和 `list_symbols` 是只读 Tool 结果，
-  不能自动运行模型、改变输入、启动 Code Action、写文件或授予权限。编辑器入口填充 Composer
-  后，内容保持可见、可编辑和可移除，发送前不创建 Run。
-- 关闭、取消、Session/Run 替换或 Extension disposal 后，迟到的上下文、诊断和语言结果均无 UI
-  效果。取消只允许 Webview 在取消控件事件中先同步更新自己的控件状态，再在同一事件回合尝试
-  一次取消请求；若 Host gate 已关闭则不发送请求，不等待或合成 Host 消息，也不产生 live-region 播报；替换或一次性 stale/limit/omission 结果才用一个简短
-  polite live region 播报，不逐项或逐字符朗读源码、诊断消息或符号列表。
-- 附件、刷新、移除、stale 决定和只读结果都必须有语义化可访问名称、键盘路径、可见焦点和禁用
-  原因。刷新/移除不得抢焦点、重置 Composer 光标、选择或滚动；结果列表使用标题、`aria` 关系
-  和稳定顺序，状态不能只靠颜色表达。在约 300px、200% 缩放、四类 VS Code 主题和长本地化文本
-  下仍可完成关闭、刷新、移除和发送。
-
-### T1905 编辑器发起入口
-
-设置 `CtrlZebra › Editor Context: Enabled` 默认关闭。用户打开后，在编辑器右键菜单和 Command
-Palette 可见 `CtrlZebra: Ask about Selection`（`editorHasSelection`，有非折叠选区时）与
-`CtrlZebra: Ask about Active File`（`editorTextFocus`，有编辑器焦点时）；这些 when/enablement
-条件只是可发现性提示，Host 必须再次验证当前编辑器、选区、工作区范围、Trust、文本类型和版本。
-
-命令只打开或聚焦 Agent 侧栏，并把带固定 `Editor context` 来源标签、工作区相对路径、语言、
-精确范围和截断状态的普通不可信上下文放入 Composer 草稿。草稿在发送前始终可见、可编辑、可
-删除；命令绝不自动发送、运行模型、执行 Tool、写入文件或授予权限。折叠选区保持空文本和精确
-范围；即使 `editorTextFocus` 菜单可见，Host 仍可能返回固定 `No editor`、`Unsupported document`、
-`Outside workspace` 或 `Untrusted workspace` 不可用状态；无选区、无活动文件、不可信工作区、
-关闭设置或取消均不回退到活动行或整个工作区。
-
-卡片提供 `Refresh`、`Remove` 和 stale 时的 `Use stale context`。ready 卡片在用户审阅或编辑后可
-直接 Send；Refresh 只重新捕获原 scope，
-Remove 先同步清卡并保留用户修改过的非上下文草稿，Use stale 只对同一 context ID 做一次明确
-发送决定；stale 未刷新或确认前 Send 禁用并显示原因。编辑器、选区或文档变化显示 stale；设置关闭、
-Trust/工作区变化或不支持编辑器由 Host 当前 owner 投影一次 cleared。Remove 和 New chat 先由
-Webview 同步清卡，Session restore/switch 在新 Session 提交前事务性清卡，侧栏关闭/disposal 关闭
-边界；这些本地/事务性边界不等待或要求 Host editor cleared，迟到结果没有 UI 效果。
-
-入口和卡片使用固定产品文案、语义按钮、可见焦点、键盘路径和一个 polite live region；刷新、移除
-和结果替换不抢 Composer 焦点、光标、选择或滚动。状态不能只靠颜色表达，来源文本按纯文本显示，
-不解析 Markdown、HTML、链接、命令或 Provider 字段。
-
-### T2103 `@` 工作区文件引用
-
-Composer 在用户输入 `@` 及可选的工作区相对路径片段后显示有界、稳定排序的文件建议。建议列表
-是语义 `listbox`，支持 ArrowUp/ArrowDown、Enter 选择和 Escape 关闭；选择后移除未发送的 `@`
-片段并在 Host 侧读取文件，绝不在 Webview 读取文件或接收原始 URI。相同规范路径只显示一个引用卡。
-
-引用卡在发送前显示工作区相对路径、`Truncated` 和 `Stale` 状态，并提供 `Refresh`、`Remove`；
-文件变化或删除时保留快照但阻止 Send，直到用户刷新或明确选择 `Use stale file`。读取中的建议/卡片
-使用固定状态播报；越界、二进制、缺少工作区或不可用文件显示稳定可操作错误，不显示 Host 异常。
-New chat、Session restore/switch 和工作区边界变化清除未发送引用但不删除已保存 Session；取消或迟到
-读取不会改变 Composer 文本。文件文本作为普通不可信上下文发送，Token 截断在卡片和 Model 投影中
-都保持可见。
-
-## 5. Tool、审批与进度反馈
-
-- Tool 默认摘要使用面向用户的动作和对象描述，不以内部 Tool 名称作为唯一标题。
-- 待审批卡片就近嵌入对应 Tool 卡内（Inline Approval Fusion）；待审批期间以审批卡置换展示结构化动作、Diff/不可变细节、显式风险等级标识与有效时间，原始 Tool JSON 参数暂被隐藏；成功的只读操作默认保持紧凑折叠，运行中、失败和待审批状态获得更高视觉优先级。
-- Tool 详情在非待审批状态下按“动作摘要 → 资源/影响范围 → 原始参数与输出”渐进披露。
-- 输出截断必须可见，并说明是否存在可查看的完整日志。
-- 取消、超时、非零退出、审批拒绝和执行错误保持不同结果，不统一显示为失败。
-- 状态更新使用适当的 live region；不得逐 Token 或因每次输出增量重复播报。
-
-### File lifecycle and multi-file approval experience (T2001)
-
-文件副作用使用固定的用户可见动作名：创建、删除、重命名和应用多文件编辑。已有的
-`propose_file_edit` 继续表示单文件修改；多文件操作显示为一个 `propose_workspace_edit`
-Tool 卡，不拆成一串可分别批准的隐含动作。`propose_file_create`、`propose_file_delete`、
-`propose_file_rename` 和 `propose_workspace_edit` 全部显示显式 `write` 风险和一次性审批。
-
-待审批卡片在所属 Tool 卡内回答“要做什么、影响哪些文件、能否恢复”：使用工作区相对路径、
-动作、文件数/文本大小、有效期和稳定的 Diff 状态。绝不显示主机绝对路径、原始 URI authority、
-Secret、原始 Tool JSON、未验证模型字段或把 Hash 当作当前状态。用户可以打开 Host-owned
-Diff 查看完整的有界 before/after 内容：创建是空文件到完整内容，删除是完整内容到空文件，
-重命名显示源/目标，编辑按路径分组显示每个文件的变更。Diff 不提供编辑、覆盖、强制、
-分文件批准或自动恢复按钮。
-
-只有当完整有界 Diff 可准备且其绑定计划仍然新鲜时，Approve 才可用。任何文件 stale、目标
-冲突、Trust 变化、审批过期、取消或 Diff 失败都关闭批准并显示固定的“未应用”状态；不把
-失败伪装为部分成功。多文件前置校验失败时 UI 明确说明“没有文件被修改”；WorkspaceEdit
-应用失败时显示“结果需要检查/恢复”，并保留与该 Run 关联的 Checkpoint 入口。
-
-恢复卡显示操作、目标文件、创建时间和“可安全恢复/存在冲突”状态。恢复前用户必须执行一次
-明确 Restore；UI 不提供替换文本、添加目标或强制覆盖输入。创建恢复删除新文件，删除恢复
-重建原文件，重命名恢复原路径，多文件编辑恢复整个文件集；任何一个目标变化都使整个恢复
-操作冲突且不改动其他目标。取消、Session 切换、New chat 或 disposal 关闭审批和 Diff，不
-产生隐藏 Toast、重试或模型动作。
-
-## 6. 会话与恢复
-
-- 会话列表优先展示可识别标题、最近活动时间和需要关注的状态。
-- 仅有时间戳和内部状态不足以作为长期会话识别方式。
-- 新建、选择和恢复会话不得在无提示时覆盖当前草稿或活动 Run。
-- 一个 Session 可以包含多个顺序回合。`completed`、`truncated`、`cancelled`、`budget-exceeded`、`failed` 和重启后显示的
-  `interrupted` 都可以在用户明确发送下一条消息时继续；继续会创建新的 Run，不复用旧的取消
-  句柄、审批或待执行操作。恢复本身只展示历史，不自动发送或续跑。识别出的旧版单回合
-  `v1` Session 以只读历史打开：保留消息并显示固定说明，禁用 Composer、编辑和重新生成，
-  但保留显式 `New chat` 与删除入口。
-- 失败、取消、截断或中断回合保留用户问题，未完成的 Agent 文本标记为部分/未完成并不注入下一轮；
-  已经完整提交的 Tool Call/Result 可以按历史顺序保留。孤立 Tool Call/Result、损坏记录或
-  未知 Session 显示可操作错误并阻止错投到其他会话。
-- `New chat` 不删除或迁移历史。用户选择/恢复会话时，界面必须明确当前 Session；恢复成功后
-  下一次发送追加到该 Session，而不是隐式创建另一会话。恢复失败、Session 不存在或活动 Run
-  竞态时，保留当前投影和草稿，丢弃陈旧恢复结果。
-- 旧版只读 Session 的恢复结果通过可选 `readOnly` 标记表达；Host 不原地改写源数据，也不
-  猜测未来格式。只读提示必须说明历史仍被保留、继续操作需要 `New chat`，并在状态文本之外
-  通过实际禁用控件表达边界。
-- 删除、归档、重命名或自动标题若需要新增协议或持久化字段，必须作为独立任务走变更控制。
-- Checkpoint 展示目标文件、所属操作、创建时间和当前是否可安全恢复。
-- Session history controls provide an explicit `Delete` action for the selected saved Session and a
-  clearly scoped `Clear all saved Sessions` action. Delete removes only CtrlZebra's local Session
-  history, its attributable Checkpoints, and its persistence temporary files; it never removes
-  workspace files or Provider/MCP settings. Clear-all requires an explicit confirmation explaining
-  that every local conversation and recovery record will be removed.
-- The Host cancels and settles an active Run before either deletion. During deletion, controls are
-  disabled, the current transcript is not replaced optimistically, and a late restore or stream
-  cannot repopulate the deleted Session. On success the selected Session, transcript, reasoning,
-  usage, pending approvals, Checkpoint list, and session selector are cleared or refreshed together.
-  A partial or unavailable cleanup shows a stable retry action and never claims that all data was
-  deleted; already removed records stay removed on retry.
-- Automatic local retention is configured in VS Code machine settings, not as a hidden Webview action.
-  The setting catalog and bounds are owned by [Configuration](configuration.md#session-retention-settings-t2105);
-  lifecycle behavior is owned by [Session retention Architecture](architecture/context-and-session.md#session-retention-lifecycle-t2105),
-  while storage behavior and safe retry semantics are owned by [Persistence](persistence.md#automatic-session-retention-t2105).
-  The user-visible rule is that cleanup occurs only after an explicit Session history request or list
-  refresh; opening the view or activating the Extension does not cause a scan.
-- A completed cleanup shows the fixed safe feedback “Automatic cleanup removed N expired Session(s) and
-  M owned Checkpoint(s).” A partial cleanup shows “Automatic Session cleanup could not remove all
-  expired local data. Retry by refreshing Session history.” If the policy or local store is unavailable,
-  the fixed next step is “Automatic Session cleanup is unavailable. Retry by refreshing Session history.”
-  Disabled cleanup is silent. The UI never exposes raw paths, storage errors, or Checkpoint attribution
-  details.
-- Running or recovery-owned Sessions are not silently deleted. The returned list omits records removed
-  before it was emitted. Once history refresh starts, its lifecycle lock blocks a new submission until
-  cleanup and list projection finish. Malformed or unattributable Checkpoints remain available for a
-  later retry and no workspace file is affected.
-- 卸载或设备交接前，Session 抽屉提供显眼的高风险 `Clear all CtrlZebra local data` 动作，
-  Command Palette 同时提供 `CtrlZebra: Clear All Local Data`。按钮旁明确列出 Sessions、
-  Checkpoints、临时文件、缓存、Provider keys、MCP/Provider 设置和其他 CtrlZebra 本地状态；
-  [Security](security.md#complete-local-data-clearing-t2106) 与 [Persistence](persistence.md#complete-local-data-clearing-t2106)
-  分别拥有安全和存储范围。Host 必须再次显示模态警告，明确说明工作区文件、用户代码、
-  CtrlZebra 之外的 VS Code 数据和其他扩展不会被删除，Webview 不使用浏览器确认替代 Host 确认。
-- 清除期间按钮、会话操作和发送入口显示进行中状态；Host 先取消并等待运行/资源清理，再顺序
-  处理各类别。完成显示固定成功文案；取消保留当前投影；部分失败按类别报告并提供同一动作
-  重试。成功或部分结果都会清除当前会话、Checkpoint、审批、MCP、Provider 和文件引用投影，
-  以免界面继续显示已经清除的数据；迟到消息不恢复旧内容。重启不会自动续跑清除，用户可
-  再次执行同一动作完成剩余类别。
-- 最新一条已完成助手回复提供带作用范围说明的“重新生成”按钮，明确使用原用户问题和此前
-  已完成历史；旧回复在新 Run 成功前保持可见。按钮在运行、恢复、会话切换或目标不再是最新
-  回复时禁用。重新生成创建新的 Run，不重复旧 Tool 副作用或审批；取消、失败、截断和迟到
-  事件保留旧回复并提供稳定的下一步。
-- 每条已完成用户消息提供带作用范围说明的“编辑并重发”入口。编辑器以内联表单保留原文
-  直到用户明确发送或取消；空内容、超限内容、运行中、恢复中、会话切换中和没有已完成回答
-  的消息不可发送。重发明确说明只使用目标之前的历史，后续旧消息会在新回答成功后替换；
-  新 Run 未完成前保留旧分支，取消、失败、截断、Session 错配和迟到事件恢复旧分支，不自动
-  执行旧 Tool 或旧审批。取消或失败后同一用户消息仍可再次编辑；成功后也可继续编辑同一
-  用户投影，最新成功回答成为当前分支。
-
-## 7. 视觉与宿主一致性
-
-- 使用 VS Code CSS Variables 表达主题颜色、字体、边框和焦点状态，不通过 JavaScript 判断主题名。
-- 建立语义化的间距、字号、圆角、边框和状态 Token，组件不得各自复制近似常量。
-- 视觉层级优先由间距、排版和内容顺序建立，减少嵌套边框和同权重卡片。
-- 品牌元素保持克制，不压缩侧边栏中的任务空间。
-- 动效只用于解释状态变化，并遵守 `prefers-reduced-motion`。
-
-## 8. 可访问性与适配
-
-- 所有主路径可仅使用键盘完成，包括发送、取消、展开 Tool 详情和审批。
-- 焦点顺序与视觉顺序一致；流式更新、错误出现和列表刷新不得无故移动焦点。
-- Light、Dark、High Contrast 和 High Contrast Light 都必须可读。
-- 在约 300px 的窄侧栏、常规侧栏宽度、200% VS Code 缩放和长本地化文本下保持可用。
-- 状态、风险和选中状态不只通过颜色表达。
-- 图标按钮需提供合理点击区域和可访问名称。
-
-## 9. 验收场景与体验指标
-
-阶段 11 至少使用以下场景进行自动化或人工验收：
-
-1. 未配置 Provider 的首次打开。
-2. 成功发送普通问候并收到流式回复。
-3. 执行包含多个只读 Tool Call 的任务。
-4. 查看 Diff，批准一次文件修改并找到对应 Checkpoint。
-5. 拒绝审批、取消生成和终止命令。
-6. Provider 配置错误、限流、工具失败和重启中断。
-7. 多条长消息、长路径和大量截断命令输出。
-8. 同一 Session 的第二轮、失败/取消后的继续、重启恢复后继续、显式 `New chat` 不继承历史。
-9. 窄侧栏、200% 缩放、四类 VS Code 主题和纯键盘操作。
-
-阶段 13 还必须覆盖：
-
-1. 一个正常摘要块、多个摘要块，以及 reasoning 与正文和 Tool 事件交错。
-2. Provider 不返回 reasoning、空 reasoning 块和普通文本回答回归。
-3. 流式期间展开/折叠、折叠后继续接收 delta、完成时保持用户选择。
-4. 块级和 Run 级截断，以及超过最大块数后的明确省略提示。
-5. 取消、失败和重启恢复得到部分摘要，完成会话恢复得到默认折叠的完整摘要。
-6. Light、Dark、High Contrast、High Contrast Light、约 300px 宽度、200% 缩放、长摘要、
-   长无空格文本、代码样式空白、复制和纯键盘操作。
-
-体验门禁：
-
-- 新用户无需阅读 README 即可根据界面完成配置并发起首次对话；目标用时不超过 3 分钟，作为人工可用性基线记录，不作为自动化性能承诺。
-- 默认空闲界面不展示没有内容或无需处理的管理区域。
-- 约 300px 宽度下消息输入和当前主要操作可见且可用。
-- 所有用户可见错误都提供与稳定错误分类一致的下一步。
-- 流式更新不抢焦点、不重置文本选择，也不在用户离开底部后强制滚动。
-- 推理摘要不逐 Token 播报；没有实际摘要时不产生空区域，截断或部分内容始终有可见文本说明。
-- 阶段完成前保留每个验收场景的结果、主题/宽度矩阵和已知限制。
-
-## 10. 变更边界
-
-以下内容不能以体验优化名义顺带实现：
-
-- 改变 Tool 风险等级、审批时效、绑定或消费语义。
-- 放宽 Workspace Trust、路径校验、命令执行或 Checkpoint 恢复要求。
-- 在 Webview 中读取凭据、文件系统或 Extension 宿主能力。
-- 新增遥测后端、云同步或收集用户源码和模型内容。
-- 未更新 Protocol/Persistence 权威文档就新增跨边界或持久化字段。
-- 引入未由阶段 14 授权的 MCP 能力、新的模型 Provider、Git 自动化或多 Agent。
-
-## 11. MCP 用户体验契约
-
-MCP 作为当前聊天的渐进披露辅助能力，不成为默认视觉焦点。界面始终把“已配置”“已连接”
-和“已授权某次外部操作”区分开，不使用笼统的“已启用”暗示持久授权。
-
-### 11.1 配置、连接与断开
-
-最小路径是：打开 MCP 区域 → 查看用户级配置说明或打开设置 → 确认 configured mode
-（`modern-only` 或 `dual`）→ 显式选择“连接” → 查看完整 Server 启动操作和外部进程警告 →
-批准或拒绝 → 查看协商后的 Server 身份、era/version、能力和状态。配置缺失或无效时，连接
-入口解释具体缺失项并提供打开用户设置的操作，不要求用户阅读日志或手工编辑未知 JSON。
-`dual` 是显式配置的活动连接模式。Host 在 workspace binding、启动审批和进程启动前完成
-配置、Trust、操作范围和 generation 校验，再按模式选择受控生命周期；只有完整握手结束后才
-显示 negotiated era/version 和能力。配置错误仍显示稳定的 `configuration-invalid` 与“打开设置”，
-不会创建进程、审批或连接世代。
-
-- MCP 区域默认折叠或紧凑显示在对话次级位置；待处理启动审批、连接失败或清理失败可提高视觉
-  优先级，但不覆盖 Composer、活动 Run 或普通聊天错误。
-- “连接”永远是用户动作。激活、恢复会话、打开侧栏或模型提到 Tool 都不显示伪连接进度或自动
-  启动。连接中可以取消；失败后只提供显式重试，不倒计时或静默重连。
-- 连接卡显示配置的 Server 名称、configured mode、`connecting/connected/disconnecting/failed`
-  的本地化状态及 Tools、Resources/Templates、Prompts 可用性。只有 connected 才显示实际
-  negotiated era/version：`modern / 2026-07-28` 或 `legacy / 2025-11-25`。额外或未支持能力不
-  作为可操作入口。
-- 配置在连接期间改变时显示“配置已更改；断开后重新连接生效”，不静默替换进程。断开按钮在
-  连接存活时始终可达；断开先让功能入口失效，再等待清理。无法确认进程树终止必须明确警告，
-  不能显示为普通“已断开”。
-- 不可信工作区说明 Server 不能启动，并保留打开 Workspace Trust 说明的安全下一步；界面不能
-  自行请求或改变信任。
-
-### 11.2 外部 Tool 与逐次审批
-
-MCP Tool 沿用 Inline Approval Fusion，并始终同时展示：Server 来源、面向用户的 Tool 动作、
-精确 MCP Tool 名称、格式化且完整有界的参数、`execute` 风险、单次有效期，以及“外部 Server
-可能产生未知本地或网络副作用”。Server 的只读或幂等声明可以作为“不可信声明”查看，但不能
-替代风险标识或降低审批显著性。
-
-- 每个 Tool Call 分别批准或拒绝；不提供“始终允许”“允许此 Server”“本次会话允许”或批量
-  按钮。连接刷新、Tool 改名、参数变化或审批过期后，旧卡显示失效原因而不是复用确认。
-- 状态区分等待审批、审批拒绝、执行中、成功、Server Tool error、无效结果、超限、取消、断开
-  和 Server 退出。取消不显示为失败，迟到结果不改变终态。
-- 成功结果默认紧凑；截断或不支持内容使用可见文本说明。UI 不提供“查看原始 JSON-RPC”、原始
-  stderr、Server error data 或完整未保留输出入口。
-
-### 11.3 Resources 与 Resource Templates
-
-Resources 是由用户控制的外部上下文。用户先浏览有界列表，填写 Template 的显式参数，再选择
-读取；读取预览显示 Server、完整外部 URI、MIME、截断状态和纯文本内容。只有单独的“附加到
-当前请求”动作才创建上下文快照。
-
-- 浏览、读取和附加是三个可区分状态；列表变更或断开不会悄悄替换已经附加的快照。
-- 外部 URI 只按可选择、可复制的文本显示，不变成工作区文件、命令或自动打开链接。
-- Resource 文本按普通不可信纯文本呈现，不执行 Markdown、HTML、图片、音频、Resource Link、
-  命令或 URI 动作。截断、MIME 不支持和超限均给出稳定下一步。
-- 用户可在发送前移除附加快照。移除只影响当前草稿上下文，不向 Server 写入或删除 Resource。
-
-### 11.4 Prompts
-
-Prompts 是用户主动选择的模板，不是来自 Server 的 System 指令。路径是：浏览 Prompt → 填写
-严格参数 → 获取完整有界文本预览 → 查看 Server、Prompt 名称、参数和每段源角色 → 明确确认
-或取消 → 将确认内容作为普通用户输入附件加入 Composer。
-
-- 预览不会自动发送、读取 Resource、调用 Tool 或授予权限。Server 的 `assistant` 角色只作为
-  来源标签展示，确认后也不成为可信 Assistant 历史。
-- 列表刷新、连接世代变化、断开、会话切换或发送使未确认预览失效，并保留明确说明；失效预览
-  不能通过返回页面恢复确认能力。
-- 确认后用户仍能在发送前审阅和移除普通输入附件。产品不宣传 Prompt 为 slash-command 兼容
-  契约，也不提供后台 Prompt 链。
-
-### 11.5 键盘、响应式与播报
-
-- 连接/断开、目录披露、Resource/Prompt 选择、模板参数、读取、附加、预览、确认、取消以及
-  Tool 审批全部可仅用键盘完成，焦点顺序与视觉顺序一致。
-- 操作完成后焦点返回触发控件或明确的新主区域；列表刷新、状态轮询式变化和迟到事件不得抢
-  焦点、重置选择或折叠用户正在阅读的内容。
-- 一个独立的礼貌 live region 只播报连接终态、目录刷新完成、预览就绪、附加/移除、Prompt
-  确认/失效和 Tool 离散状态；不逐项朗读目录、参数、Tool 输出或 Server 文本。
-- 约 300px、200% 缩放、长 Server/Tool/URI/Prompt 名称和四类 VS Code 主题下，主要动作、来源、
-  风险和错误仍可见且不产生页面级横向滚动。来源、风险、连接和失效状态不只用颜色或图标表达。
-
-### 11.6 MCP 失败诊断与恢复（T1803）
-
-MCP 诊断是连接卡片中的次级、可操作状态，不改变连接、能力或 Tool 成功投影。面板必须把
-“已连接但部分 Tool 被跳过”“刷新失败并保留上一次目录”“连接失败”与“无诊断的普通连接”
-区分开来；不得用一个笼统的“已启用”或绿色成功状态覆盖失败。
-
-- Tool 被跳过时，每条固定文案同时显示经过边界校验的 MCP Tool 名称和稳定原因：
-  `forbidden-keyword` 显示“Schema 使用了被阻止的关键字”；`unknown-keyword` 显示“Schema
-  使用了不支持的关键字”；`invalid-reference` 显示“Schema 使用了不支持的引用”；
-  `non-object-root` 显示“Schema 根不是对象”；`schema-invalid` 显示“Schema 无法通过校验”；
-  `limit-exceeded` 显示“Schema 超过大小限制”。文案不显示关键字、路径、原始错误、Schema、
-  命令、环境、Server 输出或任何敏感值。
-- 混合目录仍展示可用 Tool；“刷新 Tool”触发当前代的一次有界目录刷新。刷新成功后以一个
-  原子状态清除旧诊断并保留焦点；刷新失败保留上一次完整目录，但显示稳定失败类别和再次
-  刷新的操作。全量被跳过的初始连接显示连接失败、跳过列表和“修复 Server 后重新连接”，
-  不渲染空的成功目录。
-- 列表在 Host 侧先按 MCP 名称的 Unicode scalar 顺序，对 exact `(boundedToolName, reason)` 去重并
-  截断；Webview 再次防御性按同一键去重。
-  截断时显示固定“部分被跳过的 Tool 未显示”说明，不猜测总数或遗漏名称。重复诊断、旧
-  generation、过期 sequence 和同 sequence 冲突不会改变当前内容或产生新的提示。
-- `protocol-incompatible` 只显示 configured mode、该模式的闭合支持版本列表和固定的“打开
-  设置/更新 Server 后重新连接”下一步，并保持连接状态为失败。连接完成前不得显示探测成功、
-  回退成功、已协商版本、回退时序或可用能力；不得把双纪元配置误报为已协商 legacy。
-- 恢复动作是明确的用户操作：`refresh-tools`、`reconnect` 或 `open-settings`。它们不能自动
-  连接、静默重试、复用启动或 Tool 审批，也不能在取消、断开或清理失败后恢复旧能力。
-
-收到 `extension/mcp-connection` 的 `disconnecting`、`disconnected` 或 `failed` 状态，或收到
-Server/generation 变化的 connected 投影时，面板立即同步清除诊断列表、截断提示、待处理刷新、
-恢复按钮和诊断 live-region 文本，然后再呈现新的连接状态；不得等待 `kind: "clear"`。Workspace
-Trust 丢失、取消和 disposal 通过同一非 connected/failed 投影清理；若取消只结束一次仍保持
-connected 的刷新，则 Host 发送 `kind: "clear"` 并使待处理请求失效。普通 connected 且无跳过
-Tool 的路径不显示诊断区域或恢复按钮，也不播报失败。
-
-诊断使用独立的语义 region 与现有 MCP 状态文本关联；每次诊断替换、清除或终态失败只播报
-一次简短的礼貌 live-region 摘要，不朗读每个 Tool 名称、参数、Schema 或 Server 文本。列表、
-恢复按钮和“显示更多/截断”状态均可仅用键盘操作，按钮具备可见焦点和原因说明；刷新、轮询
-和迟到事件不得抢焦点、重置选择或折叠用户正在阅读的目录。约 300px、200% 缩放以及四类
-VS Code 主题下，原因、操作和失败状态必须可读且不依赖颜色或图标。
-
-### 11.7 双纪元配置与迁移（T1804–T1807）
-
-- 本节的 strict parser/schema、规范化 DTO、provenance/recovery fixture 与迁移契约已接入活动
-  Extension 生命周期。版本 `2` 的 `dual` submit/start 仍须经过 workspace binding、Trust、启动
-  审批和 generation 边界，随后才进行受控 probe/fallback；配置无效时不创建进程或连接世代。
-- 版本 `1` 的既有设置继续显示并运行 `modern-only`；升级不会自动写入版本 `2`，也不会因
-  Server 响应而静默进入 dual。用户必须先确认迁移，再选择 `modern-only` 或 `dual`。
-- `modern-only` 的固定支持版本是 `2026-07-28`；`dual` 的闭合集是 `2026-07-28` 和
-  `2025-11-25`。设置页明确显示模式含义、仅支持本地 stdio，以及不支持 HTTP、OAuth、远程
-  Server、多 Server、自动连接、自动重启和新增 Client 原语。
-- 配置改变会显示“配置已更改；断开后重新连接生效”，并使当前连接/目录/审批失效；不在
-  连接中切换 era，不复用启动或 Tool 审批。连接始终是用户动作。
-- 探测和回退是连接卡片内部的不可见实现状态。UI 只在完整握手成功后显示 negotiated
-  era/version；失败只显示稳定错误、configured mode、支持版本和固定恢复动作，不显示探测
-  响应、超时、回退尝试、时序、Server 原始错误或“回退成功”文案。DiscoverResult 或可识别
-  modern JSON-RPC error 都锁定 modern；其缺少受支持 `2026-07-28` 时显示
-  `protocol-incompatible`，绝不触发 legacy 回退。只有 bounded timeout 或定义的 non-modern
-  probe error 才进入 legacy；语法/结构错误或响应/错误形状校验失败显示 `malformed-message`；
-  结构有效但不属于闭合的 recognized-modern/defined-non-modern 分类（含 unknown future 或
-  未分类值）显示 `protocol-incompatible`；两者均不触发回退。
-- 连接状态与恢复组合保持严格：未连接/失败时没有可用能力；connected 才显示对应 era 的
-  Tools、Resources/Templates、Prompts。取消、断开、Trust 丢失、清理失败或世代变化立即清空
-  旧目录、诊断、恢复控件和 negotiated 值，迟到事件不改变界面。
-- 配置错误、未知模式、额外字段、旧/未来版本或不支持传输均显示固定的
-  `configuration-invalid` 文案，并提供“打开设置”；不要求用户粘贴命令、环境或原始 JSON。
+# CtrlZebra UX Contract
+
+This document defines the current user paths, information architecture, and interaction contract
+for the desktop VS Code Extension. Protocol, security, persistence, and module boundaries belong to
+their respective owner documents; this document describes their visible product behavior.
+
+## Experience goals
+
+Users should not need to understand the Agent state machine to determine whether the workspace and
+model are ready, send a question or coding task, understand progress and side effects, find the next
+step after failure/cancellation/restart, or return to a recent Session and continue working. The
+conversation and Composer are the default focus; Sessions, Checkpoints, diagnostics, and settings
+appear only when relevant.
+
+## Product language
+
+- The Webview target language is English (`en`). Headings, controls, status, error, help, and screen
+  reader copy use one consistent product vocabulary.
+- `apps/webview/src/strings.ts` is the single owner of static Webview copy. Components, feature
+  stores, and live regions use its values or formatting functions. Dynamic user input, model output,
+  paths, Server names, and validated safe errors remain data and are not copied into the string catalog.
+- A future additional language must be selected at one explicit locale boundary with complete coverage;
+  components, Providers, and screen-reader-only text cannot switch languages independently.
+
+## First use and Provider status
+
+The first-use path is: open the sidebar → inspect configuration status → complete required setup → send
+the first message → read the result. The empty state explains missing items, their purpose, and a direct
+next action without exposing every implementation detail or implying unsupported capabilities.
+
+- Onboarding receives only a strict Provider display projection: the active Provider identifier and
+  `apiKeyConfigured`/`modelConfigured` booleans. It never displays a model ID, endpoint, Secret name,
+  key fragment, or third-party response.
+- Missing credentials expose “Save API key”; a missing model exposes “Select model”; “Open settings”
+  remains available for endpoint, capability, or other configuration errors. A validated local loopback
+  OpenAI-Compatible service may report that its credential requirement is satisfied. Credential delete
+  and rotation are discovered only through Host-owned Command Palette commands.
+- Save, select, and settings controls send strict intents for Host execution. Success, cancellation,
+  and failure use separate fixed safe outcomes. Failure preserves the prior state and retry action;
+  unavailable status is never treated as proof that a credential is absent.
+- Empty-state controls are keyboard operable with visual-order focus. Refreshes and errors do not steal
+  focus. At approximately 300px, 200% zoom, long copy, and all four VS Code themes, missing items,
+  primary actions, and the Composer remain usable.
+
+### Model selection and connection checks
+
+- The Host reads configuration or starts a model-metadata request only after an explicit command.
+  Opening the sidebar, restoring a Session, activation, sending a message, and Tool execution do not
+  automatically fetch lists or check connections.
+- Official lists show only bounded Provider model IDs. Missing credentials, empty lists, network or
+  timeout failures, authentication failures, malformed responses, and unsupported custom endpoints
+  offer manual model entry. Cancellation or failure does not write settings or clear an existing model.
+- A connection check validates only context-free metadata. It sends no prompt, workspace, Session, Tool,
+  or generation request. Authentication, model existence, streaming, and Tool Calling are shown as
+  supported, unsupported, or unknown; unsupported or ambiguous facts are never guessed. Custom
+  endpoints are not assumed compatible because of their name.
+- Checks have a fixed timeout and no automatic retry. Success, authentication failure, missing model,
+  rate limiting, timeout, network unavailability, malformed response, cancellation, and unknown use
+  separate safe copy; failure and cancellation preserve all existing configuration.
+
+## Conversation, Composer, and messages
+
+- The Composer and current conversation are the primary visual region. The input has an accessible name;
+  the default keyboard contract is `Enter` to send and `Shift+Enter` for a newline. Send, stop, and retry
+  follow Run state, and disabled reasons are visible. Drafts survive configuration navigation, refresh,
+  and non-terminal state updates.
+- User, Agent, Tool, and system feedback are distinguished semantically, spatially, and with labels,
+  not by color alone. The supported Markdown subset safely renders headings, lists, code, emphasis,
+  quotes, tables, and absolute `http`/`https` links. Raw HTML, images, bare URLs, workspace files, and
+  commands remain inert text. Long content keeps the bounded prefix and shows a stable shortened marker.
+  Code supports keyboard copy with concise accessible feedback.
+- Streaming does not steal focus, reset selection, or force a user who has left the bottom to scroll.
+  Empty replies, cancellation, truncation, and no-content failure have distinct fixed messages. Partial
+  answers are display content, not complete model history.
+- Reasoning summaries appear only after actual non-empty summary text is received, remain separate from
+  answer and Tool content, and follow source order. They are plain text, not Markdown, links, commands,
+  or hidden chain-of-thought. New blocks start expanded; a user collapse is not overridden by later
+  deltas. Partial/truncated states are visible, and the live region announces only discrete transitions.
+
+### Composer management actions
+
+- `New chat` is an explicit, keyboard-accessible primary action. It clears the current projection,
+  selected Session, staged restore, and unsent Resource/Prompt/editor/file attachments without deleting
+  saved Sessions. During an active Run, restore, or switch it is disabled or ignored while preserving
+  the draft.
+- The latest completed assistant answer exposes a scope-labelled “Regenerate response” action. Every
+  completed user message exposes “Edit and resend”. Both use exact Session/message identities and create
+  a fresh Run without replaying old Tools or approvals. The old branch remains visible until the new
+  result completes; cancellation, failure, truncation, mismatch, and late events restore the old branch.
+
+## Approvals, Tools, and side effects
+
+Approval cards stay near their Tool card and answer: what will happen, what it affects, what the risk is,
+and how it can be restored. While pending, the card shows the action, workspace-relative targets,
+explicit risk, Diff or immutable details, and expiry; raw Tool JSON is hidden. Visual simplification
+cannot hide immutable details required by the security contract.
+
+- Tool details disclose progressively: action summary → resources/impact → parameters and output.
+  Successful read-only results are compact; running, pending-approval, and failed states have higher
+  priority. Truncation, cancellation, timeout, non-zero exit, denial, and execution failure remain distinct.
+- File create, delete, rename, and multi-file edit show one-time `write` approval. A multi-file plan
+  cannot be split into implicit per-file approvals. Users may open a Host-owned Diff with bounded
+  before/after content but cannot edit it, force overwrite, or provide replacement content.
+- Approve is enabled only when the complete Diff and current bound plan are ready. Target changes,
+  Trust loss, expiry, cancellation, or Diff failure show “Not applied”; preflight failure explicitly
+  says no files were modified, while apply failure retains the Checkpoint and a check/restore action.
+- Restore is one explicit whole-operation action: create restores by removing the new file, delete by
+  recreating the original, rename by restoring the original path, and multi-file edit by restoring the
+  complete set. Any changed target conflicts with the whole operation. Cancellation, switching, New
+  chat, and disposal do not create hidden retries or model actions.
+
+## Failure, interruption, Sessions, and recovery
+
+- User messages explain what happened, what did not happen, and the next safe action. Errors are not
+  conveyed by color alone. Token warnings and limits show estimates and thresholds and state that they
+  are local safety limits, not billing; an exceeded Run stops its current loop and a follow-up uses a new Run.
+- The Session list shows recognizable titles, recent activity, and attention-worthy states. Selecting,
+  restoring, or creating a Session never silently overwrites a draft or active Run. Restore displays
+  history only and never resumes work automatically.
+- Completed, truncated, cancelled, budget-exceeded, failed, and interrupted Sessions continue only when
+  the user explicitly sends another message, which creates a fresh Run. A recognized legacy single-turn
+  v1 Session opens as read-only history: deletion and `New chat` remain available, while Composer, edit,
+  and regeneration are disabled.
+- Failed, cancelled, truncated, and interrupted Runs retain the user question; incomplete assistant
+  text is marked partial and is not inserted into the next Run. Complete Tool pairs may remain in order.
+  Damaged records, orphan calls, and unknown Sessions show actionable errors and cannot be routed elsewhere.
+- Session deletion affects only local CtrlZebra history, attributable Checkpoints, and temporary files.
+  Clear-all explicitly explains that all local conversation and recovery records will be removed. The Host
+  settles the Run before cleanup. Partial/unavailable results offer a fixed retry and never claim all data
+  was removed; already deleted records remain deleted.
+- Automatic retention runs only during an explicit history refresh, never on activation or sidebar open.
+  Active or recovery-owned Sessions are not silently deleted; the UI exposes only bounded counts and safe copy.
+- A Checkpoint appears only when recovery is meaningful and shows its target, operation, creation time,
+  and safe-to-restore/conflict state. During local-data clearing, Session, approval, MCP, Provider, editor,
+  and file-reference projections are invalidated together; late messages cannot restore cleared content.
+
+## IDE context and workspace file references
+
+IDE context and `@` file references are visible, removable, editable, ordinary untrusted context, not
+hidden System instructions. Cards show fixed provenance, workspace-relative paths, language/range, Stale,
+and Truncated state; they do not show absolute paths, raw URIs, or Provider objects.
+
+- Capture happens only after explicit user action. Editor, selection, workspace, Trust, or version changes
+  mark a card Stale; sending requires Refresh or an explicit Use stale decision. A collapsed selection
+  preserves its exact empty range and does not fall back to the active line/file. Missing editors and
+  unsafe results show fixed unavailable states.
+- Diagnostics, definitions, references, and symbols appear as plain text near their message/Tool. They
+  provide no Code Action, edit, execute, or approval controls. Mixed results filtered by workspace scope
+  show a fixed omission message; fully filtered or malformed results show safe unavailability rather than
+  an indistinguishable empty result.
+- `@` suggestions support keyboard navigation, selection, and Escape. The Host reads files; the Webview
+  never reads URIs or files. Equivalent canonical paths collapse to one card. A Stale card blocks sending
+  until Refresh or Use stale file. New chat, switching, cancellation, and late reads do not change the draft.
+- Editor entry is disabled by default and fills the Composer only after an explicit request for the active
+  file or selection. It does not send, run the model, execute a Tool, write a file, or grant authority.
+  Refresh, Remove, and Use stale preserve the draft and focus.
+
+## Information architecture, visual design, and accessibility
+
+The default order is current Session and Composer, messages and Tool state, current Run actions, pending
+approval/recovery, and then history, Checkpoints, settings, and diagnostics. Secondary capabilities use
+progressive disclosure; empty management regions are not permanently visible, and the page does not rely
+on horizontal scrolling.
+
+- Use VS Code CSS variables and existing semantic tokens; JavaScript must not detect theme names. Support
+  light, dark, high-contrast, high-contrast-light, and `prefers-reduced-motion`.
+- Every primary path is keyboard operable, with semantic names and visible focus. Streaming, refreshes,
+  errors, and list changes do not unexpectedly move focus, reset selection, or scroll.
+- State, risk, Stale, truncation, selection, and errors are not communicated only by color or icons.
+  At approximately 300px, 200% zoom, and with long localized text, sources, primary actions, input, and
+  fixed next steps remain visible and usable.
+- Live regions announce discrete state changes only; they do not read every token, parameter, source,
+  diagnostic item, or Server text.
+
+## MCP user experience
+
+MCP is a progressive-disclosure assistant to the conversation, not the default focus. The UI distinguishes
+configured, connected, and authorized-for-one-operation states and never implies persistent authorization.
+
+- Connection is always a user action: inspect settings → choose `modern-only`/`dual` → read the external
+  process warning → approve or reject → inspect connection and capabilities. Activation, restore, sidebar
+  open, and model text do not auto-start, reconnect, or fake progress.
+- Negotiated era/version and capabilities appear only after a complete handshake. Configuration changes
+  say that they take effect after disconnect/reconnect. Disconnect disables features before cleanup, and
+  an untrusted workspace offers the safe Trust next step.
+- Every MCP Tool shows Server provenance, exact name, bounded parameters, `execute` risk, and unknown
+  local/network side effects, with separate per-call approval. There are no “always allow”, “allow this
+  Server”, or batch buttons. Resource/Prompt browsing, confirmation, and attachment are explicit actions,
+  not Tool approvals and never authorize follow-up operations.
+- Resource and Prompt previews are plain text. A Prompt `assistant` role is provenance only, not trusted
+  history. Disconnect, generation changes, sending, and refresh invalidate unconfirmed previews; attached
+  snapshots are not silently replaced.
+- Diagnostics distinguish skipped Tools, refresh failure with the prior catalog retained, connection
+  failure, and a normal connection. Recovery is limited to Refresh tools, Reconnect, or Open settings;
+  Schema, stderr, raw JSON-RPC, command, environment, and Server-error details are not shown. Incompatibility
+  remains a failed state and does not expose probe or fallback internals.
+
+## Change boundaries and current quality bar
+
+UX work must not change Tool risk, approval binding/expiry, Trust, path validation, command execution,
+Checkpoint recovery, credential access, telemetry/cloud synchronization, or Protocol/Persistence fields.
+New cross-boundary behavior requires an update to its owner document first.
+
+The current quality bar is: a first-time user can configure and start a conversation from the UI; primary
+actions work in a narrow sidebar; every visible error has a fixed next step; streaming preserves focus and
+scroll position; summaries are not announced token by token; no empty summary card appears without content;
+and primary paths work with keyboard input, all four themes, and 200% zoom.

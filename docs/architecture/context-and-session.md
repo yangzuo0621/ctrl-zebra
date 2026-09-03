@@ -110,7 +110,7 @@ record is restored or persisted separately.
   attempt falls back to the prior completed branch. The new Run has fresh cancellation, Tool, and
   approval ownership and never executes old Tools automatically.
 
-## Session retention lifecycle (T2105)
+## Session retention lifecycle
 
 - Core owns the retention calculation and cleanup result. The Extension supplies the validated
   machine policy, the injected clock, the Session repository, and the local Checkpoint store; Core

@@ -21,7 +21,7 @@ Read only the documents required by the current work.
 | Product scope/baseline | `docs/product.md` |
 | Code/config/dependency | `docs/development.md`; add `docs/testing.md` when behavior or tests change |
 | Core lifecycle/providers/tools/session | Applicable section under `docs/architecture/` |
-| Webview/protocol/UX | Applicable section of `docs/protocol.md`, `docs/webview.md`, or `docs/ux.md` |
+| Webview/protocol/UX | Applicable section of `docs/protocol.md` or `docs/ux.md` |
 | Workspace/approvals/commands/credentials | Applicable section of `docs/security.md` |
 | Persistence/checkpoints | `docs/persistence.md` plus applicable restore/security rules |
 | MCP | `docs/mcp.md`; add `docs/security.md` for security-sensitive MCP changes |

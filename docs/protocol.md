@@ -1,6 +1,6 @@
 # Protocol Guidelines
 
-This document defines the Webview/Extension message boundary established before T0105. It applies to messages in both directions and complements the architecture and security rules in `AGENTS.md`.
+This document defines the current Webview/Extension message boundary. It applies to messages in both directions and complements the architecture, security, and UX rules in `AGENTS.md`.
 
 The protocol contract is organized by domain so readers can load only the rules they need. Each
 topic has one normative owner:
@@ -17,7 +17,7 @@ topic has one normative owner:
 The shard links above are stable entry points for the corresponding protocol domains; they are the
 authoritative source for the exact wire contracts.
 
-## User-triggered redacted diagnostics export (T2205)
+## User-triggered redacted diagnostics export
 
 The Webview sends `webview/diagnostics-export` with a request ID, then may send the exact
 `webview/diagnostics-export-confirm` or `webview/diagnostics-export-cancel` pair only after a

@@ -1,159 +1,176 @@
-# CtrlZebra 产品与技术基础规格
+# CtrlZebra Product and Technical Foundation
 
-本文档只保存当前获准的产品范围、技术基线、模块边界、跨模块契约地图和产品级验证要求。具体运行时、
-安全、协议、持久化、Webview 和体验语义由对应领域文档拥有；历史授权过程由 Git、合并 PR 和 ADR
-保留，不在这里重复维护。
+This document contains only the currently approved product scope, technical baseline, module
+boundaries, cross-module contract map, and product-level verification requirements. Runtime, security,
+protocol, persistence, Webview, and UX semantics belong to their domain documents; historical approval
+and implementation records belong in Git, merged pull requests, and ADRs.
 
-## 1. 当前授权产品范围
+## 1. Current approved product scope
 
-本节同时包含已经实现和尚待实现的获准能力。它只决定产品边界，不代表实施状态，也不
-提前批准 DTO、Tool 名称、持久化字段、状态转换、错误码、算法、依赖或安全实现。
+This section includes approved capabilities that are implemented or may be implemented. It defines
+product boundaries only; it does not pre-authorize DTOs, Tool names, persisted fields, state transitions,
+error codes, algorithms, dependencies, or security behavior.
 
-### 1.1 获准能力
+### 1.1 Approved capabilities
 
-- 产品形态保持为桌面 VS Code Extension，通过 Activity Bar Agent 侧边栏提供本地优先的对话和
-  工作区协作体验；不引入云账户、同步或遥测后端。
-- 用户可以创建、恢复和显式续接本地多轮 Session；历史重建、上下文裁剪、Token Usage、截断和
-  溢出恢复保持取消、审批、持久化兼容和资源上限。后续获准重新生成、编辑重发、工作区文件引用、
-  会话删除、历史清空、保留策略及全部 CtrlZebra-owned 本地数据清除。
-- OpenAI、Gemini 和 OpenAI-compatible 三个 Provider 通过统一的 Provider-neutral Runtime 提供
-  流式文本、Tool Calling、可选且有界的用户可见推理摘要、受控重试、稳定错误和 Token Usage。
-  用户可以保存、删除、轮换凭据，选择或手工配置模型，并主动执行不携带工作区或会话内容的最小
-  连接与能力检查；无法可靠判断的能力显示为未知。凭据只由 Extension-owned `SecretStorage` 保存。
-- 内置工作区能力包括有界文件列举、读取、搜索、正则搜索、文本修改提议、命令执行，以及后续获准
-  的创建、删除、重命名和多文件原子编辑。任何副作用继续服从 Workspace Trust、规范路径、精确
-  一次性审批、可审阅 Diff、`WorkspaceEdit` 或等价原子写入、取消、结果限额和可恢复 Checkpoint。
-  Model 发起的 Tool Call 经受控执行产生 Tool Result 后，才可继续 Agent Loop。
-- Webview 提供流式消息、Tool 和审批状态、Session 恢复、Token Usage、可访问交互、一致产品语言
-  和受限技术 Markdown。内容呈现不得扩大 CSP、命令、文件、网络、HTML 或未批准 URI 能力。
-- Extension 可以在用户控制和工作区范围内读取活动编辑器、选区、诊断及 VS Code 语言服务结果，
-  作为有界、不可信、可关闭的上下文或只读 Tool Result；不建立自有语义、向量或代码索引。
-  这些能力只通过 Extension-owned Host adapter 接入；跨边界只允许 `Ide*Dto` 和普通用户上下文，
-  不把 VS Code 对象、绝对主机路径、编辑器快照或 Provider 结果变成 System 指令、授权材料或
-  跨会话记忆。用户可以显式启用 `ctrlZebra.editorContext.enabled`，并从
-  `ctrlZebra.askAboutSelection`/`ctrlZebra.askAboutFile` 命令把当前选区或活动文件填充到可见、
-  可编辑的 Composer 草稿；入口不自动发送、运行模型或授予权限。
-- 一个用户显式配置并连接的本地 stdio MCP Server 可以提供 Tools、Resources（含 Templates）和
-  Prompts。MCP Tool 进入现有 Core Tool、审批、取消和结果边界；Resource 与 Prompt 只通过用户或
-  应用控制的有界路径进入普通不可信上下文。当前支持显式 `modern-only | dual` 模式，闭集支持
-  modern `2026-07-28` 与 legacy `2025-11-25`，并遵循
-  [ADR 0002](adr/0002-mcp-dual-era-stdio-compatibility.md)；现有配置不静默启用 dual。Server 进程、
-  配置、Workspace Trust、启动批准和完整进程树清理继续由 Extension 拥有；Model、Webview 和
-  工作区内容不能创建或扩大 Server 配置。
-- Preview/GA 工程范围包括覆盖率与跨平台 CI、仓库治理、受审查依赖更新、数据迁移或只读降级、
-  单次 Run 成本护栏、用户主动脱敏诊断导出、性能与资源预算、许可证/SBOM/VSIX 内容审计、可重复
-  发布流水线和 Marketplace 证据。实际发布仍需单独明确授权。
+- The product remains a desktop VS Code Extension with a local-first conversation and workspace-
+  collaboration experience in the Activity Bar Agent sidebar. It does not introduce a cloud account,
+  synchronization service, or telemetry backend.
+- Users may create, restore, and explicitly continue local multi-turn Sessions. History reconstruction,
+  context pruning, Token Usage, truncation, and overflow recovery preserve cancellation, approval,
+  persistence compatibility, and resource limits. Approved capabilities also include regeneration,
+  edit-and-resend, workspace file references, Session deletion, history clearing, retention policy, and
+  clearing all CtrlZebra-owned local data.
+- OpenAI, Gemini, and OpenAI-Compatible Providers use one Provider-neutral Runtime for streaming text,
+  Tool Calling, optional bounded user-visible reasoning summaries, controlled retries, stable errors,
+  and Token Usage. Users may save, delete, and rotate credentials, choose or manually enter a model,
+  and explicitly run minimal connection and capability checks that contain no workspace or Session
+  content. Capabilities that cannot be determined reliably remain unknown. Credentials are stored only
+  in Extension-owned `SecretStorage`.
+- Built-in workspace capabilities include bounded file listing, reading, searching, regular-expression
+  searching, text-edit proposals, and command execution, plus approved create, delete, rename, and
+  multi-file atomic editing. Side effects remain subject to Workspace Trust, canonical paths, exact
+  single-use approval, reviewable Diff, `WorkspaceEdit` or equivalent atomic write, cancellation,
+  result limits, and recoverable Checkpoints. A model-initiated Tool Call may continue the Agent Loop
+  only after controlled execution produces a Tool Result.
+- The Webview provides streaming messages, Tool and approval states, Session recovery, Token Usage,
+  accessible interaction, consistent product language, and restricted technical Markdown. Presentation
+  must not expand CSP, command, file, network, HTML, or unapproved URI capabilities.
+- Within user control and workspace scope, the Extension may read the active editor, selection,
+  diagnostics, and VS Code language-service results as bounded, untrusted, removable context or
+  read-only Tool Results. It does not create its own semantic, vector, or code index. These capabilities
+  enter through Extension-owned Host adapters; cross-boundary data is limited to `Ide*Dto` and ordinary
+  user context. VS Code objects, absolute host paths, editor snapshots, and Provider results never
+  become System instructions, authorization material, or cross-Session memory. Users may explicitly
+  enable `ctrlZebra.editorContext.enabled` and use `ctrlZebra.askAboutSelection` or
+  `ctrlZebra.askAboutFile` to fill a visible, editable Composer draft. The entry point does not send,
+  run the model, or grant authority automatically.
+- One explicitly configured and connected local stdio MCP Server may provide Tools, Resources including
+  Templates, and Prompts. MCP Tools use the existing Core Tool, approval, cancellation, and result
+  boundaries; Resources and Prompts enter ordinary untrusted context only through bounded user- or
+  application-controlled paths. Supported modes are `modern-only | dual`, with the closed versions
+  modern `2026-07-28` and legacy `2025-11-25`, as recorded by
+  [ADR 0002](adr/0002-mcp-dual-era-stdio-compatibility.md). Existing configuration does not silently
+  enable dual. The Extension owns the Server process, configuration, Workspace Trust, startup approval,
+  and complete process-tree cleanup; model, Webview, and workspace content cannot create or broaden
+  Server configuration.
+- Preview/GA engineering scope includes coverage and cross-platform CI, repository governance,
+  reviewed dependency updates, data migration or read-only fallback, per-Run cost guardrails,
+  user-triggered redacted diagnostics export, performance and resource budgets, license/SBOM/VSIX
+  audits, reproducible release pipelines, and Marketplace evidence. Actual publication still requires
+  explicit authorization.
 
-### 1.2 明确排除
+### 1.2 Explicit exclusions
 
-- 多 Agent、子 Agent、Skills、跨会话记忆、自定义 Modes、运行中插话和多模态输入或文件解析。
-- 浏览器自动化、自动 Git 提交或 PR、自动发布，以及无精确审批的命令或工作区副作用。
-- Web Extension、云端账户、同步、遥测后端、SQLite、向量数据库、自建语义或代码索引。
-- 通过提示词、额外模型调用或 Host 推断生成、补写或重建模型隐藏或完整思维过程。
-- 旧于 MCP `2025-11-25` 或未知未来版本、Streamable HTTP、旧 HTTP+SSE、远程 MCP、OAuth、多
-  Server、自动安装、服务器市场、工作区共享 Server 配置，以及 Roots、Sampling、Elicitation、
-  Tasks、`input_required` 续轮或未获准 Server-to-Client 能力。
+- Multi-Agent, sub-Agent, Skills, cross-Session memory, custom Modes, mid-Run interruption, and
+  multimodal input or file parsing.
+- Browser automation, automatic Git commits or pull requests, automatic publishing, and workspace or
+  command side effects without exact approval.
+- Web Extension, cloud accounts, synchronization, telemetry backends, SQLite, vector databases, and
+  self-built semantic or code indexes.
+- Generating, completing, or reconstructing hidden or complete model reasoning through prompts, extra
+  model calls, or Host inference.
+- MCP versions older than `2025-11-25` or unknown future versions, Streamable HTTP, legacy HTTP+SSE,
+  remote MCP, OAuth, multiple Servers, automatic installation, Server marketplaces, shared workspace
+  Server configuration, and Roots, Sampling, Elicitation, Tasks, `input_required` continuation, or
+  other unapproved Server-to-Client capabilities.
 
-外部 SDK、评估报告或候选清单出现某项能力不构成授权。扩大本节范围必须先更新本文档；涉及信任
-模型或长期架构时还需更新对应领域文档和 ADR。
+An item appearing in an external SDK, evaluation report, or candidate list is not authorization. Expanding
+this scope requires an update to this document; changes to the trust model or long-lived architecture
+also require updates to the relevant domain document and ADR.
 
-## 2. 技术基线
+## 2. Technical baseline
 
-| 领域 | 选型 |
+| Area | Choice |
 |---|---|
-| 语言 | TypeScript 7.0.2（精确固定），开启 `strict`；共享编译目标与标准库为 `ES2025` |
-| 桌面宿主 | VS Code `1.125.0` 或更高版本；Extension Host 以 Node.js 24 为基线（已在 `24.15.0` 验证） |
-| 包管理 | pnpm workspace |
-| Extension 构建 | esbuild，目标 `node24` |
-| Webview | React + Vite；TypeScript 标准库为 `ES2025` + `DOM` + `DOM.Iterable`，Vite 构建目标为 `es2025` |
-| Webview 状态 | Zustand |
-| 样式 | CSS Modules + VS Code CSS Variables |
-| 运行时校验 | Zod |
-| MCP Client | 官方 `@modelcontextprotocol/client` v2；首个实现精确固定 `2.0.0`，隔离在 `packages/mcp-client` |
-| 外部 Tool JSON Schema | 同一固定 SDK 的公开 Ajv validator，经闭合集关键字与结构限额后编译 |
-| 模型标准化层 | Vercel AI SDK 7，外包一层自有接口 |
-| 单元测试 | Vitest |
-| UI 测试 | Testing Library + jsdom |
-| Extension 集成测试 | `@vscode/test-electron` |
-| 格式化和静态检查 | Biome + TypeScript |
-| 发布 | `@vscode/vsce` |
+| Language | TypeScript 7.0.2 (exactly pinned), `strict` enabled; shared target and standard library `ES2025` |
+| Desktop host | VS Code `1.125.0` or newer; Extension Host baseline Node.js 24, verified with `24.15.0` |
+| Package management | pnpm workspace |
+| Extension build | esbuild, target `node24` |
+| Webview | React + Vite; TypeScript libraries `ES2025` + `DOM` + `DOM.Iterable`; Vite target `es2025` |
+| Webview state | Zustand |
+| Styling | CSS Modules + VS Code CSS Variables |
+| Runtime validation | Zod |
+| MCP Client | Official `@modelcontextprotocol/client` v2; first implementation exactly `2.0.0`, isolated in `packages/mcp-client` |
+| External Tool JSON Schema | Public Ajv validator from the same pinned SDK, compiled after closed-keyword and structural limits |
+| Model normalization | Vercel AI SDK 7 behind a CtrlZebra-owned interface |
+| Unit tests | Vitest |
+| UI tests | Testing Library + jsdom |
+| Extension integration tests | `@vscode/test-electron` |
+| Formatting and static checks | Biome + TypeScript |
+| Release | `@vscode/vsce` |
 
-版本安装时选择相互兼容的稳定版本并提交 lockfile，不使用未固定的 `latest` 作为长期依赖声明。
+Installed versions must be mutually compatible and recorded in the lockfile. Long-lived dependency
+declarations must not use an unpinned `latest`.
 
-## 3. Workspace 结构
+## 3. Workspace structure
 
 ```text
 ctrl-zebra/
 ├─ apps/
-│  ├─ extension/        # VS Code Host、组合根、适配器和控制器
-│  └─ webview/          # React 展示和用户交互
+│  ├─ extension/        # VS Code Host, composition root, adapters, and controllers
+│  └─ webview/          # React presentation and user interaction
 ├─ packages/
-│  ├─ protocol/         # 跨边界 DTO 与 Schema
-│  ├─ core/             # Host-、Provider-neutral 业务逻辑
-│  ├─ providers/        # 具体模型 SDK 适配器
-│  ├─ builtin-tools/    # Host-independent 内置 Tool
-│  ├─ mcp-client/       # 受控 MCP SDK 边界
-│  └─ testkit/          # 跨包测试替身
-└─ docs/                # 产品、领域规范、ADR 和发布文档
+│  ├─ protocol/         # Cross-boundary DTOs and Schemas
+│  ├─ core/              # Host- and Provider-neutral business logic
+│  ├─ providers/        # Concrete model SDK adapters
+│  ├─ builtin-tools/    # Host-independent built-in Tools
+│  ├─ mcp-client/       # Controlled MCP SDK boundary
+│  └─ testkit/          # Cross-package test doubles
+└─ docs/                # Product, domain, ADR, and release documents
 ```
 
-本节只固定 Workspace 级模块，不规定包内文件夹或具体文件。实际源码树和各包公共 `exports` 是
-实现结构的事实来源；新增或移动 Workspace 模块仍需先更新本节和依赖规则。
+This section fixes Workspace-level modules only; it does not prescribe package folders or individual
+files. The source tree and each package's public `exports` are the implementation source of truth.
+Adding or moving a Workspace module requires updating this section and the dependency rules first.
 
-## 4. 模块边界
+## 4. Module boundaries
 
 ### 4.1 `packages/protocol`
 
-负责所有跨边界的数据结构：
+Owns all cross-boundary data structures:
 
-- Webview 到 Extension 的命令。
-- Extension 到 Webview 的事件。
-- Session、Message、Tool Call 的可序列化 DTO。
-- 推理摘要块、流事件、截断状态和恢复投影的严格可序列化 DTO。
-- Zod Schema 和由 Schema 推导的 TypeScript 类型。
-- 持久化格式版本号。
+- Webview-to-Extension commands and Extension-to-Webview events.
+- Serializable Session, Message, and Tool Call DTOs.
+- Reasoning blocks, stream events, truncation state, and recovery projections.
+- Zod Schemas and the TypeScript types derived from them.
+- Persistence format version identifiers.
 
-约束：
-
-- 不能依赖 React、VS Code 或模型 SDK。
-- 所有数据必须可以 JSON 序列化。
-- Webview 输入在 Extension Host 中必须经过运行时校验。
+Protocol must not depend on React, VS Code, or model SDKs. Every value must be JSON serializable, and
+Webview input must be runtime-validated in the Extension Host.
 
 ### 4.2 `packages/core`
 
-负责与宿主无关的业务逻辑：
+Owns host-independent business logic:
 
-- Agent 状态机和循环。
-- Session 生命周期。
-- Tool Registry 和 Tool Executor。
-- Approval Policy。
-- Context 构造、裁剪和摘要接口。
-- Checkpoint 数据模型。
-- 领域事件和错误分类。
-- Provider-neutral 推理摘要生命周期以及与正文、Tool 和终态保持源顺序的转发。
+- Agent state machine and loop.
+- Session lifecycle.
+- Tool Registry and Tool Executor.
+- Approval Policy.
+- Context construction, pruning, and summary interfaces.
+- Checkpoint data model.
+- Domain events and error classification.
+- Provider-neutral reasoning-summary lifecycle and source ordering relative to answer, Tool, and terminal events.
 
-约束：
-
-- 严禁 `import "vscode"`。
-- 严禁直接访问文件系统、终端、Webview 或 SecretStorage。
-- 所有外部能力必须通过构造参数接口注入。
+Core must not import `vscode` or access filesystems, terminals, Webviews, or SecretStorage directly.
+External capabilities are injected through constructor interfaces.
 
 ### 4.3 `packages/providers`
 
-负责把第三方模型 SDK 转换为内部统一事件：
+Converts third-party model SDK events into the internal contract:
 
-- 文本增量。
-- Provider 正式返回的用户可见推理摘要增量。
-- Tool Call。
-- Finish Reason。
-- Token Usage。
-- Provider Error。
+- Text deltas.
+- Provider-authored user-visible reasoning-summary deltas.
+- Tool Calls.
+- Finish Reasons.
+- Token Usage.
+- Provider Errors.
 
-对外只实现 `ModelGateway`；Agent Core 不直接依赖 Vercel AI SDK 类型。
+Providers expose `ModelGateway`; Agent Core never depends directly on Vercel AI SDK types.
 
 ### 4.4 `packages/builtin-tools`
 
-负责内置工具定义和宿主无关的参数校验：
+Owns built-in Tool definitions and host-independent argument validation:
 
 - `list_files`
 - `read_file`
@@ -161,96 +178,95 @@ ctrl-zebra/
 - `propose_file_edit`
 - `run_command`
 
-文件生命周期契约保留 `propose_file_edit` 的单文件含义，并新增
-`propose_file_create`、`propose_file_delete`、`propose_file_rename` 和 edit-only 的
-`propose_workspace_edit`。这些名称、输入闭集、边界和失败/恢复语义由
-[Protocol 的文件生命周期契约](protocol/tools-and-file-lifecycle.md#file-lifecycle-and-atomic-mutation-contracts-t2001)拥有；
-Extension 仍是唯一可以解析 VS Code URI、校验 Trust、创建 Checkpoint 和提交原子
-`WorkspaceEdit` 的模块。正则搜索通过 `search_files.mode: "regex"` 显式启用受控
-RE2-compatible dialect，默认 literal 行为不变；引擎选择和接入由对应领域文档拥有。
+The file-lifecycle contract preserves the single-file meaning of `propose_file_edit` and adds
+`propose_file_create`, `propose_file_delete`, `propose_file_rename`, and edit-only
+`propose_workspace_edit`. Names, closed inputs, limits, failure, and recovery semantics belong to the
+[Protocol file-lifecycle contract](protocol/tools-and-file-lifecycle.md#file-lifecycle-and-atomic-mutation-contracts-t2001).
+The Extension alone parses VS Code URIs, checks Trust, creates Checkpoints, and submits atomic
+`WorkspaceEdit` operations. Regular-expression search is explicitly enabled by
+`search_files.mode: "regex"` using a controlled RE2-compatible dialect; literal search remains the
+default and engine integration belongs to its domain owner.
 
-只读 IDE Tool 使用 Host-independent 输入、输出和边界契约；这些工具只能依赖注入的
-`IdeContextPort`/语言服务 Port，不得导入 VS Code、读取宿主 URI 或自行决定 Workspace Trust。
+Read-only IDE Tools use host-independent input, output, and boundary contracts. They depend only on
+injected `IdeContextPort` and language-service Ports, never import VS Code, read host URIs, or decide
+Workspace Trust.
 
-实际文件操作由 Extension 中的适配器完成。
+Actual file operations are performed by Extension adapters.
 
 ### 4.5 `apps/extension`
 
-负责 VS Code 集成：
+Owns VS Code integration:
 
-- 注册命令和 `WebviewViewProvider`。
-- 依赖装配。
-- 验证并将 Webview 命令分派给拥有相应生命周期的控制器。
-- 实现文件、编辑器、Diff、存储、日志和密钥适配器。
-- 实现文件生命周期的 canonical target/revision adapter、临时 Diff、Checkpoint durability 和
-  one host-owned atomic `WorkspaceEdit`; mutation plans never cross into Webview as host values.
-- 拥有活动编辑器/选区、诊断和语言服务的 VS Code API 调用、URI 规范化、Workspace Trust
-  检查、取消和 Disposable；只向 Core/Protocol 发布有界 `Ide*Dto`，不把 VS Code 类型下沉。
-- 管理 Disposable 和扩展生命周期。
+- Command and `WebviewViewProvider` registration.
+- Dependency composition.
+- Validation and dispatch of Webview commands to lifecycle-owning controllers.
+- File, editor, Diff, storage, logging, and credential adapters.
+- Canonical target/revision validation, temporary Diff, Checkpoint durability, and one Host-owned
+  atomic `WorkspaceEdit` for file lifecycle operations. Mutation plans do not cross into the Webview
+  as host values.
+- VS Code API access for active editor/selection, diagnostics, and language services; URI normalization,
+  Workspace Trust checks, cancellation, and disposal. Only bounded `Ide*Dto` values are published to
+  Core and Protocol; VS Code types do not cross the boundary.
+- Extension and Disposable lifecycle.
 
-`extension.ts` 只允许做注册和装配，不放业务流程。
+`extension.ts` is limited to registration and composition, not business workflows.
 
 ### 4.6 `apps/webview`
 
-负责纯展示和用户交互：
+Owns presentation and user interaction:
 
-- 聊天消息列表。
-- 流式文本渲染。
-- 独立、可折叠的推理摘要展示。
-- Tool Call 状态卡片。
-- 审批界面。
-- 会话选择和设置。
-- 显示用户可移除的 IDE 上下文来源、范围、陈旧/截断状态和只读 Tool 结果。
+- Chat message lists and streaming text.
+- Independent, collapsible reasoning-summary presentation.
+- Tool Call status cards and approval UI.
+- Session selection and settings controls.
+- Removable IDE-context source, range, stale/truncation state, and read-only Tool results.
 
-编辑器入口由 Extension-owned controller 捕获并发布严格的
-`extension/editor-context` projection；Webview 只维护 pending card、草稿和
-`webview/editor-context-refresh|remove|use-stale` intents。配置、命令、VS Code 生命周期、Trust、
-URI 规范化和取消仍归 Extension；Protocol 拥有这些消息的闭合集和 `Ide*Dto` Schema。
+Editor entry is captured by an Extension-owned controller and published as a strict
+`extension/editor-context` projection. The Webview owns only the pending card, draft, and
+`webview/editor-context-refresh|remove|use-stale` intents. Configuration, commands, VS Code lifecycle,
+Trust, URI normalization, and cancellation remain Extension responsibilities; Protocol owns the closed
+message set and `Ide*Dto` Schema.
 
-约束：
-
-- 不持有 API Key。
-- 不直接调用模型、文件系统或 VS Code 命令。
-- 服务端事实状态以 Extension 发来的 snapshot/event 为准。
+The Webview never holds API keys or calls models, filesystems, or VS Code commands directly. Extension-
+authoritative state is represented by Host snapshots/events and is not duplicated as a second authority.
 
 ### 4.7 `packages/testkit`
 
-提供跨包复用的稳定 Core contract 测试替身，例如确定性 Model Gateway、Summarizer 和事件收集器。
-具体替身名称及公共范围以该包 `exports` 为准；仅由单个包使用的 Fake 保留在该包测试中。测试中
-禁止依赖真实模型 API、用户凭据或机器状态。
+Provides reusable test doubles for stable Core contracts, such as deterministic Model Gateways,
+Summarizers, and event collectors. Public names and scope follow the package `exports`; a Fake used by
+one package remains in that package's tests. Tests never use real model APIs, user credentials, or
+machine state.
 
 ### 4.8 `packages/mcp-client`
 
-负责隔离官方 MCP SDK 并提供 Host-independent 的受控 Client 边界：
+Isolates the official MCP SDK and exposes a Host-independent controlled Client boundary:
 
-- MCP modern `2026-07-28` 与 legacy `2025-11-25` 的受控 stdio 协商，以及两个纪元共有的三类
-  获授权 Server 原语。
-- 请求关联、取消、分页、列表变更刷新、限额和稳定错误归一化。
-- 通过注入的 stdio/process port 管理协议生命周期，不直接创建真实进程。
-- 将 MCP Tool 适配为现有 Core Tool contracts，但不拥有 Registry、审批或 Agent Loop。
+- Controlled stdio negotiation for modern `2026-07-28` and legacy `2025-11-25`, with the approved
+  common Server primitives.
+- Request correlation, cancellation, pagination, list refresh, limits, and stable error normalization.
+- Protocol lifecycle through an injected stdio/process Port; it does not create real processes directly.
+- MCP Tool adaptation to existing Core Tool contracts without owning Registry, approval, or Agent Loop.
 
-约束：
+SDK, JSON-RPC, transport, capability, Schema, and error types remain private to the package. It does
+not depend on VS Code, Extension adapters, React, Webview, or persistence, and does not declare or
+handle Roots, Sampling, Elicitation, Tasks, `input_required` continuation, HTTP, OAuth, experimental,
+or multimodal capabilities. Real configuration, Workspace Trust, spawning, minimal environment, and
+process-tree cleanup remain owned by `apps/extension`.
 
-- 官方 MCP SDK、JSON-RPC、transport、capability、schema 和 error 类型不得越过包的公共入口。
-- 不依赖 VS Code、Extension adapters、React、Webview 或 persistence。
-- 不声明或处理 Roots、Sampling、Elicitation、Tasks、`input_required` 续轮、HTTP、OAuth、实验
-  或多模态能力。
-- 真实配置、Workspace Trust、spawn、最小环境和完整进程树清理仍由 `apps/extension` 拥有。
-
-## 5. 依赖规则
+## 5. Dependency rules
 
 ```text
 webview ───────────────→ protocol
 extension ─────────────→ protocol + core + providers + builtin-tools
 extension ─────────────→ mcp-client
 providers ─────────────→ core contracts
-builtin-tools ─────────→ core contracts + protocol DTO
-mcp-client ────────────→ core contracts (仅外部 Tool 适配)
+builtin-tools ─────────→ core contracts + protocol DTOs
+mcp-client ────────────→ core contracts (external Tool adaptation only)
 core ──────────────────→ protocol
 testkit ───────────────→ core contracts + protocol
 ```
 
-禁止：
+Forbidden directions include:
 
 ```text
 core → vscode
@@ -263,50 +279,58 @@ mcp-client → vscode
 mcp-client → extension
 ```
 
-依赖规则应通过 lint 规则、路径约定或专门的架构测试保护。
+Dependency rules should be protected by lint rules, path conventions, or dedicated architecture tests.
 
-## 6. 跨模块契约地图
+## 6. Cross-module contract map
 
-本节只定位契约所有者并保存跨模块稳定约束，不复制 TypeScript 签名、枚举成员或 Schema。精确公共
-接口以声明它的包公共入口为准；跨边界语义以对应领域文档为准。实现细节不得因为出现在代码中自动
-成为新的产品或公共契约。
+This section identifies contract owners without copying TypeScript signatures, enum members, or
+Schemas. Exact public interfaces belong to the exporting package; cross-boundary semantics belong to
+the relevant domain document. Code implementation details do not become product or public contracts
+merely because they appear in the source tree.
 
-| 契约 | 代码事实来源 | 语义所有者 |
+| Contract | Code source of truth | Semantic owner |
 |---|---|---|
-| Model 请求、事件、Usage、Finish 与稳定错误 | [`packages/core/src/model-gateway.ts`](../packages/core/src/model-gateway.ts) | [Architecture：Model Provider Boundary](architecture/providers.md#model-provider-boundary) |
-| Agent Loop、Tool 生命周期和 Session 转换 | [`packages/core`](../packages/core/src/index.ts) 与 [`packages/protocol/src/session.ts`](../packages/protocol/src/session.ts) | [Architecture：Tool Contract、Context 与 Session](architecture/tools-and-files.md#tool-contract-boundary) |
-| Tool Call、Result、风险和 JSON 值 | [`packages/protocol/src/tool.ts`](../packages/protocol/src/tool.ts) | [Protocol：Tool Data Contracts](protocol/tools-and-file-lifecycle.md#tool-data-contracts) 与 [Security：Tool Input and Output](security.md#tool-input-and-output) |
-| Webview/Extension 消息和请求关联 | [`packages/protocol/src/messages.ts`](../packages/protocol/src/messages.ts) | [Protocol Guidelines](protocol.md) |
-| Session Repository、事件和恢复投影 | [`packages/core/src/session-repository.ts`](../packages/core/src/session-repository.ts) 与 [`packages/protocol/src/persistence.ts`](../packages/protocol/src/persistence.ts) | [Persistence Contract](persistence.md) |
-| Approval 请求、决定、消费和失效 | [`packages/core`](../packages/core/src/index.ts) 与 [`packages/protocol/src/approval.ts`](../packages/protocol/src/approval.ts) | [Security：Approval Boundary](security.md#approval-boundary) |
-| MCP Client、Tool、Resource 与 Prompt 投影 | [`packages/mcp-client`](../packages/mcp-client/src/index.ts) 与 [`packages/protocol`](../packages/protocol/src/index.ts) | [MCP](mcp.md)；其安全、持久化、Webview 和 UX 集成分别由对应 owner 约束 |
-| IDE 上下文与只读 Tool DTO、来源和生命周期 | （Extension adapters、`packages/builtin-tools` 与 `packages/protocol` 公共入口） | [Architecture：IDE context and read-only Tool boundary](architecture/ide-context.md#ide-context-and-read-only-tool-boundary-t1901)、[Protocol：IDE context and read-only Tool DTOs](protocol/ide-context.md#ide-context-and-read-only-tool-dtos-t1901)、[Security](security.md#ide-context-and-read-only-tool-boundary-t1901)、[Persistence](persistence.md#ide-context-and-read-only-tool-persistence-t1901)、[UX](ux.md#ide-context-and-read-only-tool-experience-t1901)、[Webview](webview.md#ide-context-and-read-only-tool-projection-t1901) |
-| 文件生命周期、原子编辑与恢复计划 | （`packages/builtin-tools`、Core approval/checkpoint contracts 与 Extension workspace adapters） | [Architecture：File lifecycle and atomic WorkspaceEdit boundary](architecture/tools-and-files.md#file-lifecycle-and-atomic-workspaceedit-boundary-t2001)、[Protocol：File lifecycle and atomic mutation contracts](protocol/tools-and-file-lifecycle.md#file-lifecycle-and-atomic-mutation-contracts-t2001)、[Security：File lifecycle mutation boundary](security.md#file-lifecycle-mutation-boundary-t2001)、[Persistence：File lifecycle Checkpoint extension](persistence.md#file-lifecycle-checkpoint-extension-t2001) |
+| Model requests, events, Usage, Finish, and stable errors | [`packages/core/src/model-gateway.ts`](../packages/core/src/model-gateway.ts) | [Architecture: Model Provider Boundary](architecture/providers.md#model-provider-boundary) |
+| Agent Loop, Tool lifecycle, and Session transitions | [`packages/core`](../packages/core/src/index.ts) and [`packages/protocol/src/session.ts`](../packages/protocol/src/session.ts) | [Architecture: Tool Contract, Context, and Session](architecture/tools-and-files.md#tool-contract-boundary) |
+| Tool Call, Result, risk, and JSON values | [`packages/protocol/src/tool.ts`](../packages/protocol/src/tool.ts) | [Protocol: Tool Data Contracts](protocol/tools-and-file-lifecycle.md#tool-data-contracts) and [Security: Tool Input and Output](security.md#tool-input-output-and-workspace-scope) |
+| Webview/Extension messages and request correlation | [`packages/protocol/src/messages.ts`](../packages/protocol/src/messages.ts) | [Protocol Guidelines](protocol.md) |
+| Session Repository, events, and recovery projections | [`packages/core/src/session-repository.ts`](../packages/core/src/session-repository.ts) and [`packages/protocol/src/persistence.ts`](../packages/protocol/src/persistence.ts) | [Persistence Contract](persistence.md) |
+| Approval request, decision, consumption, and invalidation | [`packages/core`](../packages/core/src/index.ts) and [`packages/protocol/src/approval.ts`](../packages/protocol/src/approval.ts) | [Security: Approval Boundary](security.md#approval-boundary) |
+| MCP Client, Tool, Resource, and Prompt projections | [`packages/mcp-client`](../packages/mcp-client/src/index.ts) and [`packages/protocol`](../packages/protocol/src/index.ts) | [MCP](mcp.md); security, persistence, Webview, and UX integration follow their owner documents |
+| IDE context and read-only Tool DTOs, provenance, and lifecycle | Extension adapters, `packages/builtin-tools`, and `packages/protocol` public entries | [Architecture: IDE context and read-only Tool boundary](architecture/ide-context.md#ide-context-and-read-only-tool-boundary-t1901), [Protocol: IDE context and read-only Tool DTOs](protocol/ide-context.md#ide-context-and-read-only-tool-dtos-t1901), [Security](security.md#ide-context-and-file-references), [Persistence](persistence.md#ephemeral-ide-and-workspace-file-context), [UX](ux.md#ide-context-and-workspace-file-references) |
+| File lifecycle, atomic edits, and recovery plans | `packages/builtin-tools`, Core approval/Checkpoint contracts, and Extension workspace adapters | [Architecture: File lifecycle and atomic WorkspaceEdit boundary](architecture/tools-and-files.md#file-lifecycle-and-atomic-workspaceedit-boundary-t2001), [Protocol: File lifecycle and atomic mutation contracts](protocol/tools-and-file-lifecycle.md#file-lifecycle-and-atomic-mutation-contracts-t2001), [Security: Checkpoint and restore](security.md#checkpoint-and-restore), [Persistence: Checkpoint durability and recovery](persistence.md#checkpoint-durability-and-recovery) |
 
-跨模块契约共同遵守以下不变量：
+Cross-module invariants:
 
-- 外部或跨进程输入以 `unknown` 进入拥有该边界的模块，验证后才能成为领域值。
-- 取消是独立结果；取消后不得继续增量、Tool、重试、持久化副作用或用户不可见后台工作。
-- VS Code、Node Host 和具体 SDK 类型不越过声明的适配器或包公共入口。
-- Session 状态只经 Core 状态机改变；Tool、Provider、Webview 和持久化适配器不自行推进 Agent Loop。
-- Secret、授权材料、原始第三方错误和不可信无限内容不得进入 Webview、持久化、日志或测试 fixture。
-- 编辑器、选区、诊断和语言服务数据必须带有 Host-owned 来源和有界状态；它们是普通不可信用户
-  上下文或只读 Tool Result，不能成为 System 指令、能力声明、审批材料或隐式跨会话记忆。
-- 修改公共契约时先更新拥有其语义的领域文档；只有产品范围、技术基线或模块边界变化时才修改本
-  文档。
+- External and cross-process input enters its owning boundary as `unknown` and becomes a domain value
+  only after validation.
+- Cancellation is a distinct outcome. After cancellation, no further delta, Tool, retry, persistence
+  mutation, side effect, or invisible background work may continue.
+- VS Code, Node Host, and concrete SDK types do not cross their declared adapter or package boundary.
+- Session state changes only through the Core state machine; Tools, Providers, Webview, and persistence
+  adapters do not advance the Agent Loop independently.
+- Secrets, authorization material, raw third-party errors, and unbounded untrusted content do not enter
+  Webview state, persistence, logs, or test fixtures.
+- Editor, selection, diagnostic, and language-service data carry Host-owned provenance and bounded
+  state. They are ordinary untrusted user context or read-only Tool Results, never System instructions,
+  capability claims, approval material, or implicit cross-Session memory.
+- Update the owning domain document before changing a public contract. Change this document only when
+  product scope, technical baseline, or module boundaries change.
 
-## 7. 产品级验证要求
+## 7. Product-level verification requirements
 
-[Testing Guidelines](testing.md) 拥有测试层级、命名、Fake/Mock、确定性、回归和异步清理规则。
-本节只规定产品级验证所需的证据类别，具体工作项在 Issue、PR 和 CI 中声明额外测试计划。
+[Testing Guidelines](testing.md) owns test layers, naming, Fakes/Mocks, determinism, regression, and
+asynchronous cleanup. This section defines only the product-level evidence categories; an Issue, PR, or
+CI workflow may declare additional task-specific verification.
 
-| 证据 | 最低目的 |
+| Evidence | Minimum purpose |
 |---|---|
-| 包级单元测试 | 证明 Core、Protocol、Provider、Tool、MCP 和纯策略的正常路径、重要边界及预期失败 |
-| Webview 组件测试 | 从用户可见行为证明消息、流式状态、审批、恢复、可访问性和内容边界 |
-| Extension 集成测试 | 证明 VS Code 注册、适配器、生命周期、存储、SecretStorage、进程和 Trust 边界 |
-| VSIX smoke 与人工路径 | 证明打包产物可安装、激活并完成当前产品声明的关键用户路径；不替代适用自动化测试 |
-| CI、覆盖率与资源门禁 | 防止受支持平台、关键行为、性能预算和发布产物发生未审查回退 |
+| Package unit tests | Prove normal paths, important boundaries, and expected failures for Core, Protocol, Provider, Tool, MCP, and pure policy |
+| Webview component tests | Prove messages, streaming state, approvals, recovery, accessibility, and content boundaries through visible behavior |
+| Extension integration tests | Prove VS Code registration, adapters, lifecycle, storage, SecretStorage, process, and Trust boundaries |
+| VSIX smoke and manual paths | Prove the packaged product installs, activates, and completes declared critical user paths; these do not replace applicable automation |
+| CI, coverage, and resource gates | Prevent unreviewed regressions in supported platforms, key behavior, performance budgets, and release artifacts |
 
-测试不访问真实模型、用户凭据或未受控网络，不依赖墙钟、随机值、执行顺序或用户机器状态。验证
-要求不能降低本节和 Testing Guidelines 的共同基线。
+Tests do not access real models, user credentials, or uncontrolled networks, and do not depend on wall
+clock time, random values, execution order, or user machine state. Verification must preserve both this
+baseline and the Testing Guidelines.

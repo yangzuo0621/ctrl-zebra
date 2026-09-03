@@ -68,7 +68,6 @@ const baselineHotspots = Object.freeze({
     "docs/security.md": 1356,
     "docs/ux.md": 634,
     "docs/protocol.md": 38,
-    "docs/webview.md": 562,
     "docs/persistence.md": 631,
     "docs/engineering-opportunities.md": 165,
     "docs/configuration.md": 242,
