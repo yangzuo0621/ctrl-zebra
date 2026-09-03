@@ -4,8 +4,8 @@ CtrlZebra is a local-first workspace agent for desktop Visual Studio Code. It st
 can inspect a selected workspace, proposes file edits with reviewable approval, runs commands only
 after an exact single-use approval, and keeps local Sessions and recovery Checkpoints.
 
-CtrlZebra is currently in preview preparation (Phase 22). Read the [known limitations](#known-limitations)
-before using it on important work.
+CtrlZebra is a local-first preview extension. Read the [product and technical baseline](docs/product.md)
+and [known limitations](#known-limitations) before using it on important work.
 
 ## Requirements
 
@@ -234,6 +234,8 @@ Read the full [Privacy Notice](PRIVACY.md) and [security contract](docs/security
 
 ## Privacy, support, and release links
 
+- [Product and technical baseline](docs/product.md) defines the supported product scope and module
+  boundaries.
 - [Privacy Notice](PRIVACY.md) explains local storage, Provider data flow, and the external MCP boundary.
 - [Support and bug reports](https://github.com/yangzuo0621/ctrl-zebra/issues) are handled in the public issue tracker.
 - [Security Policy](SECURITY.md) describes private vulnerability reporting.

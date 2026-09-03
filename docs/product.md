@@ -1,13 +1,12 @@
 # CtrlZebra 产品与技术基础规格
 
-本文档只保存当前获准的产品范围、技术基线、模块边界、跨模块契约地图、产品级验证要求和完成
-定义。任务顺序、实施状态和完成证据以[实施计划索引](../implementation-plan.md)为准；具体运行时、
+本文档只保存当前获准的产品范围、技术基线、模块边界、跨模块契约地图和产品级验证要求。具体运行时、
 安全、协议、持久化、Webview 和体验语义由对应领域文档拥有；历史授权过程由 Git、合并 PR 和 ADR
 保留，不在这里重复维护。
 
 ## 1. 当前授权产品范围
 
-本节同时包含已经实现和尚待路线图任务交付的获准能力。它只决定产品边界，不代表实施状态，也不
+本节同时包含已经实现和尚待实现的获准能力。它只决定产品边界，不代表实施状态，也不
 提前批准 DTO、Tool 名称、持久化字段、状态转换、错误码、算法、依赖或安全实现。
 
 ### 1.1 获准能力
@@ -36,9 +35,9 @@
   可编辑的 Composer 草稿；入口不自动发送、运行模型或授予权限。
 - 一个用户显式配置并连接的本地 stdio MCP Server 可以提供 Tools、Resources（含 Templates）和
   Prompts。MCP Tool 进入现有 Core Tool、审批、取消和结果边界；Resource 与 Prompt 只通过用户或
-  应用控制的有界路径进入普通不可信上下文。阶段 18 获准显式 `modern-only | dual` 模式，闭集支持
+  应用控制的有界路径进入普通不可信上下文。当前支持显式 `modern-only | dual` 模式，闭集支持
   modern `2026-07-28` 与 legacy `2025-11-25`，并遵循
-  [ADR 0002](../adr/0002-mcp-dual-era-stdio-compatibility.md)；现有配置不静默启用 dual。Server 进程、
+  [ADR 0002](adr/0002-mcp-dual-era-stdio-compatibility.md)；现有配置不静默启用 dual。Server 进程、
   配置、Workspace Trust、启动批准和完整进程树清理继续由 Extension 拥有；Model、Webview 和
   工作区内容不能创建或扩大 Server 配置。
 - Preview/GA 工程范围包括覆盖率与跨平台 CI、仓库治理、受审查依赖更新、数据迁移或只读降级、
@@ -55,13 +54,8 @@
   Server、自动安装、服务器市场、工作区共享 Server 配置，以及 Roots、Sampling、Elicitation、
   Tasks、`input_required` 续轮或未获准 Server-to-Client 能力。
 
-外部 SDK、评估报告或候选清单出现某项能力不构成授权。扩大本节范围必须先更新本文档和路线图；
-涉及信任模型或长期架构时还需更新对应领域文档和 ADR。
-
-### 1.3 范围演进记录
-
-产品范围的当前语义由本文件和对应领域文档拥有；任务状态由[实施计划索引](../implementation-plan.md)
-拥有。历史实现过程和已完成任务证据不在当前产品基础文档中重复维护。
+外部 SDK、评估报告或候选清单出现某项能力不构成授权。扩大本节范围必须先更新本文档；涉及信任
+模型或长期架构时还需更新对应领域文档和 ADR。
 
 ## 2. 技术基线
 
@@ -100,7 +94,7 @@ ctrl-zebra/
 │  ├─ builtin-tools/    # Host-independent 内置 Tool
 │  ├─ mcp-client/       # 受控 MCP SDK 边界
 │  └─ testkit/          # 跨包测试替身
-└─ docs/                # 路线图、领域规范、ADR 和发布文档
+└─ docs/                # 产品、领域规范、ADR 和发布文档
 ```
 
 本节只固定 Workspace 级模块，不规定包内文件夹或具体文件。实际源码树和各包公共 `exports` 是
@@ -167,17 +161,16 @@ ctrl-zebra/
 - `propose_file_edit`
 - `run_command`
 
-Phase 20 的文件生命周期契约保留 `propose_file_edit` 的单文件含义，并新增
+文件生命周期契约保留 `propose_file_edit` 的单文件含义，并新增
 `propose_file_create`、`propose_file_delete`、`propose_file_rename` 和 edit-only 的
 `propose_workspace_edit`。这些名称、输入闭集、边界和失败/恢复语义由
-[Protocol 的 T2001 契约](../protocol/tools-and-file-lifecycle.md#file-lifecycle-and-atomic-mutation-contracts-t2001)拥有；
+[Protocol 的文件生命周期契约](protocol/tools-and-file-lifecycle.md#file-lifecycle-and-atomic-mutation-contracts-t2001)拥有；
 Extension 仍是唯一可以解析 VS Code URI、校验 Trust、创建 Checkpoint 和提交原子
 `WorkspaceEdit` 的模块。正则搜索通过 `search_files.mode: "regex"` 显式启用受控
-RE2-compatible dialect，默认 literal 行为不变；T2005 才选择和接入引擎。
+RE2-compatible dialect，默认 literal 行为不变；引擎选择和接入由对应领域文档拥有。
 
-T1901 还为后续阶段定义只读 IDE Tool 的 Host-independent 输入、输出和边界契约；这些工具只能
-依赖注入的 `IdeContextPort`/语言服务 Port，不得导入 VS Code、读取宿主 URI 或自行决定
-Workspace Trust。T1901 不实现这些工具；T1902–T1904 分别接入其宿主适配器和执行路径。
+只读 IDE Tool 使用 Host-independent 输入、输出和边界契约；这些工具只能依赖注入的
+`IdeContextPort`/语言服务 Port，不得导入 VS Code、读取宿主 URI 或自行决定 Workspace Trust。
 
 实际文件操作由 Extension 中的适配器完成。
 
@@ -209,7 +202,7 @@ Workspace Trust。T1901 不实现这些工具；T1902–T1904 分别接入其宿
 - 会话选择和设置。
 - 显示用户可移除的 IDE 上下文来源、范围、陈旧/截断状态和只读 Tool 结果。
 
-T1905 的编辑器入口由 Extension-owned controller 捕获并发布严格的
+编辑器入口由 Extension-owned controller 捕获并发布严格的
 `extension/editor-context` projection；Webview 只维护 pending card、草稿和
 `webview/editor-context-refresh|remove|use-stale` intents。配置、命令、VS Code 生命周期、Trust、
 URI 规范化和取消仍归 Extension；Protocol 拥有这些消息的闭合集和 `Ide*Dto` Schema。
@@ -231,7 +224,7 @@ URI 规范化和取消仍归 Extension；Protocol 拥有这些消息的闭合集
 负责隔离官方 MCP SDK 并提供 Host-independent 的受控 Client 边界：
 
 - MCP modern `2026-07-28` 与 legacy `2025-11-25` 的受控 stdio 协商，以及两个纪元共有的三类
-  获授权 Server 原语；阶段 18 完成前生产实现仍保持 modern-only。
+  获授权 Server 原语。
 - 请求关联、取消、分页、列表变更刷新、限额和稳定错误归一化。
 - 通过注入的 stdio/process port 管理协议生命周期，不直接创建真实进程。
 - 将 MCP Tool 适配为现有 Core Tool contracts，但不拥有 Registry、审批或 Agent Loop。
@@ -280,15 +273,15 @@ mcp-client → extension
 
 | 契约 | 代码事实来源 | 语义所有者 |
 |---|---|---|
-| Model 请求、事件、Usage、Finish 与稳定错误 | [`packages/core/src/model-gateway.ts`](../../packages/core/src/model-gateway.ts) | [Architecture：Model Provider Boundary](../architecture/providers.md#model-provider-boundary) |
-| Agent Loop、Tool 生命周期和 Session 转换 | [`packages/core`](../../packages/core/src/index.ts) 与 [`packages/protocol/src/session.ts`](../../packages/protocol/src/session.ts) | [Architecture：Tool Contract、Context 与 Session](../architecture/tools-and-files.md#tool-contract-boundary) |
-| Tool Call、Result、风险和 JSON 值 | [`packages/protocol/src/tool.ts`](../../packages/protocol/src/tool.ts) | [Protocol：Tool Data Contracts](../protocol/tools-and-file-lifecycle.md#tool-data-contracts) 与 [Security：Tool Input and Output](../security.md#tool-input-and-output) |
-| Webview/Extension 消息和请求关联 | [`packages/protocol/src/messages.ts`](../../packages/protocol/src/messages.ts) | [Protocol Guidelines](../protocol.md) |
-| Session Repository、事件和恢复投影 | [`packages/core/src/session-repository.ts`](../../packages/core/src/session-repository.ts) 与 [`packages/protocol/src/persistence.ts`](../../packages/protocol/src/persistence.ts) | [Persistence Contract](../persistence.md) |
-| Approval 请求、决定、消费和失效 | [`packages/core`](../../packages/core/src/index.ts) 与 [`packages/protocol/src/approval.ts`](../../packages/protocol/src/approval.ts) | [Security：Approval Boundary](../security.md#approval-boundary) |
-| MCP Client、Tool、Resource 与 Prompt 投影 | [`packages/mcp-client`](../../packages/mcp-client/src/index.ts) 与 [`packages/protocol`](../../packages/protocol/src/index.ts) | Architecture、Security、Protocol、Persistence、Webview 和 UX 中各自拥有的 MCP 章节 |
-| IDE 上下文与只读 Tool DTO、来源和生命周期 | （T1902–T1904 的 Extension adapters、`packages/builtin-tools` 与 `packages/protocol` 公共入口） | [Architecture：IDE context and read-only Tool boundary](../architecture/ide-context.md#ide-context-and-read-only-tool-boundary-t1901)、[Protocol：IDE context and read-only Tool DTOs](../protocol/ide-context.md#ide-context-and-read-only-tool-dtos-t1901)、[Security](../security.md#ide-context-and-read-only-tool-boundary-t1901)、[Persistence](../persistence.md#ide-context-and-read-only-tool-persistence-t1901)、[UX](../ux.md#ide-context-and-read-only-tool-experience-t1901)、[Webview](../webview.md#ide-context-and-read-only-tool-projection-t1901) |
-| 文件生命周期、原子编辑与恢复计划 | （T2002–T2004 的 `packages/builtin-tools`、Core approval/checkpoint contracts 与 Extension workspace adapters） | [Architecture：File lifecycle and atomic WorkspaceEdit boundary](../architecture/tools-and-files.md#file-lifecycle-and-atomic-workspaceedit-boundary-t2001)、[Protocol：File lifecycle and atomic mutation contracts](../protocol/tools-and-file-lifecycle.md#file-lifecycle-and-atomic-mutation-contracts-t2001)、[Security：File lifecycle mutation boundary](../security.md#file-lifecycle-mutation-boundary-t2001)、[Persistence：File lifecycle Checkpoint extension](../persistence.md#file-lifecycle-checkpoint-extension-t2001) |
+| Model 请求、事件、Usage、Finish 与稳定错误 | [`packages/core/src/model-gateway.ts`](../packages/core/src/model-gateway.ts) | [Architecture：Model Provider Boundary](architecture/providers.md#model-provider-boundary) |
+| Agent Loop、Tool 生命周期和 Session 转换 | [`packages/core`](../packages/core/src/index.ts) 与 [`packages/protocol/src/session.ts`](../packages/protocol/src/session.ts) | [Architecture：Tool Contract、Context 与 Session](architecture/tools-and-files.md#tool-contract-boundary) |
+| Tool Call、Result、风险和 JSON 值 | [`packages/protocol/src/tool.ts`](../packages/protocol/src/tool.ts) | [Protocol：Tool Data Contracts](protocol/tools-and-file-lifecycle.md#tool-data-contracts) 与 [Security：Tool Input and Output](security.md#tool-input-and-output) |
+| Webview/Extension 消息和请求关联 | [`packages/protocol/src/messages.ts`](../packages/protocol/src/messages.ts) | [Protocol Guidelines](protocol.md) |
+| Session Repository、事件和恢复投影 | [`packages/core/src/session-repository.ts`](../packages/core/src/session-repository.ts) 与 [`packages/protocol/src/persistence.ts`](../packages/protocol/src/persistence.ts) | [Persistence Contract](persistence.md) |
+| Approval 请求、决定、消费和失效 | [`packages/core`](../packages/core/src/index.ts) 与 [`packages/protocol/src/approval.ts`](../packages/protocol/src/approval.ts) | [Security：Approval Boundary](security.md#approval-boundary) |
+| MCP Client、Tool、Resource 与 Prompt 投影 | [`packages/mcp-client`](../packages/mcp-client/src/index.ts) 与 [`packages/protocol`](../packages/protocol/src/index.ts) | [Architecture](architecture.md)、[Security](security.md)、[Protocol](protocol.md)、[Persistence](persistence.md)、[Webview](webview.md) 和 [UX](ux.md) 中的 MCP 契约 |
+| IDE 上下文与只读 Tool DTO、来源和生命周期 | （Extension adapters、`packages/builtin-tools` 与 `packages/protocol` 公共入口） | [Architecture：IDE context and read-only Tool boundary](architecture/ide-context.md#ide-context-and-read-only-tool-boundary-t1901)、[Protocol：IDE context and read-only Tool DTOs](protocol/ide-context.md#ide-context-and-read-only-tool-dtos-t1901)、[Security](security.md#ide-context-and-read-only-tool-boundary-t1901)、[Persistence](persistence.md#ide-context-and-read-only-tool-persistence-t1901)、[UX](ux.md#ide-context-and-read-only-tool-experience-t1901)、[Webview](webview.md#ide-context-and-read-only-tool-projection-t1901) |
+| 文件生命周期、原子编辑与恢复计划 | （`packages/builtin-tools`、Core approval/checkpoint contracts 与 Extension workspace adapters） | [Architecture：File lifecycle and atomic WorkspaceEdit boundary](architecture/tools-and-files.md#file-lifecycle-and-atomic-workspaceedit-boundary-t2001)、[Protocol：File lifecycle and atomic mutation contracts](protocol/tools-and-file-lifecycle.md#file-lifecycle-and-atomic-mutation-contracts-t2001)、[Security：File lifecycle mutation boundary](security.md#file-lifecycle-mutation-boundary-t2001)、[Persistence：File lifecycle Checkpoint extension](persistence.md#file-lifecycle-checkpoint-extension-t2001) |
 
 跨模块契约共同遵守以下不变量：
 
@@ -304,26 +297,16 @@ mcp-client → extension
 
 ## 7. 产品级验证要求
 
-[Testing Guidelines](../testing.md) 拥有测试层级、命名、Fake/Mock、确定性、回归和异步清理规则。
-本节只规定产品完成所需的证据类别，具体任务仍使用其阶段规格中的测试计划。
+[Testing Guidelines](testing.md) 拥有测试层级、命名、Fake/Mock、确定性、回归和异步清理规则。
+本节只规定产品级验证所需的证据类别，具体工作项在 Issue、PR 和 CI 中声明额外测试计划。
 
 | 证据 | 最低目的 |
 |---|---|
 | 包级单元测试 | 证明 Core、Protocol、Provider、Tool、MCP 和纯策略的正常路径、重要边界及预期失败 |
 | Webview 组件测试 | 从用户可见行为证明消息、流式状态、审批、恢复、可访问性和内容边界 |
 | Extension 集成测试 | 证明 VS Code 注册、适配器、生命周期、存储、SecretStorage、进程和 Trust 边界 |
-| VSIX smoke 与人工路径 | 证明打包产物可安装、激活并完成当前阶段声明的关键用户路径；不替代适用自动化测试 |
+| VSIX smoke 与人工路径 | 证明打包产物可安装、激活并完成当前产品声明的关键用户路径；不替代适用自动化测试 |
 | CI、覆盖率与资源门禁 | 防止受支持平台、关键行为、性能预算和发布产物发生未审查回退 |
 
-测试不访问真实模型、用户凭据或未受控网络，不依赖墙钟、随机值、执行顺序或用户机器状态。每个
-阶段门禁可以提高证据要求，但不能降低本节和 Testing Guidelines 的共同基线。
-
-## 8. 完成定义
-
-任务只有同时满足以下条件才可按路线图流程标记完成：
-
-- 当前任务的目标、产物、排除项、测试和阶段门禁全部满足，且没有夹带其他任务或能力。
-- 必需的约束 PR 已先合入；公共契约、配置、持久化、安全或用户体验变化已更新其事实所有者。
-- 新逻辑具有风险相称的自动化测试，既有测试、类型检查、Biome 和适用的集成或 smoke 验证通过。
-- 取消、失败、资源清理、安全边界和数据兼容性保留可验证证据。
-- 最终差异通过检查并经 PR 审查、squash merge 合入 `main`；未合入的分支或 PR 不算完成。
+测试不访问真实模型、用户凭据或未受控网络，不依赖墙钟、随机值、执行顺序或用户机器状态。验证
+要求不能降低本节和 Testing Guidelines 的共同基线。

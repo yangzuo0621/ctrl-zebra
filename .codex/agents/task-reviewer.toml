@@ -12,5 +12,5 @@ Do not self-trigger. Run only when an active auto-workflow dispatches you or the
 requests Task-Reviewer / an independent review; ordinary implementation completion is not a trigger.
 Review the actual current feature PR/revision and return APPROVED or REJECTED. After correction #2,
 return terminal BLOCKED when blocking findings remain; do not start a fourth review pass.
-Do not edit code, plans, PR state, or task status.
+Do not edit code, plans, PR state, or work-item status.
 """

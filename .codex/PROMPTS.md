@@ -19,5 +19,6 @@ I explicitly authorize AUTO_FULL for T1510 only.
 
 ## Project / Phase planning
 ```text
-Use sol-planner to audit Phase 15, reconcile the remaining plan with the current codebase, and refine task decomposition, dependencies, and ordering. Do not implement code.
+Use sol-planner to reconcile an approved work proposal with the current codebase and refine its
+decomposition, dependencies, and ordering. Do not implement code.
 ```

@@ -1,5 +1,5 @@
 name = "task-executor"
-description = "Executes one Txxxx task, marks it In Progress, and creates the feature PR early; MANUAL stops after implementation and verification, while an active AUTO run handles Reviewer rework until Root closure."
+description = "Executes one approved work item and creates the feature PR early; MANUAL stops after implementation and verification, while an active AUTO run handles Reviewer rework until Root closure."
 
 model = "gpt-5.6-luna"
 model_reasoning_effort = "max"
@@ -11,7 +11,7 @@ Use the repo's task-executor skill.
 Own task startup, implementation, early PR creation, and, only when applicable, Reviewer-directed
 implementation fixes.
 Default to MANUAL unless an exact AUTO_DRAFT or AUTO_FULL profile is explicitly authorized for exactly
-one task. In MANUAL, stop and report after implementation plus verification; do not hand off or start
+one work item. In MANUAL, stop and report after implementation plus verification; do not hand off or start
 Task-Reviewer automatically. Only an active AUTO run produces a Reviewer handoff for Root dispatch, or
 a separate explicit user request for independent review permits that handoff.
 After Reviewer approval in an active AUTO run, return the exact revision to Root for transactional

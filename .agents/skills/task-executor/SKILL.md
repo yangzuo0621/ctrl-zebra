@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Execute exactly one assigned `Txxxx` task and own its implementation branch/PR through
+Execute exactly one assigned Issue/PR or standalone maintenance change and own its implementation branch/PR through
 implementation and verification. In an active `AUTO_DRAFT` / `AUTO_FULL` run, also handle
 Reviewer-directed fixes and, after approval, return the exact revision to Root for transactional
 closure. In `MANUAL`, stop and report after implementation and verification unless the user separately
@@ -10,17 +10,18 @@ requests an independent review.
 
 ## Inputs
 
-- `AGENTS.md`, active roadmap index/phase section, one task ID, acceptance criteria, and base revision
+- `AGENTS.md`, affected current-state owner documents, the Issue/PR or maintenance scope, acceptance
+  criteria, and base revision
 - mode: `MANUAL` (default), `AUTO_DRAFT`, or `AUTO_FULL`
 - explicit task-scoped Git/PR authorization when an AUTO profile is used
 
 ## Workflow
 
-1. Verify the task exists, is not completed, and has no conflicting active work. Create or use its
-   dedicated feature branch and mark only that task `进行中` according to the roadmap state rules.
-2. Before implementation edits, publish the compact task contract from
-   [`docs/roadmap/task-template.md`](../../../docs/roadmap/task-template.md). Its planned-file list is
-   a hard boundary; stop for an amendment before leaving it.
+1. Verify the work item is authorized and has no conflicting active work. Create or use its dedicated
+   feature branch when applicable.
+2. Before implementation edits, publish a compact work-item contract in the handoff or PR. Include
+   scope, acceptance criteria, planned files, exclusions, public-contract impact, and verification;
+   the planned-file list is a hard boundary and requires an amendment before leaving it.
 3. In `MANUAL`, stop for explicit implementation approval. In AUTO, continue only when scope,
    acceptance, contract, architecture/security rules, and exact profile authorization are unambiguous.
 4. Follow [`Reuse Before Build`](../../../docs/development.md#reuse-before-build): use `TARGETED` by

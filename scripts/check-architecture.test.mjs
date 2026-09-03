@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { analyzeArchitecture } from "./check-architecture.mjs";
 
-function fixture({ imports = {}, dependencies = {}, extraFiles = {}, roadmap = true } = {}) {
+function fixture({ imports = {}, dependencies = {}, extraFiles = {} } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "ctrl-zebra-architecture-"));
   const packages = {
     extension: { name: "ctrl-zebra", deps: [] },
@@ -40,30 +40,6 @@ function fixture({ imports = {}, dependencies = {}, extraFiles = {}, roadmap = t
       fs.mkdirSync(path.dirname(filePath), { recursive: true });
       fs.writeFileSync(filePath, content);
     }
-  }
-  if (roadmap) {
-    fs.mkdirSync(path.join(root, "docs", "roadmap", "phases"), { recursive: true });
-    fs.writeFileSync(
-      path.join(root, "docs", "roadmap", "phases", "phase-23.md"),
-      "### T2306：fitness\n",
-    );
-    fs.writeFileSync(
-      path.join(root, "docs", "implementation-plan.md"),
-      [
-        "- 总任务：2",
-        "- 已完成：1",
-        "- 进行中：0",
-        "- 受阻：0",
-        "- 待开始：1",
-        "| 阶段 | 状态 | 详细规格 |",
-        "| 23 | 进行中 | [阶段 23 规格](roadmap/phases/phase-23.md) |",
-        "### 活跃与待开始任务",
-        "| 阶段 | 任务 | 状态 |",
-        "| 23 | T2306 fitness | 待开始 |",
-        "## 5. 阶段规格索引",
-        "",
-      ].join("\n"),
-    );
   }
   return root;
 }
@@ -202,28 +178,6 @@ test("rejects SDK imports outside their owner and from public entries", () => {
       assert.equal(failureFor(root, "public package entry transitively re-exports ai"), true);
     },
   );
-});
-
-test("requires the canonical roadmap active-task status owner", () => {
-  withFixture({}, (root) => {
-    const planPath = path.join(root, "docs", "implementation-plan.md");
-    fs.writeFileSync(
-      planPath,
-      fs.readFileSync(planPath, "utf8").replace("### 活跃与待开始任务", "### Task status removed"),
-    );
-    assert.equal(failureFor(root, "active-task status owner is missing"), true);
-  });
-});
-
-test("rejects roadmap status drift in the active index", () => {
-  withFixture({}, (root) => {
-    const planPath = path.join(root, "docs", "implementation-plan.md");
-    fs.writeFileSync(
-      planPath,
-      fs.readFileSync(planPath, "utf8").replace("- 待开始：1", "- 待开始：0"),
-    );
-    assert.equal(failureFor(root, "progress pending=0 disagrees"), true);
-  });
 });
 
 test("excludes generated source files from advisory hotspots", () => {

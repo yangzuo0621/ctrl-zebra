@@ -4,14 +4,14 @@
 
 本台账记录尚未获准实施的复用、模块深化、依赖引入和重复消除机会，使发现不会丢失，也不会
 借“清理”绕过任务范围。本文件只拥有机会状态、评估门禁和下一评估窗口；合并 PR 与 Git 历史
-保存已完成的决策、执行证据和验证结论；`docs/implementation-plan.md` 只拥有路线图顺序和任务状态。
+保存已完成的决策、执行证据和验证结论；Issue、PR 或临时任务交接拥有具体工作项的顺序和状态。
 它不拥有产品语义、公共契约或技术基线。
 
 - `EO-*` 是稳定的机会编号，不是路线图任务编号，也不代表已经授权。
 - 候选项只有在明确批准后，才进入一个路线图任务或独立 maintenance 变更。
 - 需要跨会话跟踪、依赖评审、多 PR 或外部讨论的独立变更，在实施前创建 GitHub Issue，并从
   本台账链接；可在一次已授权会话中完成的小型 maintenance 可以直接使用任务计划。
-- 晋升后的执行顺序和状态只记录在 `docs/implementation-plan.md` 或对应 Issue/PR；合并 PR 和 Git
+- 晋升后的执行顺序和状态只记录在对应 Issue/PR；合并 PR 和 Git
   历史是已完成决策与执行证据的来源，本台账只保留入口、状态和最终处置，避免形成第二套任务状态。
 - 发现不在当前范围内的机会时，只更新本台账，不顺带实现。
 
@@ -30,7 +30,8 @@
 晋升一个机会时：
 
 1. 重新验证证据仍存在，确认没有被当前路线图任务吸收。
-2. 按 `docs/roadmap/task-template.md` 完成 Reuse Audit、Build vs Buy 和 Similarity Audit 计划。
+2. 按 `.github/pull_request_template.md` 和对应 workflow 的 handoff 字段完成 Reuse Audit、Build vs Buy
+   和 Similarity Audit 计划。
 3. 明确一个拥有语义的 module、最小 interface、调用方错误映射和删除目标。禁止把共享逻辑放入
    仓库级 `utils`，也禁止在旧实现外增加无行为的转发层。
 4. 判断它是路线图能力、独立 maintenance，还是现有任务的验收内容。涉及任务顺序、技术基线、
@@ -51,7 +52,7 @@
 | [EO-010 Targeted Zod reuse](#eo-010-targeted-zod-reuse) | 已有依赖复用 | P2 | 随拥有 schema 的任务分 tranche | `已发现` |
 | [EO-011 Provider token counting](#eo-011-provider-token-counting) | Buy / 实验 | P3 | 先有准确度或预算缺陷数据 | `暂缓` |
 | [EO-012 MCP SDK-native negotiation](#eo-012-mcp-sdk-native-negotiation) | Buy / 已有依赖深化 | P0 | MCP 再次演进前优先评估；不阻塞后续路线图 | `评估中` |
-| [EO-013 Webview chat-store responsibility density](#eo-013-webview-chat-store-responsibility-density) | 模块深化 | P2 | 需要独立 Webview 行为分区证据后再评估；不属于 Phase 23 | `暂缓` |
+| [EO-013 Webview chat-store responsibility density](#eo-013-webview-chat-store-responsibility-density) | 模块深化 | P2 | 需要独立 Webview 行为分区证据后再评估；不属于当前批准工作 | `暂缓` |
 
 仍影响未来执行的关系是：
 
@@ -60,7 +61,7 @@ EO-012 evidence ──→ independent maintenance decision
 ```
 
 EO-012 可独立评估；除非发现当前 negotiation 存在实际缺陷，否则不阻塞路线图推进。
-EO-009 和 EO-011 不应阻塞 Phase 22 收尾。若验证 SDK-native negotiation 能保持现有安全语义，再晋升为
+EO-009 和 EO-011 不应阻塞当前发布收尾。若验证 SDK-native negotiation 能保持现有安全语义，再晋升为
 独立 maintenance。
 
 ### EO-013 Webview chat-store responsibility density
