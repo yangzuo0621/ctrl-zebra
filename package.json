@@ -8,6 +8,7 @@
   "scripts": {
     "build": "pnpm --recursive --if-present run build",
     "check": "biome ci .",
+    "check:architecture": "node ./scripts/check-architecture.mjs",
     "package:vsix": "node ./apps/extension/scripts/package-vsix.mjs",
     "release:verify": "node ./scripts/verify-release.mjs",
     "release:update-audit": "node ./scripts/verify-release.mjs --update-audit",
@@ -16,7 +17,8 @@
     "test:marketplace": "node ./scripts/check-marketplace.mjs",
     "test:docs": "node ./scripts/check-governance-docs.mjs",
     "test:dependabot": "node ./scripts/check-dependabot-config.mjs",
-    "test": "pnpm run test:unit && pnpm run test:integration",
+    "test": "pnpm run test:architecture && pnpm run test:unit && pnpm run test:integration",
+    "test:architecture": "node --test ./scripts/check-architecture.test.mjs",
     "test:coverage": "vitest run --coverage",
     "test:integration": "pnpm --filter ./apps/extension run test:integration",
     "test:unit": "vitest run",

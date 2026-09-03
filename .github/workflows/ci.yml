@@ -54,6 +54,12 @@ jobs:
       - name: Validate dependency update policy
         run: pnpm test:dependabot
 
+      - name: Architecture hard gates and advisory report
+        run: pnpm check:architecture
+
+      - name: Architecture fixture tests
+        run: pnpm test:architecture
+
       - name: Check formatting and lint
         run: pnpm check
 

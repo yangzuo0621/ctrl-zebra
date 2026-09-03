@@ -1,0 +1,675 @@
+import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+
+const WORKSPACE_PREFIX = "@ctrl-zebra/";
+
+export const allowedWorkspaceDependencies = Object.freeze({
+  extension: new Set(["builtin-tools", "core", "mcp-client", "protocol", "providers"]),
+  webview: new Set(["protocol"]),
+  core: new Set(["protocol"]),
+  providers: new Set(["core"]),
+  "builtin-tools": new Set(["core", "protocol"]),
+  "mcp-client": new Set(["core"]),
+  protocol: new Set(),
+  testkit: new Set(["core", "protocol"]),
+});
+
+const sdkOwners = Object.freeze([
+  { prefix: "vscode", owner: "extension", label: "VS Code API" },
+  { prefix: "@types/vscode", owner: "extension", label: "VS Code types" },
+  { prefix: "@ai-sdk/", owner: "providers", label: "Provider SDK" },
+  { prefix: "ai", owner: "providers", label: "Provider SDK" },
+  {
+    prefix: "@modelcontextprotocol/",
+    owner: "mcp-client",
+    label: "MCP SDK",
+  },
+]);
+
+const nodeHostModules = new Set([
+  "assert",
+  "buffer",
+  "child_process",
+  "crypto",
+  "events",
+  "fs",
+  "module",
+  "net",
+  "os",
+  "path",
+  "process",
+  "stream",
+  "timers",
+  "url",
+  "util",
+  "worker_threads",
+]);
+
+const baselineHotspots = Object.freeze({
+  production: Object.freeze({
+    "apps/extension/src/extension.ts": 1448,
+    "apps/webview/src/chat-store.ts": 1444,
+    "packages/core/src/agent-runtime.ts": 1269,
+    "apps/extension/src/adapters/vscode-language-services.ts": 1135,
+    "packages/protocol/src/messages.ts": 1083,
+    "apps/extension/src/adapters/vscode-diagnostics.ts": 892,
+    "packages/mcp-client/src/controlled-mcp-client.ts": 886,
+    "apps/webview/src/app.tsx": 867,
+    "apps/extension/src/controllers/session-recovery.ts": 798,
+    "apps/extension/src/controllers/session-history.ts": 763,
+    "apps/extension/src/controllers/chat-runner.ts": 679,
+  }),
+  tests: Object.freeze({
+    "packages/core/src/agent-runtime.test.ts": 3029,
+    "apps/extension/src/controllers/webview-message-controller.test.ts": 2044,
+    "apps/webview/src/chat-store.test.ts": 1595,
+    "apps/extension/src/controllers/session-recovery.test.ts": 1314,
+    "apps/webview/src/app.test.tsx": 1215,
+    "apps/extension/src/controllers/chat-runner.test.ts": 1186,
+    "packages/protocol/src/messages.test.ts": 919,
+  }),
+  documents: Object.freeze({
+    "docs/implementation-plan.md": 156,
+    "docs/security.md": 1356,
+    "docs/ux.md": 634,
+    "docs/protocol.md": 38,
+    "docs/webview.md": 562,
+    "docs/persistence.md": 631,
+    "docs/engineering-opportunities.md": 165,
+    "docs/configuration.md": 242,
+    "docs/development.md": 178,
+    "docs/architecture.md": 20,
+  }),
+});
+
+export const advisoryThresholds = Object.freeze({
+  productionLines: 650,
+  testLines: 900,
+  documentLines: 600,
+});
+
+function normalize(value) {
+  return value.replaceAll("\\", "/");
+}
+
+function relativeTo(root, absolutePath) {
+  return normalize(path.relative(root, absolutePath));
+}
+
+function isWithin(parent, candidate) {
+  const relative = path.relative(parent, candidate);
+  return (
+    relative === "" ||
+    (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative))
+  );
+}
+
+function readJson(absolutePath, errors) {
+  try {
+    return JSON.parse(fs.readFileSync(absolutePath, "utf8"));
+  } catch (error) {
+    errors.push(`${relativeTo(process.cwd(), absolutePath)}: invalid JSON (${error.message})`);
+    return null;
+  }
+}
+
+function loadWorkspace(root, errors = []) {
+  const owners = new Map();
+  for (const group of ["apps", "packages"]) {
+    const groupPath = path.join(root, group);
+    if (!fs.existsSync(groupPath)) {
+      errors.push(`${group}/: workspace directory is missing`);
+      continue;
+    }
+    for (const entry of fs.readdirSync(groupPath, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const packageRoot = path.join(groupPath, entry.name);
+      const manifestPath = path.join(packageRoot, "package.json");
+      if (!fs.existsSync(manifestPath)) continue;
+      const manifest = readJson(manifestPath, errors);
+      if (manifest === null || typeof manifest.name !== "string") {
+        errors.push(`${relativeTo(root, manifestPath)}: package name is required`);
+        continue;
+      }
+      const owner = entry.name;
+      owners.set(owner, {
+        owner,
+        name: manifest.name,
+        root: packageRoot,
+        sourceRoot: path.join(packageRoot, "src"),
+        manifest,
+      });
+    }
+  }
+  return owners;
+}
+
+function collectFiles(directory, predicate) {
+  if (!fs.existsSync(directory)) return [];
+  const files = [];
+  const ignoredDirectories = new Set([
+    ".git",
+    ".vscode-test",
+    ".turbo",
+    "coverage",
+    "dist",
+    "node_modules",
+    "out",
+  ]);
+  function visit(current) {
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      if (entry.isDirectory()) {
+        if (!ignoredDirectories.has(entry.name)) visit(path.join(current, entry.name));
+        continue;
+      }
+      const filePath = path.join(current, entry.name);
+      if (predicate(filePath)) files.push(filePath);
+    }
+  }
+  visit(directory);
+  return files;
+}
+
+function sourceFilesFor(workspace) {
+  return [...workspace.values()].flatMap((entry) =>
+    collectFiles(entry.sourceRoot, (filePath) => /\.(?:ts|tsx)$/.test(filePath)),
+  );
+}
+
+function stripComments(source) {
+  let result = "";
+  let quote = null;
+  let escaped = false;
+  for (let index = 0; index < source.length; index += 1) {
+    const character = source[index];
+    const next = source[index + 1];
+    if (quote !== null) {
+      result += character;
+      if (escaped) escaped = false;
+      else if (character === "\\") escaped = true;
+      else if (character === quote) quote = null;
+      continue;
+    }
+    if (character === '"' || character === "'" || character === "`") {
+      quote = character;
+      result += character;
+      continue;
+    }
+    if (character === "/" && next === "/") {
+      result += "  ";
+      index += 1;
+      while (index + 1 < source.length && source[index + 1] !== "\n") {
+        result += " ";
+        index += 1;
+      }
+      continue;
+    }
+    if (character === "/" && next === "*") {
+      result += "  ";
+      index += 1;
+      while (index + 1 < source.length && !(source[index] === "*" && source[index + 1] === "/")) {
+        result += source[index] === "\n" ? "\n" : " ";
+        index += 1;
+      }
+      if (index + 1 < source.length) {
+        result += "  ";
+        index += 1;
+      }
+      continue;
+    }
+    result += character;
+  }
+  return result;
+}
+
+function importsFrom(filePath) {
+  const source = stripComments(fs.readFileSync(filePath, "utf8"));
+  const imports = [];
+  const patterns = [
+    /\b(?:from|import)\s*["']([^"']+)["']/g,
+    /\bimport\s*\(\s*["']([^"']+)["']\s*\)/g,
+  ];
+  for (const pattern of patterns) {
+    for (const match of source.matchAll(pattern)) {
+      const line = source.slice(0, match.index).split("\n").length;
+      imports.push({ specifier: match[1], line });
+    }
+  }
+  return imports;
+}
+
+function workspaceTarget(specifier, workspace) {
+  for (const entry of workspace.values()) {
+    if (specifier === entry.name || specifier.startsWith(`${entry.name}/`)) return entry;
+  }
+  return null;
+}
+
+function packageEdges(root, workspace, sourceFiles, failures) {
+  const edges = new Map([...workspace.keys()].map((owner) => [owner, new Set()]));
+  const actualImports = [];
+  for (const filePath of sourceFiles) {
+    const importer = [...workspace.values()].find((entry) => isWithin(entry.sourceRoot, filePath));
+    if (importer === undefined) continue;
+    for (const imported of importsFrom(filePath)) {
+      const target = workspaceTarget(imported.specifier, workspace);
+      if (target !== null && target.owner !== importer.owner) {
+        edges.get(importer.owner).add(target.owner);
+        actualImports.push({ importer, target, filePath, ...imported });
+        const dependencyName = target.name.slice(WORKSPACE_PREFIX.length);
+        const allowed = allowedWorkspaceDependencies[importer.owner] ?? new Set();
+        if (!allowed.has(dependencyName)) {
+          failures.push(
+            `${relativeTo(importer.root, filePath)}:${imported.line}: ${importer.name} imports ${target.name}, ` +
+              `but that direction is not allowed; move the dependency behind the owning package's public entry point`,
+          );
+        }
+        if (imported.specifier !== target.name) {
+          failures.push(
+            `${relativeTo(importer.root, filePath)}:${imported.line}: deep cross-package import ${imported.specifier}; ` +
+              `import ${target.name} from its public entry point instead`,
+          );
+        }
+        const declared = new Set([
+          ...Object.keys(importer.manifest.dependencies ?? {}),
+          ...Object.keys(importer.manifest.devDependencies ?? {}),
+        ]);
+        if (!declared.has(target.name)) {
+          failures.push(
+            `${relativeTo(importer.root, filePath)}:${imported.line}: ${target.name} is imported by ${importer.name} ` +
+              `but is missing from its package.json; declare the workspace dependency in the importing owner`,
+          );
+        }
+      }
+
+      if (imported.specifier.startsWith(".")) {
+        const resolved = path.resolve(path.dirname(filePath), imported.specifier);
+        const target = [...workspace.values()].find(
+          (entry) => entry.owner !== importer.owner && isWithin(entry.root, resolved),
+        );
+        if (target !== undefined) {
+          failures.push(
+            `${relativeTo(importer.root, filePath)}:${imported.line}: relative cross-package import ${imported.specifier} ` +
+              `reaches ${target.name}; use the target's public package entry point`,
+          );
+        }
+      }
+    }
+  }
+
+  for (const importer of workspace.values()) {
+    const declared = new Set([
+      ...Object.keys(importer.manifest.dependencies ?? {}),
+      ...Object.keys(importer.manifest.devDependencies ?? {}),
+    ]);
+    for (const targetName of declared) {
+      const target = workspaceTarget(targetName, workspace);
+      if (target === null || target.owner === importer.owner) continue;
+      edges.get(importer.owner).add(target.owner);
+      const allowed = allowedWorkspaceDependencies[importer.owner] ?? new Set();
+      const dependencyName = target.name.slice(WORKSPACE_PREFIX.length);
+      if (!allowed.has(dependencyName)) {
+        failures.push(
+          `${relativeTo(root, path.join(importer.root, "package.json"))}: ${importer.name} declares ${target.name}, ` +
+            `but that direction is not allowed; remove it or move the integration to the owning package`,
+        );
+      }
+    }
+  }
+  return { edges, actualImports };
+}
+
+function findCycles(edges) {
+  const cycles = [];
+  const visiting = new Set();
+  const visited = new Set();
+  const stack = [];
+  function visit(owner) {
+    if (visiting.has(owner)) {
+      const start = stack.indexOf(owner);
+      cycles.push([...stack.slice(start), owner]);
+      return;
+    }
+    if (visited.has(owner)) return;
+    visiting.add(owner);
+    stack.push(owner);
+    for (const target of edges.get(owner) ?? []) visit(target);
+    stack.pop();
+    visiting.delete(owner);
+    visited.add(owner);
+  }
+  for (const owner of edges.keys()) visit(owner);
+  return cycles;
+}
+
+function checkSdkBoundaries(workspace, sourceFiles, failures) {
+  for (const filePath of sourceFiles) {
+    const importer = [...workspace.values()].find((entry) => isWithin(entry.sourceRoot, filePath));
+    if (importer === undefined) continue;
+    for (const imported of importsFrom(filePath)) {
+      const sdk = sdkOwners.find((candidate) => {
+        const prefix = candidate.prefix.endsWith("/") ? candidate.prefix : `${candidate.prefix}/`;
+        return imported.specifier === candidate.prefix || imported.specifier.startsWith(prefix);
+      });
+      if (sdk === undefined) continue;
+      if (importer.owner !== sdk.owner) {
+        failures.push(
+          `${relativeTo(importer.root, filePath)}:${imported.line}: ${sdk.label} import ${imported.specifier} crosses ` +
+            `${sdk.owner}'s public boundary; keep SDK types, failures, and adapters inside ${sdk.owner} and expose ` +
+            `CtrlZebra-owned contracts instead`,
+        );
+      }
+      if (path.basename(filePath) === "index.ts" || path.basename(filePath) === "index.tsx") {
+        failures.push(
+          `${relativeTo(importer.root, filePath)}:${imported.line}: public package entry imports ${sdk.label} ` +
+            `${imported.specifier}; re-export only CtrlZebra-owned types from the public boundary`,
+        );
+      }
+    }
+  }
+}
+
+function checkCoreHostIsolation(workspace, sourceFiles, failures) {
+  const core = workspace.get("core");
+  if (core === undefined) return;
+  const coreFiles = sourceFiles.filter((filePath) => isWithin(core.sourceRoot, filePath));
+  for (const filePath of coreFiles) {
+    for (const imported of importsFrom(filePath)) {
+      const isNodeHostImport =
+        imported.specifier.startsWith("node:") ||
+        [...nodeHostModules].some(
+          (moduleName) =>
+            imported.specifier === moduleName || imported.specifier.startsWith(`${moduleName}/`),
+        );
+      if (isNodeHostImport) {
+        failures.push(
+          `${relativeTo(core.root, filePath)}:${imported.line}: packages/core imports ${imported.specifier}; ` +
+            `keep Node Host APIs out of Core and inject a Core-owned capability instead`,
+        );
+      }
+    }
+  }
+}
+
+function checkRoadmap(root, failures) {
+  const planPath = path.join(root, "docs", "implementation-plan.md");
+  const archivePath = path.join(root, "docs", "roadmap", "archive", "completed-tasks.md");
+  if (!fs.existsSync(planPath)) {
+    failures.push("docs/implementation-plan.md: roadmap status owner is missing");
+    return;
+  }
+  if (!fs.existsSync(archivePath)) {
+    failures.push("docs/roadmap/archive/completed-tasks.md: completed task owner is missing");
+    return;
+  }
+  const plan = fs.readFileSync(planPath, "utf8");
+  const archive = fs.readFileSync(archivePath, "utf8");
+  const phaseRows = [
+    ...plan.matchAll(
+      /^\|\s*(\d+)\s*\|\s*(待开始|进行中|受阻|已完成)\s*\|[^\n]*\(([^)]+)\)\s*\|$/gm,
+    ),
+  ];
+  const activePhases = phaseRows.filter((match) => match[2] === "进行中");
+  const activeTaskSection = plan.split("### 活跃与待开始任务", 2)[1]?.split("## 5.", 1)[0] ?? "";
+  const activeTasks = [
+    ...activeTaskSection.matchAll(
+      /^\|\s*(\d+)\s*\|\s*(T\d+)\s+[^|]+\|\s*(待开始|进行中|受阻)\s*\|$/gm,
+    ),
+  ];
+  const completedTasks = [...archive.matchAll(/^\|\s*\d+\s*\|\s*(T\d+)\s*\|\s*已完成\s*\|/gm)].map(
+    (match) => match[1],
+  );
+  const uniqueCompleted = new Set(completedTasks);
+
+  if (activePhases.length > 1) {
+    failures.push(
+      `docs/implementation-plan.md: multiple active phases are indexed; keep one active phase owner`,
+    );
+  }
+  if (activeTasks.length > 0 && activePhases.length !== 1) {
+    failures.push(
+      `docs/implementation-plan.md: active task(s) ${activeTasks.map((match) => match[2]).join(", ")} require exactly one active phase index`,
+    );
+  }
+  for (const match of phaseRows) {
+    const target = match[3].replaceAll("\\", "/");
+    const resolved = path.resolve(path.join(root, "docs"), target);
+    if (!fs.existsSync(resolved)) {
+      failures.push(`docs/implementation-plan.md: phase ${match[1]} links to missing ${target}`);
+    }
+    if (match[2] === "进行中" && activeTasks.some((task) => task[1] !== match[1])) {
+      failures.push(
+        `docs/implementation-plan.md: active task phase does not match active phase ${match[1]}`,
+      );
+    }
+  }
+  for (const match of activeTasks) {
+    if (uniqueCompleted.has(match[2])) {
+      failures.push(
+        `docs/implementation-plan.md: ${match[2]} is both active and completed; keep status in one roadmap owner`,
+      );
+    }
+    const phase = match[1];
+    const phasePath = path.join(root, "docs", "roadmap", "phases", `phase-${phase}.md`);
+    if (!fs.existsSync(phasePath)) {
+      failures.push(
+        `docs/roadmap/phases/phase-${phase}.md: active task ${match[2]} has no active phase specification`,
+      );
+    } else if (
+      !new RegExp(`^###\\s+${match[2]}(?:：|:)`, "m").test(fs.readFileSync(phasePath, "utf8"))
+    ) {
+      failures.push(
+        `docs/roadmap/phases/phase-${phase}.md: active task ${match[2]} is not defined by its phase owner`,
+      );
+    }
+  }
+  const progress = {
+    total: Number(plan.match(/- 总任务：\s*(\d+)/)?.[1]),
+    completed: Number(plan.match(/- 已完成：\s*(\d+)/)?.[1]),
+    active: Number(plan.match(/- 进行中：\s*(\d+)/)?.[1]),
+    blocked: Number(plan.match(/- 受阻：\s*(\d+)/)?.[1]),
+    pending: Number(plan.match(/- 待开始：\s*(\d+)/)?.[1]),
+  };
+  if (Object.values(progress).some((value) => Number.isNaN(value))) {
+    failures.push(
+      "docs/implementation-plan.md: progress summary is missing a mechanical status count",
+    );
+  } else {
+    const activeCount = activeTasks.filter((match) => match[3] === "进行中").length;
+    const blockedCount = activeTasks.filter((match) => match[3] === "受阻").length;
+    const pendingCount = activeTasks.filter((match) => match[3] === "待开始").length;
+    const expected = {
+      total: uniqueCompleted.size + activeTasks.length,
+      completed: uniqueCompleted.size,
+      active: activeCount,
+      blocked: blockedCount,
+      pending: pendingCount,
+    };
+    for (const [key, value] of Object.entries(expected)) {
+      if (progress[key] !== value) {
+        failures.push(
+          `docs/implementation-plan.md: progress ${key}=${progress[key]} disagrees with status owner (${value}); update the index or completed-task archive`,
+        );
+      }
+    }
+  }
+}
+
+function countLines(filePath) {
+  if (!fs.existsSync(filePath)) return null;
+  return (
+    fs.readFileSync(filePath, "utf8").split("\n").length -
+    (fs.readFileSync(filePath, "utf8").endsWith("\n") ? 1 : 0)
+  );
+}
+
+function collectAdvisory(root, workspace, sourceFiles) {
+  const production = sourceFiles.filter(
+    (filePath) =>
+      !/\.test\.(?:ts|tsx)$/.test(filePath) &&
+      !relativeTo(root, filePath).split("/").includes("test") &&
+      !relativeTo(root, filePath).split("/").includes("fixtures"),
+  );
+  const tests = sourceFiles.filter((filePath) => /\.test\.(?:ts|tsx)$/.test(filePath));
+  const documents = collectFiles(path.join(root, "docs"), (filePath) => {
+    const relative = relativeTo(root, filePath);
+    return (
+      /\.md$/.test(filePath) &&
+      !relative.startsWith("docs/roadmap/archive/") &&
+      !relative.startsWith("docs/reviews/")
+    );
+  });
+  function ranked(files, threshold) {
+    return files
+      .map((filePath) => ({ path: relativeTo(root, filePath), lines: countLines(filePath) }))
+      .filter((entry) => entry.lines >= threshold)
+      .sort((left, right) => right.lines - left.lines || left.path.localeCompare(right.path))
+      .slice(0, 12);
+  }
+
+  const baselineComparison = [];
+  for (const [category, entries] of Object.entries(baselineHotspots)) {
+    for (const [relativePath, baseline] of Object.entries(entries)) {
+      const current = countLines(path.join(root, relativePath));
+      baselineComparison.push({
+        category,
+        path: relativePath,
+        baseline,
+        current,
+        delta: current === null ? null : current - baseline,
+      });
+    }
+  }
+
+  const duplicateCandidates = [];
+  const blocks = new Map();
+  for (const filePath of production) {
+    const owner = [...workspace.values()].find((entry) =>
+      isWithin(entry.sourceRoot, filePath),
+    )?.owner;
+    if (owner === undefined) continue;
+    const lines = stripComments(fs.readFileSync(filePath, "utf8"))
+      .split("\n")
+      .map((line) => line.trim());
+    for (let index = 0; index + 2 < lines.length; index += 1) {
+      const window = lines.slice(index, index + 3);
+      if (
+        window.some(
+          (line) => line.length < 24 || line.startsWith("import ") || line.startsWith("export "),
+        )
+      ) {
+        continue;
+      }
+      const block = window.join(" ");
+      if (/^[{}()[\],.;:+\-*/]+$/.test(block)) continue;
+      const key = block;
+      const existing = blocks.get(key) ?? [];
+      if (!existing.some((entry) => entry.path === relativeTo(root, filePath))) {
+        existing.push({ path: relativeTo(root, filePath), owner });
+        blocks.set(key, existing);
+      }
+    }
+  }
+  for (const [block, entries] of blocks) {
+    const owners = new Set(entries.map((entry) => entry.owner));
+    if (owners.size > 1) duplicateCandidates.push({ block, entries });
+  }
+
+  let changedSinceBaseline = null;
+  try {
+    const output = execFileSync(
+      "git",
+      [
+        "diff",
+        "--name-only",
+        "471f9177961c06ec8d6d7965a2b79890615523c2..HEAD",
+        "--",
+        "apps",
+        "packages",
+        "docs",
+      ],
+      { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+    );
+    changedSinceBaseline = output.split(/\r?\n/).filter(Boolean);
+  } catch {
+    // Advisory only: shallow clones and source archives do not have the baseline revision.
+  }
+
+  return {
+    productionHotspots: ranked(production, advisoryThresholds.productionLines),
+    testHotspots: ranked(tests, advisoryThresholds.testLines),
+    documentHotspots: ranked(documents, advisoryThresholds.documentLines),
+    baselineComparison,
+    duplicateCandidates: duplicateCandidates.slice(0, 10),
+    changedSinceBaseline,
+  };
+}
+
+export function analyzeArchitecture(root = process.cwd()) {
+  const failures = [];
+  const workspace = loadWorkspace(root, failures);
+  const sourceFiles = sourceFilesFor(workspace);
+  const { edges, actualImports } = packageEdges(root, workspace, sourceFiles, failures);
+  for (const cycle of findCycles(edges)) {
+    failures.push(
+      `workspace dependency cycle ${cycle.join(" -> ")}; remove the edge or restore the documented package direction`,
+    );
+  }
+  checkSdkBoundaries(workspace, sourceFiles, failures);
+  checkCoreHostIsolation(workspace, sourceFiles, failures);
+  checkRoadmap(root, failures);
+  return {
+    failures: [...new Set(failures)],
+    workspace,
+    edges,
+    actualImports,
+    advisory: collectAdvisory(root, workspace, sourceFiles),
+  };
+}
+
+function formatAdvisory(advisory) {
+  const lines = ["Advisory architecture signals (review-only; never a CI hard fail):"];
+  for (const [label, entries] of [
+    ["production hotspots", advisory.productionHotspots],
+    ["test hotspots", advisory.testHotspots],
+    ["document hotspots", advisory.documentHotspots],
+  ]) {
+    lines.push(
+      `- ${label}: ${entries.length === 0 ? "none above the T2301-derived threshold" : entries.map((entry) => `${entry.path} (${entry.lines} lines)`).join(", ")}`,
+    );
+  }
+  const regressions = advisory.baselineComparison.filter(
+    (entry) =>
+      entry.current !== null && entry.delta > Math.max(32, Math.ceil(entry.baseline * 0.1)),
+  );
+  lines.push(
+    `- T2301 hotspot regressions: ${regressions.length === 0 ? "none" : regressions.map((entry) => `${entry.path} (+${entry.delta})`).join(", ")}`,
+  );
+  lines.push(
+    `- representative change surface since T2301: ${advisory.changedSinceBaseline === null ? "unavailable in this checkout" : `${advisory.changedSinceBaseline.length} changed paths (directional only)`}`,
+  );
+  lines.push(
+    `- conservative cross-owner duplicate candidates: ${advisory.duplicateCandidates.length === 0 ? "none" : `${advisory.duplicateCandidates.length} (inspect ownership before acting)`}`,
+  );
+  return lines.join("\n");
+}
+
+export function formatReport(result) {
+  const hardGate = result.failures.length === 0 ? "PASSED" : "FAILED";
+  const lines = [`Architecture hard gates: ${hardGate}`];
+  if (result.failures.length > 0) {
+    for (const failure of result.failures) lines.push(`- ${failure}`);
+  }
+  lines.push(formatAdvisory(result.advisory));
+  return lines.join("\n");
+}
+
+const invokedPath =
+  process.argv[1] === undefined ? null : pathToFileURL(path.resolve(process.argv[1])).href;
+if (invokedPath === import.meta.url) {
+  const result = analyzeArchitecture(process.cwd());
+  console.log(formatReport(result));
+  if (result.failures.length > 0) process.exitCode = 1;
+}
