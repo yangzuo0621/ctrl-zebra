@@ -1,5 +1,11 @@
 # 阶段 23：架构收敛与可维护性治理
 
+> **归档状态：阶段完成（本 PR）**
+>
+> - 归档日期：2026-09-03
+> - 完成任务：T2301–T2306；任务已通过 [PR #276](https://github.com/yangzuo0621/ctrl-zebra/pull/276)、[PR #278](https://github.com/yangzuo0621/ctrl-zebra/pull/278)、[PR #280](https://github.com/yangzuo0621/ctrl-zebra/pull/280)、[PR #281](https://github.com/yangzuo0621/ctrl-zebra/pull/281)、[PR #284](https://github.com/yangzuo0621/ctrl-zebra/pull/284) 和本 PR [#283](https://github.com/yangzuo0621/ctrl-zebra/pull/283) 完成。
+> - 阶段门禁：本 PR 已完成阶段规格要求；合并后阶段状态在 `main` 生效。
+
 ## 1. 阶段目标
 
 在阶段 22 完成 Preview / GA 工程就绪后，暂停新增 capability，针对随着功能增长已经显现的维护成本进行一次受控的架构收敛。

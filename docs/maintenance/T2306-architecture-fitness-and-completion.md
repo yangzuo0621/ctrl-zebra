@@ -157,8 +157,9 @@ Extension hotspots with task evidence improved, the large runtime test boundary 
 document ownership narrowed without conflicting copies, and unchanged hotspots have explicit retention
 reasons or an opportunity-ledger entry.
 
-The overall Phase 23 completion gate remains pending until this PR is merged, as required by the
-roadmap status owner. GitHub Actions is the cross-platform verification authority for this revision;
+The final PR branch now marks T2306 and Phase 23 complete in the roadmap archive. Until PR #283 is
+merged, `main` continues to represent the previous active baseline. GitHub Actions is the
+cross-platform verification authority for this revision;
 the PR must remain green across architecture checks, fixture tests, lint, typecheck, unit tests,
 Extension integration, coverage, performance, and build before merge.
 
