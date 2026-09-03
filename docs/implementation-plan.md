@@ -82,7 +82,6 @@
 
 | 阶段 | 任务 | 状态 |
 |---|---|---|
-| 23 | T2302 收敛文档 Hot Context 与 Single Source of Truth | 已完成 |
 | 23 | T2306 建立 Architecture Fitness Checks 并验证收敛结果 | 待开始 |
 
 ### 当前任务
