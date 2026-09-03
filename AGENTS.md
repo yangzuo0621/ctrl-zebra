@@ -24,7 +24,7 @@ Read only the documents required by the current work.
 | Webview/protocol/UX | Applicable section of `docs/protocol.md`, `docs/webview.md`, or `docs/ux.md` |
 | Workspace/approvals/commands/credentials | Applicable section of `docs/security.md` |
 | Persistence/checkpoints | `docs/persistence.md` plus applicable restore/security rules |
-| MCP | `docs/architecture/mcp-client.md` plus applicable MCP security rules |
+| MCP | `docs/mcp.md`; add `docs/security.md` for security-sensitive MCP changes |
 | CI/packaging/release | `docs/ci.md`, `docs/packaging.md`, or `docs/release-checklist.md` |
 | Implementation review | `docs/review-checklist.md` plus only documents required by the reviewed change |
 | Auto workflow | `.agents/skills/auto-workflow/SKILL.md` and the dispatched role Skill |

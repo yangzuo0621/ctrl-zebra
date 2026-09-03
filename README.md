@@ -111,69 +111,18 @@ tool-call format.
 
 ## Local MCP Server
 
-CtrlZebra can connect to one explicitly configured local `stdio` MCP Server. The Server runs with
-your operating-system authority and may access local files or networks independently of CtrlZebra,
-so configure only an executable you trust. CtrlZebra does not download, install, authenticate, or
-start a Server automatically.
+CtrlZebra supports one explicitly configured local `stdio` MCP Server. It requires a trusted
+single-folder workspace, an exact startup approval, and an executable you trust; the Server runs
+with your operating-system authority and may have local or network side effects. CtrlZebra never
+downloads, installs, authenticates, starts, reconnects, or resumes a Server automatically.
 
-Configure the exact executable and ordered arguments in machine-scoped settings. Shell command
-lines, environment overrides, credentials, and workspace-scoped MCP configuration are rejected:
+Tools are external `execute` operations and require a fresh exact approval for every call. Resources
+and Prompts are shown only after explicit user actions, and their bounded results remain ordinary
+untrusted text. Version 1 settings remain modern-only; version 2 can explicitly select modern-only
+or dual compatibility for the supported local protocol versions.
 
-```json
-{
-  "ctrlZebra.mcp.server": {
-    "version": 1,
-    "serverId": "local_docs",
-    "displayName": "Local docs",
-    "command": "/absolute/path/to/the-server",
-    "args": ["--stdio"]
-  }
-}
-```
-
-This existing `version: 1` setting remains `modern-only` and accepts only MCP `2026-07-28`. It is
-not silently migrated or broadened on upgrade. To opt into the reviewed compatibility path, first
-explicitly migrate the setting to version `2`, then choose the closed `protocolMode` value
-`"modern-only"` or `"dual"`:
-
-```json
-{
-  "ctrlZebra.mcp.server": {
-    "version": 2,
-    "protocolMode": "dual",
-    "serverId": "local_docs",
-    "displayName": "Local docs",
-    "command": "/absolute/path/to/the-server",
-    "args": ["--stdio"]
-  }
-}
-```
-
-`dual` supports exactly modern `2026-07-28` and legacy `2025-11-25` over local `stdio`. The full
-configuration, migration, and exclusion rules are in the [configuration contract](docs/configuration.md).
-The strict v1/v2 parser, normalized Protocol Schemas, bounded provenance, deterministic local
-compatibility fixtures, mode-aware Extension/Webview wiring, and negotiated modern/legacy lifecycle
-are implemented. A version `2` `dual` setting selects the controlled dual-era Client after the same
-trusted-workspace and fresh startup-approval checks; it is never silently treated as modern-only.
-Recovery remains explicit: no reconnect, re-probe, or renegotiation is started from persisted data.
-
-Open one trusted workspace, review the exact executable, arguments, and canonical working directory,
-then run **CtrlZebra: Connect MCP Server** or select **Connect** in the Agent view. After connection:
-
-- **Configured mode and negotiated protocol** are shown separately. A connected modern Server is
-  shown as `modern / 2026-07-28`; a connected legacy Server is shown as `legacy / 2025-11-25`.
-  Before the handshake completes, the UI shows no selected era, version, probe, or fallback result.
-- **Tools** are available to the model, but every call has trusted `execute` risk and requires a new
-  exact single-use approval showing the Server, Tool, arguments, and external-side-effect warning.
-- **Resources** and **Resource Templates** are read only after you select them. Previewed bounded text
-  enters model context only after you select **Attach**.
-- **Prompts** are fetched only after you select one and provide its required arguments. They remain
-  ordinary untrusted text and enter the input flow only after preview and confirmation.
-
-Use **CtrlZebra: Disconnect MCP Server** when finished. Disconnecting, cancelling a Run, losing
-workspace trust, or closing the Extension Host invalidates live catalogs and pending operations;
-CtrlZebra never reconnects or resumes them from a saved Session.
-
+See the [MCP contract](docs/mcp.md) for configuration, lifecycle, compatibility, safety, and
+protocol details.
 ## Configuration
 
 Provider and MCP settings have machine scope. Editor context is explicitly window scoped.
@@ -184,7 +133,7 @@ Provider and MCP settings have machine scope. Editor context is explicitly windo
 | `ctrlZebra.provider.model` | empty | Required exact model ID. Surrounding whitespace is rejected. |
 | `ctrlZebra.provider.endpoint` | empty | Optional override for OpenAI/Gemini; required for OpenAI-compatible. Remote URLs must use HTTPS. Plain HTTP is allowed only for `localhost`, `127.0.0.0/8`, or `::1`. User info, query strings, and fragments are rejected. |
 | `ctrlZebra.provider.capabilities` | `["text-streaming"]` | Used only by OpenAI-compatible endpoints. Values are `text-streaming` and `tool-calling`, without duplicates. CtrlZebra currently requires both to start an Agent run. |
-| `ctrlZebra.mcp.server` | `null` | One local stdio Server object. Existing `version: 1` means modern-only; explicit `version: 2` adds `protocolMode: "modern-only" | "dual"`. Stable lower-snake-case `serverId`, bounded `displayName`, exact `command`, and ordered `args` are required; credentials and shell command lines are forbidden. A trusted single-folder workspace and fresh startup approval are required. See the [configuration contract](docs/configuration.md). |
+| `ctrlZebra.mcp.server` | `null` | One explicitly configured local stdio Server. Version 1 is modern-only; version 2 explicitly selects modern-only or dual. See the [MCP contract](docs/mcp.md#configuration). |
 | `ctrlZebra.editorContext.enabled` | `false` | Window-scoped opt-in for the explicit editor entry commands. It captures no text in the background and does not grant Trust or side-effecting permissions. |
 
 OpenAI and Gemini always use their adapter-declared text-streaming and tool-calling capabilities.
@@ -277,30 +226,13 @@ Read the full [Privacy Notice](PRIVACY.md) and [security contract](docs/security
 
 ## MCP troubleshooting
 
-- **Configure one valid MCP Server**: check that the setting is machine-scoped, contains no unknown
-  fields, uses an absolute or otherwise directly executable command, and separates every argument.
-- **Workspace must be trusted**: open exactly one local folder and grant VS Code Workspace Trust;
-  MCP process startup is disabled in untrusted, empty, remote-only, or multi-root windows.
-- **Protocol or capability failure**: check the configured mode. Modern-only requires MCP
-  `2026-07-28`; dual supports only `2026-07-28` and `2025-11-25`. CtrlZebra never accepts unknown
-  versions, exposes probe/fallback details before a successful handshake, or enables undeclared
-  Client capabilities. A well-formed modern DiscoverResult or recognized modern JSON-RPC error
-  never falls back; if it does not advertise controlled `2026-07-28`, the stable result is
-  `protocol-incompatible`. Syntactically/structurally malformed or validation-failing response/error
-  uses `malformed-message`; structurally valid unknown-future or otherwise unclassified response/error
-  uses `protocol-incompatible`; neither falls back. Dual fallback is limited to a defined non-modern
-  response or bounded timeout. A version-1 setting must be explicitly migrated before dual can be
-  selected. A malformed response fails as `malformed-message`; an unknown or unclassified valid
-  response fails as `protocol-incompatible`; neither authorizes fallback. Only the closed non-modern
-  response or bounded-timeout cases can enter one legacy handshake in `dual`.
-- **Server exited or malformed output**: disconnect, inspect the Server outside CtrlZebra without
-  sharing secrets, correct its stdout protocol behavior, then reconnect explicitly. CtrlZebra never
-  treats stderr or raw protocol data as user-visible content.
-- **Configuration changed**: disconnect the current generation before reconnecting. A live Server is
-  never silently reconfigured or restarted.
-- **Cancellation or restart**: retry from a new explicit user action. Pending Tools, Resource reads,
-  Prompt previews, approvals, and catalogs are intentionally not resumed.
-
+- **Configuration or trust**: verify the machine-scoped setting, trusted single-folder workspace,
+  exact executable, and fresh startup approval.
+- **Protocol or capability failure**: verify the selected mode and consult the
+  [MCP contract](docs/mcp.md#protocol-negotiation); CtrlZebra never enables undeclared capabilities
+  or reconnects automatically.
+- **Server or cancellation failure**: inspect the Server outside CtrlZebra without sharing secrets,
+  then disconnect and reconnect explicitly. Pending operations are not resumed.
 ## Development
 
 This repository uses pnpm 11 and Node.js 22 or later.

@@ -69,87 +69,23 @@ and retry behavior are defined by [Persistence](persistence.md#complete-local-da
 and [Security](security.md#complete-local-data-clearing-t2106). It is separate from Session retention
 and does not run at activation or silently broaden the uninstall action.
 
-## Scope and ownership
+## MCP Server setting
 
 `ctrlZebra.mcp.server` is one optional, machine-scoped VS Code setting. The Extension Host is the
-only authority that reads it or starts a process. Workspace settings, Webview messages, model text,
-MCP messages, persisted Sessions, and Server metadata cannot create, merge, or replace this value.
-The setting describes one local `stdio` executable and ordered arguments. It never contains a cwd,
-environment override, shell command line, endpoint, headers, credentials, or Client capability.
+only authority that reads it or starts a process. It describes one local `stdio` executable and
+ordered arguments and never contains a cwd, environment override, shell command line, endpoint,
+headers, credentials, or Client capability.
 
-The object is strict: unknown properties, unknown versions, duplicate values, malformed strings,
-and values outside the existing identifier, argument, and serialized-size limits fail closed with
-the stable `configuration-invalid` classification. A rejected value does not start or reconfigure
-a live process.
+The value is `null` or one strict versioned object. Unknown fields, versions, modes, duplicate
+values, malformed strings, and out-of-bound values fail closed as `configuration-invalid` and
+cannot start or reconfigure a live process. Version `1` means `protocolMode: "modern-only"` and
+accepts only MCP `2026-07-28`; version `2` requires the closed mode `"modern-only" | "dual"`.
+Migration and selection of `dual` are explicit user actions. Version 1 and version 2 explicit
+modern-only normalize to the same effective operation when their other fields match.
 
-## Versioned representation
-
-The setting remains `null` or one of these closed objects. The common fields keep their existing
-machine-scoped contract and bounds:
-
-```json
-{
-  "version": 1,
-  "serverId": "local_docs",
-  "displayName": "Local docs",
-  "command": "/absolute/path/to/the-server",
-  "args": ["--stdio"]
-}
-```
-
-Version `1` has no mode field. It is interpreted as `protocolMode: "modern-only"` and accepts only
-MCP `2026-07-28`. Reading an existing version `1` setting never writes a new value, adds a field,
-or silently broadens its protocol behavior. For operation identity, this normalized effective mode
-is equivalent to version `2` with explicit `protocolMode: "modern-only"`; the raw configuration
-version is not a second startup-operation identity field.
-
-The reviewed version `2` representation makes the user choice explicit:
-
-```json
-{
-  "version": 2,
-  "protocolMode": "modern-only",
-  "serverId": "local_docs",
-  "displayName": "Local docs",
-  "command": "/absolute/path/to/the-server",
-  "args": ["--stdio"]
-}
-```
-
-`protocolMode` is the closed union `"modern-only" | "dual"`. Version `2` requires it; it cannot be
-omitted, set to another string, or supplied on version `1`. `modern-only` accepts only
-`2026-07-28`. `dual` accepts exactly `2026-07-28` (modern) and `2025-11-25` (legacy). Older
-revisions, unknown future versions, and every non-stdio transport remain unsupported.
-
-## Explicit migration and change behavior
-
-- An existing version `1` setting remains valid and modern-only after an extension upgrade. The
-  user may explicitly choose **Migrate to version 2**; that action writes the same executable,
-  arguments, identity, and label with `version: 2` and `protocolMode: "modern-only"`.
-- Selecting `dual` is a separate explicit user action after migration. There is no automatic
-  migration, implicit dual mode, or inference from a Server response. If the user does not migrate,
-  the old setting continues to have modern-only behavior.
-- Editing any effective setting while a connection is live marks it stale. The Host does not mutate
-  the process, reuse an approval, or switch era in place. The user must disconnect and explicitly
-  connect again, with a new startup approval and generation.
-- A missing setting, invalid version/mode, unknown property, or unsupported transport remains a
-  bounded configuration error. It cannot trigger a probe, legacy fallback, process start, retry, or
-  automatic recovery.
-
-## Runtime activation and change behavior
-
-The Extension selects the normalized mode before workspace binding and passes it to the controlled
-Client lifecycle. Effective mode changes invalidate pending approval and require a fresh exact
-approval before process creation. The closed modern-first decision matrix is owned by
-[Architecture](architecture/mcp-schema-and-discovery.md#closed-modern-first-fallback-decision-matrix-t1804);
-wire shapes and negotiated projection by
-[Protocol](protocol/mcp-configuration-and-resources.md#dual-era-configuration-and-negotiated-projection-t1804);
-security and no-fallback behavior by [Security](security.md#controlled-mcp-security-boundary); and
-historical provenance by [Persistence](persistence.md#mcp-persistence-projection).
-
-The Extension, Webview, persistence, and local stdio fixture paths consume the normalized configured
-mode and negotiated projection through those owning contracts. Recovery remains an explicit user
-action and never starts a hidden reconnect.
+The complete MCP configuration, bounds, migration behavior, and runtime contract are owned by
+[MCP](mcp.md#configuration). This document owns the setting declaration, scope, defaults, and
+configuration clearing; it does not duplicate MCP lifecycle or negotiation rules.
 
 ## Diagnostics export does not add configuration (T2205)
 
