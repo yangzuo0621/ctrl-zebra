@@ -22,10 +22,10 @@
   the installed TypeScript 7 package exposes parsing through unstable APIs. Existing Git/search tools
   remain optional evidence; executor and reviewer semantic judgment stays authoritative.
 - Initial Reuse Audit: Searched `Reuse Before Build`, `Reuse Audit`, `Similarity Audit`, task templates,
-  review requirements, PR evidence, CI commands, and existing EO-001 through EO-004 maintenance records.
-  Existing root rules and `docs/development.md` remain the authority and are deepened rather than
-  replaced. The roadmap task template, review checklist, and PR template are reused as the evidence
-  surfaces. No new workflow system, dependency, or parallel policy owner is introduced.
+  review requirements, PR evidence, CI commands, and prior maintenance decisions. Existing root rules
+  and `docs/development.md` remain the authority and are deepened rather than replaced. The roadmap
+  task template, review checklist, and PR template are reused as the evidence surfaces. No new workflow
+  system, dependency, or parallel policy owner is introduced.
 - Active reuse plan: Deepen the existing root workflow rules and reuse the existing task, review, and
   pull-request evidence surfaces. Do not create a scanner, policy package, or second process owner.
 - Second/third implementation assessment: None. All changes deepen existing documentation owners.

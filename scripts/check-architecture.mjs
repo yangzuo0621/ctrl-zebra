@@ -599,17 +599,11 @@ function checkCoreHostIsolation(workspace, sourceFiles, failures) {
 
 function checkRoadmap(root, failures) {
   const planPath = path.join(root, "docs", "implementation-plan.md");
-  const archivePath = path.join(root, "docs", "roadmap", "archive", "completed-tasks.md");
   if (!fs.existsSync(planPath)) {
     failures.push("docs/implementation-plan.md: roadmap status owner is missing");
     return;
   }
-  if (!fs.existsSync(archivePath)) {
-    failures.push("docs/roadmap/archive/completed-tasks.md: completed task owner is missing");
-    return;
-  }
   const plan = fs.readFileSync(planPath, "utf8");
-  const archive = fs.readFileSync(archivePath, "utf8");
   const phaseRows = [
     ...plan.matchAll(
       /^\|\s*(\d+)\s*\|\s*(待开始|进行中|受阻|已完成)\s*\|[^\n]*\(([^)]+)\)\s*\|$/gm,
@@ -633,11 +627,6 @@ function checkRoadmap(root, failures) {
       /^\|\s*(\d+)\s*\|\s*(T\d+)\s+[^|]+\|\s*(待开始|进行中|受阻)\s*\|$/gm,
     ),
   ];
-  const completedTasks = [...archive.matchAll(/^\|\s*\d+\s*\|\s*(T\d+)\s*\|\s*已完成\s*\|/gm)].map(
-    (match) => match[1],
-  );
-  const uniqueCompleted = new Set(completedTasks);
-
   if (activePhases.length > 1) {
     failures.push(
       `docs/implementation-plan.md: multiple active phases are indexed; keep one active phase owner`,
@@ -661,11 +650,6 @@ function checkRoadmap(root, failures) {
     }
   }
   for (const match of activeTasks) {
-    if (uniqueCompleted.has(match[2])) {
-      failures.push(
-        `docs/implementation-plan.md: ${match[2]} is both active and completed; keep status in one roadmap owner`,
-      );
-    }
     const phase = match[1];
     const phasePath = path.join(root, "docs", "roadmap", "phases", `phase-${phase}.md`);
     if (!fs.existsSync(phasePath)) {
@@ -696,8 +680,8 @@ function checkRoadmap(root, failures) {
     const blockedCount = activeTasks.filter((match) => match[3] === "受阻").length;
     const pendingCount = activeTasks.filter((match) => match[3] === "待开始").length;
     const expected = {
-      total: uniqueCompleted.size + activeTasks.length,
-      completed: uniqueCompleted.size,
+      total: progress.completed + activeTasks.length,
+      completed: progress.completed,
       active: activeCount,
       blocked: blockedCount,
       pending: pendingCount,
@@ -705,7 +689,7 @@ function checkRoadmap(root, failures) {
     for (const [key, value] of Object.entries(expected)) {
       if (progress[key] !== value) {
         failures.push(
-          `docs/implementation-plan.md: progress ${key}=${progress[key]} disagrees with status owner (${value}); update the index or completed-task archive`,
+          `docs/implementation-plan.md: progress ${key}=${progress[key]} disagrees with the active task index (${value}); update the roadmap index`,
         );
       }
     }
@@ -775,12 +759,7 @@ function collectAdvisory(root, workspace, sourceFiles) {
   );
   const documents = collectFiles(path.join(root, "docs"), (filePath) => {
     const relative = relativeTo(root, filePath);
-    return (
-      /\.md$/.test(filePath) &&
-      !relative.startsWith("docs/roadmap/archive/") &&
-      !relative.startsWith("docs/reviews/") &&
-      !isGeneratedPath(relative)
-    );
+    return /\.md$/.test(filePath) && !isGeneratedPath(relative);
   });
   function ranked(files, threshold) {
     return files
@@ -932,7 +911,7 @@ function formatAdvisory(advisory) {
     ["document hotspots", advisory.documentHotspots],
   ]) {
     lines.push(
-      `- ${label}: ${entries.length === 0 ? "none above the T2301-derived threshold" : entries.map((entry) => `${entry.path} (${entry.lines} lines)`).join(", ")}`,
+      `- ${label}: ${entries.length === 0 ? "none above the baseline threshold" : entries.map((entry) => `${entry.path} (${entry.lines} lines)`).join(", ")}`,
     );
   }
   const regressions = advisory.baselineComparison.filter(
@@ -940,13 +919,13 @@ function formatAdvisory(advisory) {
       entry.current !== null && entry.delta > Math.max(32, Math.ceil(entry.baseline * 0.1)),
   );
   lines.push(
-    `- T2301 hotspot regressions: ${regressions.length === 0 ? "none" : regressions.map((entry) => `${entry.path} (+${entry.delta})`).join(", ")}`,
+    `- hotspot regressions: ${regressions.length === 0 ? "none" : regressions.map((entry) => `${entry.path} (+${entry.delta})`).join(", ")}`,
   );
   lines.push(
-    `- representative change surface since T2301: ${advisory.changeSurface === null ? "unavailable in this checkout" : `${advisory.changeSurface.files} paths; production=${advisory.changeSurface.production}, tests=${advisory.changeSurface.tests}, docs=${advisory.changeSurface.documents}, manifests=${advisory.changeSurface.manifests}, owners=${advisory.changeSurface.owners.length} (${advisory.changeSurface.owners.join(", ") || "none"}); compare with T2204=44/4, T2205=40/3, EO-007=80/7 (directional only)`}`,
+    `- representative change surface: ${advisory.changeSurface === null ? "unavailable in this checkout" : `${advisory.changeSurface.files} paths; production=${advisory.changeSurface.production}, tests=${advisory.changeSurface.tests}, docs=${advisory.changeSurface.documents}, manifests=${advisory.changeSurface.manifests}, owners=${advisory.changeSurface.owners.length} (${advisory.changeSurface.owners.join(", ") || "none"})`}`,
   );
   lines.push(
-    `- deleted-path regressions since T2301: ${advisory.deletedPathRegressions === null ? "unavailable in this checkout" : advisory.deletedPathRegressions.length === 0 ? "none" : advisory.deletedPathRegressions.join(", ")}`,
+    `- deleted-path regressions: ${advisory.deletedPathRegressions === null ? "unavailable in this checkout" : advisory.deletedPathRegressions.length === 0 ? "none" : advisory.deletedPathRegressions.join(", ")}`,
   );
   lines.push(
     `- conservative cross-owner duplicate candidates: ${advisory.duplicateCandidates.length === 0 ? "none" : `${advisory.duplicateCandidates.length} (inspect ownership before acting)`}${advisory.duplicateScanCapped ? "; scan capped at the advisory resource limit" : ""}`,

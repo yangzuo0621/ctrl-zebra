@@ -15,8 +15,8 @@
   `.codex/README.md`, `.codex/PROMPTS.md`, relevant `.codex/agents/*.toml`, and this record.
 - Public-contract impact: None. This changes agent workflow policy and profile names only; product code,
   Protocol DTOs, persistence, security policy, dependencies, CI, and release behavior are unchanged.
-- Explicitly excluded: `docs/roadmap/archive/phase-11.md` product-version language and unrelated V1/V2
-  terminology outside auto-workflow profiles.
+- Explicitly excluded: historical product-version language and unrelated V1/V2 terminology outside
+  auto-workflow profiles.
 - Build vs Buy: Not applicable. Existing roles, skills, templates, Git state, and CI remain the owners;
   no coordinator, dependency, scanner, or workflow service is added.
 - Reuse: Deepen the existing workflow roles, authorization profiles, progressive-loading guidance,
