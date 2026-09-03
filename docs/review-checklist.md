@@ -4,7 +4,7 @@ This is a compact review gate. Detailed semantics remain authoritative in
 [Reuse Before Build](development.md#reuse-before-build) and
 [Build vs Buy](development.md#build-vs-buy); repository ownership and security rules remain in
 [AGENTS.md](../AGENTS.md). Execution evidence belongs in the handoff, conversation, or PR, not in
-`docs/implementation-plan.md`.
+the current-state documents under `docs/`.
 
 ## 1. Scope
 

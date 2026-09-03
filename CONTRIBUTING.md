@@ -11,8 +11,8 @@ and release rules documented in this repository.
   contents, raw logs, or other sensitive data in an issue, pull request, fixture, or screenshot.
 - Report suspected vulnerabilities privately through the [Security Policy](SECURITY.md). Do not use a
   public issue for a security report.
-- Check the existing [README](README.md), [documentation index](docs/), and open issues before
-  starting duplicate work.
+- Check the existing [README](README.md), [product and domain documentation](docs/), and open issues
+  before starting duplicate work.
 
 ## Local development
 
@@ -37,10 +37,10 @@ cancellation, and cleanup requirements.
 
 ## Scope and changes
 
-Work on one roadmap task or one standalone maintenance change at a time. Preserve existing public
+Work on one Issue/PR or one standalone maintenance change at a time. Preserve existing public
 contracts and authoritative owner documents. A change to architecture, security boundaries,
-persistence, protocol, release policy, or roadmap order needs the repository's documented change
-control before implementation.
+persistence, protocol, release policy, or product scope needs documented change control before
+implementation.
 
 Keep changes focused, explain the user or maintainer value, and update the owning documentation when
 a durable rule changes. Do not add dependencies, CI jobs, publishing behavior, telemetry, or
@@ -48,7 +48,7 @@ automatic release behavior without an explicitly authorized task.
 
 ## Branches, commits, and pull requests
 
-- Use a task-scoped branch such as `codex/t2201-governance-docs` for roadmap work.
+- Use a task-scoped branch such as `codex/t2201-governance-docs` for an Issue or maintenance change.
 - Keep commits small enough to review and use an imperative summary. The pull-request template
   describes the accepted title format and the evidence expected for scope, reuse, security, and
   verification.

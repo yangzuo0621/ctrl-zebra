@@ -47,7 +47,7 @@ Templates), and Prompts.
 - Each SDK update requires a new Context7 review of current official documentation and errata,
   protocol compatibility evidence, lockfile review, tests for every supported primitive and
   excluded Client capability, and a VSIX bundle audit. A protocol-version change also requires
-  product-foundation, phase, Architecture, Security, Protocol, Persistence, UX, and ADR review.
+  product scope, Architecture, Security, Protocol, Persistence, UX, and ADR review.
 
 ### Module boundary
 
@@ -170,7 +170,7 @@ gives a current maintained base without admitting its entire feature surface.
 
 Rejected. Each adds a distinct attack surface and ownership model: remote endpoint and OAuth
 security, Server-to-Client access to models/users/workspaces, or binary rendering and CSP expansion.
-They require separately approved roadmap tasks and cannot be hidden behind the stdio or text
+They require separately approved work items and cannot be hidden behind the stdio or text
 interfaces decided here.
 
 ## Consequences

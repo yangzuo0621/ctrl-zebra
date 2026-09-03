@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Coordinate exactly one roadmap task across Root, Executor, Reviewer, and the optional Planner. Root
+Coordinate exactly one approved work item across Root, Executor, Reviewer, and the optional Planner. Root
 orchestrates the work and performs the transactional closure after an independent Reviewer approval;
 Root does not take over implementation or implementation review.
 
@@ -16,38 +16,40 @@ and the v3 review-loop and closure rules below continue unchanged.
 
 ## Inputs
 
-- `AGENTS.md`, the active portion of `docs/implementation-plan.md`, and one task ID
+- `AGENTS.md`, the affected current-state owner documents, and one Issue/PR or standalone maintenance
+  scope
 - authorization profile: `AUTO_DRAFT` or `AUTO_FULL`
 - explicit task-scoped authorization for every Git/PR operation in that profile
 - base revision, branch, acceptance criteria, and the Executor reuse tier
 
 ## Authorization profiles
 
-`AUTO_DRAFT` authorizes, for the assigned task only:
+`AUTO_DRAFT` authorizes, for the assigned work item only:
 
 - create or switch to its dedicated `codex/...` branch;
-- stage only task-scoped changes;
+- stage only work-item-scoped changes;
 - commit and push that branch; and
 - create and update its draft PR.
 
 After Reviewer approval of the current implementation revision and required checks are green, Root
 closure stops at `READY_FOR_MERGE`. `AUTO_DRAFT` never authorizes merge, branch deletion, cleanup, or
-marking the task completed.
+work-item closure.
 
-`AUTO_FULL` includes `AUTO_DRAFT` and additionally authorizes, for the assigned task only:
+`AUTO_FULL` includes `AUTO_DRAFT` and additionally authorizes, for the assigned work item only:
 
-- task-scoped plan/status updates and their required commit/push;
+- explicitly authorized status updates in the Issue or PR;
 - squash merge of the approved PR; and
 - safe deletion of the merged feature branch and task-owned temporary resources.
 
 Both profiles exclude force-push, unrelated changes, destructive cleanup, scope expansion,
 architecture/contract changes, branch-protection bypass, and ambiguous conflict resolution. Naming a
 profile is not authorization: the user must explicitly authorize that exact profile for that exact
-task. The envelope is immutable; changing it requires a profile change and renewed authorization.
+work item. The envelope is immutable; changing it requires a profile change and renewed authorization.
 
 ## Coordinator workflow
 
-1. Pin the task, base revision, branch, authorization envelope, and Executor `TARGETED`/`FULL` tier.
+1. Pin the work item, acceptance criteria, base revision, branch, authorization envelope, and Executor
+   `TARGETED`/`FULL` tier.
 2. Use `sol-planner` only for pre-implementation decomposition or unresolved architecture/roadmap
    ambiguity; it is not part of routine closure.
 3. Dispatch Executor for startup, implementation, verification, early PR creation, and a compact

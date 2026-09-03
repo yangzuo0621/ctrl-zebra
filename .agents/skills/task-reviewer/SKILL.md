@@ -2,8 +2,8 @@
 
 ## Purpose
 
-When explicitly invoked, independently review one `Txxxx` implementation at an exact current PR
-revision. Remain read-only and return the sole implementation-quality decision for that review.
+When explicitly invoked, independently review one approved work item at an exact current PR revision.
+Remain read-only and return the sole implementation-quality decision for that review.
 
 ## Invocation boundary
 
@@ -17,9 +17,9 @@ The base context is exactly:
 
 - compact Review Handoff;
 - current PR diff at the handoff's exact revision; and
-- task acceptance criteria.
+- work-item acceptance criteria.
 
-Require the handoff to identify the task/PR/revision, acceptance and changed areas/contracts,
+Require the handoff to identify the work item/PR/revision, acceptance and changed areas/contracts,
 verification, and any applicable reuse or Build-vs-Buy evidence. Treat handoff fields as claims. Open
 extra documents only for a touched contract, material handoff claim, concrete concern, or documented
 similarity escalation; do not reconstruct the Executor's full context.
@@ -81,5 +81,5 @@ unverifiable, required base context is missing, or review exposes a change-contr
 
 ## Role boundary
 
-Do not edit implementation, plans, PR state, or task status; impersonate Executor, Root closure, or
+Do not edit implementation, plans, PR state, or work-item status; impersonate Executor, Root closure, or
 Planner; merge, close, or perform closure; or reinterpret the quality decision after returning it.

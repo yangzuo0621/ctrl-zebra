@@ -7,7 +7,7 @@ This document defines the shared constraints for CtrlZebra automated tests. Test
 - **Unit tests** verify one host-independent module or a small group of collaborators. They are the default test layer for `packages/*`. Core, Protocol, and policy tests must not start VS Code.
 - **Component tests** verify Webview components through user-visible behavior. After React test infrastructure is introduced, use Testing Library and avoid assertions against component internals.
 - **Adapter integration tests** verify translations between Provider, storage, or VS Code API adapters and internal contracts. Provider tests use recorded or hand-written SDK responses and never access a real model.
-- **Extension integration tests** cover only VS Code API adapters, registrations, and lifecycle behavior. They run only after the corresponding roadmap task introduces the Extension Development Host.
+- **Extension integration tests** cover only VS Code API adapters, registrations, and lifecycle behavior. They run only after the corresponding work item introduces the Extension Development Host.
 
 Do not move to a more expensive test layer when a lower-level test can fully prove the behavior. Manual smoke tests do not replace applicable automated tests.
 

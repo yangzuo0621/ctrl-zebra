@@ -11,6 +11,7 @@ const requiredFiles = [
   "SECURITY.md",
   "README.md",
   "PRIVACY.md",
+  "docs/product.md",
   ".github/CODEOWNERS",
   ".github/ISSUE_TEMPLATE/config.yml",
   ".github/ISSUE_TEMPLATE/bug-report.yml",
@@ -180,6 +181,7 @@ for (const relativePath of [
   "SECURITY.md",
   "README.md",
   "PRIVACY.md",
+  "docs/product.md",
   ".github/pull_request_template.md",
 ]) {
   checkMarkdownLinks(relativePath);

@@ -64,7 +64,7 @@ const baselineHotspots = Object.freeze({
     "packages/protocol/src/messages.test.ts": 919,
   }),
   documents: Object.freeze({
-    "docs/implementation-plan.md": 156,
+    "docs/product.md": 312,
     "docs/security.md": 1356,
     "docs/ux.md": 634,
     "docs/protocol.md": 38,
@@ -597,105 +597,6 @@ function checkCoreHostIsolation(workspace, sourceFiles, failures) {
   }
 }
 
-function checkRoadmap(root, failures) {
-  const planPath = path.join(root, "docs", "implementation-plan.md");
-  if (!fs.existsSync(planPath)) {
-    failures.push("docs/implementation-plan.md: roadmap status owner is missing");
-    return;
-  }
-  const plan = fs.readFileSync(planPath, "utf8");
-  const phaseRows = [
-    ...plan.matchAll(
-      /^\|\s*(\d+)\s*\|\s*(待开始|进行中|受阻|已完成)\s*\|[^\n]*\(([^)]+)\)\s*\|$/gm,
-    ),
-  ];
-  const activePhases = phaseRows.filter((match) => match[2] === "进行中");
-  const activeTaskHeading = "### 活跃与待开始任务";
-  if (!plan.includes(activeTaskHeading)) {
-    failures.push(
-      "docs/implementation-plan.md: active-task status owner is missing; restore the canonical active-task section",
-    );
-  }
-  const activeTaskSection = plan.split(activeTaskHeading, 2)[1]?.split("## 5.", 1)[0] ?? "";
-  if (!activeTaskSection.includes("| 阶段 | 任务 | 状态 |")) {
-    failures.push(
-      "docs/implementation-plan.md: active-task status owner is malformed; restore the canonical task table header",
-    );
-  }
-  const activeTasks = [
-    ...activeTaskSection.matchAll(
-      /^\|\s*(\d+)\s*\|\s*(T\d+)\s+[^|]+\|\s*(待开始|进行中|受阻)\s*\|$/gm,
-    ),
-  ];
-  if (activePhases.length > 1) {
-    failures.push(
-      `docs/implementation-plan.md: multiple active phases are indexed; keep one active phase owner`,
-    );
-  }
-  if (activeTasks.length > 0 && activePhases.length !== 1) {
-    failures.push(
-      `docs/implementation-plan.md: active task(s) ${activeTasks.map((match) => match[2]).join(", ")} require exactly one active phase index`,
-    );
-  }
-  for (const match of phaseRows) {
-    const target = match[3].replaceAll("\\", "/");
-    const resolved = path.resolve(path.join(root, "docs"), target);
-    if (!fs.existsSync(resolved)) {
-      failures.push(`docs/implementation-plan.md: phase ${match[1]} links to missing ${target}`);
-    }
-    if (match[2] === "进行中" && activeTasks.some((task) => task[1] !== match[1])) {
-      failures.push(
-        `docs/implementation-plan.md: active task phase does not match active phase ${match[1]}`,
-      );
-    }
-  }
-  for (const match of activeTasks) {
-    const phase = match[1];
-    const phasePath = path.join(root, "docs", "roadmap", "phases", `phase-${phase}.md`);
-    if (!fs.existsSync(phasePath)) {
-      failures.push(
-        `docs/roadmap/phases/phase-${phase}.md: active task ${match[2]} has no active phase specification`,
-      );
-    } else if (
-      !new RegExp(`^###\\s+${match[2]}(?:：|:)`, "m").test(fs.readFileSync(phasePath, "utf8"))
-    ) {
-      failures.push(
-        `docs/roadmap/phases/phase-${phase}.md: active task ${match[2]} is not defined by its phase owner`,
-      );
-    }
-  }
-  const progress = {
-    total: Number(plan.match(/- 总任务：\s*(\d+)/)?.[1]),
-    completed: Number(plan.match(/- 已完成：\s*(\d+)/)?.[1]),
-    active: Number(plan.match(/- 进行中：\s*(\d+)/)?.[1]),
-    blocked: Number(plan.match(/- 受阻：\s*(\d+)/)?.[1]),
-    pending: Number(plan.match(/- 待开始：\s*(\d+)/)?.[1]),
-  };
-  if (Object.values(progress).some((value) => Number.isNaN(value))) {
-    failures.push(
-      "docs/implementation-plan.md: progress summary is missing a mechanical status count",
-    );
-  } else {
-    const activeCount = activeTasks.filter((match) => match[3] === "进行中").length;
-    const blockedCount = activeTasks.filter((match) => match[3] === "受阻").length;
-    const pendingCount = activeTasks.filter((match) => match[3] === "待开始").length;
-    const expected = {
-      total: progress.completed + activeTasks.length,
-      completed: progress.completed,
-      active: activeCount,
-      blocked: blockedCount,
-      pending: pendingCount,
-    };
-    for (const [key, value] of Object.entries(expected)) {
-      if (progress[key] !== value) {
-        failures.push(
-          `docs/implementation-plan.md: progress ${key}=${progress[key]} disagrees with the active task index (${value}); update the roadmap index`,
-        );
-      }
-    }
-  }
-}
-
 function countLines(filePath) {
   if (!fs.existsSync(filePath)) return null;
   const stat = fs.statSync(filePath);
@@ -893,7 +794,6 @@ export function analyzeArchitecture(root = process.cwd()) {
   }
   checkSdkBoundaries(workspace, sourceFiles, failures);
   checkCoreHostIsolation(workspace, sourceFiles, failures);
-  checkRoadmap(root, failures);
   return {
     failures: [...new Set(failures)],
     workspace,

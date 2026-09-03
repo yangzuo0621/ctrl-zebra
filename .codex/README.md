@@ -7,7 +7,7 @@
 - `task-executor` — task startup, implementation, verification, early PR, and review fixes
 - `task-reviewer` — the implementation-quality gate only for an active auto-workflow or an explicitly
   requested independent review
-- `sol-planner` — optional project/Phase architecture and roadmap escalation before implementation
+- `sol-planner` — optional project architecture and planning escalation before implementation
 
 ## Lifecycle boundary
 
@@ -27,9 +27,9 @@ Task-Executor
 → Root closure
 ```
 
-Ordinary implementation, roadmap tasks, PR requests, verification, and maintenance requests do not
+Ordinary implementation, work items, PR requests, verification, and maintenance requests do not
 implicitly select `auto-workflow`. The detailed lifecycle below applies only after the user explicitly
-selects `auto-workflow` or authorizes `AUTO_DRAFT` / `AUTO_FULL` for the exact task.
+selects `auto-workflow` or authorizes `AUTO_DRAFT` / `AUTO_FULL` for the exact work item.
 
 ## Active auto-workflow lifecycle
 
@@ -79,5 +79,5 @@ The authoritative, immutable profiles are defined only in
 `.agents/skills/auto-workflow/SKILL.md`.
 
 `AUTO_DRAFT` and `AUTO_FULL` are the current profiles. Invoke one by its exact name and explicitly
-authorize it for one task. `AUTO_DRAFT` stops at `READY_FOR_MERGE`; only explicitly authorized
-`AUTO_FULL` closure may update task status, merge, or clean up.
+authorize it for one work item. `AUTO_DRAFT` stops at `READY_FOR_MERGE`; only explicitly authorized
+`AUTO_FULL` closure may update work-item status, merge, or clean up.

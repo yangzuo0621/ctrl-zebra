@@ -214,5 +214,5 @@ through a public issue or pull request. Do not include secrets or private user d
 ## Changes to this notice
 
 Material changes to collection, external transmission, persistence, telemetry, accounts, or cloud
-services require an implementation-plan and security review before code changes. The effective date
+services require documented change control and a security review before code changes. The effective date
 above will be updated when this notice materially changes.

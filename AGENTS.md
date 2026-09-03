@@ -6,8 +6,8 @@ This file contains repository-wide invariants and routes agents to the authorita
 
 - Work on exactly one roadmap task or one standalone maintenance change at a time.
 - Preserve product scope, architecture, security, public contracts, persisted data, user behavior, and roadmap order unless change control explicitly authorizes otherwise.
-- The product remains the desktop VS Code Extension defined by [`docs/roadmap/product-foundation.md`](docs/roadmap/product-foundation.md).
-- [`docs/implementation-plan.md`](docs/implementation-plan.md) is the active roadmap index. Active task specifications own task goals, acceptance criteria, deliverables, exclusions, prerequisites, and gates. Completed task history is retained by Git, merged PRs, and the changelog rather than a second in-tree archive.
+- The product remains the desktop VS Code Extension defined by [`docs/product.md`](docs/product.md).
+- Current product and domain documents describe the main branch. Work-item goals, acceptance criteria, exclusions, prerequisites, and verification belong to the Issue, PR, or transient task handoff; completed history is retained by Git, merged PRs, and the changelog.
 - Domain documents own their respective architecture, protocol, security, persistence, UX, CI, packaging, and release rules.
 - Public package entry points and domain documents own exact interfaces and schemas. Resolve conflicts through the owning source rather than duplicating policy elsewhere.
 
@@ -17,8 +17,8 @@ Read only the documents required by the current work.
 
 | Work area | Read first |
 |---|---|
-| Roadmap task | `docs/implementation-plan.md`, then the linked active task/phase section |
-| Product scope/baseline | `docs/roadmap/product-foundation.md` |
+| Roadmap task or maintenance change | Issue/PR or transient task handoff, then the affected owner documents |
+| Product scope/baseline | `docs/product.md` |
 | Code/config/dependency | `docs/development.md`; add `docs/testing.md` when behavior or tests change |
 | Core lifecycle/providers/tools/session | Applicable section under `docs/architecture/` |
 | Webview/protocol/UX | Applicable section of `docs/protocol.md`, `docs/webview.md`, or `docs/ux.md` |
@@ -78,7 +78,7 @@ Read `docs/security.md` and the applicable domain document before modifying any 
 - Keep implementation task-scoped. Do not opportunistically add unrelated maintenance, refactors, dependencies, or later-roadmap work.
 - Validate from narrow to broad according to `docs/testing.md`: affected checks first, then required package/repository checks and smoke tests.
 - Finish implementation work with `git diff --check`, `git status --short`, and a final diff review. Report required checks that were not run.
-- Use `docs/roadmap/task-template.md` for task execution/handoff evidence when the selected workflow requires it.
+- Use the pull-request template and the selected workflow's handoff fields for task execution evidence; do not create a permanent task-spec or completion ledger in `docs/`.
 
 Detailed Executor, Reviewer, Planner, AUTO, reuse-tier, review-loop, handoff, and closure behavior belongs to the applicable `.agents/skills/*/SKILL.md`, not this root file.
 

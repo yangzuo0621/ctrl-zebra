@@ -13,7 +13,7 @@
   structured error fields; response text and third-party wording never control this decision. Other
   invalid requests remain `invalid-request`.
 - The caller owns cancellation and passes an `AbortSignal` to `ModelGateway.stream`. An adapter passes that same signal to the underlying SDK operation, observes cancellation while consuming the stream, emits no later events, and preserves cancellation as distinct from provider failure.
-- Provider adapters do not decide session transitions, retry policy, tool approval or execution, persistence, or presentation. Those decisions remain with the owning Core runtime or host adapter introduced by their roadmap tasks.
+- Provider adapters do not decide session transitions, retry policy, tool approval or execution, persistence, or presentation. Those decisions remain with the owning Core runtime or host adapter introduced by approved work.
 - A normalized `FinishReason` of `length` is a terminal truncated response. Core preserves any
   bounded text already emitted, does not execute a Tool Call observed in that response, and never
   reports the Run as normally completed.

@@ -38,7 +38,8 @@ notification ports plus the concrete category operations; it does not implement 
 
 - Public command IDs use the stable `ctrlZebra.<action>` namespace, for example `ctrlZebra.openAgent`.
 - Action names describe user intent, not the implementing class or UI location.
-- Renaming a contributed command is a public-contract change and requires an implementation-plan update before code changes.
+- Renaming a contributed command is a public-contract change and requires documented change control
+  and an update to the owning contract before code changes.
 - Internal commands use the same namespace and remain unlisted in `contributes.commands` unless users or keybindings need to invoke them.
 
 ## URI Boundary
