@@ -159,6 +159,18 @@ describe("release policy", () => {
     ).toThrow(/Incompatible license/);
   });
 
+  it("preserves distinct versions of a transitive dependency in the SBOM", () => {
+    const inventory = [
+      { name: "eventsource-parser", version: "3.1.0", license: "MIT" },
+      { name: "eventsource-parser", version: "3.1.1", license: "MIT" },
+    ];
+    const sbom = createSpdxDocument({ name: "ctrl-zebra", version: "1.2.3", packages: inventory });
+
+    expect(sbom.packages).toHaveLength(2);
+    expect(sbom.packages.map((entry) => entry.versionInfo)).toEqual(["3.1.0", "3.1.1"]);
+    expect(() => validateSpdxDocument(sbom, inventory)).not.toThrow();
+  });
+
   it("fails closed for tampered SPDX catalog source, digest, and identifiers", () => {
     const catalog = {
       schemaVersion: 1,
