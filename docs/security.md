@@ -949,339 +949,53 @@ entry, not only the intermediate object.
 
 ## Controlled MCP Security Boundary
 
-This boundary applies to the stage 14 MCP surface and the T1804 dual-era contract. MCP Servers,
-descriptors, schemas, annotations, content, results, notifications, stderr, logs, and
-errors are untrusted external process input. A local stdio transport is not a sandbox: the Server
-runs with the Extension user's operating-system authority and can have unknown local or network
-side effects independent of what it advertises.
+MCP is an independent security boundary because a configured local Server is an external process
+running with the user's operating-system authority. Server descriptors, schemas, annotations,
+content, results, notifications, stderr, logs, and errors are untrusted. Local stdio is not a
+sandbox, and Server claims never grant CtrlZebra authority. The complete MCP lifecycle, protocol,
+projection, and compatibility contract is owned by [MCP](mcp.md).
 
-### User configuration and Server identity
+### User configuration and Workspace Trust
 
-- The source is the user-scoped VS Code setting `ctrlZebra.mcp.server`. The Host reads its
-  inspected global value as `unknown`; workspace, workspace-folder, language override, Webview,
-  model, Prompt, Resource, persistence, environment, and Server-provided values cannot create,
-  replace, or merge configuration.
-- The setting is either absent or one strict versioned object. Version `1` is
-  `{ version: 1, serverId, displayName, command, args }` and means
-  `protocolMode: "modern-only"`. Version `2` adds required
-  `protocolMode: "modern-only" | "dual"`. Unknown fields, versions, and modes are rejected.
-  `serverId` is lower `snake_case`, begins with a letter, and is at most 64 ASCII characters.
-  `displayName` is well-formed Unicode, non-empty, and at most 128 code points and 512 UTF-8 bytes.
-  `command` is non-empty, contains no NUL or newline, and is at most 4,096 UTF-8 bytes. `args`
-  contains at most 64 strings; each is at most 4,096 bytes and the array is at most 32,768
-  serialized UTF-8 bytes.
-- Reading a version `1` object never writes a version `2` object or silently enables dual behavior.
-  Migration and selection of `protocolMode: "dual"` are explicit user actions. A change while
-  connected marks the configuration stale and requires disconnect, a new generation, and fresh
-  startup approval; it cannot mutate the live process or switch era in place. The Extension
-  normalizes the effective mode and passes it to the controlled MCP client only after configuration,
-  Workspace Trust, and the exact startup approval have been revalidated. `modern-only` accepts only
-  `2026-07-28`; `dual` performs one bounded modern probe and may use one legacy `initialize` for
-  `2025-11-25` only after the closed non-modern/timeout classification. Recognized-modern,
-  malformed, unknown, overflow, cancellation, and cleanup failures remain failures and never
-  authorize fallback. Neither mode automatically reconnects or retries.
-- Configuration has no cwd, environment, shell, transport, endpoint, headers, credential,
-  SecretStorage name, auto-start, retry, or capability fields. The canonical cwd is the exact
-  Extension-selected trusted workspace root at connect time. The normalized effective
-  `protocolMode`, Server identity, command, args, and cwd form the immutable configuration for one
-  connection attempt. Raw version is used only to normalize version `1` implicit `modern-only` and
-  version `2` explicit `modern-only`; those two representations have the same effective identity
-  when every other field matches.
-- API keys, bearer tokens, passwords, authorization headers, cookies, proxy credentials, and other
-  secrets are forbidden in `command`, `args`, display values, or future ordinary settings. Stage 14
-  provides no MCP Secret injection. A Server that requires credentials is unsupported until a
-  separately approved SecretStorage contract exists.
-- `serverId` is the stable external identity used in approvals and persisted provenance. Changing
-  any effective configuration while connected does not mutate the live Server; it marks the
-  displayed configuration stale and requires explicit disconnect plus a new approved connect.
+- Only the Extension Host reads the machine-scoped `ctrlZebra.mcp.server` setting and starts a
+  Server. Workspace settings, Webview messages, model text, MCP messages, persisted Sessions, and
+  Server metadata cannot create, merge, or replace it.
+- The setting is one strict local stdio object. It has no cwd, environment, shell command line,
+  endpoint, headers, credentials, SecretStorage name, auto-start, retry, or capability fields.
+  Version 1 normalizes to modern-only; version 2 requires the explicit modern-only or dual mode.
+  Migration and dual selection are explicit and unknown values fail closed.
+- Connect requires a trusted single-folder workspace, the selected canonical workspace root as cwd,
+  and a fresh exact startup approval. The Host revalidates trust, configuration scope, normalized
+  mode, executable, ordered arguments, cwd, and approval immediately before direct spawn.
+  Changes invalidate approval and require a new generation and approval.
 
-### Startup and process containment
+### External process and side effects
 
-- Server startup is a distinct `execute` operation, not `run_command` and not a Tool Call. It
-  requires a fresh single-use approval that displays and binds the normalized effective mode,
-  Server identity, complete executable,
-  ordered arguments, canonical selected-workspace cwd, the external-process warning, creation and
-  expiry times, and the current trusted-workspace decision. It uses the existing host-owned
-  five-minute approval lifetime; configuration or trust changes can invalidate it earlier.
-- The Extension revalidates configuration scope, Workspace Trust, approval, normalized effective
-  mode, executable/arguments, canonical cwd, and operation equality immediately before direct
-  spawn. A mode change between the approval request and this second read, or during an explicit
-  retry, invalidates the old approval and generation; it cannot be reused. Shell interpretation,
-  string command lines, profile loading, variable/glob expansion, aliases, pipes, redirects,
-  command substitution, and model- or Server-selected executables are forbidden.
-- The process receives a new allowlisted environment rather than the Host environment. Both
-  configuration versions may copy only `PATH`; on Windows it may additionally copy `PATHEXT`, `SystemRoot`, `WINDIR`,
-  `TEMP`, and `TMP`, and on POSIX `TMPDIR`. Missing optional values are omitted. Names and values
-  are never shown, logged, persisted, sent to the Webview or model, or configurable by the Server.
-- Stdout is exclusively the MCP framed message channel. Non-protocol stdout is a malformed-message
-  failure, never a diagnostic log. Stderr is collected only into a bounded volatile diagnostic
-  status and is never copied verbatim to logs, errors, persistence, Webview, model context, or Tool
-  Results.
-- Disconnect, cancellation, timeout, Server exit, connection-negotiation failure, trust loss, or
-  Extension disposal closes the result gate before process cleanup. Cleanup closes stdin, aborts
-  all owned requests, terminates the complete process tree, waits a bounded interval, escalates
-  through the host process port when necessary, and confirms termination.
-  `termination-unconfirmed` remains distinct from successful disconnect and blocks reuse of that
-  connection.
+- A local stdio Server is not a sandbox: it runs with the user's operating-system authority and may
+  perform local or network side effects independent of its declarations. Startup therefore remains
+  a distinct approved `execute` operation, not an ordinary Tool Call or background action.
+- Server output, descriptors, schemas, annotations, notifications, stderr, and errors remain
+  untrusted external content. They are validated and bounded before any product projection, and raw
+  process details or third-party error text are not exposed through logs, persistence, or the UI.
+- Process lifecycle, cancellation, generation fencing, and termination behavior are defined by the
+  [MCP contract](mcp.md#connection-lifecycle); this document does not duplicate those mechanics.
 
-### External Tool approval
+### Tool approval and untrusted content
 
-- Every MCP Tool is assigned trusted CtrlZebra risk `execute`, regardless of Server annotations,
-  name, description, input schema, or claims such as read-only, idempotent, open-world, or
-  destructive. The approval UI also states “external Server; local and network side effects are
-  unknown.” Server metadata can make this warning stricter but never remove or downgrade it.
-- Each call requires a new exact Approval Request binding Session ID, Run ID, Tool Call ID,
-  CtrlZebra registry name, Server ID, MCP Tool name, connection generation, the immutable compiled
-  schema identity, structurally validated JSON arguments, display projection, trusted risk,
-  creation time, and expiry time. No batch, Server-wide, Tool-wide, remembered, Session-wide, or
-  argument-prefix approval exists. The approval uses the existing five-minute host-owned lifetime.
-- Approval is invalidated by any configuration, identity, generation, Tool snapshot, schema,
-  argument, workspace trust, presentation, or connection-state change. Consumption is atomic and
-  permits exactly one `tools/call` request. A retry or changed call requires a new approval.
-- Arguments are validated against the current-generation Tool schema before approval construction
-  and immediately before consumption. Validation is not authorization. A Server error,
-  cancellation, disconnect, invalid or unsupported result, or lost response never creates a retry
-  grant or reusable approval.
-
-Resource reads and Prompt gets are not Core Tools and never masquerade as Tool approval. They occur
-only after an explicit user selection in the current connected generation. The UI identifies the
-external Server and requested URI or Prompt; returned content remains ordinary untrusted content
-and cannot authorize follow-up operations.
-
-### Operation security matrix
-
-| Operation | Required user action | Trust/approval | Persisted effect | Cancellation/close result |
-|---|---|---|---|---|
-| Read configuration | Open or change user setting | No Server action | Configuration remains VS Code-owned | No connection starts |
-| Connect/start Server | Select Connect and inspect startup | Trusted workspace plus exact five-minute single-use startup approval | No connection or approval persistence | Close gate and terminate tree |
-| List Tools/Resources/Prompts | Successful explicit connection | Current generation and advertised projected capability | Catalogs are not persisted | Discard partial/late snapshot |
-| Call MCP Tool | Agent proposes exact call; user decides inline | Trusted `execute` risk plus fresh exact five-minute single-use call approval | Bounded Call/Result provenance only | No late Result, retry, or side effect acceptance |
-| Read/attach Resource | User selects Read, then separately Attach | Current generation; no Tool approval or Workspace authority | Exact attached text snapshot only | No late preview/attachment |
-| Get/confirm Prompt | User requests Preview, then separately confirms | Current generation and exact preview; no Tool approval | Exact confirmed ordinary user projection only | Invalidate preview; no auto-send |
-| Disconnect/dispose | User disconnects or owning lifecycle ends | No approval required to reduce capability | No connection state persisted | Close gate, abort, terminate, confirm |
-| Session recovery | User restores existing Session | Never reads config for side effects or reconnects | Reads historical bounded projections only | No replay or resumed request |
-
-### Collection and content limits
-
-All limits are enforced incrementally before constructing the complete value. A more specific
-limit may reject or truncate earlier; none relaxes the existing 1,048,576-byte serialized Tool
-Result ceiling.
-
-| Scope | Version `1` hard limit |
-|---|---:|
-| One inbound or outbound JSON-RPC message | 1,048,576 UTF-8 bytes |
-| Retained stderr per connection | 65,536 UTF-8 bytes, prefix only |
-| One list operation | 100 pages and 1,000 entries |
-| One descriptor | 65,536 serialized UTF-8 bytes |
-| One complete list snapshot | 1,048,576 serialized UTF-8 bytes |
-| Rejected Tool projection | 256 entries; the complete strict catalog envelope (wrapper plus catalog) is at most 1,048,576 UTF-8 bytes |
-| MCP diagnostic projection | 256 skipped entries; the complete strict diagnostic envelope is at most 1,048,576 UTF-8 bytes |
-| One Tool input or output schema | 65,536 bytes, depth 32, 4,096 nodes, 1,024 properties |
-| All schemas in one Tool snapshot | 524,288 serialized UTF-8 bytes |
-| Tool arguments before approval | 262,144 serialized UTF-8 bytes |
-| Normalized Tool text content | 262,144 code points and 524,288 UTF-8 bytes |
-| Normalized Tool structured content | 524,288 serialized UTF-8 bytes |
-| Resource/Template URI | 2,048 code points and 8,192 UTF-8 bytes |
-| One Resource read | 32 text items, 131,072 code points and 524,288 UTF-8 bytes total |
-| Prompt arguments | 32 entries; key 64 code points, value 4,096 code points, 65,536 bytes total |
-| One Prompt result | 32 text messages, 65,536 code points and 262,144 UTF-8 bytes total |
-
-List collectors reject duplicate cursors, a cursor that does not advance, limit overflow, duplicate
-identities, or a malformed page and retain no partial replacement snapshot. Resource text may keep
-the largest well-formed prefix only when the Protocol projection records `truncated: true`; Tool
-and Prompt data that exceed their applicable limit are rejected rather than silently omitted.
-
-### Tool rejection projection and atomic replacement (T1801)
-
-- Tool discovery classifies each bounded descriptor independently after the descriptor envelope and
-  identity have passed validation. A schema that is unsafe, unsupported, malformed, or over its
-  schema limit rejects only that Tool; accepted sibling Tools remain eligible for the replacement
-  snapshot. The rejection projection contains only the well-formed MCP Tool name and a closed
-  CtrlZebra reason (`forbidden-keyword`, `unknown-keyword`, `invalid-reference`, `non-object-root`,
-  `schema-invalid`, or `limit-exceeded`). It never contains a Server keyword, schema path, raw
-  schema, SDK/JSON-RPC error, stack, command, environment, or other untrusted diagnostic.
-- `rejectedTools` is independently bounded to 256 entries. Before taking the prefix, entries are
-  sorted by exact MCP Tool name using lexicographic Unicode scalar-value order (not UTF-16 code units
-  or Server page order), so paging and refresh order cannot change the reported prefix. When more
-  entries are rejected in a mixed snapshot, the adapter retains that deterministic prefix and sets
-  `rejectedToolsTruncated: true`; accepted Tools are never dropped to satisfy this diagnostic bound.
-  An empty rejection list has `rejectedToolsTruncated: false`. The complete strict
-  `extension/mcp-tool-catalog` wrapper and catalog are then counted together as UTF-8 serialized
-  JSON bytes and must fit the 1,048,576-byte ceiling. The Host applies this check during bounded
-  construction and before sequence allocation or sending; an over-limit candidate follows the
-  stable `limit-exceeded` whole-operation path, retains the prior complete snapshot, emits neither
-  combined nor legacy catalog, and consumes no sequence.
-  If a non-empty input list has no accepted Tool, discovery fails with the existing stable
-  `invalid-schema` outcome instead of publishing a misleading empty catalog. A genuinely empty
-  Server list remains a valid empty catalog.
-- Malformed pages, malformed descriptor envelopes, duplicate MCP identities, duplicate or reserved
-  Registry names, and aggregate list/snapshot limit breaches are whole-operation failures. They
-  retain the last complete current-generation snapshot and never publish a partial mixture of new
-  and old entries. A successful replacement is committed only after all descriptors have been
-  classified and all accepted schemas compiled.
-- Every replacement is bound to the Server identity, connection generation, and a Host-owned
-  monotonic `catalogSequence`. Disconnect, cancellation, Trust loss, a newer generation, or a
-  failed refresh closes the delivery gate; late pages, validators, and catalog projections are
-  discarded before Core, Protocol, Webview, persistence, or approval state can observe them. The
-  sequence is scoped to `(server.serverId, generation)`, starts at `1`, is allocated once immediately
-  before emitting a fully validated, within-ceiling projection, and never wraps a positive safe
-  integer. Failed, cancelled, all-rejected, and over-limit discoveries allocate no sequence. On
-  overflow the Host closes the current generation and requires an explicit reconnect; the new
-  generation resets the sequence and Webview committed watermark. A sequence-aware Webview keeps a
-  committed publication record plus only a transient pending candidate during synchronous
-  validation. A message for a different Server or generation is ignored before watermark handling. A
-  lower sequence than either watermark is a stale no-op. At an equal committed or pending sequence,
-  an exact duplicate (same Server, generation, sequence, request ID, and equivalent validated catalog
-  payload) is an idempotent no-op: it is ignored and never re-staged or committed. A same-scope,
-  same-sequence candidate with a differing request ID or payload is discarded with the stable local
-  `conflicting-catalog-sequence` classification, leaving pending, committed, and rendered state
-  unchanged. A higher sequence commits only as one complete atomic value after validation; invalid
-  validation clears only pending. There is no unmatched-half timer, retry, or receipt-order dependency.
-
-Unsupported image, audio, Blob, embedded Resource, Resource Link, unknown content, task,
-`input_required`, progress, logging, completion, subscription, or experimental values produce
-stable unsupported errors. They
-are not fetched, stringified, rendered, persisted, remotely loaded, or passed to the model.
-
-### Tool Schema normalization and reference policy (T1802)
-
-- MCP Tool schemas remain untrusted JSON. The Host applies the byte, node, depth, and property
-  limits while walking the original value, before any keyword is stripped or renamed. A known
-  keyword is never dropped without inspecting its value: nested schemas under a stripped keyword
-  are walked with the same policy, so `pattern`, a remote reference, an unknown keyword, or a
-  limit breach cannot be hidden inside an annotation or conditional branch. The normalized schema
-  is the only value sent to Ajv; the original value and raw policy details never enter Core,
-  Protocol, Webview, persistence, approval display, or diagnostics.
-- The policy has four closed outcomes: allowed/retained, safe-to-strip, known-dangerous rejection,
-  and unknown-keyword rejection. Allowed keywords retain their bounded, recursively validated
-  value. Safe-to-strip keywords are the known annotation/unsupported-assertion set `format`,
-  `$id`, `$comment`, `readOnly`, `writeOnly`, `deprecated`, `nullable`, `if`, `then`, `else`,
-  `dependentSchemas`, `dependentRequired`, `propertyNames`, `contains`, `minContains`,
-  `maxContains`, `unevaluatedProperties`, `unevaluatedItems`, `contentEncoding`,
-  `contentMediaType`, and `contentSchema`; their values are validated and then omitted. The
-  legacy `definitions` map is not stripped: it is converted to `$defs`, and every local
-  `#/definitions/...` reference is rewritten to `#/$defs/...` before reference resolution. A
-  collision between converted and native `$defs` names is `schema-invalid`, rather than choosing
-  an order-dependent meaning. A successful conversion itself produces no rejection entry. Any
-  key outside the allowed, stripped, conversion, and known-dangerous sets is an unknown keyword
-  and maps to `unknown-keyword`.
-- The known-dangerous keyword set is exactly `pattern`, `patternProperties`, `$dynamicRef`,
-  `$dynamicAnchor`, `$recursiveRef`, and `$recursiveAnchor`; each maps to `forbidden-keyword`.
-  Compiling Server-provided regular expressions for model-generated arguments creates a ReDoS
-  attack surface, while dynamic/recursive reference vocabularies have not been reviewed for this
-  boundary. The allowed `$ref` keyword must carry a local, well-formed, resolvable pointer to an
-  exact top-level `#/$defs/<name>` anchor (or a rewritten legacy `#/definitions/<name>` pointer).
-  Bare `#`, root/non-anchor targets, nested pointers below an anchor, remote/malformed/unresolved
-  targets, and every multi-anchor cycle map to `invalid-reference`. A direct self-reference is
-  only a `$ref` from within one anchor to that exact same anchor; it is allowed. The graph has one
-  vertex per `$defs` anchor and rejects every other cycle as `invalid-reference`, including root
-  self and nested/non-anchor mutual cycles. These rules preserve useful tree/AST schemas without allowing remote loading or
-  unbounded reference traversal. Limits remain hard `limit-exceeded` failures and are never relaxed
-  by stripping or conversion.
-- Stripping a known keyword can make CtrlZebra's local shape check less strict, but it does not
-  grant authority. Draft 2020-12 `format` is annotation-only under the pinned validator unless a
-  format-assertion vocabulary is explicitly enabled (which CtrlZebra does not enable), and the
-  MCP Server remains responsible for validating its own tool arguments. More importantly, every
-  invocation still validates the normalized arguments immediately before approval and execution,
-  and the one-time approval displays and binds the exact values that will be sent. Schema
-  normalization therefore cannot bypass the approval, Workspace Trust, risk, generation, or
-  cancellation boundaries; the worst permitted outcome is a bounded validation retry.
-- The normalized schema must compile through the pinned SDK Ajv adapter. Its compiled validator is
-  reused for argument validation immediately before approval construction and again before the
-  side-effecting Tool call, with coercion, default insertion, and property removal disabled. A
-  compile or runtime failure is a stable bounded classification and never exposes Ajv errors,
-  schema paths, Server keywords, or raw schema data.
-
-### MCP diagnostics and secrets
-
-- MCP logging adds only bounded allowlisted facts: `event`, `component: "mcp"`, stable outcome or
-  error code, `serverId`, connection generation, and already-owned request/Tool correlation IDs.
-  Command, arguments, cwd, environment, descriptors, schemas, annotations, JSON-RPC content,
-  Resource/Prompt/Tool content, stdout, stderr, SDK errors, Server error data, and process details
-  are excluded.
-- Stable MCP errors are classified before logging or Webview projection. Raw SDK/JSON-RPC/process
-  errors and nested causes never cross the adapter. Redaction is defense in depth and cannot justify
-  accepting forbidden data.
-- MCP configuration and persisted provenance contain no credentials. SecretStorage values are never
-  injected into the Server process in stage 14, and Server output cannot name or request a Secret.
-
-### MCP diagnostic projection and recovery (T1803)
-
-The user-facing `extension/mcp-diagnostics` projection is a separate bounded display surface, not a
-log, persisted record, Tool result, capability claim, or authorization artifact. It may carry only a
-validated MCP Tool name plus one existing `McpToolRejectionReason`, a closed discovery error code,
-or the fixed protocol-compatibility facts defined by Protocol. It never carries a schema, keyword,
-JSON Pointer, raw SDK/JSON-RPC/process error, response data, stderr, stack, command, arguments, cwd,
-environment, URI query/fragment, credentials, or arbitrary Server metadata.
-
-- Diagnostic entries are de-duplicated by exact `(boundedToolName, reason)` (the bounded
-  `mcpToolName` value) and sorted by the validated Tool name using Unicode scalar-value order before
-  the independent 256-entry prefix is
-  selected. The prefix and complete strict message are measured incrementally in UTF-8; omitted
-  entries set `skippedToolsTruncated: true`. The empty projection is an explicit bounded clear value,
-  not an absent/unknown state. A malformed or over-limit diagnostic is dropped as a stable local
-  protocol failure and cannot be replaced with an unbounded raw value.
-- Diagnostics are bound to the exact Server identity, connection generation, Host-owned
-  `diagnosticSequence`, and delivery gate. A lower sequence, wrong scope, cancelled request,
-  closed generation, or late refresh is ignored before Webview state mutation. Exact duplicates are
-  idempotent no-ops; same-sequence conflicting payloads are discarded. Disconnect, Trust loss,
-  disposal, and failed cleanup clear the delivery gate before cleanup and cannot leave a recovery
-  action that would reconnect or approve work. Independently of the gate, the Webview clears
-  diagnostics, pending refresh, recovery controls, sequence watermarks, and diagnostic live-region
-  text as soon as it receives `extension/mcp-connection` with `disconnecting`, `disconnected`, or
-  `failed`, or a connected Server/generation change. A connected cancelled refresh emits an explicit
-  `clear`; cleanup does not depend on waiting for that value.
-- `refresh-tools`, `reconnect`, and `open-settings` are display/recovery intents only. They must
-  repeat the ordinary explicit connection, Workspace Trust, startup approval, generation, and
-  cancellation checks. No diagnostic action can auto-connect, silently retry, downgrade protocol,
-  reuse an approval, invoke a Tool, read a Resource, or mutate persistence.
-- A protocol-incompatible diagnostic is emitted only alongside a failed connection projection and
-  says the configured mode (`modern-only` or `dual`), its corresponding closed supported-version
-  list, and the fixed next action. It has no probe result, fallback flag, selected-era claim, or
-  capability data; those facts cannot be inferred before a successful handshake. The negotiated
-  era/version is available only on a connected projection.
-- A mixed accepted/rejected catalog may show the validated rejected names while retaining accepted
-  siblings. An all-rejected or failed refresh may show only its bounded validated rejection prefix
-  and stable recovery code while retaining the prior complete catalog. Whole-operation identity or
-  envelope failures show no untrusted Tool name. A successful refresh replaces diagnostics with
-  `clear`, and a disconnect/generation change clears them synchronously. The strict variants permit
-  only connected+`refresh-tools` for degraded or refresh failures, failed+`reconnect` for initial
-  all-rejected/whole-operation failure, failed+`open-settings` for protocol incompatibility, and no
-  recovery action for `clear`.
-
-### T1804–T1807 dual-era negotiation and information boundary
-
-The [configuration contract](configuration.md#versioned-representation) owns the configured mode,
-version representation, and migration choice. This security section owns the fact that mode is not a
-Server capability and cannot broaden the same approved local `stdio` executable operation.
-
-- The [Architecture decision matrix](architecture/mcp-schema-and-discovery.md#closed-modern-first-fallback-decision-matrix-t1804)
-  is the sole owner of probe/fallback eligibility, response classification, and late-probe ordering.
-  Security requires that malformed, unsupported, cancelled, trust-lost, exited, or cleanup-failed
-  connections never become a downgrade oracle and that no late data crosses the generation gate.
-- No capability, catalog, Tool, Resource, Prompt, approval, persistence, or Webview state is
-  available until the selected handshake has validated its exact closed version. Both eras expose
-  only the reviewed Tools, Resources, Resource Templates, Prompts, and list-change behavior. Roots,
-  Sampling, Elicitation, Tasks, logging, completion, subscriptions, experimental values, and unknown
-  Server requests are rejected before Core, Provider, Workspace, approval, or persistence.
-- The connected projection may expose the configured mode and one negotiated `{ era, version }`
-  pair. Before connection succeeds, failed/connecting projections expose no selected era, version,
-  capability, probe result, fallback result, timing, or SDK value. Protocol diagnostics use the
-  bounded configured mode, closed supported-version list, stable error code, and fixed next action;
-  raw protocol data and whether a fallback was attempted never cross the boundary.
-- Negotiated era is not authorization. The same Workspace Trust, startup approval, exact Tool
-  approval, generation, cancellation, limits, and process-tree cleanup apply in both eras. Legacy
-  annotations cannot lower `execute` risk or create remembered permission.
-- [Persistence](persistence.md#mcp-persistence-projection) owns the exact historical provenance
-  record and recovery rules. Security requires that failed attempts, probe timing, fallback state,
-  command/args/cwd/environment, credentials, SDK/JSON-RPC errors, and Server output remain volatile;
-  provenance is never an authorization or reconnect instruction.
-
-The T1804–T1807 implementation applies these rules end to end: configuration parsing and Protocol
-schemas normalize the closed modes, the controlled lifecycle owns negotiation, and deterministic
-local fixtures cover modern, legacy, malformed, and cleanup outcomes. The VSIX policy excludes those
-fixtures and all credentials or process details from the release artifact.
-
+- Every MCP Tool is trusted CtrlZebra `execute` risk regardless of Server annotations, names,
+  descriptions, schemas, or read-only/idempotent claims. The approval UI identifies the external
+  Server and warns that local and network side effects are unknown.
+- Each call requires a fresh exact single-use approval bound to Session, Run, Tool Call, Registry
+  name, Server identity, generation, immutable schema identity, validated arguments, presentation,
+  and expiry. A retry or changed call requires a new approval. Validation is not authorization.
+- Resource reads and Prompt previews require explicit current-generation user actions but are not
+  Tool approvals. Returned text remains ordinary untrusted context and cannot authorize follow-up
+  operations, become a System message, or grant Workspace access.
+- MCP configuration and persisted provenance contain no credentials. Raw JSON-RPC/SDK/process
+  errors, command details, environment values, Server output, and unbounded external text are not
+  exposed through diagnostics, persistence, or UI.
+- Recovery reads bounded historical projections only. It never starts or reconnects a Server,
+  resumes a request, or replays an external operation.
 ### User-triggered redacted diagnostics export (T2205)
 
 The diagnostics export is an explicit local user action. It is a bounded support artifact, never a

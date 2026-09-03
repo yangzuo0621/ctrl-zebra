@@ -12,9 +12,7 @@ topic has one normative owner:
 | Model Provider and Provider configuration boundaries, including event projections | [Providers](architecture/providers.md#model-provider-boundary) |
 | Tool contract and file lifecycle/atomic WorkspaceEdit boundary | [Tools and Files](architecture/tools-and-files.md#tool-contract-boundary) |
 | Context budgeting, recovery, multi-turn history, and Session state machine | [Context and Session](architecture/context-and-session.md#context-budget-and-recovery-boundary) |
-| Controlled MCP client ownership, lifecycle, transport, negotiation, and dual-era migration | [MCP Client](architecture/mcp-client.md#controlled-mcp-client-boundary) |
-| MCP SDK/JSON Schema isolation, Tool discovery acceptance, and fallback decision matrix | [MCP Schema and Discovery](architecture/mcp-schema-and-discovery.md#sdk-and-json-schema-isolation) |
-| MCP diagnostic and recovery projection | [MCP Diagnostics](architecture/mcp-diagnostics.md#mcp-diagnostic-and-recovery-projection-t1803) |
+| MCP package ownership and dependency direction | [MCP](mcp.md#process-ownership) |
 
 The shard links above are stable entry points for the corresponding architecture domains; they are
 the authoritative source for the exact runtime boundaries.
