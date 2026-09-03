@@ -165,9 +165,10 @@ describe("release policy", () => {
       { name: "eventsource-parser", version: "3.1.1", license: "MIT" },
     ];
     const sbom = createSpdxDocument({ name: "ctrl-zebra", version: "1.2.3", packages: inventory });
+    const sbomPackages = (sbom as { packages: Array<{ versionInfo: string }> }).packages;
 
-    expect(sbom.packages).toHaveLength(2);
-    expect(sbom.packages.map((entry) => entry.versionInfo)).toEqual(["3.1.0", "3.1.1"]);
+    expect(sbomPackages).toHaveLength(2);
+    expect(sbomPackages.map((entry) => entry.versionInfo)).toEqual(["3.1.0", "3.1.1"]);
     expect(() => validateSpdxDocument(sbom, inventory)).not.toThrow();
   });
 
