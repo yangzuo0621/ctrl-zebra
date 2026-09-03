@@ -5,7 +5,7 @@ explicit configuration migration/change behavior. The [Persistence Contract](per
 durable records and cleanup semantics; [Security](security.md), [Protocol](protocol.md), and the
 applicable Architecture and Webview documents own their respective boundaries and projections.
 
-## Editor context setting (T1905)
+## Editor context setting
 
 `ctrlZebra.editorContext.enabled` is a boolean, `window`-scoped VS Code setting and defaults to
 `false`. It is the user's opt-in for the explicit editor entry commands; it is not a Trust grant and does
@@ -20,7 +20,7 @@ checks before each bounded capture. A direct command invocation therefore cannot
 Workspace Trust boundary. The captured context stays in a visible, editable Composer draft until the user
 sends or removes it; opening the Agent view, changing focus, or model activity never captures implicitly.
 
-## Session retention settings (T2105)
+## Session retention settings
 
 The Extension owns two machine-scoped settings for local Session and recovery Checkpoint retention:
 
@@ -29,8 +29,8 @@ The Extension owns two machine-scoped settings for local Session and recovery Ch
 | `ctrlZebra.sessionRetention.enabled` | boolean | `true` | Enables automatic cleanup on an explicit Session history list/refresh. |
 | `ctrlZebra.sessionRetention.days` | integer `1..3650` | `30` | Retains the last 24-hour UTC-day window. |
 
-The Host validates both values before use. The [Session retention lifecycle](architecture/context-and-session.md#session-retention-lifecycle-t2105)
-owns calculation, trigger, protected states, locking, and the cleanup result; [Persistence](persistence.md#automatic-session-retention-t2105)
+The Host validates both values before use. The [Session retention lifecycle](architecture/context-and-session.md#session-retention-lifecycle)
+owns calculation, trigger, protected states, locking, and the cleanup result; [Persistence](persistence.md#session-retention)
 owns the storage scan and exact Checkpoint attribution. The clock is injected by the lifecycle owner
 for deterministic tests.
 
@@ -47,10 +47,10 @@ The values are validated before a Provider request starts. They count local esti
 Provider Usage in one Run; they do not represent a price or Provider bill. Runtime terminal behavior
 is owned by [Session and Runtime Architecture](architecture/context-and-session.md) and
 [Protocol](protocol/session-and-runtime.md); persisted warning/exceeded snapshots and recovery rules
-are owned by [Persistence](persistence.md#run-token-budget-events). An invalid setting fails closed
+are owned by [Persistence](persistence.md#provider-usage-and-run-budget-events). An invalid setting fails closed
 with a configuration error and does not start the Provider.
 
-## Complete local-data clearing (T2106)
+## Complete local-data clearing
 
 The uninstall-before/device-handoff action clears the Extension's explicit values for these owned
 settings, at every configured user, workspace, workspace-folder, and language override scope:
@@ -65,8 +65,8 @@ settings, at every configured user, workspace, workspace-folder, and language ov
 
 Clearing restores registered defaults rather than deleting unrelated VS Code settings. This section
 owns the exact configuration leaves and scope semantics; storage, SecretStorage, process, ordering,
-and retry behavior are defined by [Persistence](persistence.md#complete-local-data-clearing-t2106)
-and [Security](security.md#complete-local-data-clearing-t2106). It is separate from Session retention
+and retry behavior are defined by [Persistence](persistence.md#complete-local-data-clearing)
+and [Security](security.md#complete-local-data-clearing). It is separate from Session retention
 and does not run at activation or silently broaden the uninstall action.
 
 ## MCP Server setting
@@ -87,7 +87,7 @@ The complete MCP configuration, bounds, migration behavior, and runtime contract
 [MCP](mcp.md#configuration). This document owns the setting declaration, scope, defaults, and
 configuration clearing; it does not duplicate MCP lifecycle or negotiation rules.
 
-## Diagnostics export does not add configuration (T2205)
+## Diagnostics export does not add configuration
 
 The user-triggered diagnostics export reads the existing non-sensitive Provider onboarding projection
 and MCP connection snapshot only when the user requests a preview. It adds no setting, endpoint,

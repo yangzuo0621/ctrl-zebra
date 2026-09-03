@@ -1,1026 +1,311 @@
 # Security Guidelines
 
-This document defines the Webview security constraints established before T0104. It complements the trust boundaries in `AGENTS.md` and applies to every HTML document produced by the desktop Extension.
+This document is the current security contract for the desktop VS Code Extension. It covers trust
+boundaries, untrusted data, authorization, workspace access, credentials, persistence, and external
+processes. Protocol and persistence documents own their schemas and durable layouts; this document
+owns the security constraints that those contracts must preserve.
 
-## Content Security Policy
+## Webview document security
 
-- Every Webview document starts from `default-src 'none'` and opens only the resource types required by the current UI.
-- Styles may load only from the current Webview resource origin exposed by `webview.cspSource`.
-- Scripts require a fresh, cryptographically random nonce for each generated document. The same nonce appears in the `script-src` directive and on the intended script element.
-- `unsafe-inline`, `unsafe-eval`, wildcard sources, unrestricted `https:` sources, remote frames, and network connections are forbidden by default.
-- A new resource type or origin requires a concrete current-task use case, the narrowest possible CSP directive, and tests that prove unrelated sources remain denied.
+### Content Security Policy
 
-## Nonce Ownership
+- Every Webview document starts with `default-src 'none'` and allows only resources required by the
+  current UI. Styles use the current `webview.cspSource`; scripts use a fresh cryptographically
+  random nonce.
+- `unsafe-inline`, `unsafe-eval`, wildcard sources, unrestricted `https:` sources, remote frames,
+  and network connections are denied by default. A new resource type or origin requires a narrow,
+  documented use case and verification that unrelated sources remain denied.
+- The Extension Host generates at least 128 bits of nonce randomness for each document. Nonces are
+  document-local: they are not persisted, sent through Protocol, logged, or exposed to Webview
+  state, and never authorize dynamic or untrusted content.
 
-- The Extension Host generates at least 128 bits of randomness for every HTML document and never reuses a nonce intentionally.
-- Nonces are document-local implementation details. They are not persisted, sent through the Webview message protocol, logged, or exposed to Webview application state.
-- Dynamic or untrusted content never receives a nonce. A nonce authorizes only static script elements emitted by the Extension-owned HTML builder.
+### Local and remote resources
 
-## Local Resource Boundary
+- `localResourceRoots` contains only the Extension directory holding the built Webview assets.
+  Workspace folders, user directories, temporary directories, and the complete installation
+  directory are not resource roots.
+- Local resource URIs are built from Extension-owned `vscode.Uri` values and passed through
+  `webview.asWebviewUri`. URI strings from Webview messages, model output, persisted data, or
+  workspace files are never passed directly to it.
+- Remote scripts, styles, images, fonts, frames, media, and connections remain denied unless an
+  explicit security decision adds them. Any allowlist uses exact schemes and origins, with no
+  wildcard, redirect, or user-controlled origin. Secrets, authorization headers, workspace data,
+  and identifiers are never sent to a remote origin from the Webview.
 
-- `localResourceRoots` is set explicitly and contains only the Extension directory that holds the built Webview assets required by the page.
-- Workspace folders, the complete Extension installation directory, user directories, and temporary directories are not Webview resource roots.
-- Every local script, stylesheet, image, or font URI is built from an Extension-owned `vscode.Uri` and converted with `webview.asWebviewUri`.
-- URI strings from Webview messages, model output, persisted content, or workspace files are never passed directly to `asWebviewUri`.
+### Untrusted content and Markdown
 
-## Remote Resources
+- Webview messages, model output, workspace text, persisted values, MCP content, and URL-derived
+  values are untrusted. Render them with DOM text APIs or React interpolation; never use
+  `innerHTML`, `outerHTML`, `insertAdjacentHTML`, `document.write`, or equivalent sinks.
+- The answer renderer uses the pinned `markdown-it` 14.3.0 configuration: `html: false`,
+  `linkify: false`, `breaks: true`, and `typographer: false`. Images and resource-producing plugins
+  are disabled. It renders parser tokens into a fixed React element tree rather than parser HTML.
+- The supported presentation set is headings, ordered and unordered lists, fenced or indented code,
+  inline code, emphasis, block quotes, tables, and links. Raw HTML and unsupported tokens remain
+  escaped text.
+- A link is actionable only when its parsed destination is an absolute `http` or `https` URL with
+  no control characters or spaces and no more than 2,048 characters. Relative, protocol-relative,
+  malformed, `javascript:`, `data:`, `file:`, and `vscode:` destinations are inert text. The Webview
+  sends a validated `webview/open-external-link` intent; the Extension validates it again before
+  calling `vscode.env.openExternal`.
+- One answer message is bounded to 262,144 Unicode code points and 1,048,576 UTF-8 bytes before
+  parsing. The renderer retains the largest complete prefix and marks it shortened. Streaming,
+  cancellation, terminal state, and Session replacement cannot create late deltas or link actions.
+  Code-copy controls copy only bounded code text and never grant host capability. Reasoning, MCP,
+  Resource, Prompt, and Tool projections remain plain text.
 
-- Remote scripts, stylesheets, images, fonts, frames, media, and connections are denied unless a later approved task documents an explicit requirement.
-- When remote access is introduced, allowlists use exact schemes and origins. Wildcards, redirects to unlisted origins, and user-controlled origins remain forbidden.
-- Secrets, authorization headers, workspace content, and identifiers must not be sent to remote origins from the Webview.
+## Reasoning summaries
 
-## Untrusted Content
-
-- Treat Webview messages, model output, workspace text, persisted values, and URL-derived values as untrusted.
-- Render untrusted text through DOM text APIs or React text interpolation. Do not inject it with `innerHTML`, `outerHTML`, `insertAdjacentHTML`, `document.write`, or equivalent sinks.
-- If a future feature must render formatted untrusted markup, it requires a narrowly configured, maintained sanitizer and tests for script elements, event-handler attributes, dangerous URLs, SVG, MathML, and mutation-based bypasses.
-- HTML attributes and CSP metadata assembled by the Extension are escaped before interpolation. Validation and sanitization complement CSP; CSP is not their replacement.
-
-## Restricted Markdown Boundary (T1702)
-
-- Answer messages use the pinned `markdown-it` 14.3.0 parser with `html: false`, `linkify: false`,
-  `breaks: true`, and `typographer: false`. The image rule is disabled, so model output cannot
-  create a remote image, media, or font request. No Markdown plugin may add a resource, HTML, or
-  executable surface without a new task-specific security review.
-- The Webview consumes parser tokens and creates a fixed React element tree. It never calls
-  `render()`, `dangerouslySetInnerHTML`, `innerHTML`, or an equivalent HTML sink. Raw HTML and
-  unsupported tokens remain escaped text; the supported presentation set is headings, ordered and
-  unordered lists, fenced/indented code, inline code, emphasis, block quotes, tables, and links.
-- A link is actionable only when its parsed destination is an absolute `http` or `https` URL within
-  the 2,048-character protocol bound and contains no control characters or spaces. `javascript:`,
-  `data:`, `file:`, `vscode:`, protocol-relative, relative, and malformed destinations are rendered
-  as non-actionable text. Bare URLs are not auto-linked. Link clicks never navigate the Webview:
-  the Webview sends a validated `webview/open-external-link` intent and the Extension re-validates
-  the destination before calling `vscode.env.openExternal`.
-- The renderer parses at most 262,144 Unicode code points and 1,048,576 UTF-8 bytes from one
-  message. It keeps the largest complete prefix, marks the visible projection as shortened, and
-  never builds a larger parsed tree merely to truncate it afterward. A streaming message may be
-  reparsed while a fence or inline construct is unfinished; cancellation, terminal status, or
-  Session replacement prevents further deltas and link actions from reaching the renderer.
-- Code-copy controls copy only the bounded code text through the Webview clipboard API. Copying
-  does not move focus, announce token fragments, or grant any host capability; failures remain a
-  local UI state. Reasoning, MCP Resource, Prompt, and Tool projections remain plain text and never
-  enter this answer Markdown renderer.
-
-## Reasoning Summary Boundary
-
-- Reasoning summaries are untrusted model output with the same confidentiality and injection risk
-  as answer text. The label “推理摘要” describes a Provider-supplied user-visible summary; it does
-  not make the content authoritative, safe to execute, or evidence of the model's hidden process.
-- Only text from a Provider's documented reasoning stream events is eligible. Ordinary answer text,
-  System Prompt output, Tool activity, host-generated explanations, raw chain of thought, signatures,
-  Provider metadata, SDK values, request/response bodies, and opaque or encrypted reasoning payloads
-  are rejected rather than displayed or persisted.
-- Reasoning text must be well-formed Unicode. Producers split normalized deltas to at most 8,192
-  Unicode code points and 32,768 UTF-8 bytes. The Extension collector retains at most 32,768 code
-  points and 131,072 bytes per block, 32 blocks per run, and 65,536 code points and 262,144 bytes
-  across the run. It counts while collecting, cuts only at code-point boundaries, and never builds
-  the unbounded block or run before applying the limit.
-- Limit exhaustion keeps only the largest prefix that fits every applicable ceiling, discards later
-  reasoning text in that scope, and records structured block/run truncation. The collector continues
-  only far enough to validate lifecycle and reach the normal run outcome; omitted content cannot be
-  recovered from logs, temporary files, diagnostics, raw response retention, or another model call.
-- The Extension forwards and persists only reasoning events associated with the exact active
-  request, Session, run, and open block. Duplicate, malformed, mismatched, late, or terminal-following
-  events cause no protocol, persistence, Tool, retry, or UI side effect. Cancellation stops
-  collection immediately and invalidates every open block for further delivery.
-- Reasoning is rendered only through React text interpolation or equivalent DOM text APIs. It never
-  reaches an HTML sink, a Markdown/HTML renderer, a command or URI parser, an approval request,
-  Tool input, workspace operation, diagnostic field, notification template, or executable surface.
-- Reasoning is excluded from System instructions, model request history, context summaries, retry
-  prompts, Tool Call/Result pairs, and subsequent turns. A user may copy it and later submit it as
-  ordinary user text, but the product does not perform that promotion automatically.
-- User-visible bounded reasoning may be stored in the versioned Session event log under the
-  persistence contract. It remains forbidden from `LogOutputChannel`, telemetry, snapshots, crash
-  reports, raw debug dumps, and test fixtures containing real model output. Logs may record only
-  existing allowlisted operational facts such as a stable event name, correlation IDs, and outcome;
-  they never record block text, Provider block IDs, truncation details, or content-derived values.
+- A reasoning summary is bounded Provider-supplied display text, not authoritative instruction,
+  hidden chain of thought, or evidence of a model decision. Only documented reasoning-stream text is
+  eligible; answer text, System output, Tool activity, metadata, signatures, opaque payloads, and
+  raw request/response bodies are rejected.
+- Producers bound each delta to 8,192 code points and 32,768 bytes, each block to 32,768 code
+  points and 131,072 bytes, and each Run to 32 blocks, 65,536 code points, and 262,144 bytes.
+  Limits are enforced while collecting, at code-point boundaries, before retaining an unbounded
+  value. Omitted content cannot be recovered from logs or another model call.
+- Events are accepted only for the exact active request, Session, Run, and open block. Duplicate,
+  malformed, mismatched, late, or terminal-following events have no side effect; cancellation
+  closes the collection gate. Reasoning is rendered as plain text and never enters HTML/Markdown,
+  commands, URI parsing, approvals, Tool input, workspace operations, diagnostics, or later model
+  history. Bounded user-visible text may be stored only under the Persistence Contract.
+- Logs, telemetry, snapshots, crash reports, raw debug dumps, and fixtures contain only allowlisted
+  operational facts, never reasoning text, Provider block IDs, or content-derived values.
 
 ## Session, Run, and history boundary
 
-- A Session ID is an opaque, validated identifier used for exact repository lookup; it is never a
-  path, workspace authority, approval grant, or instruction. Omitting a Session ID on `webview/submit`
-  creates a new Session; providing one requests that exact Session. Unknown, corrupt, active, or
-  mismatched Sessions fail closed and never fall through to a different Session.
-- Each submission receives a fresh Host/Core-generated Run ID, distinct from Session ID, message ID,
-  and transport `requestId`. Webview input, model output, persisted content, and MCP metadata cannot
-  choose or replace it. The Run ID scopes cancellation, event delivery, Tool state, approvals,
-  Checkpoints, diagnostics, and transient resources. A later Run never inherits a prior Run's
-  `AbortSignal`, pending operation, approval, or delivery gate.
-- History reconstructed from a validated local Session is untrusted model context. It may contain
-  bounded user text and complete Tool Call/Result pairs, but it is never authorization, a command,
-  a workspace target, or evidence to replay a side effect. Failed, cancelled, budget-exceeded, and
-  interrupted partial
-  assistant output is display-only and is not injected into the next Run; an unfinished Tool Call is
-  discarded rather than given a synthetic Result.
-- Cancellation and Session replacement close the Run's event gate before cleanup. No later delta,
-  Tool Result, retry, approval response, persistence mutation, or side effect is accepted. Explicit
-  `webview/new-chat` clears unconsumed user-context attachments and staged restore state but does not
-  delete persisted Sessions or resume an active Run.
-- Regeneration is accepted only for the selected idle/restored Session's latest completed assistant
-  projection and carries the exact `sessionId` plus assistant `messageId`. It allocates a new Run and
-  one-time approval scope; the target Run's Tool Call/Result, external context, Provider request, and
-  approval are never replayed. The Webview keeps the old answer visible until the replacement reaches
-  `completed`; cancellation, failure, truncation, duplicate intent, and late events close the new
-  gate without changing the old projection.
-- Historical editing is accepted only for the selected idle/restored Session and an exact completed
-  user projection. The request is bounded by `sessionId`, target `messageId`, and submitted content;
-  the Host revalidates all three against the immutable event log before appending a new user event and
-  `session.edit` relation. It creates a fresh Run, AbortSignal, Tool lifecycle, and one-time approval
-  scope from the prefix before the target. Old suffix messages, Tool Call/Result pairs, attachments,
-  Provider requests, approvals, and side effects are never replayed or executed automatically. A
-  failed, cancelled, mismatched, or late replacement closes its gate and preserves the old branch;
-  only a completed replacement projects the edited target and new suffix. The original target
-  identity remains valid for a retry or successive edit; the latest incomplete attempt falls back
-  to the prior completed projection.
+- Session IDs are opaque validated identities for exact repository lookup. They are never paths,
+  workspace authority, approval grants, or instructions. An omitted ID creates a Session; an unknown,
+  corrupt, active, or mismatched ID fails closed without fallback.
+- Every submission receives a fresh Host/Core-generated Run ID, distinct from Session, message, and
+  transport request IDs. It scopes cancellation, event delivery, Tool state, approvals, Checkpoints,
+  diagnostics, and transient resources. A later Run never inherits an earlier Run's signal or gate.
+- Reconstructed history is untrusted model context, never authorization, a command, a workspace
+  target, or permission to replay a side effect. Failed, cancelled, budget-exceeded, and interrupted
+  partial assistant output is display-only; unfinished Tool Calls are discarded rather than given a
+  synthetic Result.
+- Cancellation and Session replacement close the event gate before cleanup. No later delta, Tool
+  Result, retry, approval response, persistence mutation, or side effect is accepted. `New chat`
+  clears unsubmitted attachments and staged restore state but does not delete persisted Sessions.
+- Regeneration and historical editing require the exact selected Session and target message identity.
+  Each creates a fresh Run, cancellation scope, Tool lifecycle, and one-time approval scope from the
+  validated history prefix. Old Tool operations, approvals, attachments, and side effects are never
+  replayed. The old projection remains visible until a replacement completes successfully.
 
-### Session deletion and local-history clearing (T2104)
+### Session deletion and local-history clearing
 
-- Deletion is a user-intended Host operation bound to one validated opaque `sessionId`, or to an
-  explicit clear-all-local-history confirmation. The Webview cannot provide a path, storage URI,
-  encoded directory name, Checkpoint target, or wildcard. The Host records selection only after the
-  exact ID appeared in its latest Session list, revalidates the selected/owned Session immediately
-  before cleanup, and never falls back to another Session.
-- The [Persistence Contract](persistence.md#session-deletion-and-local-history-clearing-t2104) owns
-  which records are removed and how partial cleanup is represented. This security boundary limits
-  the target to CtrlZebra persistence data: workspace files, source code, unrelated VS Code storage,
-  Provider secrets, MCP settings, and another Extension's data are never in scope.
-- If a target Session owns an active Run, the Host closes that Run's delivery/event gate first,
-  issues exactly one cancellation, and waits for its owned async work and cleanup to settle before
-  deleting persisted data. Cancellation is not converted into a failure. After the gate closes,
-  no delta, reasoning event, Tool Result, retry, approval response, persistence append, or stale
-  restore result may reach the deleted Session or Webview.
-- Storage, corruption, or attribution failures remain bounded `partial`/`unavailable` outcomes and
-  never expose paths, content, or raw storage exceptions. Successful categories remain deleted and
-  the operation is safe to retry.
+- Deletion is an explicit Host operation bound to one validated opaque Session ID, or to an explicit
+  clear-all confirmation. The Webview cannot provide a path, storage URI, encoded directory,
+  Checkpoint target, or wildcard. The Host revalidates the exact selected/owned Session immediately
+  before cleanup and never falls back to another Session.
+- Cleanup is limited to CtrlZebra persistence data. Workspace files, source code, unrelated VS Code
+  storage, Provider secrets, MCP settings, and other Extensions' data are outside scope. Persistence
+  owns the records removed and the representation of partial cleanup.
+- If a Session owns an active Run, the Host closes its gate, issues exactly one cancellation, and
+  waits for owned work and cleanup before deleting data. Storage, corruption, and attribution
+  failures remain bounded `partial` or `unavailable` outcomes; successful categories remain deleted
+  and the operation is safe to retry.
 
-### Automatic Session retention (T2105)
+### Session retention
 
-- Retention settings are untrusted machine configuration. The [configuration contract](configuration.md#session-retention-settings-t2105)
-  owns their names, scopes, bounds, and defaults; Webview messages, model output, persisted Sessions,
-  and workspace data cannot supply or override them.
-- The [Session retention lifecycle](architecture/context-and-session.md#session-retention-lifecycle-t2105)
-  owns the explicit list/refresh trigger, UTC cutoff, protected states, locking, cancellation, and
-  cleanup result; the [Persistence Contract](persistence.md#automatic-session-retention-t2105) owns
-  bounded storage scanning, exact Checkpoint attribution, and retryable storage behavior. Security
-  requires that retention never runs during activation and never targets workspace files, source code,
-  settings, secrets, or other extension data.
-- Invalid, unreadable, or unattributable records are retained rather than guessed. Storage and parse
-  failures produce bounded counts and fixed user-safe feedback without raw paths, content, exception
-  text, or identifiers derived from persisted data.
+- Machine-scoped retention settings are untrusted configuration. [Configuration](configuration.md#session-retention-settings)
+  owns names, scope, bounds, and defaults. Retention runs only from an explicit history list/refresh;
+  it does not run during activation and cannot be triggered by Webview data, model output, or a
+  persisted Session.
+- [Architecture](architecture/context-and-session.md#session-retention-lifecycle) owns cutoff,
+  protected states, locking, cancellation, and lifecycle results. [Persistence](persistence.md#session-retention)
+  owns bounded scanning, exact Checkpoint attribution, and retryable storage behavior. Invalid,
+  unreadable, or unattributable records are retained rather than guessed.
+- Retention never targets workspace files, source code, settings, secrets, or other Extension data.
+  Feedback contains only bounded counts and fixed safe text, never raw paths, content, exceptions,
+  or persisted identifiers.
 
-### Complete local-data clearing (T2106)
+### Complete local-data clearing
 
-- `ctrlZebra.clearLocalData` and the Agent view action share one Host controller. The Host presents a
-  modal warning naming the permanent scope before cancellation or storage; Webview `confirm: true` is
-  only an intent marker, never confirmation authority. Dismissal performs no mutation.
-- The controller is single-flight and acquires every registered operation lock before cleanup. The Run
-  lock closes the event gate, cancels once, and waits for active/settling work; the MCP lock aborts
-  connection work and holds an exclusive disconnect gate. An unconfirmed termination fails closed
-  before durable cleanup. Provider Secret operations remain excluded until all categories settle, and
-  Resource, Prompt, editor, workspace-reference, Checkpoint, and transient MCP projections are
-  invalidated before the first durable category.
-- The [configuration contract](configuration.md#complete-local-data-clearing-t2106) owns the exact
-  setting leaves. The [Persistence Contract](persistence.md#complete-local-data-clearing-t2106) owns
-  Session, Checkpoint, and Extension-storage cleanup. Security limits the combined operation to
-  CtrlZebra-owned data and excludes workspace files, user code, unrelated VS Code data, and other
-  extensions.
-- Results contain only bounded category names, counts, and fixed text. A partial result is never
-  success, successful categories remain retry-safe, and late Run, restore, MCP, or projection
-  messages remain fenced; raw SecretStorage, filesystem, configuration, and process errors never
-  cross Protocol.
+- `ctrlZebra.clearLocalData` and the Agent view action use one Host controller. The Host presents a
+  modal warning naming the permanent scope; Webview `confirm: true` is only an intent marker.
+  Dismissal performs no mutation.
+- The controller is single-flight and acquires operation locks before cleanup. It closes Run gates,
+  cancels and settles active work, aborts MCP connection work, and invalidates Resource, Prompt,
+  editor, workspace-reference, Checkpoint, and transient MCP projections before durable cleanup.
+  Provider Secret operations remain excluded until other categories settle.
+- [Configuration](configuration.md#complete-local-data-clearing) owns setting leaves and
+  [Persistence](persistence.md#complete-local-data-clearing) owns Session, Checkpoint, and
+  Extension-storage cleanup. The combined operation touches only CtrlZebra-owned data and never
+  workspace files, user code, unrelated VS Code data, or another Extension's data.
+- Results contain bounded category names, counts, and fixed text. Partial is never success;
+  successful categories are retry-safe, and late Run, restore, MCP, or projection messages remain
+  fenced. Raw SecretStorage, filesystem, configuration, and process errors never cross Protocol.
 
-## Tool Input and Output
+## Tool input, output, and workspace scope
 
-- Model-supplied Tool Call IDs, names, and input are untrusted. The generic protocol Schema rejects
-  non-JSON values and malformed envelopes, but execution requires a second, tool-specific parse from
-  `unknown`. A tool must reject missing fields, wrong types, unsupported values, and unreviewed extra
-  fields before any side effect.
-- Risk is assigned by the trusted registered tool definition as one of `read`, `write`, `execute`,
-  or `network`. Model input cannot provide, override, or downgrade risk. Approval and
-  workspace-trust policy introduced by later tasks operate on this trusted definition.
-- Tool output is untrusted even when produced locally. It must be normalized to the shared JSON
-  result contract before persistence, model context insertion, or Webview delivery. Raw `Error`,
-  filesystem, process, SDK, VS Code, stream, or class instances are forbidden.
-- A normalized Tool Result cannot exceed 1,048,576 UTF-8 bytes. Every output-producing layer must
-  enforce that ceiling while collecting data and avoid building an unbounded intermediate value
-  merely to truncate it afterward. Successful truncation is marked in the Tool Result and that
-  marker is preserved downstream. T0702 adds narrower, type-specific context limits; it does not
-  relax this boundary.
-- Structured tool errors expose only a stable code and bounded safe message. Secrets, authorization
-  headers, workspace contents not already approved for return, raw exception messages, stack traces,
-  third-party response bodies, and unrestricted arguments are excluded.
-- The run owns cancellation. A tool receives the same `AbortSignal`, observes it during long work,
-  and performs no later output or side effect after cancellation. Cancellation is never converted to
-  a normal error result, retry hint, approval, or successful partial result.
-- Tools cannot directly mutate Agent or Session status, emit synthetic lifecycle events, continue the
-  model loop, or approve their own operation. Keeping control flow in Core prevents model-selected
-  tool code from bypassing policy and state-machine invariants.
+- Model-supplied Tool names, IDs, and arguments are untrusted. The generic Protocol schema is followed
+  by a Tool-specific parse from `unknown`; missing fields, wrong types, unsupported values, and
+  unreviewed extra fields are rejected before side effects.
+- Risk comes only from the trusted registered definition: `read`, `write`, `execute`, or `network`.
+  Model input cannot assign, override, or downgrade it. Tool output is normalized to the shared JSON
+  result contract before persistence, model context, or Webview delivery; raw Error, SDK, process,
+  filesystem, stream, and VS Code objects are forbidden.
+- A normalized Tool Result is at most 1,048,576 UTF-8 bytes. Producers enforce limits while collecting
+  and preserve a truncation marker. Structured errors expose only stable codes and bounded safe
+  messages; secrets, headers, unapproved workspace content, raw exceptions, stacks, and response
+  bodies are excluded.
+- The Run owns cancellation. Tools observe its signal, produce no later output or side effect after
+  cancellation, and cannot mutate Session/Agent status, emit lifecycle events, continue the model
+  loop, or approve their own operation.
+- Workspace Tools operate relative to exactly one Extension-selected root. Paths are parsed as
+  untrusted URI values; query/fragment data, `..`, backslashes, non-absolute paths, wrong scheme or
+  authority, and ambiguous forms are rejected. Lexical containment is checked before host
+  canonicalization, then symlinks/junctions and canonical URI path segments are checked again.
+  `fsPath` string-prefix checks are forbidden. Failure to establish canonical identity fails closed.
+- Text reads and searches reject NUL bytes, invalid decoding, and binary data. Enumeration, reads,
+  searches, canonicalization, and serialized results are bounded and cancellation-aware.
 
-## Workspace Tool Scope
+## IDE context and file references
 
-- A workspace tool operates relative to exactly one Extension-selected workspace folder. In a
-  multi-root window, the other roots are outside that operation's scope until the user explicitly
-  selects one of them. The model, Webview, persisted state, and tool arguments cannot broaden or
-  replace the selected root.
-- The Extension workspace adapter retains `vscode.Uri` values through scope validation. It compares
-  scheme, authority, and decoded URI path segments; it does not compare `fsPath` strings or use
-  string-prefix containment. Query strings and fragments are invalid for filesystem tool targets.
-- Tool-supplied paths are untrusted. After URI parsing and before normalization, the adapter rejects
-  `..` segments, backslashes, non-absolute URI paths, and other ambiguous path forms. Normalization
-  must not silently turn an escaping input into an accepted descendant.
-- Scheme and authority must match the selected root. URI schemes and host authorities are compared
-  case-insensitively. On Windows, drive letters and path segments are compared case-insensitively;
-  a different drive is outside scope. UNC targets must retain the exact selected server authority
-  and share path; another server or share is outside scope.
-- Lexical containment is checked before filesystem canonicalization so an obvious outside target is
-  rejected without probing it. The selected root and candidate are then canonicalized by the
-  host-owned adapter, following symbolic links, junctions, and equivalent aliases, and containment
-  is checked again by URI path segments. A descendant whose canonical target leaves the selected
-  root is rejected. The operation must use the validated canonical target or revalidate immediately
-  before access so a path swap cannot bypass the decision.
-- Filesystem providers that cannot provide a trustworthy canonical identity must reject the access;
-  they must not fall back to lexical-only acceptance. Canonicalization failures use a safe stable
-  error and do not reveal the outside target or host exception.
-- `read_file` and `search_files` accept text only. Binary detection occurs before returning content;
-  a NUL byte, invalid required text decoding, or another positive binary classification is rejected
-  with a structured error. Binary bytes are never lossy-decoded into model context.
-- Directory enumeration, file reads, and search collect into bounded buffers and stop at their
-  tool-specific count or byte limit. The serialized Tool Result remains subject to the global
-  1,048,576-byte UTF-8 ceiling, and successful truncation keeps its marker through later context
-  budgeting. Cancellation stops traversal, reads, canonicalization, and output production.
+Editor, selection, diagnostic, language-service, and `@` file-reference values are untrusted,
+read-only user context. Only the Extension reads VS Code state and emits strict Protocol projections.
 
-## IDE context and read-only Tool boundary (T1901)
-
-Editor, selection, diagnostic, and language-service values are untrusted host observations. They
-remain ordinary user context or read-only Tool output and never become System instructions,
-authorization, a capability claim, or a write/execute request.
-
-- Only the Extension Host reads `window.activeTextEditor`, `TextDocument`, selections, diagnostics,
-  and VS Code language providers. It retains the complete `vscode.Uri` privately and exposes only
-  the strict Protocol `IdeUriDto`/`Ide*Dto` projections. Webview, Core, Providers, MCP Client, model
-  output, and Tool input cannot supply or replace an editor URI, document version, selected root, or
-  Trust decision.
-- Every source URI is checked against exactly one Extension-selected workspace folder. The adapter
-  preserves scheme and authority, rejects `untitled:`/external documents, query and fragment data,
-  `..`/backslash/ambiguous paths, and performs lexical then symlink/junction-aware canonical
-  containment before reading. A URI returned by a diagnostic or language provider is treated as
-  untrusted and is discarded unless it passes the same canonical identity and containment checks.
-  String-prefix checks and `fsPath` comparisons are forbidden.
-- Read-only IDE operations may run under the Extension's declared limited untrusted-workspace
-  capability, but Trust is checked at capture start and immediately before the read/provider call.
-  Trust loss closes the operation gate and prevents all later output; it never enables a write,
-  execute, MCP, Code Action, or hidden trust grant. A provider that cannot operate in the current
-  Trust state returns a stable bounded unavailable outcome without fallback to an unsafe API.
-- Only supported text documents are accepted. NUL bytes, invalid UTF-8, binary classifications,
-  missing document identity, and unreadable content fail closed. IDE DTO field limits are concrete:
-  `scheme` ≤32 Unicode scalar values/128 UTF-8 bytes; the redacted `authority` is empty or the fixed
-  `workspace` label (≤9/32); `path` ≤4,096/16,384; `languageId` ≤128/512; text ≤65,536 scalar
-  values/2,000 logical lines/262,144 UTF-8 bytes;
-  diagnostic messages ≤4,096/16,384; and diagnostic code/origin, symbol name/container/detail each
-  ≤1,024/4,096. Positions use line `0..1,999` and VS Code's 0-based UTF-16 `character` offset
-  `0..131,072` inclusive; the Host rejects offsets inside a surrogate pair or beyond the actual
-  UTF-16 length of that line, while non-negative safe document versions remain numeric metadata.
-  Diagnostic, location, and symbol collections are at most 256 entries and each
-  successful result has at most 131,072 aggregate scalar values/524,288 aggregate bytes across those
-  projected strings. The complete Tool Result remains at most 1,048,576 serialized UTF-8 bytes.
-  Producers count well-formed Unicode scalar values and UTF-8 bytes incrementally before retaining a
-  field or entry; an over-limit field is cut at a scalar boundary, and an aggregate/entry limit stops
-  before the next field or entry. They never build an unbounded provider value merely to reject it.
-- A supported text value or collection that reaches a limit is truncated deterministically and carries
-  `truncated: true` plus one or more closed reasons (`code-points`, `utf8-bytes`, `lines`, `entries`,
-  `tokens`, or `out-of-workspace`). The `code-points`/`utf8-bytes` reasons also cover aggregate
-  ceilings; omitted entries are never replaced with an empty placeholder. The producer checks the
-  scalar, UTF-8, and logical-line counters before retaining each scalar/delimiter, treats CRLF as one
-  atomic delimiter, and stops before a delimiter that would create line 2,001; empty text counts as one
-  line and a terminal delimiter creates the following empty line. Invalid Unicode, malformed
-  DTO shape, non-finite/reversed/out-of-document ranges, and provider values that cannot be mapped are
-  `invalid-output`, not truncation; the one exception is an unmappable symbol kind, which maps to the
-  closed `unknown` label. `DocumentSymbol` nodes are flattened depth-first and `SymbolInformation`
-  entries use their optional `containerName`; optional `detail`/`selectionRange` fields are omitted
-  when the provider does not supply them, while explicit empty strings remain valid bounded values.
-- The Host estimates tokens before inserting an attachment. IDE content may use only the current
-  Files budget (at most 25% of the declared model window and never beyond the existing 2,000,000
-  token context ceiling). Missing, negative, fractional, unsafe, or over-budget estimates are not
-  treated as zero; the Host applies a deterministic bounded prefix or returns `limit-exceeded`
-  without borrowing System, History, or Tool budget.
-- A capture records the source URI, range, language ID, and document version before collecting. The
-  Host rechecks active editor/selection, workspace folder, Trust, setting, and version before
-  delivery. A changed source is marked `stale` and requires an explicit refresh or user decision;
-  stale text is never silently injected as current. A switched editor, Session, Run, workspace, or
-  setting invalidates a pending capture and cannot produce a late result.
-- Diagnostics and language results are rendered as bounded plain text. Severity, ranges, source
-  labels, symbol names, and provider messages are data, not Markdown, HTML, links, commands, Code
-  Actions, or instructions. A non-empty provider location set is filtered against canonical workspace
-  scope: a mixed valid/outside set returns valid items with `truncated: true` and the closed
-  `out-of-workspace` omission reason; an all-filtered or malformed set returns stable `invalid-output`
-  with no path or raw provider detail. An actually empty provider set is a valid empty result. Provider
-  failures are mapped to existing stable Tool errors; raw SDK, provider, response, stack, and arbitrary
-  metadata are excluded.
+- Every source URI is checked against the selected root with lexical and canonical containment;
+  external/untitled documents, ambiguous paths, invalid text, and unsafe provider locations fail
+  closed. Trust is checked at capture start and immediately before reading or delivering results.
+- Text is bounded to 65,536 scalar values, 2,000 logical lines, and 262,144 UTF-8 bytes. Collections
+  are bounded; results carry closed truncation or `out-of-workspace` reasons. Positions preserve
+  VS Code UTF-16 semantics and reject split-surrogate or out-of-range offsets. The Files budget is
+  at most 25% of the model window and never above the 2,000,000-token context ceiling.
 - `read_editor_context`, `get_diagnostics`, `find_definition`, `find_references`, and `list_symbols`
-  are read-only operations. Their Tool-specific input is parsed from `unknown` with a closed Schema;
-  no input can choose a URI outside the selected root or add a write/execute action. They do not need
-  an Approval grant and cannot create one as a result of a read.
-- `read_editor_context` with `scope: "selection"` returns the exact selected range even when collapsed:
-  that is a valid empty snapshot with `text: ""` and no active-line/file fallback. With no active
-  editor, both `active-editor` and `selection` return the fixed unavailable `failed` outcome. The Host
-  validates UTF-16 range boundaries without converting them to scalar offsets.
-- `get_diagnostics` accepts exactly `{ scope: "active-file" }`, `{ scope: "workspace" }`, or
-  `{ scope: "workspace", path }`; the first resolves the current active text document, the second
-  the selected root, and the third one validated workspace-relative document. A path with
-  `active-file`, a missing/unknown scope, an empty or invalid path, or any extra property is
-  `invalid-input` before any provider call.
-- Each capture and Tool call owns an `AbortSignal`. Cancellation, Run terminal state, Session switch,
-  setting disable, Trust loss, workspace/editor change, and Extension disposal close the delivery
-  gate before cleanup. Cancellation is not a Tool Result: after the gate closes, no Host-to-Webview or
-  Webview-to-Host message, text, diagnostic, language result, retry, approval, persistence mutation,
-  log entry containing source data, or Webview update may be emitted. A Webview cancel handler updates
-  only its own local interaction state synchronously before it attempts one cancel intent in the same
-  event turn; if the gate is already closed, it posts no intent. It cannot wait for or synthesize a Host
-  cancellation message. Cleanup is idempotent and awaited by the owning Host controller.
-- Pending or unsubmitted context, live selection state, document versions, source URI identity,
-  diagnostics, language-provider objects, stale markers, and cancellation metadata are excluded from
-  Session persistence, Webview restoration, logs, diagnostics, telemetry, fixtures, and model history.
-  Text explicitly sent by the user may follow the ordinary user-message/Tool-Result persistence rules,
-  but source metadata is not persisted as a separate record and no cross-session editor memory is
-  created.
-- The T1901 security fixture set includes a 2,000-line value and a 2,001-line value under LF, CRLF,
-  and terminal-newline encodings; 65,536-scalar/262,144-byte boundary cases; astral UTF-16 position
-  round-trips; split-surrogate and out-of-line rejection; collapsed-selection empty snapshots; and
-  no-editor unavailable outcomes. Each fixture verifies producer limits before retention and the
-  corresponding closed truncation or `failed`/`invalid-output` result.
+  are read-only and require no approval. Provider failures become stable safe errors; source text,
+  URI identity, stale state, diagnostics, provider objects, and pending attachments are not persisted,
+  logged, restored, or used as hidden instructions.
+- `@` references are user-initiated. The Webview sends only a bounded query or relative path; the
+  Host reads through the same scope and text boundaries. Fingerprint changes make a snapshot stale;
+  only an explicit refresh or use-stale decision permits submission. Duplicate canonical targets share
+  one opaque reference ID, and only accepted text follows ordinary user-message persistence.
+- Editor entry is opt-in through `ctrlZebra.editorContext.enabled` (default `false`) and explicit
+  commands. The Host revalidates editor, selection, root, Trust, text type, and version before every
+  capture. The Webview can refresh, remove, or explicitly use stale context, but cannot provide a
+  URI, range, revision, Trust value, or text source. Capture and delivered-card gates are separate;
+  cancellation, replacement, disposal, and stale/cross-view/session events cannot install a late card.
 
-### `@` workspace file references (T2103)
+## Approval boundary
 
-Workspace file completion is a read-only, user-initiated context path. The Webview sends only a bounded
-query or relative path; the Host resolves it against the current selected root, validates scheme and
-authority, canonicalizes symlinks/junctions with `WorkspaceScope`, and reads through the bounded UTF-8
-adapter. It never trusts a Webview URI, absolute path, root, revision, or Trust value. Search returns
-only bounded relative paths; binary/NUL/invalid UTF-8, missing roots, out-of-scope targets, and
-canonicalization failures return fixed safe errors. Limited untrusted-workspace read capability does
-not grant write, execute, MCP, or Trust authority.
+Approval authorizes one exact, user-visible operation. It is not a Session-wide, Tool-wide, path-wide,
+or reusable grant. The Host builds it from the trusted Tool definition and validated operation.
 
-The Host records a bounded file fingerprint before and after each read. A mismatch is surfaced as
-`stale`/`changed-during-read`; a document change or delete event marks an existing snapshot stale and
-retains it only for an explicit `Use stale file` or Remove decision. Refresh revalidates the same
-canonical target and revision. New chat, Session restore/switch, selected-root or Trust-boundary
-change, cancellation, view disposal, and Extension disposal close the operation gate; no late read
-can install or replace a reference. Duplicate canonical targets share one opaque Host reference ID,
-and a submission includes only non-stale or explicitly accepted references.
-
-Accepted file snapshots are ordinary untrusted user context and share the Files token budget with MCP
-context. Core keeps a deterministic bounded prefix plus a token-truncation marker when the remaining
-budget is smaller; it never borrows another category. Pending reference metadata, URI identity,
-fingerprints, stale state, and unsubmitted text are not persisted, logged, restored, or sent to the
-model. Only text the user explicitly sends follows ordinary user-message persistence and provider
-disclosure rules.
-
-### Explicit editor entry (T1905)
-
-The editor entry setting is `ctrlZebra.editorContext.enabled`, default `false` and scoped to the VS Code
-window. It is a user opt-in, not a capability grant. `ctrlZebra.askAboutSelection` and
-`ctrlZebra.askAboutFile` are explicit commands; command-palette/menu visibility and `editorHasSelection`
-are not security checks. Before every capture the Extension repeats setting, active editor, exact selection,
-selected-root, Trust, URI identity/containment, supported-text, and document-version validation. A command
-from an untrusted workspace, an empty/absent editor, or a selection command with no selection returns the
-fixed unavailable category and performs no fallback read.
-
-The Host sends only the strict `extension/editor-context` projection from [Protocol](protocol.md). Every
-projection carries Host-issued `requestId`/`eventSequence`, `viewGeneration`, `sessionGeneration`, and the
-current `cardGeneration`/`contextId` when a card exists. The capture fence is exactly
-`(viewGeneration, sessionGeneration, captureId)`; the delivered-card owner tuple is exactly
-`(viewGeneration, sessionGeneration, cardGeneration, contextId)`. `captureId` is present only on `ready` and
-`stale` projections for capture correlation; `cleared` intentionally omits it and correlates by the owner
-tuple's card/context fields. These fences prevent cross-view or cross-Session replacement. The Webview cannot
-provide a URI, range, revision, Trust value, or text source; `webview/editor-context-*` messages are narrow
-refresh/remove/use-stale intents with the exact owner tuple. `use-stale` is an explicit display/send decision
-for one context ID, never a freshness override or a capability change.
-
-The **capture delivery gate** owns the AbortController and closes before cancellation, supersession,
-setting disable, Trust loss, editor/workspace transition, Session/New chat, view disposal, or Extension
-disposal. A closed capture gate suppresses every later capture completion, including `ready` and
-`unavailable`; it produces no owner transition, text, retry, persistence mutation, approval, model request,
-or Webview message from that capture. The **delivered-card/event projection owner gate** is separate and opens only at
-the `ready` enqueue commit for an exact `(viewGeneration, sessionGeneration, cardGeneration, contextId)`.
-After all affected capture gates close, it may emit one bounded `stale` for an editor/selection/document
-change, or one Host-driven `cleared` for setting disable, Trust loss, selected-root/workspace change, or
-unsupported editor. Remove and accepted New chat clear the Webview editor store synchronously before the
-single intent/action; Session restore/switch is transactional, with the Host closing both gates and the
-Webview clearing its store before committing the new session generation. Disposal closes both gates. These
-local/transactional boundaries emit no editor `cleared` event; a Remove acknowledgement, if sent, is optional
-and ignored by the Webview. A transition with no delivered card emits no stale/clear event; an owner gate
-closes permanently on clear and cannot produce a late capture result.
-
-The Host serializes gate closure before transition projection and increments `eventSequence` for each
-outbound event. Every `viewGeneration`, `sessionGeneration`, `cardGeneration`, and `eventSequence` value is a
-non-negative safe integer; the owner checks for `Number.MAX_SAFE_INTEGER` before incrementing. Overflow fails
-closed with no event, wrap, reuse, or silent reset, and requires a new view generation (view overflow requires
-a new Extension activation). The Webview first compares an exact canonical same-sequence event record: an
-identical duplicate is a no-op, while a conflicting duplicate is discarded. Only then does it accept a greater
-sequence and advance the watermark; a lower sequence is a stale no-op. Active view/session and exact owner
-tuple checks still precede mutation. A refresh closes the old capture first and leaves its delivered card
-unchanged until the new ready commit, so an old completion can never overwrite the current card. Pending
-editor text and source metadata are not persisted, logged, restored, or used as hidden instructions. Only
-text that the user deliberately leaves in the ordinary Composer draft can follow the existing user-message/
-provider data path.
-
-Before allocating an outbound `eventSequence` or `requestId` for an editor/selection/document transition,
-the Host owner queue normalizes a bounded `{ normalizedStaleReasons, sourceFingerprint }` record for the
-current owner. The first record is reserved and produces one stale projection; a matching pending or committed
-record produces no event and no IDs, and the stale-latched owner suppresses any later transition until a newer
-`ready` owner resets the watermark. This source-transition watermark is independent of Webview retransmission
-de-duplication, which compares the exact same-sequence/requestId/canonical-payload event after delivery.
-
-The T1905 security matrix must exercise both gates and all fences: normal ready delivery; cancellation or
-close before capture completion; Refresh A/B with a late A result; transition with and without a delivered
-card; completion/transition same-turn ordering; one stale for repeated identical editor/selection/document
-transition with no second event ID; setting/Trust/workspace/editor invalidation; local
-Remove/New-chat/disposal clearing with no Host clear event; transactional restore/session-switch clearing;
-strict projection fields (`captureId` only on `ready`/`stale`, rejected on `cleared`);
-old/cross-view/cross-session request, capture, context, and card IDs; same-sequence duplicate/conflict checks
-before monotonic ordering; lower and greater event sequences; safe-integer overflow and required new-view/
-activation reset; and events after disposal. Each case proves no unbounded text allocation, model/Tool/
-Approval action, persistence mutation, retry, or late Webview message after the relevant gate closes.
-
-## Approval Boundary
-
-Approval is an authorization for one exact, user-visible operation. It is not a capability token,
-session-wide grant, tool-wide grant, path-wide grant, or reusable confirmation. The trusted host
-constructs the request from the registered tool definition and validated operation; model output
-and Webview input cannot assign risk, broaden scope, extend lifetime, or replace the operation.
-
-### Risk Matrix
-
-| Risk | Meaning | Baseline disposition |
+| Risk | Meaning | Default |
 |---|---|---|
-| `read` | Observes bounded workspace data without changing external state. | May be allowed without prompting by the policy introduced in T0502. |
-| `write` | Creates, changes, renames, or deletes workspace state. | Requires an explicit approval bound to the exact operation. |
-| `execute` | Starts a process, task, command, or other executable behavior. | Denied by default; a later task must define any narrower approved case. |
-| `network` | Sends data or initiates a request outside the local trusted boundary. | Denied by default; a later task must define any narrower approved case. |
+| `read` | Observes bounded local data without external mutation. | May be allowed by policy. |
+| `write` | Creates, changes, renames, or deletes workspace state. | Requires exact approval. |
+| `execute` | Starts a process or executable behavior. | Denied unless explicitly defined. |
+| `network` | Sends data outside the local trusted boundary. | Denied unless explicitly defined. |
 
-Risk comes only from the trusted registered tool definition. If an operation has multiple effects,
-its risk is the most restrictive applicable category. Splitting one semantic operation into lower-
-risk calls to avoid the matrix is forbidden.
+- The request binds Host-generated identity, Session, Run, Tool Call, trusted risk, validated JSON
+  input, selected root, resource identities/revisions, user-visible presentation, creation time, and
+  expiration. MCP startup additionally binds normalized mode, Server identity, executable, arguments,
+  and canonical cwd.
+- Structural changes to tool name, input, target, root, revision/hash, effect, risk, or presentation
+  create a new operation. The UI is a projection of the exact request consumed by execution; hidden or
+  changed effects invalidate it. Secrets and unrestricted contents are excluded from presentation.
+- A request moves from `pending` to exactly one of `approved`, `denied`, `cancelled`, `expired`, or
+  `invalidated`. Host time checks expiration before response and consumption. Only `approved` can
+  atomically become `consumed`, authorizing one attempt. Duplicate, late, conflicting, and unknown
+  responses are rejected. Run completion, failure, cancellation, Session switch, New chat, or disposal
+  invalidates all unconsumed approvals.
 
-### Exact Operation Binding
+## Command execution
 
-- An Approval Request has a host-generated identifier and binds the exact Session and Run, Tool Call
-  ID and name, trusted risk, validated JSON input, selected workspace root when applicable, affected
-  resource identities and revisions when known, user-visible presentation, creation time, and
-  expiration time. Built-in and external Tool approvals both require this Run binding; an approval
-  without an owning Run is invalid.
-- The bound operation is compared structurally from validated values, not from display text or raw
-  JSON spelling. Any change to the tool name, input, selected root, target URI, resource set,
-  expected version or content hash, effect, or risk creates a different operation and requires a
-  new request. MCP startup additionally binds the normalized effective `protocolMode`, Server
-  identity, executable, ordered arguments, and canonical cwd. Version `1` without a mode and
-  version `2` with explicit `modern-only` have the same startup identity when those effective
-  fields match; `dual` is different.
-- File targets retain URI identity at the Extension boundary. A request for a file mutation binds
-  the canonical target and the exact pre-operation version or content hash. Canonicalization or
-  revision checks are repeated immediately before consumption.
-- The Approval UI is a projection of the same immutable request that execution consumes. It shows
-  the exact tool/effect, target resources, selected workspace, risk, material arguments, expiration,
-  and proposed diff or equivalent effect description. Hidden or changed effects invalidate the
-  request; execution must never rely on information omitted from or inconsistent with the UI.
-- Secrets and unrestricted file contents are excluded from Approval Requests and display text.
-  Presentation contains only the bounded information needed for an informed decision.
+- Commands are `execute` risk and require fresh single-use approval for the exact invocation. The
+  executable and ordered arguments remain separate validated values; the runner directly spawns with
+  shell interpretation disabled. It does not concatenate a command line, invoke a shell, parse
+  quoting, expand variables/globs, or interpret pipes, redirects, substitution, or sequencing.
+- The cwd is a canonical directory inside the selected trusted root and is revalidated immediately
+  before spawn. The child receives only an explicit baseline environment allowlist; credentials,
+  tokens, cookies, proxy values, arbitrary variables, and model/Webview-supplied entries are excluded.
+- Timeout, cancellation, spawn failure, and non-zero exit are distinct outcomes. Stdout/stderr are
+  collected independently into bounded buffers with a truncation marker. Cancellation or timeout
+  terminates the process tree; cleanup is idempotent and awaited, and uncertain termination is not
+  reported as successful cancellation.
 
-### Lifecycle and One-Time Consumption
+## Checkpoint and restore
 
-- A request starts as `pending`. An explicit user response changes it once to `approved` or
-  `denied`. Cancellation changes a pending or approved-but-unconsumed request to `cancelled`.
-- Reaching the expiration time changes a pending or approved-but-unconsumed request to `expired`.
-  Expiration is evaluated by a host-owned clock before accepting a response and again immediately
-  before consumption; client timestamps cannot extend or revive a request.
-- A changed, missing, replaced, or no-longer-canonical target, a changed resource revision, a scope
-  mismatch, or a presentation/operation mismatch changes a pending or approved-but-unconsumed
-  request to `invalidated`.
-- Run completion, failure, cancellation, interruption, Session switch, explicit New chat, or disposal
-  invalidates every unconsumed approval owned by that Run. A new Run must create a new exact request;
-  no Session-wide, Tool-wide, remembered, or retry approval exists.
-- Only `approved` may transition to `consumed`, and the transition is atomic with claiming the
-  authorization for execution. A consumed request can authorize exactly one attempt of the bound
-  operation; retries and modified operations require a new request.
-- `denied`, `cancelled`, `expired`, `invalidated`, and `consumed` are terminal. They cannot return to
-  pending or approved. An approved request is not reusable after cancellation, expiration,
-  invalidation, or consumption.
-- Duplicate, late, conflicting, or unknown responses are rejected without changing state or
-  executing an operation. Concurrent responses and consumers must have one deterministic winner.
-- Cancellation is not a denial, failure, or ordinary Tool Result. Once the owning run is cancelled,
-  no later response, consumption, output, or side effect is accepted.
+[Persistence](persistence.md#checkpoint-durability-and-recovery) owns layout, record shape,
+durable-before-side-effect ordering, compatibility, and retention. Security additionally requires
+that a Checkpoint bind the exact Session/Run and immutable operation; model and Webview input cannot
+choose its identity, targets, hashes, replacement content, extra targets, or force flag.
 
-## Command execution boundary
+- Restore is explicit, all-target, scoped to the selected trusted workspace, and revalidates canonical
+  identity and current hashes immediately before the atomic operation. Any conflict leaves every target
+  unchanged. Checkpoint before-content is sensitive workspace data and never enters model context,
+  Webview state, approval presentation, logs, telemetry, diagnostics, or ordinary fixtures.
+- File mutation operations remain trusted `write` operations. Create, delete, rename, single-file edit,
+  and multi-file WorkspaceEdit use the same root, Trust, approval, Diff, Checkpoint, cancellation, and
+  result boundaries. Create/delete/rename are single-target; WorkspaceEdit is a bounded edit-only
+  plan. A failed Checkpoint commit authorizes no workspace write.
 
-- Every command is an `execute`-risk operation and requires a fresh, single-use approval for that
-  exact invocation. Approval never applies to a Session, Run, executable, directory, prefix, retry,
-  or later command. The immutable approval presentation and consumed operation both contain the
-  complete executable, ordered argument vector, canonical selected-workspace cwd, and timeout.
-- The command contract represents an executable and arguments as separate validated values. The
-  Extension runner uses direct process spawning with shell interpretation disabled. It does not
-  concatenate values into a command line, invoke a platform shell, parse quoting, expand variables
-  or globs, follow aliases, or interpret operators such as pipes, redirects, command substitution,
-  sequencing, or background execution. Shell execution would be a different public operation and
-  requires a later security review and explicit protocol contract.
-- The cwd is a canonical directory inside the one Extension-selected workspace root. It remains a
-  URI through scope validation and must pass the same scheme, authority, segment, symlink, junction,
-  and path-swap checks as workspace tools immediately before spawn. A missing cwd, a non-directory,
-  an unselected root, or a target whose canonical identity cannot be established is rejected.
-- The child receives only an explicit allowlist of environment variables required for baseline
-  process operation. It does not inherit the host environment wholesale. API keys, authorization
-  values, tokens, cookies, credential-helper settings, proxy credentials, arbitrary user variables,
-  and model- or Webview-supplied environment entries are excluded. Environment names and values are
-  treated as sensitive and redacted from approval text, logs, diagnostics, Tool Results, persistence,
-  and model context.
-- Command execution is disabled unless the selected workspace is trusted. Trust is rechecked after
-  approval and immediately before spawn; a trust change invalidates unconsumed approval. A command
-  cannot request a trust change or bypass the host-owned trust decision.
-- Every invocation has a validated positive timeout within the protocol maximum. The runner owns a
-  hard deadline independent of model or Webview activity. Timeout, caller cancellation, spawn
-  failure, and a non-zero exit are distinct outcomes; none extends the deadline or silently retries.
-- Stdout and stderr are collected independently into bounded buffers while streaming. The runner
-  stops retaining bytes at the command-output ceiling without first constructing unbounded output,
-  preserves a truncation marker, and remains subject to the global serialized Tool Result limit.
-  Optional complete log persistence is disabled unless a later task defines its location, retention,
-  permissions, redaction, size ceiling, approval implications, and cleanup ownership.
-- Cancellation or timeout terminates the entire process tree, not only the direct child. No later
-  output, tool continuation, or side effect is accepted after termination begins. Cleanup is
-  idempotent, bounded, and awaited by an explicit owner; failure to confirm tree termination is
-  reported separately and never represented as successful cancellation.
-- Tests use fixed local fixture processes and fake environments; they never invoke a real shell,
-  network client, package manager, developer command, or credential-bearing process. The suite
-  covers Windows process-tree and argument behavior plus POSIX signal and argument behavior without
-  assuming one platform's quoting, separators, executable lookup, exit codes, or termination model.
+## Diagnostic logging
 
-## Checkpoint and restore boundary
+- Logs are local, bounded operational records written by the Extension Host, not telemetry, model
+  context, persisted Session data, or a user-facing error store. Entries use a stable event, component,
+  outcome, and bounded allowlisted primitive fields/correlation IDs.
+- Never log keys, tokens, cookies, headers, SecretStorage values, environment blocks, prompts, model
+  or Tool data, command output, file contents, diffs, Checkpoint content, editor data, source URIs,
+  paths, raw errors, stacks, SDK objects, or arbitrary causes. A boundary maps failures to stable safe
+  categories before logging; cancellation, timeout, provider, tool, and cleanup outcomes remain distinct.
+- User notifications and diagnostics are separate surfaces. A notification may explain a safe next
+  step; a log may identify a bounded operation category, but neither is a fallback store for omitted data.
 
-The [Persistence Contract](persistence.md#checkpoint-durability-and-recovery) is the canonical owner
-of Checkpoint layout, record shape, durable-before-side-effect ordering, all-target recovery, format
-compatibility, and retention. This security boundary adds the non-negotiable rules: a Checkpoint is
-bound to the exact Session/Run and immutable operation; model/Webview input cannot choose its identity,
-targets, hashes, replacement content, extra targets, or force flag; and restore is explicit, scoped to
-the selected trusted workspace, revalidated immediately before the atomic operation, and conflict-safe.
+## Credentials and Provider boundaries
 
-Checkpoint before-content is sensitive local workspace data. It is excluded from model context,
-Webview state, approval presentation, logs, telemetry, diagnostics, snapshots, and fixtures except for
-deterministic fake test content. Checkpoints never contain credentials or other forbidden persistence
-data.
+- The Extension Host alone accesses SecretStorage. Keys never enter Webview state, Protocol messages,
+  workspace/global state, Sessions, fixtures, snapshots, command arguments, environments, logs, or
+  model-visible content. Secret names are stable Extension-owned constants, not user input.
+- Provider settings contain only validated Provider IDs, model IDs, endpoint URLs, and known capability
+  declarations. Credentials, arbitrary SecretStorage names, user information, query strings, and
+  fragments are invalid settings. Remote endpoints require `https:`; plain `http:` is limited to
+  explicit localhost, `127.0.0.0/8`, or `::1` loopback.
+- Provider save, delete, rotate, model selection, and connection-check workflows are explicit
+  Host-owned commands. Empty/cancelled input has no mutation; adapter failures become fixed safe
+  outcomes. Delete uses presence-only tri-state reconciliation; rotation performs one direct save;
+  neither exposes or rolls back a Secret after an indeterminate backend failure.
+- Model lists and connection checks are metadata-only, bounded, no-retry requests. They never include
+  workspace/session/model context beyond the validated model identity, and responses are parsed from
+  bounded JSON into closed projections. Raw bodies, headers, endpoint details, SDK errors, and auth
+  material never reach UI, persistence, diagnostics, or logs. Unsupported or ambiguous capabilities
+  remain `unknown`.
 
-### File lifecycle mutation boundary (T2001)
+## Controlled MCP security boundary
 
-The Phase 20 lifecycle surface is four distinct preparation Tools: `propose_file_create`,
-`propose_file_delete`, `propose_file_rename`, and `propose_workspace_edit`. The existing
-`propose_file_edit` remains the one-file edit Tool. All five are trusted `write` operations and use
-the same selected-root, Trust, approval, Diff, Checkpoint, cancellation, and result boundaries;
-there is no separate low-risk delete/rename category and no write-through read Tool.
+MCP is an independent boundary because a configured local Server is an external process with the
+user's operating-system authority. Server descriptors, schemas, annotations, content, results,
+notifications, stderr, and errors are untrusted. The complete MCP lifecycle, protocol, projection,
+and compatibility contract is owned by [MCP](mcp.md).
 
-The model supplies only bounded workspace-relative paths, text, and edit ranges. It cannot supply a
-host URI, absolute path, selected root, canonical identity, revision/hash, target-exists flag,
-approval or Checkpoint ID, operation risk, expiry, replacement/force switch, or recovery content.
-The Extension revalidates every path lexically and canonically (including symlinks/junctions and
-case/authority rules) at preparation and immediately before approval consumption. A target whose
-canonical identity cannot be established is rejected; lexical containment alone is never enough.
+- Only the Extension Host reads the machine-scoped local stdio configuration and starts a Server.
+  The setting has no cwd, environment, shell command line, endpoint, headers, credentials, Secret name,
+  auto-start, retry, or capability fields. Connect requires a trusted single-folder workspace, the
+  selected canonical root as cwd, and fresh exact startup approval.
+- A Server is not a sandbox. Startup is a distinct approved `execute` operation; Server claims never
+  grant CtrlZebra authority. External content is validated and bounded before projection, and raw
+  process details are excluded from UI, logs, and persistence.
+- Every MCP Tool is trusted `execute` risk regardless of Server annotations. Each call needs a fresh
+  exact approval bound to Session, Run, Tool Call, Server identity, generation, schema identity,
+  arguments, presentation, and expiry. Resource reads and Prompt previews require explicit current-
+  generation user actions but are not Tool approvals and cannot authorize follow-up operations.
+- Recovery displays bounded historical projections only. It never starts or reconnects a Server,
+  resumes a request, replays an operation, consumes an approval, or reads current MCP configuration
+  for a side effect.
 
-The immutable operation plan has one of `create`, `delete`, `rename`, or `edit`; its target set is
-non-empty, unique, deterministically ordered, and bounded to 128 files. Each target is supported
-UTF-8 text with no NUL/binary classification and at most 65,536 Unicode scalars, 2,000 logical
-lines, and 262,144 UTF-8 bytes. A plan's aggregate proposed text is at most 1,048,576 UTF-8
-bytes. `propose_workspace_edit` is edit-only: it rejects create/delete/rename entries, duplicate
-paths, overlapping ranges, and a mixture whose operation identity cannot be represented as one
-unchanged-target edit plan. Create, delete, and rename each remain a single-target operation so
-their existence transitions and restore semantics are unambiguous.
+## User-triggered redacted diagnostics export
 
-Approval is created only after the Host has captured the exact before state and computed the after
-hash. The request binds Session, Run, Tool Call, selected workspace, operation kind, ordered
-canonical target identities, source/target pair for rename, before existence and revision/hash,
-after hash, exact edits/content, and the bounded presentation digest. The UI may show complete
-bounded before/after text in the temporary Diff editor (including a full create body or delete
-body); that content is not copied into the Approval DTO, persisted, logged, or sent as model context.
-The Diff must be available and complete within the same limits before the approval buttons become
-active. A changed Diff, hidden target, changed path, or changed operation invalidates the request.
+Diagnostics export is an explicit local action, never automatic upload, telemetry, persistence, model
+input, or authorization. The Host builds an allowlisted, Protocol-validated document containing only
+format/extension/VS Code versions, closed platform and Provider IDs, aggregated stable error categories,
+bounded MCP status facts, and bounded runtime measurements. It is at most 64 KiB and is shown in full
+before confirmation.
 
-Immediately before consuming an approved request, the Host closes the cancellation gate and checks
-in this order: cancellation/Run ownership; approval state and host-clock expiry; selected-root and
-Trust; canonical target identity and file type; target existence (create absent, delete/rename
-source present and target absent); exact before revision/hash; durable Checkpoint creation; then one
-host-owned atomic `WorkspaceEdit`. Any failed preflight produces zero writes. `applyEdit` returning
-false, throwing, or lacking a proof of all-or-nothing behavior is a bounded `failed` outcome and is
-never reported as a subset or success. The Checkpoint remains for explicit reconciliation.
-
-Internally, an explicit decision moves an approval request to `approved`, and the one-time
-consumption gate moves it to terminal `consumed`; those are approval-state labels, not a claim that
-the public lifecycle Tool Result has applied a write. The existing `propose_file_edit` continues to
-use its current Core/Extension success payload `{ outcome: "approved" }`. For the additive T2001
-lifecycle Tools, the public success payload is `{ outcome: "applied" }` only after consumption,
-durable Checkpoint creation, and one atomic application. Their stable public errors are `denied`
-(rejection or terminal approval), `conflict` (stale/replaced/missing/duplicate target,
-Trust/scope/canonical failure, or restore conflict), and `failed` (durability or host application
-failure). Cancellation is neither denial nor failure and emits no ordinary Tool Result. If more
-than one race is observed, the first failure in the above order wins and later details are
-suppressed.
-
-Restore is explicit and all-target. A create Checkpoint restores by deleting only the exact target
-whose current text hashes to the recorded after hash; a delete Checkpoint restores by creating the
-target only when it is absent. A rename Checkpoint records an exact pair: source before is bounded
-text plus `beforeHash` and after is absent; target before is absent and after is text whose
-`afterHash` equals the source `beforeHash`. Restore requires the canonical source to be absent and
-the canonical target to hash to that after hash, then atomically renames target to source and
-verifies source `beforeHash` plus target absence. A multi-file Checkpoint is restored by one
-WorkspaceEdit after every target passes the after-hash preflight. No model or Webview input can
-provide replacement content, add targets, skip a conflict, or force an overwrite. A failed or
-partially confirmed host operation is surfaced for reconciliation rather than guessed.
-
-## Structured Diagnostic Logging
-
-CtrlZebra diagnostic logs are local, bounded operational records written by the Extension Host to
-the VS Code `LogOutputChannel`. They are not telemetry, model context, persisted Session data, or a
-user-facing error surface. Core and provider code may describe an event through host-independent
-values, but only the Extension adapter formats and writes a log entry.
-
-### Entry shape and correlation
-
-- Every entry is one structured object with a stable `event` name in lower `snake_case`, a
-  `component`, and an `outcome` when the operation has completed. The channel's log level and VS
-  Code timestamp remain transport metadata rather than duplicated fields.
-- Optional diagnostic fields are limited to bounded primitive values: `errorCode`, `durationMs`,
-  `memoryBytes`, `provider`, `attempt`, and identifiers needed to correlate an operation. Memory
-  values describe only the Extension Host process and never contain heap snapshots or object data.
-  Arbitrary objects and free-form metadata bags are forbidden.
-- Correlation identifiers use explicit keys: `sessionId`, `runId`, `requestId`, `toolCallId`, and
-  `approvalId`. An entry includes only identifiers already owned by the logged operation. Logging
-  must not create a second identity or derive an identifier from content, paths, or secrets.
-- Identifiers are diagnostic labels, not authorization. They cannot be used to approve, resume, or
-  locate an operation without the normal ownership and validation checks.
-- Field order is deterministic so tests and human inspection remain useful. Unknown fields are
-  rejected or dropped before formatting, and each serialized entry has a fixed byte ceiling.
-
-### Sensitive data and default exclusions
-
-The following values are sensitive and must never enter a diagnostic entry, including as a field
-name, nested value, interpolated message, error message, stack, URL query, or serialized object:
-
-- API keys, bearer tokens, OAuth tokens, cookies, authorization and proxy-authorization headers,
-  SecretStorage values, passwords, client secrets, signing material, and credential-helper data.
-- Environment names and values, command environment blocks, request and response headers, and
-  third-party request or response bodies.
-- User prompts, model input or output, tool input or output, command stdout or stderr, file contents,
-  diffs, checkpoint before-content, persisted messages, and workspace source text.
-- Active editor text, selections, diagnostic messages, language-service names/locations, document
-  versions, stale/truncation details, and source URI values are likewise excluded. A stable event
-  code may say that an IDE operation was cancelled, unavailable, stale, or limit-exceeded, but it may
-  not include the source or content that led to that outcome.
-- Absolute workspace paths, user-directory paths, URIs containing user-controlled query or fragment
-  data, and filenames or identifiers derived from source content.
-
-User source and model content are excluded by default rather than inspected and selectively
-retained. A future exception requires an explicit security review, a documented bounded schema and
-retention rule, user-visible control where appropriate, and tests proving that unrelated content
-remains excluded.
-
-Before formatting, the logging adapter recursively treats input as `unknown`, accepts only the
-documented fields and primitive types, and replaces sensitive key names and recognized credential
-forms with a constant redaction marker. Redaction is defense in depth; callers still must not pass
-sensitive values. Tests use synthetic conspicuous secrets and assert against the final rendered
-entry, not only the intermediate object.
-
-### Errors and third-party causes
-
-- Raw `Error` objects, stacks, SDK response objects, host exceptions, and arbitrary `cause` chains
-  are never serialized or interpolated into logs.
-- A trusted boundary maps a failure to a stable internal `errorCode` and safe `outcome`. The logger
-  may record an allowlisted error `name` only when it is assigned by CtrlZebra; third-party names,
-  messages, status text, response bodies, headers, and stacks are excluded.
-- A third-party `cause` may be inspected only to classify it through documented type guards or
-  stable SDK properties. The resulting stable category may be logged, but the original cause and
-  its recursively nested causes are discarded from diagnostic entries. A Provider `ModelGatewayError`
-  may retain a non-enumerable in-memory cause for the owning host to preserve failure causality;
-  that cause is never serialized, logged directly, persisted, or projected to the user.
-- Core approval-preparation and Tool-execution diagnostics use a separate injected local sink. The
-  Extension may inspect the in-memory cause only long enough to classify it into an allowlisted
-  error code; the raw cause is never emitted as a Runtime event or retained in Protocol, Session
-  persistence, model history, Tool Results, or Webview state.
-- Cancellation, timeout, provider failure, tool failure, and cleanup failure remain distinct
-  outcomes. Logging must not convert one into another or replace the primary result.
-
-### User prompts versus diagnostics
-
-- User-facing messages answer what failed and what the user can safely do next. They use stable,
-  localized-safe text and never ask the user to inspect raw secrets or paste credentials into logs.
-- Diagnostic entries identify where and in which correlated operation the failure occurred. They do
-  not contain the user-facing prose, user content, or raw exception message.
-- Showing a user notification and writing a diagnostic entry are independent decisions. A routine
-  cancellation may need neither; a recoverable setup error may need a user prompt but no error log;
-  an internal failure may need both, with only a stable error code linking the two surfaces.
-- The logger must never be used as a fallback store for data omitted from Tool Results, protocol
-  DTOs, persistence, approval presentation, or user notifications.
-
-## API Key Secret Storage
-
-- The OpenAI API key is stored under the stable, Extension-owned name
-  `ctrlZebra.provider.openai.apiKey`. Secret names are implementation contracts and must not be
-  derived from Webview input, workspace content, model output, or the secret value itself.
-- Saving stores the supplied value exactly and replaces any value already held under that name.
-  Reading returns `undefined` when no value exists. The VS Code API does not promise idempotent
-  deletion or a compare-and-swap/transaction boundary; the Host therefore checks presence before a
-  delete and does not call the adapter delete operation when the key is absent.
-- The Extension Host is the only owner of SecretStorage access. API keys must not enter Webview
-  state, protocol messages, workspace or global state, persisted sessions, fixtures, snapshots,
-  command arguments, environment variables, or model-visible content.
-- The adapter does not cache API keys. A retrieved string remains in memory only for the lifetime
-  of the operation that needs it; callers must not retain it in long-lived services, module state,
-  closures, or diagnostic objects.
-- Logs and telemetry must never contain an API key, a key prefix or suffix, authorization headers,
-  SecretStorage values, or third-party errors that could embed them. Secret names may be used only
-  when required for internal diagnosis and must not be presented as credential values.
-- Read, save, and delete failures are reported as operation-specific, user-safe errors. User-facing
-  text may explain that the saved API key could not be accessed or changed and suggest retrying, but
-  must not include the submitted value, the stored value, or the original error message.
-- Automated tests use conspicuously fake values such as `test-openai-api-key`, operate only on an
-  in-memory fake, and never read or mutate a developer's real SecretStorage. A manual Extension Host
-  smoke test must also use a fake value and delete it before the test ends.
-
-## Provider Endpoints and Credentials
-
-- Provider settings contain only Provider identifiers, model IDs, endpoint URLs, and capability
-  declarations. Raw API keys, bearer tokens, authorization headers, and arbitrary SecretStorage
-  names are invalid configuration values and must never be accepted from workspace settings.
-- The Extension owns the stable Secret names `ctrlZebra.provider.openai.apiKey`,
-  `ctrlZebra.provider.gemini.apiKey`, and `ctrlZebra.provider.openaiCompatible.apiKey`. The active
-  Provider identifier selects the corresponding name; users and model output cannot supply or
-  derive a Secret name.
-- OpenAI and Gemini require their corresponding API key. A remote OpenAI-Compatible endpoint also
-  requires its API key. An OpenAI-Compatible endpoint whose URL contains an explicit loopback host
-  may omit a key so that a local service such as Ollama can be used. Missing required credentials
-  fail before model client creation with a user-safe message that names the Provider but not the
-  Secret name or value.
-- Explicit endpoint URLs are parsed as URLs and must not contain user information, query strings,
-  or fragments. Remote endpoints require `https:`. Plain `http:` is allowed only when the parsed
-  hostname is explicitly `localhost`, an IPv4 address in `127.0.0.0/8`, or the IPv6 loopback
-  address `::1`; lookalike names and DNS names that might resolve to loopback do not qualify.
-- Endpoint validation is structural and does not perform DNS resolution, probing, redirects, or
-  other network access. Provider adapters must not follow a redirect that weakens the validated
-  transport policy or sends credentials to a different origin.
-- Capability declarations are untrusted configuration. Only known capability identifiers are
-  retained, duplicates are rejected, and an undeclared capability is treated as unsupported.
-  Capability checks occur before Secret access and network activity.
-- Configuration errors and Provider selection errors may identify the invalid setting and explain
-  how to correct it, but must not include credential values, authorization material, third-party
-  response bodies, or unredacted SDK errors.
-
-## Provider API Key Entry
-
-- The stable user-facing commands are `ctrlZebra.saveOpenAIApiKey`,
-  `ctrlZebra.saveGeminiApiKey`, and `ctrlZebra.saveOpenAICompatibleApiKey`. Renaming one is a
-  public-contract change. Each command is contributed to the Command Palette and its registration
-  is owned by `ExtensionContext.subscriptions`.
-- Each command collects the value with VS Code's password-masked input. It does not prefill an
-  existing credential, does not reveal whether a prior value exists, and keeps the prompt open on
-  focus loss so the value is not accidentally submitted to another UI surface.
-- Canceling the prompt or the credential-free overwrite confirmation performs no SecretStorage
-  write and shows no success message. An empty value is rejected before storage. A non-empty value
-  is stored exactly as entered under the Provider's Extension-owned SecretStorage name, replacing
-  any prior value according to the existing SecretStorage contract.
-- The submitted value remains local to the command invocation and SecretStorage adapter. It must
-  not enter configuration, command arguments, Webview messages or state, persistence, logs,
-  diagnostics, snapshots, fixtures, or error text.
-- Save success uses a credential-free confirmation. Input and storage failures use fixed,
-  user-safe text and never include the submitted value, stored value, Secret name, or original
-  backend error. The command does not initialize a Gemini client or make a network request.
-
-## Provider API Key Lifecycle (T1604)
-
-- Credential deletion and rotation are Extension Host-only Command Palette workflows. The stable
-  commands are `ctrlZebra.deleteOpenAIApiKey`, `ctrlZebra.deleteGeminiApiKey`,
-  `ctrlZebra.deleteOpenAICompatibleApiKey`, `ctrlZebra.rotateOpenAIApiKey`,
-  `ctrlZebra.rotateGeminiApiKey`, and `ctrlZebra.rotateOpenAICompatibleApiKey`. They are not
-  Webview actions, Protocol messages, Onboarding actions, model Tools, or settings values. T1603
-  onboarding remains limited to save-key, select-model, and open-settings.
-- A delete command shows a modal confirmation that names the Provider and explains that its saved
-  API key will be removed. It never reads or displays the Secret to construct the confirmation and
-  never reveals whether a value exists. Cancellation before any storage call performs no
-  SecretStorage operation and therefore leaves the state unchanged. After confirmation, the command
-  asks the existing Host-owned presence adapter once. An `absent` result performs a fixed safe no-op
-  and does not call the delete adapter; a `present` result permits exactly one existing
-  `ApiKeySecretStorage.delete` call; an `unavailable` result performs no mutation and returns fixed
-  safe indeterminate retry/settings guidance. A fulfilled adapter delete is a completed command
-  outcome, while a rejected call has an indeterminate state. The command must not claim that the old
-  value remains or that a rejected call removed it, perform a compensating mutation, or expose
-  backend details; it performs a fresh presence-only reconciliation and offers fixed safe
-  retry/settings guidance.
-- A rotation command always opens a new password-masked input with no prefilled value. It keeps the
-  input open across focus loss, rejects an empty submitted value before storage, and treats dismissal
-  as cancellation. After validation it invokes exactly one existing `ApiKeySecretStorage.save`,
-  including when no prior key exists; rotation is equivalent to a first save in that case. The adapter
-  delegates to the Provider's stable-key `SecretStorage.store`; it does not read, delete, or clear the
-  old value first. A fulfilled adapter save is the replacement commit boundary. A rejected write has an
-  indeterminate state because the VS Code API provides no
-  transaction, compare-and-swap, or rollback guarantee; the command must not read the Secret for
-  rollback or compensation, or claim that the old value remains. Only after the adapter call settles
-  may the dedicated presence adapter perform reconciliation; it compares the `get` result only with
-  `undefined` and immediately discards it. An unavailable reconciliation is indeterminate and gives
-  fixed safe retry/settings guidance. Cancellation before the store call guarantees no
-  storage side effect; once the call starts, cancellation is not reported as a reversible outcome.
-- Delete, rotation, existing save commands, and presence reads for one Provider share a Host-owned
-  serial coordinator. It covers the prompt, confirmation, adapter mutation settlement, presence-only
-  reconciliation, and result notification. The queue is released only after settlement and
-  reconciliation, preventing overlapping commands from observing or reporting an interleaved
-  lifecycle; this includes T1603 onboarding status reads. Operations for different Providers may
-  proceed independently. Queue state contains only operation promises, never Secret values.
-- Any credential presence/status projection uses a dedicated Host-owned presence adapter with an
-  internal tri-state result: `present` only when `get` fulfills with a non-`undefined` value, `absent`
-  only when `get` fulfills with `undefined`, and `unavailable` when `get` rejects. `unavailable` is
-  never converted to `absent`/`false`; a delete preflight does not invoke delete in that case and
-  instead returns a fixed safe indeterminate retry/settings outcome. Rotation has no presence
-  preflight; an unavailable post-save reconciliation makes its observed outcome indeterminate. The unavoidable
-  VS Code `SecretStorage.get` result is accepted inside the adapter, compared only with
-  `=== undefined`, and immediately discarded; the adapter never checks length, prefix, suffix, hash,
-  or content and never returns the string to its caller.
-- The public T1603 Webview projection remains Boolean-only. A fulfilled tri-state result may map to
-  `true`/`false`; an `unavailable` result uses the existing safe status-failure path and retains the
-  last valid projection (or emits no replacement), never publishing `false` as a fact. A rejected
-  post-mutation reconciliation is likewise indeterminate and cannot be used to claim the old/new
-  value state.
-- Controller disposal and generation changes close a notification gate. An awaited adapter operation
-  that settles after disposal or an obsolete generation is still observed by its owning coordinator,
-  but emits no user notification, Webview status, or diagnostic/log side effect. Queue cleanup is
-  idempotent. The underlying VS Code SecretStorage Thenable is not cancellable; cancellation only
-  prevents a not-yet-started call.
-- User-facing success and failure messages may name the Provider and operation, but never include a
-  Secret value, Secret name, authorization material, submitted input, or original SecretStorage
-  error. The commands do not initialize a model client or contact a Provider endpoint.
-
-## Provider Model Selection Network Boundary
-
-- Model selection is an explicit Extension Host workflow. The `ctrlZebra.selectModel` command may
-  open a Quick Pick after the user invokes it, but activation, Webview creation, Session restore,
-  and chat execution never fetch a model list. The command is not a Tool or a model Run and does
-  not create an approval request.
-- T1602 permits a narrow network exception for bounded model metadata only. The only automatic list
-  requests are HTTPS `GET` requests to the fixed official endpoints documented by the providers:
-  [OpenAI `GET /v1/models`](https://developers.openai.com/api/reference/resources/models/methods/list)
-  and Gemini's OpenAI-compatible
-  [`GET /v1beta/openai/models`](https://ai.google.dev/gemini-api/docs/openai). The request has an
-  `Accept: application/json` header and an `Authorization: Bearer <API key>` header, no body, no
-  query or fragment, and redirects disabled. The API key is read from the matching SecretStorage
-  entry for this operation only; it is never placed in a URL, persisted, logged, or returned to a
-  caller.
-- A configured custom endpoint is not covered by those official guarantees. OpenAI-Compatible
-  endpoints, and custom endpoints configured for a dedicated Provider, never receive an automatic
-  list request in this task; the command must offer manual model-ID entry instead. Endpoint
-  validation remains structural and must complete before any SecretStorage read or network access.
-- A list request contains no workspace URI or text, Session, message, Tool definition, Tool input or
-  result, prompt, or other model context. It is a metadata-only request initiated by the user's
-  command. No provider response body, headers, authorization material, or SDK error text may enter
-  Webview state, Session persistence, diagnostics, or logs.
-- The response is untrusted third-party input. Before parsing, the Extension enforces a fixed body
-  limit of 256 KiB. It accepts only a bounded JSON object with a `data` array; for each array entry it
-  validates a required `id` string (at most 256 Unicode code points and at most 256 entries total),
-  extracts only `data[].id`, removes exact duplicates, and discards all top-level, entry-level, and
-  provider metadata or unknown fields. A missing/non-array `data`, invalid entry, malformed JSON, or
-  oversized response is a safe unavailable-list failure; no other field becomes a configuration value.
-- Missing credentials, authentication failures, network/timeout failures, malformed or over-limit
-  responses, empty lists, and cancellation are distinct outcomes. Missing credentials, an unavailable
-  list, or an empty list offer manual model-ID entry. Cancellation performs no write and shows no
-  success message. A failed request or a cancelled manual prompt leaves the existing model setting
-  untouched.
-- The user must explicitly choose a Quick Pick item or submit a validated manual model ID before the
-  Extension updates `ctrlZebra.provider.model`. The update changes only that setting; it never
-  clears or rewrites Provider, endpoint, capability, or SecretStorage values. A configuration write
-  failure reports fixed user-safe text and preserves the prior model value.
-
-## Provider Connection Check Boundary (T1605)
-
-- Connection checks are Extension Host-only Command Palette workflows. The stable command is
-  `ctrlZebra.checkProviderConnection`; it runs only after an explicit user invocation and is not a
-  Webview action, Protocol message, Session/Run operation, model Tool, activation hook, or background
-  health poll. A check reads the active, validated Provider configuration and model identifier, then
-  reads the matching SecretStorage value only for the one request. It never writes Provider,
-  endpoint, model, capability, or SecretStorage configuration.
-- The request is metadata-only and contains only the active Provider/model identifier plus the
-  required authorization material in the Provider-defined header. It has no body containing a prompt
-  or instructions, no workspace URI or text, Session/message history, Tool declaration, Tool input or
-  result, and it cannot trigger model generation or a Tool side effect. Dedicated OpenAI and Gemini
-  checks use only their documented [OpenAI model retrieve](https://developers.openai.com/api/reference/resources/models/methods/retrieve)
-  route (`GET /v1/models/{model}`, `Authorization: Bearer <key>`) and
-  [Gemini `models.get`](https://ai.google.dev/api/models#method:-models.get) route
-  (`GET /v1beta/models/{model}`, `x-goog-api-key: <key>`). The model is one strictly validated path
-  segment encoded exactly once; both requests have an empty body, only `Accept` plus the required
-  authorization header, no query credential, and redirects disabled. For OpenAI-Compatible, the
-  validated normalized endpoint is the base URL from the existing configuration contract; the Host
-  appends exactly one `models/{encodedModelId}` segment after preserving the base path and adding one
-  separator. The request is `GET` with an empty body, `Accept: application/json`, redirects disabled,
-  and no query or cookie credential. A remote endpoint (`requiresApiKey`) receives exactly one
-  `Authorization: Bearer <key>` header. An explicit loopback endpoint may omit that header when no
-  key is configured and uses it when a key is present. No other auth form is accepted. A dedicated
-  Provider custom endpoint has no official route and reports unknown without a request; the Provider
-  name never grants an undocumented OpenAI assumption.
-- The Host bounds the response before parsing (64 KiB maximum body, with a declared length rejected
-  above that limit), accepts only the documented model identity and explicitly documented capability
-  fields, and discards all other metadata. It uses one operation-wide `AbortSignal`, a fixed 10-second
-  timeout, and no retry. Cancellation is distinct from timeout and provider failure; after any
-  terminal result no late message, notification, retry, or other side effect is allowed.
-- Authentication, model existence, text streaming, Tool Calling, and the required capabilities are
-  represented as `supported`, `unsupported`, or `unknown`. `supported` or `unsupported` is allowed
-  only when official metadata or an explicitly documented, side-effect-free probe proves the fact;
-  missing metadata, custom endpoints, and ambiguous responses remain `unknown`. OpenAI retrieve
-  metadata has no Tool Calling or streaming fields, so a successful response leaves both unknown.
-  Gemini streaming is supported only for a strict, bounded, complete `supportedGenerationMethods`
-  list containing `streamGenerateContent`; omission proves unsupported only when the official
-  complete-list semantics are valid, otherwise it remains unknown. No `generateContent` field or
-  HTTP 200 may be used to infer Tool Calling. The aggregate required-capability fact is unsupported
-  when any required capability is unsupported, supported only when all are supported, and unknown
-  otherwise. The OpenAI-Compatible response contract is a bounded JSON object with a required `id`
-  string exactly equal to the configured model ID. Unknown fields are discarded, no capability field
-  is recognized, and all compatible capability facts remain unknown; missing or mismatched `id` is a
-  malformed response, not evidence of model absence. A successful metadata response proves
-  authentication and model existence only when the Provider contract says so; it does not imply
-  streaming or Tool Calling support.
-- HTTP status classification is structural and allowlisted: `401`/`403` are authentication failure,
-  `404` is model not found, `429` is rate limited, `408`/`504` are timeout, other `5xx` and transport
-  failures are network/unavailable, and other statuses are unknown or invalid response according to
-  the documented route. The classifier never branches on response text, headers, URL, or SDK error
-  messages.
-- User-facing outcomes and diagnostics use fixed safe categories: authentication failure, model not
-  found, rate limited, timeout, cancelled, network/unavailable, malformed response, configuration,
-  and unknown. Raw response bodies, headers, authorization values, endpoint URLs (including query or
-  fragment), SDK errors, stack traces, and SecretStorage values never enter Webview state, messages,
-  persistence, fixtures, logs, diagnostics, or notifications. Logs may retain only the stable
-  Provider identifier, outcome category, and bounded duration.
-
-## Controlled MCP Security Boundary
-
-MCP is an independent security boundary because a configured local Server is an external process
-running with the user's operating-system authority. Server descriptors, schemas, annotations,
-content, results, notifications, stderr, logs, and errors are untrusted. Local stdio is not a
-sandbox, and Server claims never grant CtrlZebra authority. The complete MCP lifecycle, protocol,
-projection, and compatibility contract is owned by [MCP](mcp.md).
-
-### User configuration and Workspace Trust
-
-- Only the Extension Host reads the machine-scoped `ctrlZebra.mcp.server` setting and starts a
-  Server. Workspace settings, Webview messages, model text, MCP messages, persisted Sessions, and
-  Server metadata cannot create, merge, or replace it.
-- The setting is one strict local stdio object. It has no cwd, environment, shell command line,
-  endpoint, headers, credentials, SecretStorage name, auto-start, retry, or capability fields.
-  Version 1 normalizes to modern-only; version 2 requires the explicit modern-only or dual mode.
-  Migration and dual selection are explicit and unknown values fail closed.
-- Connect requires a trusted single-folder workspace, the selected canonical workspace root as cwd,
-  and a fresh exact startup approval. The Host revalidates trust, configuration scope, normalized
-  mode, executable, ordered arguments, cwd, and approval immediately before direct spawn.
-  Changes invalidate approval and require a new generation and approval.
-
-### External process and side effects
-
-- A local stdio Server is not a sandbox: it runs with the user's operating-system authority and may
-  perform local or network side effects independent of its declarations. Startup therefore remains
-  a distinct approved `execute` operation, not an ordinary Tool Call or background action.
-- Server output, descriptors, schemas, annotations, notifications, stderr, and errors remain
-  untrusted external content. They are validated and bounded before any product projection, and raw
-  process details or third-party error text are not exposed through logs, persistence, or the UI.
-- Process lifecycle, cancellation, generation fencing, and termination behavior are defined by the
-  [MCP contract](mcp.md#connection-lifecycle); this document does not duplicate those mechanics.
-
-### Tool approval and untrusted content
-
-- Every MCP Tool is trusted CtrlZebra `execute` risk regardless of Server annotations, names,
-  descriptions, schemas, or read-only/idempotent claims. The approval UI identifies the external
-  Server and warns that local and network side effects are unknown.
-- Each call requires a fresh exact single-use approval bound to Session, Run, Tool Call, Registry
-  name, Server identity, generation, immutable schema identity, validated arguments, presentation,
-  and expiry. A retry or changed call requires a new approval. Validation is not authorization.
-- Resource reads and Prompt previews require explicit current-generation user actions but are not
-  Tool approvals. Returned text remains ordinary untrusted context and cannot authorize follow-up
-  operations, become a System message, or grant Workspace access.
-- MCP configuration and persisted provenance contain no credentials. Raw JSON-RPC/SDK/process
-  errors, command details, environment values, Server output, and unbounded external text are not
-  exposed through diagnostics, persistence, or UI.
-- Recovery reads bounded historical projections only. It never starts or reconnects a Server,
-  resumes a request, or replays an external operation.
-### User-triggered redacted diagnostics export (T2205)
-
-The diagnostics export is an explicit local user action. It is a bounded support artifact, never a
-telemetry event, automatic upload, persisted Session record, model input, or authorization artifact.
-The Host builds it from an explicit allowlist and the Protocol validates the complete strict document
-before any file write. The document contains only the format version, extension version, VS Code
-version, closed platform and Provider identifiers, aggregated stable error categories, bounded MCP
-status/generation/negotiation facts, and bounded runtime facts (activation/first-display durations,
-RSS bytes, and a closed Run status).
-
-- Provider configuration is read only through the non-sensitive onboarding projection. Keys,
-  SecretStorage values, authorization headers, endpoint URLs or credentials, model requests and raw
-  Provider/SDK errors never enter the document. MCP command/arguments/cwd/environment, Server output,
-  workspace paths/content, editor/diagnostic content, conversation text, stacks, causes, and raw
-  third-party errors are likewise excluded. Stable error category counts are the only error history.
-- Version and enum values are closed, malformed values become `unknown` or `[REDACTED]`, and corrupt
-  objects/getters fail closed without copying arbitrary properties. Error entries and integer fields
-  have fixed limits; the serialized UTF-8 document has a 64 KiB ceiling. The preview DTO uses the
-  same validated document and exact compact serialization, so the user sees the exact bounded bytes
-  before saving. Runtime `runStatus` comes from host-owned lifecycle callbacks; the Host does not
-  infer it from Webview state and reports `unknown` when that state is no longer observable.
-- The selected VS Code save target is shown only as a bounded UI label. It is not copied into the
-  document. The user must confirm after reviewing both target and content; closing the save dialog or
-  pressing Cancel performs no write. A write failure produces a fixed local status and never exposes
-  the filesystem error. Disposal drops pending state and rejects stale request/export IDs.
-- Export bytes are written once through `workspace.fs.writeFile` after the explicit confirmation.
-  Cancellation is guaranteed before the write starts; VS Code's write API is not treated as
-  cancellable after the write begins. No export path sends data over the network or records telemetry.
+- Keys, headers, endpoints, commands, paths, workspace/editor/conversation content, Server output,
+  stacks, causes, and raw third-party errors are excluded. Malformed or out-of-range values become
+  closed `unknown`/`[REDACTED]` values rather than copying arbitrary properties.
+- The save target is a bounded UI label only and is not included in the artifact. Cancel, disposal,
+  or closing the dialog performs no write. After explicit confirmation, bytes are written once through
+  the local VS Code file API; write failure exposes only fixed local status.
