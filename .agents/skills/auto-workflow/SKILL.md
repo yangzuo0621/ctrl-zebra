@@ -24,27 +24,27 @@ and the v3 review-loop and closure rules below continue unchanged.
 
 ## Authorization profiles
 
-`AUTO_DRAFT` authorizes, for the assigned task only:
+`AUTO_DRAFT` authorizes, for the assigned work item only:
 
 - create or switch to its dedicated `codex/...` branch;
-- stage only task-scoped changes;
+- stage only work-item-scoped changes;
 - commit and push that branch; and
 - create and update its draft PR.
 
 After Reviewer approval of the current implementation revision and required checks are green, Root
 closure stops at `READY_FOR_MERGE`. `AUTO_DRAFT` never authorizes merge, branch deletion, cleanup, or
-marking the task completed.
+work-item closure.
 
-`AUTO_FULL` includes `AUTO_DRAFT` and additionally authorizes, for the assigned task only:
+`AUTO_FULL` includes `AUTO_DRAFT` and additionally authorizes, for the assigned work item only:
 
-- task-scoped plan/status updates and their required commit/push;
+- explicitly authorized status updates in the Issue or PR;
 - squash merge of the approved PR; and
 - safe deletion of the merged feature branch and task-owned temporary resources.
 
 Both profiles exclude force-push, unrelated changes, destructive cleanup, scope expansion,
 architecture/contract changes, branch-protection bypass, and ambiguous conflict resolution. Naming a
 profile is not authorization: the user must explicitly authorize that exact profile for that exact
-task. The envelope is immutable; changing it requires a profile change and renewed authorization.
+work item. The envelope is immutable; changing it requires a profile change and renewed authorization.
 
 ## Coordinator workflow
 

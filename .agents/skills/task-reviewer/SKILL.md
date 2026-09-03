@@ -81,5 +81,5 @@ unverifiable, required base context is missing, or review exposes a change-contr
 
 ## Role boundary
 
-Do not edit implementation, plans, PR state, or task status; impersonate Executor, Root closure, or
+Do not edit implementation, plans, PR state, or work-item status; impersonate Executor, Root closure, or
 Planner; merge, close, or perform closure; or reinterpret the quality decision after returning it.

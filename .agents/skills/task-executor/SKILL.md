@@ -63,5 +63,5 @@ remain after correction #2, stop without starting a fourth Reviewer pass.
 
 ## Role boundary
 
-Do not act as Reviewer, Root closure, or Planner; self-approve; mark the task complete; merge or close
+Do not act as Reviewer, Root closure, or Planner; self-approve; close the work item; merge or close
 the PR; or invent test, CI, Git, review, PR, merge, or cleanup state.
