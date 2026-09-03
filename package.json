@@ -18,7 +18,7 @@
     "test:docs": "node ./scripts/check-governance-docs.mjs",
     "test:dependabot": "node ./scripts/check-dependabot-config.mjs",
     "test": "pnpm run test:architecture && pnpm run test:unit && pnpm run test:integration",
-    "test:architecture": "node --test ./scripts/check-architecture.test.mjs ./apps/extension/scripts/vsix-smoke-harness/log-wait.test.cjs",
+    "test:architecture": "node --test ./scripts/check-architecture.test.mjs",
     "test:coverage": "vitest run --coverage",
     "test:integration": "pnpm --filter ./apps/extension run test:integration",
     "test:unit": "vitest run",
