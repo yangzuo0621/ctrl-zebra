@@ -7,7 +7,7 @@ This file contains repository-wide invariants and routes agents to the authorita
 - Work on exactly one roadmap task or one standalone maintenance change at a time.
 - Preserve product scope, architecture, security, public contracts, persisted data, user behavior, and roadmap order unless change control explicitly authorizes otherwise.
 - The product remains the desktop VS Code Extension defined by [`docs/roadmap/product-foundation.md`](docs/roadmap/product-foundation.md).
-- [`docs/implementation-plan.md`](docs/implementation-plan.md) is the active roadmap index. Active task specifications own task goals, acceptance criteria, deliverables, exclusions, prerequisites, and gates. Completed task records belong under `docs/roadmap/archive/`.
+- [`docs/implementation-plan.md`](docs/implementation-plan.md) is the active roadmap index. Active task specifications own task goals, acceptance criteria, deliverables, exclusions, prerequisites, and gates. Completed task history is retained by Git, merged PRs, and the changelog rather than a second in-tree archive.
 - Domain documents own their respective architecture, protocol, security, persistence, UX, CI, packaging, and release rules.
 - Public package entry points and domain documents own exact interfaces and schemas. Resolve conflicts through the owning source rather than duplicating policy elsewhere.
 

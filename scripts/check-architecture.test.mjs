@@ -43,14 +43,9 @@ function fixture({ imports = {}, dependencies = {}, extraFiles = {}, roadmap = t
   }
   if (roadmap) {
     fs.mkdirSync(path.join(root, "docs", "roadmap", "phases"), { recursive: true });
-    fs.mkdirSync(path.join(root, "docs", "roadmap", "archive"), { recursive: true });
     fs.writeFileSync(
       path.join(root, "docs", "roadmap", "phases", "phase-23.md"),
       "### T2306：fitness\n",
-    );
-    fs.writeFileSync(
-      path.join(root, "docs", "roadmap", "archive", "completed-tasks.md"),
-      "| 1 | T0001 | 已完成 |\n",
     );
     fs.writeFileSync(
       path.join(root, "docs", "implementation-plan.md"),
@@ -220,7 +215,7 @@ test("requires the canonical roadmap active-task status owner", () => {
   });
 });
 
-test("rejects roadmap status drift between active index and archive", () => {
+test("rejects roadmap status drift in the active index", () => {
   withFixture({}, (root) => {
     const planPath = path.join(root, "docs", "implementation-plan.md");
     fs.writeFileSync(

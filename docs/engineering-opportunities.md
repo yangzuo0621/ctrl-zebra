@@ -3,16 +3,16 @@
 ## 1. 目的与权限
 
 本台账记录尚未获准实施的复用、模块深化、依赖引入和重复消除机会，使发现不会丢失，也不会
-借“清理”绕过任务范围。本文件只拥有机会状态、评估门禁和下一评估窗口；maintenance 记录与 PR
-保存已完成的决策、执行证据和验证结论；`docs/implementation-plan.md` 只拥有路线图顺序、任务状态
-和完成引用。它不拥有产品语义、公共契约或技术基线。
+借“清理”绕过任务范围。本文件只拥有机会状态、评估门禁和下一评估窗口；合并 PR 与 Git 历史
+保存已完成的决策、执行证据和验证结论；`docs/implementation-plan.md` 只拥有路线图顺序和任务状态。
+它不拥有产品语义、公共契约或技术基线。
 
 - `EO-*` 是稳定的机会编号，不是路线图任务编号，也不代表已经授权。
 - 候选项只有在明确批准后，才进入一个路线图任务或独立 maintenance 变更。
 - 需要跨会话跟踪、依赖评审、多 PR 或外部讨论的独立变更，在实施前创建 GitHub Issue，并从
   本台账链接；可在一次已授权会话中完成的小型 maintenance 可以直接使用任务计划。
-- 晋升后的执行顺序和状态只记录在 `docs/implementation-plan.md` 或对应 Issue/PR；maintenance
-  记录和 PR 是已完成决策与执行证据的来源，本台账只保留入口、状态和最终处置，避免形成第二套任务状态。
+- 晋升后的执行顺序和状态只记录在 `docs/implementation-plan.md` 或对应 Issue/PR；合并 PR 和 Git
+  历史是已完成决策与执行证据的来源，本台账只保留入口、状态和最终处置，避免形成第二套任务状态。
 - 发现不在当前范围内的机会时，只更新本台账，不顺带实现。
 
 ## 2. 状态与晋升流程
@@ -65,32 +65,20 @@ EO-009 和 EO-011 不应阻塞 Phase 22 收尾。若验证 SDK-native negotiatio
 
 ### EO-013 Webview chat-store responsibility density
 
-- **问题证据**：T2301 与 T2306 advisory 报告持续观测到 `apps/webview/src/chat-store.ts` 约 1,444
+- **问题证据**：既有可维护性观察持续显示 `apps/webview/src/chat-store.ts` 约 1,444
   行，集中投影消息、推理、Tool/approval、Run 状态、usage/budget、regeneration、recovery 和
   batching。
-- **当前判断**：暂缓。当前只有职责密度证据，没有第二套等价 store lifecycle，也没有 Phase 23
-  授权的 Webview production split。文件大小和 change frequency 不能单独授权抽象。
+- **当前判断**：暂缓。当前只有职责密度证据，没有第二套等价 store lifecycle，也没有已批准的
+  Webview production split。文件大小和 change frequency 不能单独授权抽象。
 - **重新评估触发**：新增 Webview capability 需要跨越两个以上稳定行为区，或 focused behavior
   tests 证明现有 store 已成为不可定位的回归边界。
 - **约束**：先按真实 Webview 行为边界建立 focused suites；保持 Protocol-only Webview import
   direction、消息投影顺序和恢复/approval 可观察语义；不得引入跨包 `common`/manager wrapper。
 
-## 4. 已晋升/已完成台账
+## 4. 已关闭机会
 
-EO-001–EO-008 的技术决策、执行证据和逐项验证以各自 maintenance 记录为准。本表只保留每项的最终
-状态、长期 owner/结论和入口；PR 链接仅在现有记录明确存在时列出，未创建或未推送的 PR 不补造。
-问题证据、候选比较、迁移步骤和执行流水不在本文件重复。
-
-| 机会 | 最终状态 | 长期 owner / 结论 | Maintenance / PR |
-|---|---|---|---|
-| EO-001 Provider endpoint policy | `已晋升` | Extension-private endpoint policy 拥有 normalization、loopback 与 credential 语义；调用方保留诊断和 UI 映射。 | [maintenance](maintenance/EO-001-provider-endpoint-policy.md)；[PR #215](https://github.com/yangzuo0621/ctrl-zebra/pull/215) |
-| EO-002 Extension test support | `已晋升` | Extension URI fixture 与 Webview host fixture 仅供测试使用；不扩大公共 package 或生产策略。 | [maintenance](maintenance/EO-002-extension-test-support.md)；[PR #216](https://github.com/yangzuo0621/ctrl-zebra/pull/216) |
-| EO-003 IDE source projection | `已完成` | Extension `IdeSourceProjector` 拥有 URI/path、Unicode/UTF-8、range/order 与 truncation 投影；adapters 保留来源和错误映射。 | [maintenance](maintenance/EO-003-ide-source-projection.md)；[PR #217](https://github.com/yangzuo0621/ctrl-zebra/pull/217) |
-| EO-004 Bounded text persistence | `已晋升` | Extension `VscodeBoundedTextStorage` 拥有 bounded persistence I/O；Session/Checkpoint 保留领域行为、原子性、恢复和兼容性。 | [maintenance](maintenance/EO-004-bounded-text-persistence.md)；[PR #218](https://github.com/yangzuo0621/ctrl-zebra/pull/218) |
-| EO-005 MCP catalog refresh | `已晋升` | package-private collector 与 refresh lifecycle 拥有分页、generation 与 cancellation 复用；Tool/Prompt/Resource policy 保留 schema、撤销和诊断。 | [maintenance](maintenance/EO-005-mcp-catalog-refresh.md)；[PR #220](https://github.com/yangzuo0621/ctrl-zebra/pull/220) |
-| EO-006 MCP error ownership | `已完成` | MCP client 拥有稳定 client error normalization；Extension 保留 Host/process/configuration fallback 与展示映射。 | [maintenance](maintenance/EO-006-mcp-error-ownership.md)；[PR #221](https://github.com/yangzuo0621/ctrl-zebra/pull/221) |
-| EO-007 Package-local text primitives | `已完成` | 各 package 按语义拥有 text/record/URI/canonical JSON/equality seam；不建立跨包 `text-utils` 或 `common`。 | [maintenance](maintenance/EO-007-package-local-text-primitives.md)；[PR #222](https://github.com/yangzuo0621/ctrl-zebra/pull/222)，merged commit `53bc57b` |
-| EO-008 Safe regex engine | `已完成` | `packages/builtin-tools` 的 package-local controlled RE2JS adapter 拥有 RE2-compatible syntax filtering, bounded program/input/aggregate budgets, cancellation and empty-match policy, and stable `invalid-input` mapping; RE2JS types and failures remain private. | [PR #235](https://github.com/yangzuo0621/ctrl-zebra/pull/235) |
+EO-001–EO-008 已完成。技术决策、执行证据和验证结论由合并 PR 与 Git 历史保留；本台账不再重复
+维护已关闭项目的执行记录。
 
 ## 5. Build vs Buy 机会
 
