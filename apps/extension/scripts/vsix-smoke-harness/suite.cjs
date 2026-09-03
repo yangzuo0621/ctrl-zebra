@@ -1,4 +1,6 @@
 const { createServer } = require("node:http");
+const { readdir, readFile } = require("node:fs/promises");
+const { join } = require("node:path");
 
 const vscode = require("vscode");
 
@@ -86,7 +88,53 @@ exports.run = async () => {
   }
 
   await vscode.commands.executeCommand("ctrlZebra.agentView.focus");
+  await waitForStructuredLogEvent("agent_view_first_displayed");
 };
+
+async function waitForStructuredLogEvent(event) {
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    if (await logContainsEvent(event)) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error(`The installed extension did not emit ${event} after focusing the Agent view.`);
+}
+
+async function logContainsEvent(event) {
+  const logRoot = process.env.CTRL_ZEBRA_SMOKE_USER_DATA_DIR;
+  if (logRoot === undefined) {
+    throw new Error(
+      "The installed-extension smoke harness cannot locate its isolated user-data directory.",
+    );
+  }
+  for (const logPath of await findFiles(logRoot, "CtrlZebra.log")) {
+    if ((await readFile(logPath, "utf8")).includes(`"event":"${event}"`)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+async function findFiles(directory, fileName) {
+  const matches = [];
+  let entries;
+  try {
+    entries = await readdir(directory, { withFileTypes: true });
+  } catch {
+    return matches;
+  }
+  for (const entry of entries) {
+    const entryPath = join(directory, entry.name);
+    if (entry.isDirectory()) {
+      matches.push(...(await findFiles(entryPath, fileName)));
+    } else if (entry.isFile() && entry.name === fileName) {
+      matches.push(entryPath);
+    }
+  }
+  return matches;
+}
 
 async function startProviderMetadataServer() {
   let requests = 0;

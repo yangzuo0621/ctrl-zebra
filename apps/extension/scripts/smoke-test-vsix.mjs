@@ -68,6 +68,7 @@ try {
     vscodeExecutablePath,
     extensionDevelopmentPath: harnessRoot,
     extensionTestsPath: join(harnessRoot, "suite.cjs"),
+    extensionTestsEnv: { CTRL_ZEBRA_SMOKE_USER_DATA_DIR: userDataDirectory },
     launchArgs: [
       repositoryRoot,
       "--skip-welcome",
