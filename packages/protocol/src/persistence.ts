@@ -13,7 +13,6 @@ import {
 } from "./reasoning.js";
 import { runTokenBudgetSnapshotSchema } from "./run-token-budget.js";
 import { sessionIdSchema, sessionStatusSchema } from "./session.js";
-import { decodeUtf16CodePoints } from "./text-primitives.js";
 import { jsonValueSchema, toolCallSchema, toolNameSchema, toolResultSchema } from "./tool.js";
 import { tokenUsageSchema } from "./usage.js";
 
@@ -356,35 +355,10 @@ export function getCheckpointPersistencePaths(checkpointId: unknown): Checkpoint
   };
 }
 
-function encodeUtf8(value: string): readonly number[] | undefined {
-  const bytes: number[] = [];
-  const wellFormed = decodeUtf16CodePoints(value, (codePoint) =>
-    appendUtf8CodePoint(bytes, codePoint),
-  );
-  return wellFormed ? bytes : undefined;
+function encodeUtf8(value: string): Uint8Array | undefined {
+  return value.isWellFormed() ? new TextEncoder().encode(value) : undefined;
 }
 
-function appendUtf8CodePoint(bytes: number[], codePoint: number): void {
-  if (codePoint <= 0x7f) {
-    bytes.push(codePoint);
-  } else if (codePoint <= 0x7ff) {
-    bytes.push(0xc0 | (codePoint >> 6), 0x80 | (codePoint & 0x3f));
-  } else if (codePoint <= 0xffff) {
-    bytes.push(
-      0xe0 | (codePoint >> 12),
-      0x80 | ((codePoint >> 6) & 0x3f),
-      0x80 | (codePoint & 0x3f),
-    );
-  } else {
-    bytes.push(
-      0xf0 | (codePoint >> 18),
-      0x80 | ((codePoint >> 12) & 0x3f),
-      0x80 | ((codePoint >> 6) & 0x3f),
-      0x80 | (codePoint & 0x3f),
-    );
-  }
-}
-
-function toLowercaseHex(bytes: readonly number[]): string {
-  return bytes.map((byte) => byte.toString(16).padStart(2, "0")).join("");
+function toLowercaseHex(bytes: Iterable<number>): string {
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }

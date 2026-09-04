@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { utf8ByteLength, utf8Encode } from "./text-primitives.js";
+import { utf8ByteLength } from "./text-primitives.js";
 
 /** The version of the user-triggered, local diagnostics document. */
 export const diagnosticsExportFormatVersion = 1 as const;
@@ -142,7 +142,10 @@ export function serializeDiagnosticsExport(
 ): SerializedDiagnosticsExport {
   const parsed = diagnosticsExportDocumentSchema.parse(document);
   const json = `${JSON.stringify(parsed)}\n`;
-  const bytes = utf8Encode(json);
+  // JSON.stringify() output is always well-formed Unicode (it escapes lone surrogates as literal
+  // `\uXXXX` text rather than emitting them as raw code units), so TextEncoder's lone-surrogate
+  // substitution behavior never applies here.
+  const bytes = new TextEncoder().encode(json);
   if (utf8ByteLength(json) > maxDiagnosticsExportBytes) {
     throw new RangeError("The diagnostics export exceeds its serialized byte limit.");
   }

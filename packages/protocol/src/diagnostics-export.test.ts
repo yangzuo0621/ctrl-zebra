@@ -36,6 +36,16 @@ describe("diagnostics export document", () => {
     expect(result.bytes.byteLength).toBe(utf8ByteLength(result.json));
   });
 
+  it("encodes multi-byte UTF-8 content exactly, across every UTF-8 width", () => {
+    const result = serializeDiagnosticsExport({
+      ...validDocument,
+      extensionVersion: "A¢€😀",
+    });
+
+    expect(result.bytes).toEqual(new TextEncoder().encode(result.json));
+    expect(result.bytes.byteLength).toBe(utf8ByteLength(result.json));
+  });
+
   it("rejects unknown fields so secrets and content cannot enter the export contract", () => {
     expect(
       diagnosticsExportDocumentSchema.safeParse({

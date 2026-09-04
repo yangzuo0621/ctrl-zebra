@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { decodeUtf16CodePoints, utf8BytesForCodePoint } from "./text-primitives.js";
+import { utf8BytesForCodePoint } from "./text-primitives.js";
 
 export const maxReasoningBlockIdCharacters = 128;
 export const maxReasoningDeltaCodePoints = 8_192;
@@ -161,15 +161,11 @@ export type RestoredReasoningBlock = z.infer<typeof restoredReasoningBlockSchema
 export type RestoredReasoning = z.infer<typeof restoredReasoningSchema>;
 
 export function measureReasoningText(value: string): ReasoningTextMeasurement | undefined {
-  let codePoints = 0;
-  let utf8Bytes = 0;
+  if (!value.isWellFormed()) {
+    return undefined;
+  }
 
-  const wellFormed = decodeUtf16CodePoints(value, (codePoint) => {
-    codePoints += 1;
-    utf8Bytes += utf8BytesForCodePoint(codePoint);
-  });
-
-  return wellFormed ? { codePoints, utf8Bytes } : undefined;
+  return { codePoints: [...value].length, utf8Bytes: new TextEncoder().encode(value).byteLength };
 }
 
 export function takeReasoningTextPrefix(
