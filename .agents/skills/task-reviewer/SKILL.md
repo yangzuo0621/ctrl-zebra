@@ -19,6 +19,10 @@ The base context is exactly:
 - current PR diff at the handoff's exact revision; and
 - work-item acceptance criteria.
 
+The Review Handoff and exact revision are transient review context, not required PR-body fields. The
+dispatch context supplies the current revision; do not rely on a stale revision recorded in the PR
+description.
+
 Require the handoff to identify the work item/PR/revision, acceptance and changed areas/contracts,
 verification, and any applicable reuse or Build-vs-Buy evidence. Treat handoff fields as claims. Open
 extra documents only for a touched contract, material handoff claim, concrete concern, or documented

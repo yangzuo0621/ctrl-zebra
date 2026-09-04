@@ -78,7 +78,7 @@ Read `docs/security.md` and the applicable domain document before modifying any 
 - Keep implementation task-scoped. Do not opportunistically add unrelated maintenance, refactors, dependencies, or later-roadmap work.
 - Validate from narrow to broad according to `docs/testing.md`: affected checks first, then required package/repository checks and smoke tests.
 - Finish implementation work with `git diff --check`, `git status --short`, and a final diff review. Report required checks that were not run.
-- Use the pull-request template and the selected workflow's handoff fields for task execution evidence; do not create a permanent task-spec or completion ledger in `docs/`.
+- Use the pull-request template for durable PR context and verification. Use workflow handoff fields only when the selected workflow requires review or closure evidence; do not create a permanent task-spec or completion ledger in `docs/`.
 
 Detailed Executor, Reviewer, Planner, AUTO, reuse-tier, review-loop, handoff, and closure behavior belongs to the applicable `.agents/skills/*/SKILL.md`, not this root file.
 

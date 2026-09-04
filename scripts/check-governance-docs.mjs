@@ -147,8 +147,6 @@ requireText(
   "[Changelog](https://github.com/yangzuo0621/ctrl-zebra/blob/main/CHANGELOG.md)",
 );
 requireText("PRIVACY.md", "[Security Policy](SECURITY.md)");
-requireText(".github/pull_request_template.md", "[SECURITY.md](../SECURITY.md)");
-
 const owners = text.get(".github/CODEOWNERS") ?? "";
 if (!/^\s*\*\s+@yangzuo0621\s*$/m.test(owners)) {
   errors.push(".github/CODEOWNERS: missing default owner @yangzuo0621");
@@ -173,14 +171,7 @@ checkRequiredFormFields(".github/ISSUE_TEMPLATE/feature-request.yml", [
   "proposed-change",
 ]);
 
-for (const expected of [
-  "## Summary",
-  "## Scope",
-  "## Verification",
-  "## Contributor checklist",
-  "## Reuse and Similarity Audit",
-  "[SECURITY.md](../SECURITY.md)",
-]) {
+for (const expected of ["## Summary", "## Scope & Impact", "## Verification", "## Review Notes"]) {
   requireText(".github/pull_request_template.md", expected);
 }
 

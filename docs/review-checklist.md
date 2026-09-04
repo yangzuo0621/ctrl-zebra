@@ -1,19 +1,20 @@
 # Implementation Review Checklist
 
-This is a compact review gate. Detailed semantics remain authoritative in
+This is a compact review gate. Durable PR context and verification belong in the PR; transient
+review/workflow evidence belongs in the handoff or conversation. Detailed semantics remain authoritative in
 [Reuse Before Build](development.md#reuse-before-build) and
 [Build vs Buy](development.md#build-vs-buy); repository ownership and security rules remain in
-[AGENTS.md](../AGENTS.md). Execution evidence belongs in the handoff, conversation, or PR, not in
-the current-state documents under `docs/`.
+[AGENTS.md](../AGENTS.md), not in the current-state documents under `docs/`.
 
 ## 1. Scope
 
-- [ ] The change is within the authorized roadmap task or standalone maintenance scope.
+- [ ] The change is within the authorized work item or standalone maintenance scope.
 - [ ] Acceptance criteria, planned files, exclusions, public-contract impact, and changed areas match
       the actual diff; no opportunistic work or dependency was added.
-- [ ] The compact Review Handoff names the task, PR, exact revision, contracts, consulted docs,
-      verification, reuse tier/candidates/conclusion, and caveats.
-- [ ] Base context was the Review Handoff, exact current PR diff/revision, and acceptance criteria.
+- [ ] When independent review is invoked, the compact Review Handoff names the work item, PR, exact
+      revision, contracts, consulted docs, verification, applicable reuse evidence, and caveats.
+- [ ] When independent review is invoked, base context was the Review Handoff, exact current PR
+      diff/revision, and acceptance criteria.
       Extra documents were opened only for a touched contract, material handoff claim, concrete
       concern, or similarity escalation, and are listed in the review report.
 

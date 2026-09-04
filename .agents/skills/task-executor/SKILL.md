@@ -21,7 +21,9 @@ requests an independent review.
    feature branch when applicable.
 2. Before implementation edits, publish a compact work-item contract in the handoff or PR. Include
    scope, acceptance criteria, planned files, exclusions, public-contract impact, and verification;
-   the planned-file list is a hard boundary and requires an amendment before leaving it.
+   keep the PR version limited to durable context, and keep exact revision and transient execution
+   evidence in the handoff. The planned-file list is a hard boundary and requires an amendment
+   before leaving it.
 3. In `MANUAL`, stop for explicit implementation approval. In AUTO, continue only when scope,
    acceptance, contract, architecture/security rules, and exact profile authorization are unambiguous.
 4. Follow [`Reuse Before Build`](../../../docs/development.md#reuse-before-build): use `TARGETED` by
@@ -49,10 +51,11 @@ requests an independent review.
 Required for an active AUTO run or an explicitly requested independent review; ordinary MANUAL
 completion stops after verification and does not require a Reviewer handoff.
 
-Use the non-empty fields in the task template. The handoff must identify the task/PR/exact revision,
-acceptance criteria, changed areas, touched contracts, verification and unrun checks, and any reuse
-or Build-vs-Buy evidence that applies. Do not include whole source documents, raw searches, tool
-transcripts, document counts, or other routine telemetry.
+Use the non-empty fields in the task handoff. Do not copy the full handoff into the PR body: the PR
+should retain only durable summary, scope/impact, verification, and material notes. The handoff must
+identify the task/PR/exact revision, acceptance criteria, changed areas, touched contracts,
+verification and unrun checks, and any reuse or Build-vs-Buy evidence that applies. Do not include
+whole source documents, raw searches, tool transcripts, document counts, or other routine telemetry.
 
 ## Stop/block conditions
 
