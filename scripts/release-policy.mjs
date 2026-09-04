@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { valid as validSemver } from "semver";
 import parseSpdxExpression from "spdx-expression-parse";
 
 import spdxExceptionData from "../release/spdx-exceptions.json" with { type: "json" };
@@ -427,7 +428,12 @@ export function validateVersionConsistency({
   requireReleaseNotes = Boolean(tag),
 }) {
   const expectedVersion = version ?? extensionVersion;
-  if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u.test(String(expectedVersion ?? ""))) {
+  const expectedVersionText = String(expectedVersion ?? "");
+  // `validSemver` also normalizes (strips a "v" prefix, drops build metadata) instead of
+  // rejecting; comparing its output back to the raw text keeps this gate exact-syntax strict —
+  // stricter than @vscode/vsce's own bare `semver.valid()` manifest-version check, so anything
+  // that passes here is guaranteed to also pass vsce's check later, at packaging time.
+  if (validSemver(expectedVersionText, { loose: false }) !== expectedVersionText) {
     throw new Error("Extension version must be a valid semver-like release version.");
   }
   if (extensionVersion && String(extensionVersion) !== String(expectedVersion)) {

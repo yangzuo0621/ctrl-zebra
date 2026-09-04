@@ -133,6 +133,43 @@ describe("release policy", () => {
     ).toThrow(/no release notes/);
   });
 
+  it("rejects semver-syntax violations the previous hand-rolled regex accepted", () => {
+    // Each of these matched the old `/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u` regex but is not
+    // valid SemVer 2.0.0: a leading zero, a leading-zero prerelease identifier, and an empty
+    // dot-separated prerelease identifier. "v1.2.3" and build metadata are syntactically valid
+    // SemVer but must still be rejected here: this gate requires the bare, exact release version
+    // text, not something `semver.valid()` would additionally have to normalize to get there.
+    for (const invalidVersion of [
+      "01.2.3",
+      "1.2.3-beta.01",
+      "1.2.3-..",
+      "v1.2.3",
+      "1.2.3+build.1",
+    ]) {
+      expect(() =>
+        validateVersionConsistency({
+          version: invalidVersion,
+          changelog,
+          lockfile,
+          extensionManifest: manifest,
+          releaseDocument,
+        }),
+      ).toThrow(/semver-like/);
+    }
+  });
+
+  it("accepts a valid prerelease version", () => {
+    expect(() =>
+      validateVersionConsistency({
+        version: "1.2.3-beta.1",
+        changelog,
+        lockfile,
+        extensionManifest: manifest,
+        releaseDocument,
+      }),
+    ).not.toThrow();
+  });
+
   it("rejects incompatible licenses and inventory/SBOM differences", () => {
     expect(() =>
       validateCompatibleLicenses([{ name: "bad", version: "1.0.0", license: "GPL-3.0-only" }]),

@@ -29,6 +29,7 @@
     "@biomejs/biome": "2.5.10",
     "@vitest/coverage-v8": "4.1.11",
     "@vscode/vsce": "3.9.2",
+    "semver": "7.8.5",
     "spdx-expression-parse": "5.0.0",
     "typescript": "7.0.2",
     "vitest": "4.1.11",
