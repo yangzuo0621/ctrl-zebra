@@ -289,9 +289,20 @@ function walkForDynamicModuleSpecifiers(node, onSpecifier) {
   }
 }
 
+// packageEdges(), checkSdkBoundaries(), and checkCoreHostIsolation() each call importsFrom()
+// once per source file; cache the derived list so the AST is walked for dynamic
+// import()/require() calls once per file rather than once per caller.
+const importsByFile = new Map();
+
 function importsFrom(filePath) {
+  const cached = importsByFile.get(filePath);
+  if (cached !== undefined) return cached;
+
   const { ast } = parseModule(filePath);
-  if (ast === null) return [];
+  if (ast === null) {
+    importsByFile.set(filePath, []);
+    return [];
+  }
 
   const imports = [];
   for (const statement of ast.program.body) {
@@ -307,6 +318,7 @@ function importsFrom(filePath) {
   walkForDynamicModuleSpecifiers(ast.program, (specifier, node) => {
     imports.push({ specifier, line: lineOf(node) });
   });
+  importsByFile.set(filePath, imports);
   return imports;
 }
 
