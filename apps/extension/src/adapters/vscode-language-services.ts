@@ -7,6 +7,7 @@ import {
   InvalidLanguageServiceOutputError,
   LanguageServiceUnavailableError,
 } from "@ctrl-zebra/builtin-tools";
+import { isRecord } from "@ctrl-zebra/core";
 import {
   type IdeLanguageLocationDto,
   type IdeLanguageLocationsResultDto,
@@ -31,7 +32,6 @@ import {
 } from "@ctrl-zebra/protocol";
 import type { TextDocument, Uri } from "vscode";
 import { IdeSourceProjectionError, ideSourceProjector } from "./ide-source-projector.js";
-import { isRecord } from "./record-validation.js";
 import type { WorkspaceScope } from "./workspace-scope.js";
 import { WorkspaceScopeError } from "./workspace-scope.js";
 

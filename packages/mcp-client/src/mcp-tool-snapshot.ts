@@ -3,6 +3,8 @@ import { createHash } from "node:crypto";
 import {
   type AgentTool,
   type ExternalToolInputSchema,
+  hasOnlyKeys,
+  isPlainRecord,
   type JsonValue,
   type ToolName,
   ToolRegistry,
@@ -32,7 +34,6 @@ import {
   McpToolSchemaError,
   validateMcpToolSchema,
 } from "./mcp-tool-schema.js";
-import { hasOnlyKeys, isPlainRecord } from "./record-validation.js";
 import { utf8ByteLength } from "./text-primitives.js";
 
 const descriptorKeys = new Set([

@@ -3,6 +3,7 @@ import {
   DiagnosticsUnavailableError,
   InvalidDiagnosticsOutputError,
 } from "@ctrl-zebra/builtin-tools";
+import { isRecord } from "@ctrl-zebra/core";
 import {
   type IdeDiagnosticDto,
   type IdeDiagnosticsResultDto,
@@ -27,7 +28,6 @@ import {
 } from "@ctrl-zebra/protocol";
 import type { Diagnostic, TextDocument, TextEditor, Uri } from "vscode";
 import { IdeSourceProjectionError, ideSourceProjector } from "./ide-source-projector.js";
-import { isRecord } from "./record-validation.js";
 import type { WorkspaceScope } from "./workspace-scope.js";
 import { WorkspaceScopeError } from "./workspace-scope.js";
 

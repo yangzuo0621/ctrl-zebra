@@ -1,4 +1,7 @@
 import {
+  hasOnlyKeys,
+  isPlainRecord,
+  isRecord,
   type JsonValue,
   jsonValueSchema,
   ToolExecutionError,
@@ -15,7 +18,6 @@ import {
   maxMcpToolTextItems,
 } from "./contracts.js";
 import type { CompiledExternalJsonSchema } from "./mcp-tool-schema.js";
-import { hasOnlyKeys, isPlainRecord, isRecord } from "./record-validation.js";
 import { utf8ByteLength } from "./text-primitives.js";
 
 export interface McpToolApprovalPreparation {

@@ -1,3 +1,5 @@
+import { hasOnlyKeys, isPlainRecord } from "@ctrl-zebra/core";
+
 import {
   type McpPromptDiscoveryContext,
   type McpServerIdentity,
@@ -13,7 +15,6 @@ import {
   maxMcpPromptTextBytes,
 } from "./contracts.js";
 import { createMcpClientError } from "./errors.js";
-import { hasOnlyKeys, isPlainRecord } from "./record-validation.js";
 import { utf8ByteLength } from "./text-primitives.js";
 
 const promptKeys = new Set(["_meta", "arguments", "description", "icons", "name", "title"]);

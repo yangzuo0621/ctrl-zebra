@@ -1,3 +1,4 @@
+import { isRecord } from "@ctrl-zebra/core";
 import {
   type IdePositionDto,
   type IdeRangeDto,
@@ -6,7 +7,6 @@ import {
   maxIdePositionCharacter,
   maxIdePositionLine,
 } from "@ctrl-zebra/protocol";
-import { isRecord } from "./record-validation.js";
 import {
   utf8ByteLength as genericUtf8ByteLength,
   utf8BytesForCodePoint,

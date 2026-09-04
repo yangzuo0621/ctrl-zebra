@@ -1,3 +1,4 @@
+import { isRecord } from "@ctrl-zebra/core";
 import {
   messageIdSchema,
   type PersistedEventRecord,
@@ -7,7 +8,6 @@ import {
   sessionStatusSchema,
   userMessageSchema,
 } from "@ctrl-zebra/protocol";
-import { isRecord } from "../adapters/record-validation.js";
 
 export class RegenerationRelationCorruptError extends Error {
   constructor() {
@@ -23,7 +23,12 @@ export class EditRelationCorruptError extends Error {
   }
 }
 
-const legalTransitions: Readonly<Record<SessionStatus, readonly SessionStatus[]>> = {
+/**
+ * Owns the persisted Session status transition table and its terminal statuses. Both regeneration
+ * validation and Session history projection must reject the same malformed transitions, so this is
+ * the single source both consume rather than duplicating the table.
+ */
+export const legalTransitions: Readonly<Record<SessionStatus, readonly SessionStatus[]>> = {
   idle: ["preparing", "interrupted"],
   preparing: ["streaming", "cancelled", "budget-exceeded", "failed", "interrupted"],
   streaming: [
@@ -53,7 +58,7 @@ const legalTransitions: Readonly<Record<SessionStatus, readonly SessionStatus[]>
   interrupted: ["preparing"],
 };
 
-const terminalStatuses = new Set<SessionStatus>([
+export const terminalStatuses = new Set<SessionStatus>([
   "completed",
   "truncated",
   "cancelled",

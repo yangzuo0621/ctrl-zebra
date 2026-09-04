@@ -1,3 +1,4 @@
+import { isRecord } from "@ctrl-zebra/core";
 import type {
   CancellationToken,
   Disposable,
@@ -14,7 +15,6 @@ import type {
   ProviderId,
   ProviderSelectionConfiguration,
 } from "../adapters/provider-configuration.js";
-import { isRecord } from "../adapters/record-validation.js";
 import { ProviderApiKeyOperationCoordinator } from "./provider-api-key-command.js";
 import type { ProviderOnboardingActionResult } from "./provider-onboarding-controller.js";
 

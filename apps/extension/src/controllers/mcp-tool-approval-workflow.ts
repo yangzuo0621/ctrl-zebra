@@ -13,6 +13,7 @@ import {
 import type { ApprovalDecisionIntent, ApprovalRequest } from "@ctrl-zebra/protocol";
 
 import { ApprovalLifecycle, type ApprovalLifecycleRecord } from "./approval-lifecycle.js";
+import { jsonValuesEqual } from "./json-values.js";
 import type { WorkspaceTrustPolicy } from "./workspace-trust-policy.js";
 
 export const defaultMcpToolApprovalLifetimeMilliseconds = 5 * 60 * 1_000;
@@ -48,7 +49,7 @@ export class McpToolApprovalWorkflow implements ToolApprovalWorkflow {
     const preparation = parseMcpToolApprovalPreparation(prepared.prepared.output);
     if (
       preparation.registryName !== prepared.call.name ||
-      !sameJson(preparation.arguments, prepared.call.input)
+      !jsonValuesEqual(preparation.arguments, prepared.call.input)
     ) {
       throw new Error("MCP Tool approval does not match the proposed call.");
     }
@@ -169,8 +170,4 @@ function formatApprovalSummary(preparation: McpToolApprovalPreparation): string 
       ? argumentsText
       : `${argumentsText.slice(0, Math.max(0, remaining - 1))}…`;
   return `${prefix}${suffix}`;
-}
-
-function sameJson(left: unknown, right: unknown): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
 }
