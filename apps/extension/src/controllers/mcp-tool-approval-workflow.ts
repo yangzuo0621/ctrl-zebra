@@ -1,5 +1,4 @@
 import {
-  approvalRequestSchema,
   maxApprovalPresentationSummaryCharacters,
   type PreparedToolApproval,
   type ToolApprovalOperation,
@@ -12,11 +11,16 @@ import {
 } from "@ctrl-zebra/mcp-client";
 import type { ApprovalDecisionIntent, ApprovalRequest } from "@ctrl-zebra/protocol";
 
-import { ApprovalLifecycle, type ApprovalLifecycleRecord } from "./approval-lifecycle.js";
+import {
+  ApprovalLifecycle,
+  type ApprovalLifecycleRecord,
+  buildApprovalRequest,
+  defaultToolApprovalLifetimeMilliseconds,
+} from "./approval-lifecycle.js";
 import { jsonValuesEqual } from "./json-values.js";
 import type { WorkspaceTrustPolicy } from "./workspace-trust-policy.js";
 
-export const defaultMcpToolApprovalLifetimeMilliseconds = 5 * 60 * 1_000;
+export const defaultMcpToolApprovalLifetimeMilliseconds = defaultToolApprovalLifetimeMilliseconds;
 
 interface McpToolApprovalWorkflowDependencies {
   readonly createId: () => string;
@@ -58,49 +62,41 @@ export class McpToolApprovalWorkflow implements ToolApprovalWorkflow {
       throw new Error("MCP Tool approval targets a stale connection generation.");
     }
 
-    const createdAt = this.dependencies.now();
-    const expiresAt = new Date(
-      createdAt.getTime() +
-        (this.dependencies.approvalLifetimeMilliseconds ??
-          defaultMcpToolApprovalLifetimeMilliseconds),
-    );
-    const request = approvalRequestSchema.parse({
-      id: this.dependencies.createId(),
-      scope: {
-        sessionId: prepared.sessionId,
-        runId: prepared.runId,
-        call: prepared.call,
-        risk: "execute",
-        source: {
-          kind: "mcp",
-          serverId: preparation.server.serverId,
-          registryName: preparation.registryName,
-          mcpToolName: preparation.mcpToolName,
-          generation: preparation.generation,
-          schemaId: preparation.schemaId,
+    const request = buildApprovalRequest(
+      this.dependencies.now,
+      {
+        id: this.dependencies.createId(),
+        scope: {
+          sessionId: prepared.sessionId,
+          runId: prepared.runId,
+          call: prepared.call,
+          risk: "execute",
+          source: {
+            kind: "mcp",
+            serverId: preparation.server.serverId,
+            registryName: preparation.registryName,
+            mcpToolName: preparation.mcpToolName,
+            generation: preparation.generation,
+            schemaId: preparation.schemaId,
+          },
+          resources: [],
         },
-        resources: [],
+        presentation: {
+          title: `Run external Tool from ${preparation.server.displayName}`,
+          summary: formatApprovalSummary(preparation),
+        },
       },
-      presentation: {
-        title: `Run external Tool from ${preparation.server.displayName}`,
-        summary: formatApprovalSummary(preparation),
-      },
-      createdAt: createdAt.toISOString(),
-      expiresAt: expiresAt.toISOString(),
-    });
+      this.dependencies.approvalLifetimeMilliseconds,
+    );
     const record: McpToolApprovalRecord = {
       request,
       preparation,
       status: "pending",
       consuming: false,
     };
-    this.#lifecycle.register(record);
-    return {
-      request,
-      requestDecision: (decisionSignal) => this.#lifecycle.requestDecision(record, decisionSignal),
-      consume: (consumptionSignal) => this.#consume(record, consumptionSignal),
-      invalidate: () => this.#lifecycle.invalidate(record),
-    };
+    return this.#lifecycle.open(record, (consumptionSignal) =>
+      this.#consume(record, consumptionSignal),
+    );
   }
 
   decide(approvalId: string, decision: ApprovalDecisionIntent): void {

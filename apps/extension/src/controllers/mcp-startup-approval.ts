@@ -2,8 +2,10 @@ import type { MessageOptions } from "vscode";
 
 import type { McpServerConfiguration } from "../adapters/mcp-server-configuration.js";
 import type { McpProcessOperation } from "../adapters/mcp-stdio-port.js";
+import { defaultToolApprovalLifetimeMilliseconds } from "./approval-lifecycle.js";
 
-export const defaultMcpStartupApprovalLifetimeMilliseconds = 5 * 60 * 1_000;
+export const defaultMcpStartupApprovalLifetimeMilliseconds =
+  defaultToolApprovalLifetimeMilliseconds;
 export const approveMcpServerStartLabel = "Start MCP Server";
 
 export interface McpServerStartOperation extends McpProcessOperation {

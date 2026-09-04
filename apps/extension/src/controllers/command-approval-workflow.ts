@@ -4,7 +4,6 @@ import {
   runCommandToolName,
 } from "@ctrl-zebra/builtin-tools";
 import {
-  approvalRequestSchema,
   maxApprovalPresentationSummaryCharacters,
   type PreparedToolApproval,
   type ToolApprovalOperation,
@@ -12,10 +11,15 @@ import {
 } from "@ctrl-zebra/core";
 import type { ApprovalDecisionIntent, ApprovalRequest } from "@ctrl-zebra/protocol";
 
-import { ApprovalLifecycle, type ApprovalLifecycleRecord } from "./approval-lifecycle.js";
+import {
+  ApprovalLifecycle,
+  type ApprovalLifecycleRecord,
+  buildApprovalRequest,
+  defaultToolApprovalLifetimeMilliseconds,
+} from "./approval-lifecycle.js";
 import type { WorkspaceTrustPolicy } from "./workspace-trust-policy.js";
 
-export const defaultCommandApprovalLifetimeMilliseconds = 5 * 60 * 1_000;
+export const defaultCommandApprovalLifetimeMilliseconds = defaultToolApprovalLifetimeMilliseconds;
 
 export interface CommandCwdBinding {
   readonly workspaceRootUri: string;
@@ -66,29 +70,25 @@ export class CommandApprovalWorkflow implements ToolApprovalWorkflow, CommandApp
       throw new CommandApprovalPresentationTooLargeError();
     }
 
-    const createdAt = this.#dependencies.now();
-    const expiresAt = new Date(
-      createdAt.getTime() +
-        (this.#dependencies.approvalLifetimeMilliseconds ??
-          defaultCommandApprovalLifetimeMilliseconds),
+    const request = buildApprovalRequest(
+      this.#dependencies.now,
+      {
+        id: this.#dependencies.createId(),
+        scope: {
+          sessionId: prepared.sessionId,
+          runId: prepared.runId,
+          call: prepared.call,
+          risk: prepared.risk,
+          workspaceRootUri: binding.workspaceRootUri,
+          resources: [{ uri: binding.cwdUri }],
+        },
+        presentation: {
+          title: "Run command",
+          summary,
+        },
+      },
+      this.#dependencies.approvalLifetimeMilliseconds,
     );
-    const request = approvalRequestSchema.parse({
-      id: this.#dependencies.createId(),
-      scope: {
-        sessionId: prepared.sessionId,
-        runId: prepared.runId,
-        call: prepared.call,
-        risk: prepared.risk,
-        workspaceRootUri: binding.workspaceRootUri,
-        resources: [{ uri: binding.cwdUri }],
-      },
-      presentation: {
-        title: "Run command",
-        summary,
-      },
-      createdAt: createdAt.toISOString(),
-      expiresAt: expiresAt.toISOString(),
-    });
     const record: CommandApprovalRecord = {
       request,
       input,
@@ -96,13 +96,9 @@ export class CommandApprovalWorkflow implements ToolApprovalWorkflow, CommandApp
       status: "pending",
       consuming: false,
     };
-    this.#lifecycle.register(record);
-    return {
-      request,
-      requestDecision: (decisionSignal) => this.#lifecycle.requestDecision(record, decisionSignal),
-      consume: (consumptionSignal) => this.#consume(record, consumptionSignal),
-      invalidate: () => this.#lifecycle.invalidate(record),
-    };
+    return this.#lifecycle.open(record, (consumptionSignal) =>
+      this.#consume(record, consumptionSignal),
+    );
   }
 
   decide(approvalId: string, decision: ApprovalDecisionIntent): void {

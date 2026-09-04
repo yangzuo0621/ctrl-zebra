@@ -13,6 +13,7 @@ import {
 } from "./reasoning.js";
 import { runTokenBudgetSnapshotSchema } from "./run-token-budget.js";
 import { sessionIdSchema, sessionStatusSchema } from "./session.js";
+import { decodeUtf16CodePoints } from "./text-primitives.js";
 import { jsonValueSchema, toolCallSchema, toolNameSchema, toolResultSchema } from "./tool.js";
 import { tokenUsageSchema } from "./usage.js";
 
@@ -357,27 +358,10 @@ export function getCheckpointPersistencePaths(checkpointId: unknown): Checkpoint
 
 function encodeUtf8(value: string): readonly number[] | undefined {
   const bytes: number[] = [];
-
-  for (let index = 0; index < value.length; index += 1) {
-    const firstCodeUnit = value.charCodeAt(index);
-    let codePoint = firstCodeUnit;
-
-    if (firstCodeUnit >= 0xd800 && firstCodeUnit <= 0xdbff) {
-      const secondCodeUnit = value.charCodeAt(index + 1);
-      if (!(secondCodeUnit >= 0xdc00 && secondCodeUnit <= 0xdfff)) {
-        return undefined;
-      }
-
-      codePoint = 0x10000 + ((firstCodeUnit - 0xd800) << 10) + (secondCodeUnit - 0xdc00);
-      index += 1;
-    } else if (firstCodeUnit >= 0xdc00 && firstCodeUnit <= 0xdfff) {
-      return undefined;
-    }
-
-    appendUtf8CodePoint(bytes, codePoint);
-  }
-
-  return bytes;
+  const wellFormed = decodeUtf16CodePoints(value, (codePoint) =>
+    appendUtf8CodePoint(bytes, codePoint),
+  );
+  return wellFormed ? bytes : undefined;
 }
 
 function appendUtf8CodePoint(bytes: number[], codePoint: number): void {
