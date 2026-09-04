@@ -472,16 +472,9 @@ function projectRuntimeEvent(
   return [event];
 }
 
-export function createSelectingChatRunner({
-  selectModelGateway,
-  diagnosticSink,
-  selectToolRegistry = async () => new ToolRegistry(),
-  createId,
-  now,
-  approvalWorkflow,
-  selectSessionRepository,
-  readRunTokenBudget,
-}: SelectingChatRunnerDependencies): ChatRunner {
+export function createSelectingChatRunner(
+  dependencies: SelectingChatRunnerDependencies,
+): ChatRunner {
   return {
     async run(
       content,
@@ -492,86 +485,74 @@ export function createSelectingChatRunner({
       sessionId,
       workspaceFiles = [],
     ) {
-      signal.throwIfAborted();
-      const sessionRepository = await selectSessionRepository?.();
-      signal.throwIfAborted();
-      const runTokenBudget = readRunTokenBudget?.();
-      signal.throwIfAborted();
-      const selected = await selectToolRegistry(signal);
-      const selection = selected instanceof ToolRegistry ? { registry: selected } : selected;
-      signal.throwIfAborted();
-      const modelGateway = await selectModelGateway();
-      signal.throwIfAborted();
-
-      await createChatRunner({
-        modelGateway,
-        toolRegistry: selection.registry,
-        createId,
-        now,
-        approvalWorkflow,
-        diagnosticSink,
-        runTokenBudget,
-        sessionRepository,
-        mcpToolSources: selection.mcpToolSources,
-      }).run(content, signal, emit, externalResources, externalPrompts, sessionId, workspaceFiles);
+      const runner = await selectChatRunner(dependencies, signal);
+      await runner.run(
+        content,
+        signal,
+        emit,
+        externalResources,
+        externalPrompts,
+        sessionId,
+        workspaceFiles,
+      );
     },
     async regenerate(sessionId, targetAssistantMessageId, signal, emit) {
-      signal.throwIfAborted();
-      const sessionRepository = await selectSessionRepository?.();
-      signal.throwIfAborted();
-      const runTokenBudget = readRunTokenBudget?.();
-      signal.throwIfAborted();
-      const selected = await selectToolRegistry(signal);
-      const selection = selected instanceof ToolRegistry ? { registry: selected } : selected;
-      signal.throwIfAborted();
-      const modelGateway = await selectModelGateway();
-      signal.throwIfAborted();
-
-      const runner = createChatRunner({
-        modelGateway,
-        toolRegistry: selection.registry,
-        createId,
-        now,
-        approvalWorkflow,
-        diagnosticSink,
-        runTokenBudget,
-        sessionRepository,
-        mcpToolSources: selection.mcpToolSources,
-      });
+      const runner = await selectChatRunner(dependencies, signal);
       if (runner.regenerate === undefined) {
         throw new SessionRecoveryError("unavailable");
       }
       await runner.regenerate(sessionId, targetAssistantMessageId, signal, emit);
     },
     async edit(sessionId, targetUserMessageId, content, signal, emit) {
-      signal.throwIfAborted();
-      const sessionRepository = await selectSessionRepository?.();
-      signal.throwIfAborted();
-      const runTokenBudget = readRunTokenBudget?.();
-      signal.throwIfAborted();
-      const selected = await selectToolRegistry(signal);
-      const selection = selected instanceof ToolRegistry ? { registry: selected } : selected;
-      signal.throwIfAborted();
-      const modelGateway = await selectModelGateway();
-      signal.throwIfAborted();
-
-      const runner = createChatRunner({
-        modelGateway,
-        toolRegistry: selection.registry,
-        createId,
-        now,
-        approvalWorkflow,
-        diagnosticSink,
-        runTokenBudget,
-        sessionRepository,
-        mcpToolSources: selection.mcpToolSources,
-      });
+      const runner = await selectChatRunner(dependencies, signal);
       if (runner.edit === undefined) {
         throw new SessionRecoveryError("unavailable");
       }
       await runner.edit(sessionId, targetUserMessageId, content, signal, emit);
     },
   };
+}
+
+/**
+ * Resolves the current model gateway, Tool registry, and Session repository, then builds the
+ * ChatRunner that uses them. Every SelectingChatRunner operation (run, regenerate, edit) needs
+ * this exact selection sequence before it can act; only what it does with the result differs.
+ */
+async function selectChatRunner(
+  {
+    selectModelGateway,
+    diagnosticSink,
+    selectToolRegistry = async () => new ToolRegistry(),
+    createId,
+    now,
+    approvalWorkflow,
+    selectSessionRepository,
+    readRunTokenBudget,
+  }: SelectingChatRunnerDependencies,
+  signal: AbortSignal,
+): Promise<ChatRunner> {
+  signal.throwIfAborted();
+  const sessionRepository = await selectSessionRepository?.();
+  signal.throwIfAborted();
+  const runTokenBudget = readRunTokenBudget?.();
+  signal.throwIfAborted();
+  const selected = await selectToolRegistry(signal);
+  const selection = selected instanceof ToolRegistry ? { registry: selected } : selected;
+  signal.throwIfAborted();
+  const modelGateway = await selectModelGateway();
+  signal.throwIfAborted();
+
+  return createChatRunner({
+    modelGateway,
+    toolRegistry: selection.registry,
+    createId,
+    now,
+    approvalWorkflow,
+    diagnosticSink,
+    runTokenBudget,
+    sessionRepository,
+    mcpToolSources: selection.mcpToolSources,
+  });
 }
 
 function parseRequestedSessionId(value: string): string {

@@ -43,6 +43,22 @@ export interface DisplayMessage {
   readonly reasoningRunTruncated: boolean;
 }
 
+/** Builds a fresh DisplayMessage with no Tool calls, reasoning, or truncation yet observed. */
+function createDisplayMessage(
+  id: string,
+  role: DisplayMessage["role"],
+  content: string,
+): DisplayMessage {
+  return {
+    id,
+    role,
+    content,
+    toolCalls: [],
+    reasoningBlocks: [],
+    reasoningRunTruncated: false,
+  };
+}
+
 export type DisplayTokenUsage = TokenUsage;
 
 export type DisplayToolCall =
@@ -284,21 +300,8 @@ export function createChatStore({
       set((state) => ({
         messages: [
           ...state.messages.slice(0, targetIndex),
-          {
-            ...target,
-            content: replacementContent,
-            toolCalls: [],
-            reasoningBlocks: [],
-            reasoningRunTruncated: false,
-          },
-          {
-            id: assistantMessageId,
-            role: "assistant",
-            content: "",
-            toolCalls: [],
-            reasoningBlocks: [],
-            reasoningRunTruncated: false,
-          },
+          createDisplayMessage(target.id, target.role, replacementContent),
+          createDisplayMessage(assistantMessageId, "assistant", ""),
         ],
       }));
     };
@@ -486,14 +489,9 @@ export function createChatStore({
               expanded: false,
             }))
           : [];
-      const restoredMessages: DisplayMessage[] = message.session.messages.map((restored) => ({
-        id: restored.messageId,
-        role: restored.role,
-        content: restored.content,
-        toolCalls: [],
-        reasoningBlocks: [],
-        reasoningRunTruncated: false,
-      }));
+      const restoredMessages: DisplayMessage[] = message.session.messages.map((restored) =>
+        createDisplayMessage(restored.messageId, restored.role, restored.content),
+      );
       if (restoredBlocks.length === 0) {
         return restoredMessages;
       }
@@ -617,22 +615,8 @@ export function createChatStore({
         set((state) => ({
           messages: [
             ...state.messages,
-            {
-              id: `${requestId}:user`,
-              role: "user",
-              content,
-              toolCalls: [],
-              reasoningBlocks: [],
-              reasoningRunTruncated: false,
-            },
-            {
-              id: assistantMessageId,
-              role: "assistant",
-              content: "",
-              toolCalls: [],
-              reasoningBlocks: [],
-              reasoningRunTruncated: false,
-            },
+            createDisplayMessage(`${requestId}:user`, "user", content),
+            createDisplayMessage(assistantMessageId, "assistant", ""),
           ],
           status: "preparing",
           activeRequestId: requestId,

@@ -66,15 +66,7 @@ export class WebviewRunMessageHandler {
       return;
     }
 
-    const run: ActiveRun = {
-      requestId,
-      abortController: new AbortController(),
-      sessionId,
-      sessionStartedSent: false,
-      eventsClosed: false,
-      terminalSent: false,
-      ...createSettlement(),
-    };
+    const run = this.#createRun(requestId, sessionId);
     this.#launch(run, (signal) =>
       this.chatRunner.run(
         content,
@@ -102,16 +94,7 @@ export class WebviewRunMessageHandler {
       return;
     }
 
-    const run: ActiveRun = {
-      requestId,
-      abortController: new AbortController(),
-      sessionId,
-      sessionStartedSent: false,
-      eventsClosed: false,
-      terminalSent: false,
-      regenerationTargetMessageId: targetAssistantMessageId,
-      ...createSettlement(),
-    };
+    const run = this.#createRun(requestId, sessionId, targetAssistantMessageId);
     this.#launch(run, (signal) =>
       regenerate(sessionId, targetAssistantMessageId, signal, (event) =>
         this.#handleRuntimeEvent(run, event),
@@ -133,20 +116,33 @@ export class WebviewRunMessageHandler {
       return;
     }
 
-    const run: ActiveRun = {
+    const run = this.#createRun(requestId, sessionId);
+    this.#launch(run, (signal) =>
+      edit(sessionId, targetUserMessageId, content, signal, (event) =>
+        this.#handleRuntimeEvent(run, event),
+      ),
+    );
+  }
+
+  /**
+   * Builds the ActiveRun record shared by `start`, `regenerate`, and `edit`. Only the optional
+   * regeneration target differs between the three call sites.
+   */
+  #createRun(
+    requestId: string,
+    sessionId: string | undefined,
+    regenerationTargetMessageId?: string,
+  ): ActiveRun {
+    return {
       requestId,
       abortController: new AbortController(),
       sessionId,
       sessionStartedSent: false,
       eventsClosed: false,
       terminalSent: false,
+      regenerationTargetMessageId,
       ...createSettlement(),
     };
-    this.#launch(run, (signal) =>
-      edit(sessionId, targetUserMessageId, content, signal, (event) =>
-        this.#handleRuntimeEvent(run, event),
-      ),
-    );
   }
 
   #launch(run: ActiveRun, execute: (signal: AbortSignal) => Promise<void>): void {

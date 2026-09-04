@@ -27,7 +27,11 @@ import {
   maxIdeUriSchemeCodePoints,
 } from "@ctrl-zebra/protocol";
 import type { Diagnostic, TextDocument, TextEditor, Uri } from "vscode";
-import { IdeSourceProjectionError, ideSourceProjector } from "./ide-source-projector.js";
+import {
+  AggregateTextBudget,
+  IdeSourceProjectionError,
+  ideSourceProjector,
+} from "./ide-source-projector.js";
 import type { WorkspaceScope } from "./workspace-scope.js";
 import { WorkspaceScopeError } from "./workspace-scope.js";
 
@@ -214,20 +218,7 @@ export class VsCodeDiagnostics implements IdeDiagnosticsPort {
     }
 
     this.#assertOpen(signal, generation);
-    this.#assertSnapshotIdentity({
-      generation,
-      input,
-      root,
-      canonicalRoot,
-      target,
-      targetDocument,
-      targetVersion,
-      editor,
-      document,
-      documentUri,
-      trusted,
-    });
-    return {
+    const snapshot: QuerySnapshot = {
       generation,
       input,
       root,
@@ -240,6 +231,8 @@ export class VsCodeDiagnostics implements IdeDiagnosticsPort {
       documentUri,
       trusted,
     };
+    this.#assertSnapshotIdentity(snapshot);
+    return snapshot;
   }
 
   async #validateTarget(
@@ -382,7 +375,12 @@ export class VsCodeDiagnostics implements IdeDiagnosticsPort {
     if (overflowed) reasons.add("entries");
     candidates.sort(compareCandidates);
 
-    const budget = new DiagnosticBudget();
+    const budget = new AggregateTextBudget(
+      maxIdeDiagnosticAggregateCodePoints,
+      maxIdeDiagnosticAggregateBytes,
+      countCodePoints,
+      utf8ByteLength,
+    );
     const accepted: NormalizedCandidate[] = [];
     const firstSource = candidates[0]?.source;
     const topLevelSourceValues =
@@ -642,30 +640,6 @@ export class VsCodeDiagnostics implements IdeDiagnosticsPort {
 }
 
 class OutsideWorkspaceError extends Error {}
-
-class DiagnosticBudget {
-  #codePoints = 0;
-  #bytes = 0;
-  readonly takeReasons = new Set<IdeTruncationReason>();
-
-  fit(values: readonly string[]): readonly string[] | undefined {
-    const codePoints = values.reduce((sum, value) => sum + countCodePoints(value), 0);
-    const bytes = values.reduce((sum, value) => sum + utf8ByteLength(value), 0);
-    if (
-      this.#codePoints + codePoints > maxIdeDiagnosticAggregateCodePoints ||
-      this.#bytes + bytes > maxIdeDiagnosticAggregateBytes
-    ) {
-      if (this.#codePoints + codePoints > maxIdeDiagnosticAggregateCodePoints) {
-        this.takeReasons.add("code-points");
-      }
-      if (this.#bytes + bytes > maxIdeDiagnosticAggregateBytes) this.takeReasons.add("utf8-bytes");
-      return undefined;
-    }
-    this.#codePoints += codePoints;
-    this.#bytes += bytes;
-    return values;
-  }
-}
 
 function normalizeRange(value: unknown, document: TextDocument | undefined): IdeRangeDto {
   if (

@@ -238,6 +238,58 @@ function orderedReasons(reasons: Iterable<IdeTruncationReason>): readonly IdeTru
   return ideTruncationReasons.filter((reason) => set.has(reason));
 }
 
+/**
+ * Tracks a running code-point/UTF-8-byte aggregate against a pair of bounds and reports which
+ * bound(s) a rejected addition would have overflowed. Diagnostics, language-location, and symbol
+ * projection all bound their aggregate output payload with this exact rule; only the bounds, the
+ * bounded candidate values, and whether a given addition is allowed to fail differ per caller.
+ */
+export class AggregateTextBudget {
+  #codePoints = 0;
+  #bytes = 0;
+  readonly takeReasons = new Set<IdeTruncationReason>();
+
+  constructor(
+    private readonly maxCodePoints: number,
+    private readonly maxBytes: number,
+    private readonly countCodePoints: (value: string) => number,
+    private readonly utf8ByteLength: (value: string) => number,
+  ) {}
+
+  /** Unconditionally charges `values`' cost, regardless of the remaining budget. */
+  charge(values: readonly string[]): void {
+    this.#codePoints += this.#codePointsOf(values);
+    this.#bytes += this.#bytesOf(values);
+  }
+
+  /**
+   * Charges `values`' cost only if neither bound would be exceeded; otherwise records which
+   * bound(s) overflowed into `takeReasons` and leaves the running budget unchanged.
+   */
+  fit(values: readonly string[]): readonly string[] | undefined {
+    const codePoints = this.#codePointsOf(values);
+    const bytes = this.#bytesOf(values);
+    const overCodePoints = this.#codePoints + codePoints > this.maxCodePoints;
+    const overBytes = this.#bytes + bytes > this.maxBytes;
+    if (overCodePoints || overBytes) {
+      if (overCodePoints) this.takeReasons.add("code-points");
+      if (overBytes) this.takeReasons.add("utf8-bytes");
+      return undefined;
+    }
+    this.#codePoints += codePoints;
+    this.#bytes += bytes;
+    return values;
+  }
+
+  #codePointsOf(values: readonly string[]): number {
+    return values.reduce((sum, value) => sum + this.countCodePoints(value), 0);
+  }
+
+  #bytesOf(values: readonly string[]): number {
+    return values.reduce((sum, value) => sum + this.utf8ByteLength(value), 0);
+  }
+}
+
 export const ideSourceProjector = {
   boundedRequired,
   compareOptionalRanges,
