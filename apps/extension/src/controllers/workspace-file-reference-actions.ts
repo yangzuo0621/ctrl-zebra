@@ -171,26 +171,7 @@ export class WorkspaceFileReferenceActions implements WorkspaceFileReferenceView
 
     const controller = this.#startRead();
     void this.#readPath(parsedPath.data, controller.signal)
-      .then((result) => {
-        if (result.stale) {
-          this.#postReference({
-            protocolVersion: 1,
-            type: "extension/workspace-file-reference",
-            requestId,
-            status: "stale",
-            reference: result.reference,
-            reason: result.reason ?? "changed-during-read",
-          });
-        } else {
-          this.#postReference({
-            protocolVersion: 1,
-            type: "extension/workspace-file-reference",
-            requestId,
-            status: "ready",
-            reference: result.reference,
-          });
-        }
-      })
+      .then((result) => this.#postReadResult(requestId, result))
       .catch((error: unknown) => {
         if (isAbort(error, controller.signal)) return;
         this.#postReferenceError(requestId, undefined, toErrorCode(error));
@@ -223,26 +204,7 @@ export class WorkspaceFileReferenceActions implements WorkspaceFileReferenceView
 
     const controller = this.#startRead(referenceId);
     void this.#readPath(state.path, controller.signal, referenceId)
-      .then((result) => {
-        if (result.stale) {
-          this.#postReference({
-            protocolVersion: 1,
-            type: "extension/workspace-file-reference",
-            requestId,
-            status: "stale",
-            reference: result.reference,
-            reason: result.reason ?? "changed-during-read",
-          });
-        } else {
-          this.#postReference({
-            protocolVersion: 1,
-            type: "extension/workspace-file-reference",
-            requestId,
-            status: "ready",
-            reference: result.reference,
-          });
-        }
-      })
+      .then((result) => this.#postReadResult(requestId, result))
       .catch((error: unknown) => {
         if (isAbort(error, controller.signal)) return;
         this.#postReferenceError(requestId, referenceId, toErrorCode(error));
@@ -538,6 +500,29 @@ export class WorkspaceFileReferenceActions implements WorkspaceFileReferenceView
     message: Extract<ExtensionToWebviewMessage, { type: "extension/workspace-file-reference" }>,
   ): void {
     if (!this.#disposed) this.#post?.(message);
+  }
+
+  /** Reports a completed read, shared by both `read` and `refresh`. */
+  #postReadResult(requestId: string, result: ReadResult): void {
+    if (result.stale) {
+      this.#postReference({
+        protocolVersion: 1,
+        type: "extension/workspace-file-reference",
+        requestId,
+        status: "stale",
+        reference: result.reference,
+        reason: result.reason ?? "changed-during-read",
+      });
+      return;
+    }
+
+    this.#postReference({
+      protocolVersion: 1,
+      type: "extension/workspace-file-reference",
+      requestId,
+      status: "ready",
+      reference: result.reference,
+    });
   }
 
   #postReferenceError(

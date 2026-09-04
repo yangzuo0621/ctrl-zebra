@@ -31,7 +31,11 @@ import {
   maxIdeUriSchemeCodePoints,
 } from "@ctrl-zebra/protocol";
 import type { TextDocument, Uri } from "vscode";
-import { IdeSourceProjectionError, ideSourceProjector } from "./ide-source-projector.js";
+import {
+  AggregateTextBudget,
+  IdeSourceProjectionError,
+  ideSourceProjector,
+} from "./ide-source-projector.js";
 import type { WorkspaceScope } from "./workspace-scope.js";
 import { WorkspaceScopeError } from "./workspace-scope.js";
 
@@ -47,12 +51,19 @@ type LanguageOperation = "definition" | "references";
 const maxDocumentSymbolTraversalNodes = 4_096;
 const maxDocumentSymbolTraversalDepth = 512;
 
-interface LocationCollection {
-  readonly locations: readonly IdeLanguageLocationDto[];
+/**
+ * The out-of-workspace/provider-resource findings every collection pass produces, independent of
+ * whether it collected locations or symbols. `#finalizeCollection` consumes exactly this shape.
+ */
+interface CollectionTruncationSignals {
   readonly reasons: ReadonlySet<IdeTruncationReason>;
   readonly outsideCount: number;
   readonly sawProviderResource: boolean;
   readonly sawInWorkspaceResource: boolean;
+}
+
+interface LocationCollection extends CollectionTruncationSignals {
+  readonly locations: readonly IdeLanguageLocationDto[];
 }
 
 interface QuerySnapshot {
@@ -162,20 +173,7 @@ export class VsCodeLanguageServices implements IdeLanguageServicePort {
     this.#assertOpen(signal, snapshot.generation);
     this.#assertSnapshotIdentity(snapshot, true);
 
-    const reasons = new Set<IdeTruncationReason>(collected.reasons);
-    if (collected.outsideCount > 0) reasons.add("out-of-workspace");
-    if (collected.sawProviderResource && !collected.sawInWorkspaceResource) {
-      throw new InvalidLanguageServiceOutputError();
-    }
-    const truncated = reasons.size > 0;
-    const source = this.#sourceForUri(
-      snapshot,
-      snapshot.target,
-      stale,
-      truncated,
-      reasons,
-      snapshot.targetDocument,
-    );
+    const { source, truncated, reasons } = this.#finalizeCollection(snapshot, stale, collected);
     const result = ideSymbolsResultSchema.safeParse({
       kind: "symbols",
       source,
@@ -217,20 +215,7 @@ export class VsCodeLanguageServices implements IdeLanguageServicePort {
     this.#assertOpen(signal, snapshot.generation);
     this.#assertSnapshotIdentity(snapshot, true);
 
-    const reasons = new Set<IdeTruncationReason>(collected.reasons);
-    if (collected.outsideCount > 0) reasons.add("out-of-workspace");
-    if (collected.sawProviderResource && !collected.sawInWorkspaceResource) {
-      throw new InvalidLanguageServiceOutputError();
-    }
-    const truncated = reasons.size > 0;
-    const source = this.#sourceForUri(
-      snapshot,
-      snapshot.target,
-      stale,
-      truncated,
-      reasons,
-      snapshot.targetDocument,
-    );
+    const { source, truncated, reasons } = this.#finalizeCollection(snapshot, stale, collected);
     const result = ideLanguageLocationsResultSchema.safeParse({
       kind: "language-locations",
       operation,
@@ -341,8 +326,12 @@ export class VsCodeLanguageServices implements IdeLanguageServicePort {
     let outsideCount = 0;
     const sawProviderResource = value.length > 0;
     let sawInWorkspaceResource = false;
-    let aggregateCodePoints = 0;
-    let aggregateBytes = 0;
+    const budget = new AggregateTextBudget(
+      maxIdeDiagnosticAggregateCodePoints,
+      maxIdeDiagnosticAggregateBytes,
+      countCodePoints,
+      utf8ByteLength,
+    );
     const topSource = this.#sourceForUri(
       snapshot,
       snapshot.target,
@@ -351,10 +340,7 @@ export class VsCodeLanguageServices implements IdeLanguageServicePort {
       new Set(),
       snapshot.targetDocument,
     );
-    for (const text of sourceStrings(topSource)) {
-      aggregateCodePoints += countCodePoints(text);
-      aggregateBytes += utf8ByteLength(text);
-    }
+    budget.charge(sourceStrings(topSource));
 
     const retained = new Map<string, IdeLanguageLocationDto>();
     let overflowed = false;
@@ -387,31 +373,10 @@ export class VsCodeLanguageServices implements IdeLanguageServicePort {
     if (overflowed) reasons.add("entries");
     const sortedLocations = [...retained.values()].sort(compareLocations);
     for (const normalized of sortedLocations) {
-      const candidateValues = sourceStrings(normalized.source);
-      const candidateCodePoints = candidateValues.reduce(
-        (total, text) => total + countCodePoints(text),
-        0,
-      );
-      const candidateBytes = candidateValues.reduce(
-        (total, text) => total + utf8ByteLength(text),
-        0,
-      );
-      if (
-        aggregateCodePoints + candidateCodePoints > maxIdeDiagnosticAggregateCodePoints ||
-        aggregateBytes + candidateBytes > maxIdeDiagnosticAggregateBytes
-      ) {
-        if (aggregateCodePoints + candidateCodePoints > maxIdeDiagnosticAggregateCodePoints) {
-          reasons.add("code-points");
-        }
-        if (aggregateBytes + candidateBytes > maxIdeDiagnosticAggregateBytes) {
-          reasons.add("utf8-bytes");
-        }
-        continue;
-      }
-      aggregateCodePoints += candidateCodePoints;
-      aggregateBytes += candidateBytes;
+      if (budget.fit(sourceStrings(normalized.source)) === undefined) continue;
       locations.push(normalized);
     }
+    for (const reason of budget.takeReasons) reasons.add(reason);
 
     return {
       locations,
@@ -497,13 +462,11 @@ export class VsCodeLanguageServices implements IdeLanguageServicePort {
     value: unknown,
     stale: boolean,
     signal: AbortSignal,
-  ): Promise<{
-    readonly symbols: readonly IdeSymbolDto[];
-    readonly reasons: ReadonlySet<IdeTruncationReason>;
-    readonly outsideCount: number;
-    readonly sawProviderResource: boolean;
-    readonly sawInWorkspaceResource: boolean;
-  }> {
+  ): Promise<
+    CollectionTruncationSignals & {
+      readonly symbols: readonly IdeSymbolDto[];
+    }
+  > {
     if (!Array.isArray(value)) throw new InvalidLanguageServiceOutputError();
     const stack: SymbolTraversalFrame[] = [];
     const rootCount = Math.min(value.length, maxDocumentSymbolTraversalNodes);
@@ -516,8 +479,12 @@ export class VsCodeLanguageServices implements IdeLanguageServicePort {
     let outsideCount = 0;
     let sawProviderResource = value.length > 0;
     let sawInWorkspaceResource = false;
-    let aggregateCodePoints = 0;
-    let aggregateBytes = 0;
+    const budget = new AggregateTextBudget(
+      maxIdeDiagnosticAggregateCodePoints,
+      maxIdeDiagnosticAggregateBytes,
+      countCodePoints,
+      utf8ByteLength,
+    );
     const source = this.#sourceForUri(
       snapshot,
       snapshot.target,
@@ -526,10 +493,7 @@ export class VsCodeLanguageServices implements IdeLanguageServicePort {
       new Set(),
       snapshot.targetDocument,
     );
-    for (const text of sourceStrings(source)) {
-      aggregateCodePoints += countCodePoints(text);
-      aggregateBytes += utf8ByteLength(text);
-    }
+    budget.charge(sourceStrings(source));
 
     const active = new WeakSet<object>();
     let traversedNodes = 0;
@@ -595,30 +559,10 @@ export class VsCodeLanguageServices implements IdeLanguageServicePort {
     if (sortedCandidates.length > maxIdeSymbolEntries) reasons.add("entries");
     const symbols: IdeSymbolDto[] = [];
     for (const candidate of sortedCandidates.slice(0, maxIdeSymbolEntries)) {
-      const candidateCodePoints = candidate.aggregateValues.reduce(
-        (total, text) => total + countCodePoints(text),
-        0,
-      );
-      const candidateBytes = candidate.aggregateValues.reduce(
-        (total, text) => total + utf8ByteLength(text),
-        0,
-      );
-      if (
-        aggregateCodePoints + candidateCodePoints > maxIdeDiagnosticAggregateCodePoints ||
-        aggregateBytes + candidateBytes > maxIdeDiagnosticAggregateBytes
-      ) {
-        if (aggregateCodePoints + candidateCodePoints > maxIdeDiagnosticAggregateCodePoints) {
-          reasons.add("code-points");
-        }
-        if (aggregateBytes + candidateBytes > maxIdeDiagnosticAggregateBytes) {
-          reasons.add("utf8-bytes");
-        }
-        continue;
-      }
-      aggregateCodePoints += candidateCodePoints;
-      aggregateBytes += candidateBytes;
+      if (budget.fit(candidate.aggregateValues) === undefined) continue;
       symbols.push(candidate.symbol);
     }
+    for (const reason of budget.takeReasons) reasons.add(reason);
 
     return {
       symbols,
@@ -747,6 +691,37 @@ export class VsCodeLanguageServices implements IdeLanguageServicePort {
       if (error instanceof LanguageServiceUnavailableError) throw error;
       throw new InvalidLanguageServiceOutputError();
     }
+  }
+
+  /**
+   * Folds a collection pass's outside-workspace/provider-resource findings into the shared
+   * out-of-workspace/truncation rules and projects the query's own IdeSourceDto. `listSymbols`
+   * and `#findLocations` both need this exact sequence after collecting their own candidate kind.
+   */
+  #finalizeCollection(
+    snapshot: QuerySnapshot,
+    stale: boolean,
+    collected: CollectionTruncationSignals,
+  ): {
+    readonly source: IdeSourceDto;
+    readonly truncated: boolean;
+    readonly reasons: Set<IdeTruncationReason>;
+  } {
+    const reasons = new Set<IdeTruncationReason>(collected.reasons);
+    if (collected.outsideCount > 0) reasons.add("out-of-workspace");
+    if (collected.sawProviderResource && !collected.sawInWorkspaceResource) {
+      throw new InvalidLanguageServiceOutputError();
+    }
+    const truncated = reasons.size > 0;
+    const source = this.#sourceForUri(
+      snapshot,
+      snapshot.target,
+      stale,
+      truncated,
+      reasons,
+      snapshot.targetDocument,
+    );
+    return { source, truncated, reasons };
   }
 
   #sourceForUri(
