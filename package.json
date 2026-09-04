@@ -25,6 +25,7 @@
     "typecheck": "pnpm --recursive exec tsc --noEmit"
   },
   "devDependencies": {
+    "@babel/parser": "8.0.4",
     "@biomejs/biome": "2.5.10",
     "@vitest/coverage-v8": "4.1.11",
     "@vscode/vsce": "3.9.2",

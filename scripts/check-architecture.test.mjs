@@ -178,6 +178,21 @@ test("rejects SDK imports outside their owner and from public entries", () => {
       assert.equal(failureFor(root, "public package entry transitively re-exports ai"), true);
     },
   );
+  // A default import combined with named imports in one statement, from the same SDK, where
+  // only the named binding is later re-exported.
+  withFixture(
+    {
+      imports: { providers: 'export { Named } from "./sdk-types.js";\n' },
+      extraFiles: {
+        providers: {
+          "sdk-types.ts": 'import Default, { Named } from "ai";\nexport { Named };\n',
+        },
+      },
+    },
+    (root) => {
+      assert.equal(failureFor(root, "public package entry transitively re-exports ai"), true);
+    },
+  );
 });
 
 test("excludes generated source files from advisory hotspots", () => {
