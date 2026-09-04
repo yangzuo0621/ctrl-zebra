@@ -29,4 +29,29 @@ describe("ModelGatewayError", () => {
     expect(error.cause).toBe(cause);
     expect(JSON.stringify(error)).not.toContain("provider secret");
   });
+
+  it("is undefined by default", () => {
+    expect(new ModelGatewayError("rate-limit").retryAfterMilliseconds).toBeUndefined();
+  });
+
+  it("exposes a valid Provider-requested retryAfterMilliseconds", () => {
+    const error = new ModelGatewayError("rate-limit", { retryAfterMilliseconds: 30_000 });
+
+    expect(error.retryAfterMilliseconds).toBe(30_000);
+  });
+
+  it.each([-1, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
+    "treats an invalid retryAfterMilliseconds (%s) as absent rather than propagating it",
+    (invalid) => {
+      const error = new ModelGatewayError("rate-limit", { retryAfterMilliseconds: invalid });
+
+      expect(error.retryAfterMilliseconds).toBeUndefined();
+    },
+  );
+
+  it("accepts a zero retryAfterMilliseconds (retry immediately)", () => {
+    const error = new ModelGatewayError("rate-limit", { retryAfterMilliseconds: 0 });
+
+    expect(error.retryAfterMilliseconds).toBe(0);
+  });
 });

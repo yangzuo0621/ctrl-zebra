@@ -7,10 +7,27 @@ import {
 
 export const maxProviderRetryAttempts = 2;
 export const initialProviderRetryDelayMilliseconds = 250;
+/**
+ * A ceiling on any single retry wait, including a Provider-requested `retryAfterMilliseconds`.
+ * Protects an interactive Run from blocking indefinitely on an unreasonable or malformed
+ * Provider-supplied wait; a real, actionable rate limit longer than this is better surfaced as a
+ * failure than as a silent multi-minute hang.
+ */
+export const maxProviderRetryDelayMilliseconds = 30_000;
 
 export interface ProviderRetryDelay {
   wait(milliseconds: number, signal: AbortSignal): Promise<void>;
 }
+
+/** A source of jitter for the exponential-backoff fallback, injectable for deterministic tests. */
+export interface ProviderRetryJitter {
+  /** Returns a value in the half-open range [0, maximum). */
+  next(maximum: number): number;
+}
+
+export const defaultProviderRetryJitter: ProviderRetryJitter = {
+  next: (maximum) => Math.random() * maximum,
+};
 
 export const defaultProviderRetryDelay: ProviderRetryDelay = {
   async wait(milliseconds, signal) {
@@ -48,6 +65,7 @@ export class RetryingModelGateway implements ModelGateway {
   constructor(
     readonly gateway: ModelGateway,
     readonly delay: ProviderRetryDelay = defaultProviderRetryDelay,
+    readonly jitter: ProviderRetryJitter = defaultProviderRetryJitter,
   ) {}
 
   async *stream(request: ModelRequest, signal: AbortSignal): AsyncIterable<ModelEvent> {
@@ -77,11 +95,26 @@ export class RetryingModelGateway implements ModelGateway {
           throw error;
         }
 
-        const backoffMilliseconds = initialProviderRetryDelayMilliseconds * 2 ** retries;
+        const backoffMilliseconds = this.computeBackoffMilliseconds(error, retries);
         retries += 1;
         await this.delay.wait(backoffMilliseconds, signal);
       }
     }
+  }
+
+  /**
+   * Honors a Provider-requested `retryAfterMilliseconds` exactly (clamped to the ceiling) rather
+   * than jittering it: the Provider gave a specific number, and jittering it away would defeat
+   * its purpose. Only the un-guided exponential-backoff fallback is jittered, using "full jitter"
+   * (uniform over [0, baseline)) to avoid every concurrent retry in this Run waking in lockstep.
+   */
+  private computeBackoffMilliseconds(error: ModelGatewayError, retries: number): number {
+    if (error.retryAfterMilliseconds !== undefined) {
+      return Math.min(error.retryAfterMilliseconds, maxProviderRetryDelayMilliseconds);
+    }
+
+    const baseline = initialProviderRetryDelayMilliseconds * 2 ** retries;
+    return Math.min(this.jitter.next(baseline), maxProviderRetryDelayMilliseconds);
   }
 }
 

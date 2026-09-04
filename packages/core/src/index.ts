@@ -236,11 +236,13 @@ export {
   maxReasoningDeltaCodePoints,
   maxReasoningDeltaUtf8Bytes,
 } from "./model-gateway.js";
-export type { ProviderRetryDelay } from "./provider-retry-policy.js";
+export type { ProviderRetryDelay, ProviderRetryJitter } from "./provider-retry-policy.js";
 export {
   defaultProviderRetryDelay,
+  defaultProviderRetryJitter,
   initialProviderRetryDelayMilliseconds,
   maxProviderRetryAttempts,
+  maxProviderRetryDelayMilliseconds,
   RetryingModelGateway,
 } from "./provider-retry-policy.js";
 export {

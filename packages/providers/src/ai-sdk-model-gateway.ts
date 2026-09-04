@@ -79,7 +79,10 @@ export function createAISDKModelGateway(model: LanguageModel): ModelGateway {
           throw error;
         }
 
-        throw new ModelGatewayError(classifyProviderError(error), { cause: error });
+        throw new ModelGatewayError(classifyProviderError(error), {
+          cause: error,
+          retryAfterMilliseconds: retryAfterMillisecondsFromError(error),
+        });
       }
     },
   };
@@ -542,6 +545,50 @@ function classifyApiCallError(error: APICallError): ModelGatewayErrorCode {
   }
 
   return "unknown";
+}
+
+function retryAfterMillisecondsFromError(error: unknown): number | undefined {
+  if (!APICallError.isInstance(error)) {
+    return undefined;
+  }
+
+  // The AI SDK populates responseHeaders from the Fetch API's Headers object, whose iteration
+  // always yields lowercase names, but a defensive lookup costs nothing here.
+  const headers = error.responseHeaders;
+  const retryAfter = headers?.["retry-after"] ?? headers?.["Retry-After"];
+  return parseRetryAfterMilliseconds(retryAfter, Date.now());
+}
+
+/**
+ * Parses an HTTP `Retry-After` header value per RFC 9110 §10.2.3: either the delay-seconds form
+ * ("30") or the HTTP-date form ("Wed, 21 Oct 2026 07:28:00 GMT"). Returns `undefined` for a
+ * missing or unparseable value rather than guessing.
+ */
+function parseRetryAfterMilliseconds(
+  value: string | undefined,
+  nowMilliseconds: number,
+): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  if (/^\d+$/.test(trimmed)) {
+    const seconds = Number(trimmed);
+    return Number.isSafeInteger(seconds) ? seconds * 1000 : undefined;
+  }
+
+  // A real IMF-fixdate always contains a weekday and month name (both alphabetic). Requiring a
+  // letter before trying Date.parse rejects malformed non-digit input like "-5" or "3.14" that
+  // Date.parse would otherwise silently misinterpret as some other date format.
+  if (!/[A-Za-z]/u.test(trimmed)) {
+    return undefined;
+  }
+
+  const deadlineMilliseconds = Date.parse(trimmed);
+  return Number.isNaN(deadlineMilliseconds)
+    ? undefined
+    : Math.max(0, deadlineMilliseconds - nowMilliseconds);
 }
 
 const contextOverflowCodes = new Set([
