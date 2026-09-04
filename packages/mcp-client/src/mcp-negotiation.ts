@@ -1,8 +1,8 @@
+import { hasOnlyKeys, isRecord } from "@ctrl-zebra/core";
 import type { DiscoverResult, JSONRPCMessage } from "@modelcontextprotocol/client";
 
 import { type McpClientErrorCode, type McpProtocolMode, mcpProtocolVersion } from "./contracts.js";
 import { createMcpClientError } from "./errors.js";
-import { hasOnlyKeys, isRecord } from "./record-validation.js";
 import type { SdkStdioTransport } from "./sdk-stdio-transport.js";
 
 const modernMetaKey = "io.modelcontextprotocol/protocolVersion";

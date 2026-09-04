@@ -243,6 +243,13 @@ export {
   maxProviderRetryAttempts,
   RetryingModelGateway,
 } from "./provider-retry-policy.js";
+export {
+  hasExactKeys,
+  hasOnlyKeys,
+  isNonnegativeSafeInteger,
+  isPlainRecord,
+  isRecord,
+} from "./record-validation.js";
 export type { RunTokenBudgetObservation } from "./run-token-budget.js";
 export {
   defaultRunTokenBudget,

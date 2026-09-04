@@ -5,6 +5,7 @@ import {
   EventLogLimitExceededError,
   InconsistentSessionRecordError,
   InvalidSessionManifestError,
+  isRecord,
   ReadOnlySessionError,
   SessionNotFoundError,
   type SessionRecord,
@@ -35,7 +36,6 @@ import {
   tokenUsageSchema,
   userMessageSchema,
 } from "@ctrl-zebra/protocol";
-import { isRecord } from "../adapters/record-validation.js";
 import {
   EditRelationCorruptError,
   RegenerationRelationCorruptError,

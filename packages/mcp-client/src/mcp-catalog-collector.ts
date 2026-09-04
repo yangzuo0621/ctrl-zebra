@@ -1,5 +1,6 @@
+import { isRecord } from "@ctrl-zebra/core";
+
 import { maxMcpListEntries, maxMcpListPages } from "./contracts.js";
-import { isRecord } from "./record-validation.js";
 
 export type McpCatalogCollectionErrorCode = "malformed-message" | "limit-exceeded";
 

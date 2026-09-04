@@ -1,4 +1,11 @@
-import type { ModelMessage, SessionRecord, ToolCall, ToolResult } from "@ctrl-zebra/core";
+import {
+  hasExactKeys,
+  isPlainRecord,
+  type ModelMessage,
+  type SessionRecord,
+  type ToolCall,
+  type ToolResult,
+} from "@ctrl-zebra/core";
 import {
   type PersistedEventRecord,
   type SessionStatus,
@@ -8,13 +15,14 @@ import {
   type UserMessage,
   userMessageSchema,
 } from "@ctrl-zebra/protocol";
-import { hasExactKeys, isPlainRecord } from "../adapters/record-validation.js";
 import { jsonValuesEqual } from "./json-values.js";
 import {
   canonicalAssistantProjectionId,
   EditRelationCorruptError,
   isCompletedRegenerationRun,
+  legalTransitions,
   RegenerationRelationCorruptError,
+  terminalStatuses,
   type ValidatedEditRelation,
   type ValidatedRegenerationRelation,
   validateEditRelations,
@@ -30,45 +38,6 @@ const activeStatuses = new Set<SessionStatus>([
   "awaiting_approval",
   "executing_tool",
 ]);
-
-const terminalStatuses = new Set<SessionStatus>([
-  "completed",
-  "truncated",
-  "cancelled",
-  "budget-exceeded",
-  "failed",
-  "interrupted",
-]);
-
-const legalTransitions: Readonly<Record<SessionStatus, readonly SessionStatus[]>> = {
-  idle: ["preparing", "interrupted"],
-  preparing: ["streaming", "cancelled", "budget-exceeded", "failed", "interrupted"],
-  streaming: [
-    "awaiting_approval",
-    "executing_tool",
-    "completed",
-    "truncated",
-    "cancelled",
-    "budget-exceeded",
-    "failed",
-    "interrupted",
-  ],
-  awaiting_approval: [
-    "streaming",
-    "executing_tool",
-    "cancelled",
-    "budget-exceeded",
-    "failed",
-    "interrupted",
-  ],
-  executing_tool: ["streaming", "cancelled", "budget-exceeded", "failed", "interrupted"],
-  completed: ["preparing"],
-  truncated: ["preparing"],
-  cancelled: ["preparing"],
-  "budget-exceeded": ["preparing"],
-  failed: ["preparing"],
-  interrupted: ["preparing"],
-};
 
 export class SessionHistoryCorruptError extends Error {
   constructor() {

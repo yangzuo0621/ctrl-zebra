@@ -1,3 +1,4 @@
+import { isRecord } from "@ctrl-zebra/core";
 import type { CancellationToken, Disposable } from "vscode";
 
 import {
@@ -13,7 +14,6 @@ import {
   ProviderEndpointPolicyError,
   providerEndpointPolicy,
 } from "../adapters/provider-endpoint-policy.js";
-import { isRecord } from "../adapters/record-validation.js";
 import { ProviderApiKeyOperationCoordinator } from "./provider-api-key-command.js";
 
 export const checkProviderConnectionCommandId = "ctrlZebra.checkProviderConnection";

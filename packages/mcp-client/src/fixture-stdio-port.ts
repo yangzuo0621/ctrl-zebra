@@ -1,5 +1,6 @@
+import { isRecord } from "@ctrl-zebra/core";
+
 import type { McpProcessTermination, McpStdioPort, McpStdioPortHandlers } from "./contracts.js";
-import { isRecord } from "./record-validation.js";
 
 type FixtureMessageHandler = (
   message: Readonly<Record<string, unknown>>,

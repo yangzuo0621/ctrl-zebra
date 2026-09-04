@@ -1,4 +1,5 @@
-import { hasExactKeys } from "./record-validation.js";
+import { hasExactKeys } from "@ctrl-zebra/core";
+
 import { utf8ByteLength } from "./text-primitives.js";
 
 export const mcpServerSettingSection = "ctrlZebra.mcp";
