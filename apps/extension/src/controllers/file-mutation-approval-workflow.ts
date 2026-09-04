@@ -3,17 +3,22 @@ import type {
   ToolApprovalOperation,
   ToolApprovalWorkflow,
 } from "@ctrl-zebra/core";
-import {
-  type ApprovalDecisionIntent,
-  type ApprovalRequest,
-  type ApprovalResource,
-  approvalRequestSchema,
+import type {
+  ApprovalDecisionIntent,
+  ApprovalRequest,
+  ApprovalResource,
 } from "@ctrl-zebra/protocol";
 
-import { ApprovalLifecycle, type ApprovalLifecycleRecord } from "./approval-lifecycle.js";
+import {
+  ApprovalLifecycle,
+  type ApprovalLifecycleRecord,
+  buildApprovalRequest,
+  defaultToolApprovalLifetimeMilliseconds,
+} from "./approval-lifecycle.js";
 import type { WorkspaceTrustPolicy } from "./workspace-trust-policy.js";
 
-export const defaultFileMutationApprovalLifetimeMilliseconds = 5 * 60 * 1_000;
+export const defaultFileMutationApprovalLifetimeMilliseconds =
+  defaultToolApprovalLifetimeMilliseconds;
 
 export interface FileMutationApprovalActions {
   showDiff(approvalId: string): void;
@@ -69,29 +74,25 @@ export class FileMutationApprovalWorkflow<Plan>
     signal.throwIfAborted();
     const workspaceRootUri = await this.#dependencies.bindPlan(plan, signal);
     signal.throwIfAborted();
-    const createdAt = this.#dependencies.now();
-    const expiresAt = new Date(
-      createdAt.getTime() +
-        (this.#dependencies.approvalLifetimeMilliseconds ??
-          defaultFileMutationApprovalLifetimeMilliseconds),
+    const request = buildApprovalRequest(
+      this.#dependencies.now,
+      {
+        id: this.#dependencies.createId(),
+        scope: {
+          sessionId: prepared.sessionId,
+          runId: prepared.runId,
+          call: prepared.call,
+          risk: prepared.risk,
+          workspaceRootUri,
+          resources: this.#dependencies.resources(plan),
+        },
+        presentation: {
+          title: this.#dependencies.title,
+          summary: this.#dependencies.summary(plan),
+        },
+      },
+      this.#dependencies.approvalLifetimeMilliseconds,
     );
-    const request = approvalRequestSchema.parse({
-      id: this.#dependencies.createId(),
-      scope: {
-        sessionId: prepared.sessionId,
-        runId: prepared.runId,
-        call: prepared.call,
-        risk: prepared.risk,
-        workspaceRootUri,
-        resources: this.#dependencies.resources(plan),
-      },
-      presentation: {
-        title: this.#dependencies.title,
-        summary: this.#dependencies.summary(plan),
-      },
-      createdAt: createdAt.toISOString(),
-      expiresAt: expiresAt.toISOString(),
-    });
     const record: ApprovalRecord<Plan> = {
       request,
       plan,
@@ -99,14 +100,7 @@ export class FileMutationApprovalWorkflow<Plan>
       status: "pending",
       consuming: false,
     };
-    this.#lifecycle.register(record);
-
-    return {
-      request,
-      requestDecision: (decisionSignal) => this.#lifecycle.requestDecision(record, decisionSignal),
-      consume: (consumeSignal) => this.#consume(record, consumeSignal),
-      invalidate: () => this.#lifecycle.invalidate(record),
-    };
+    return this.#lifecycle.open(record, (consumeSignal) => this.#consume(record, consumeSignal));
   }
 
   showDiff(approvalId: string): void {

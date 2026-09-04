@@ -1,5 +1,21 @@
-import { ApprovalRequestNotPendingError, CancellableApprovalService } from "@ctrl-zebra/core";
-import type { ApprovalDecisionIntent, ApprovalRequest, ApprovalStatus } from "@ctrl-zebra/protocol";
+import {
+  ApprovalRequestNotPendingError,
+  type ApprovedToolConsumption,
+  CancellableApprovalService,
+  type ToolApprovalOperation,
+} from "@ctrl-zebra/core";
+import {
+  type ApprovalDecisionIntent,
+  type ApprovalRequest,
+  type ApprovalStatus,
+  approvalRequestSchema,
+} from "@ctrl-zebra/protocol";
+
+/**
+ * The default single-use expiry window shared by every Tool approval kind (file mutation, command,
+ * MCP Tool call, and MCP Server startup). Each workflow may still accept a caller-supplied override.
+ */
+export const defaultToolApprovalLifetimeMilliseconds = 5 * 60 * 1_000;
 
 export interface ApprovalLifecycleRecord {
   readonly request: ApprovalRequest;
@@ -7,6 +23,29 @@ export interface ApprovalLifecycleRecord {
   signal?: AbortSignal;
   expiration?: ReturnType<typeof setTimeout>;
   consuming: boolean;
+}
+
+/**
+ * Builds a fresh ApprovalRequest whose expiry is `lifetimeMilliseconds` (or the shared default)
+ * after `now`. Every approval workflow computes createdAt/expiresAt identically; only the
+ * request's scope and presentation differ per Tool kind.
+ */
+export function buildApprovalRequest(
+  now: () => Date,
+  input: { readonly id: string; readonly scope: unknown; readonly presentation: unknown },
+  lifetimeMilliseconds?: number,
+): ApprovalRequest {
+  const createdAt = now();
+  const expiresAt = new Date(
+    createdAt.getTime() + (lifetimeMilliseconds ?? defaultToolApprovalLifetimeMilliseconds),
+  );
+  return approvalRequestSchema.parse({
+    id: input.id,
+    scope: input.scope,
+    presentation: input.presentation,
+    createdAt: createdAt.toISOString(),
+    expiresAt: expiresAt.toISOString(),
+  });
 }
 
 export class ApprovalLifecycle<Record extends ApprovalLifecycleRecord> {
@@ -20,6 +59,23 @@ export class ApprovalLifecycle<Record extends ApprovalLifecycleRecord> {
       throw new Error("Approval identifier is already active.");
     }
     this.#records.set(record.request.id, record);
+  }
+
+  /**
+   * Registers `record` and returns the ToolApprovalOperation every workflow hands back from
+   * `create()`. Only Tool-kind-specific consumption differs, so callers supply that as `consume`.
+   */
+  open(
+    record: Record,
+    consume: (signal: AbortSignal) => Promise<ApprovedToolConsumption>,
+  ): ToolApprovalOperation {
+    this.register(record);
+    return {
+      request: record.request,
+      requestDecision: (signal) => this.requestDecision(record, signal),
+      consume,
+      invalidate: () => this.invalidate(record),
+    };
   }
 
   get(approvalId: string): Record | undefined {

@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { ideTextContextSchema } from "./ide-context.js";
-import { utf8ByteLength } from "./text-primitives.js";
+import { boundedTextSchema } from "./text-primitives.js";
 
 /** The maximum number of file references that can be carried by one submission. */
 export const maxWorkspaceFileReferences = 32;
@@ -172,17 +172,3 @@ export type WorkspaceFileRefreshMessage = z.infer<typeof workspaceFileRefreshMes
 export type WorkspaceFileUseStaleMessage = z.infer<typeof workspaceFileUseStaleMessageSchema>;
 export type WorkspaceFileSearchResponse = z.infer<typeof workspaceFileSearchResponseSchema>;
 export type WorkspaceFileReferenceMessage = z.infer<typeof workspaceFileReferenceMessageSchema>;
-
-function boundedTextSchema(maxCodePoints: number, maxBytes: number) {
-  return z
-    .string()
-    .refine((value) => value.isWellFormed(), "Text must contain well-formed Unicode.")
-    .refine(
-      (value) => [...value].length <= maxCodePoints,
-      `Text must not exceed ${maxCodePoints} Unicode code points.`,
-    )
-    .refine(
-      (value) => utf8ByteLength(value) <= maxBytes,
-      `Text must not exceed ${maxBytes} UTF-8 bytes.`,
-    );
-}

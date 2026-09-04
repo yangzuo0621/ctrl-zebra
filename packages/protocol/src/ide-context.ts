@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { utf8ByteLength, utf8BytesForCodePoint } from "./text-primitives.js";
+import { boundedTextSchema, utf8ByteLength, utf8BytesForCodePoint } from "./text-primitives.js";
 
 export const maxIdeUriSchemeCodePoints = 32;
 export const maxIdeUriSchemeBytes = 128;
@@ -487,20 +487,6 @@ export function takeIdeTextPrefix(value: string): IdeTextPrefix {
   const collector = new IdeTextPrefixCollector();
   collector.add(value);
   return collector.finish();
-}
-
-function boundedTextSchema(maxCodePoints: number, maxBytes: number) {
-  return z
-    .string()
-    .refine((value) => value.isWellFormed(), "Text must contain well-formed Unicode.")
-    .refine(
-      (value) => [...value].length <= maxCodePoints,
-      `Text must not exceed ${maxCodePoints} Unicode code points.`,
-    )
-    .refine(
-      (value) => utf8ByteLength(value) <= maxBytes,
-      `Text must not exceed ${maxBytes} UTF-8 bytes.`,
-    );
 }
 
 function compareIdePositions(
