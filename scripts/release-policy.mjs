@@ -149,6 +149,17 @@ export function normalizeLicenseExpression(value) {
  * compatibility does not end up deciding the outer result. This mirrors the grammar's own
  * `+` handling: a "later version" qualifier does not narrow compatibility, so it is not
  * consulted here.
+ *
+ * Reaching this function at all already requires `spdx-expression-parse` to have recognized
+ * the exception name as a token, which it only does against its own bundled `spdx-exceptions`
+ * package data — a smaller, independently-versioned snapshot than the SPDX List 3.28.0 catalog
+ * pinned in `release/spdx-exceptions.json`. An exception id that is canonical in the pinned
+ * catalog but absent from the bundled data never reaches `unknownException` here: parsing the
+ * whole expression throws first and `isCompatibleLicenseExpression` rejects it via its outer
+ * catch. Both paths reject the expression (fail closed, matching this policy's intent), so this
+ * is a diagnosability gap, not a soundness one — but it means extending
+ * `POLICY_COMPATIBLE_SPDX_EXCEPTION_IDS` with an id the parser dependency doesn't recognize
+ * yet would silently reject every dependency using it instead of accepting it.
  */
 function evaluateSpdxNode(node) {
   if ("left" in node) {
