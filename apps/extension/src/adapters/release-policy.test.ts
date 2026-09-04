@@ -159,6 +159,27 @@ describe("release policy", () => {
     ).toThrow(/Incompatible license/);
   });
 
+  it("parses full SPDX license expression grammar via spdx-expression-parse", () => {
+    // A "+" grants "this version or later"; it does not narrow compatibility.
+    expect(isCompatibleLicenseExpression("Apache-2.0+")).toBe(true);
+    expect(isCompatibleLicenseExpression("GPL-3.0-only+")).toBe(false);
+    // Operator keywords are matched case-insensitively per the SPDX expression grammar,
+    // while license identifiers themselves remain case-sensitive.
+    expect(isCompatibleLicenseExpression("MIT or Apache-2.0")).toBe(true);
+    expect(isCompatibleLicenseExpression("mit")).toBe(false);
+    expect(isCompatibleLicenseExpression("(MIT AND Apache-2.0) OR GPL-3.0-only")).toBe(true);
+    expect(isCompatibleLicenseExpression("MIT AND GPL-3.0-only")).toBe(false);
+    // An unknown exception poisons the whole expression, even inside an OR branch whose
+    // own compatibility does not end up deciding the outer result.
+    expect(isCompatibleLicenseExpression("(MIT WITH UnknownException) OR Apache-2.0")).toBe(false);
+    // Still rejected: unknown license identifiers, LicenseRef, and malformed expressions.
+    expect(isCompatibleLicenseExpression("NOT-A-REAL-LICENSE")).toBe(false);
+    expect(isCompatibleLicenseExpression("LicenseRef-custom")).toBe(false);
+    expect(isCompatibleLicenseExpression("MIT AND")).toBe(false);
+    expect(isCompatibleLicenseExpression("(MIT OR Apache-2.0")).toBe(false);
+    expect(isCompatibleLicenseExpression("")).toBe(false);
+  });
+
   it("preserves distinct versions of a transitive dependency in the SBOM", () => {
     const inventory = [
       { name: "eventsource-parser", version: "3.1.0", license: "MIT" },

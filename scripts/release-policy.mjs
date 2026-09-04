@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import parseSpdxExpression from "spdx-expression-parse";
+
 import spdxExceptionData from "../release/spdx-exceptions.json" with { type: "json" };
 
 export const RELEASE_POLICY_VERSION = 1;
@@ -140,88 +142,50 @@ export function normalizeLicenseExpression(value) {
   return "";
 }
 
+/**
+ * Evaluates one `spdx-expression-parse` AST node against the policy-owned allow lists.
+ * Both sides of an AND/OR are always visited (never short-circuited) so an unrecognized
+ * exception anywhere in the expression is detected even inside a branch whose own
+ * compatibility does not end up deciding the outer result. This mirrors the grammar's own
+ * `+` handling: a "later version" qualifier does not narrow compatibility, so it is not
+ * consulted here.
+ */
+function evaluateSpdxNode(node) {
+  if ("left" in node) {
+    const left = evaluateSpdxNode(node.left);
+    const right = evaluateSpdxNode(node.right);
+    return {
+      compatible:
+        node.conjunction === "or"
+          ? left.compatible || right.compatible
+          : left.compatible && right.compatible,
+      unknownException: left.unknownException || right.unknownException,
+    };
+  }
+
+  const compatible = allowedLicenses.has(node.license);
+  if (!node.exception) {
+    return { compatible, unknownException: false };
+  }
+  const knownException = allowedSpdxExceptions.has(node.exception);
+  return { compatible: compatible && knownException, unknownException: !knownException };
+}
+
 export function isCompatibleLicenseExpression(value) {
   const expression = normalizeLicenseExpression(value);
   if (expression === "") {
     return false;
   }
 
-  const tokens = expression.match(/[A-Za-z0-9.+-]+|[()]/gu);
-  if (!tokens || tokens.join("") !== expression.replace(/\s+/gu, "")) {
-    return false;
-  }
-
-  let index = 0;
-  let unknownException = false;
-
-  function parseOr() {
-    let compatible = parseAnd();
-    while (tokens[index] === "OR") {
-      index += 1;
-      compatible = parseAnd() || compatible;
-    }
-    return compatible;
-  }
-
-  function parseAnd() {
-    let compatible = parseAtom();
-    while (tokens[index] === "AND") {
-      index += 1;
-      compatible = parseAtom() && compatible;
-    }
-    return compatible;
-  }
-
-  function parseAtom() {
-    if (tokens[index] === "(") {
-      index += 1;
-      const compatible = parseOr();
-      if (tokens[index] !== ")") {
-        throw new Error("Unbalanced SPDX license expression.");
-      }
-      index += 1;
-      return compatible;
-    }
-
-    const license = tokens[index];
-    if (
-      !license ||
-      license === ")" ||
-      license === "AND" ||
-      license === "OR" ||
-      license === "WITH"
-    ) {
-      throw new Error("Malformed SPDX license expression.");
-    }
-    index += 1;
-    let compatible = allowedLicenses.has(license);
-    if (tokens[index] === "WITH") {
-      index += 1;
-      const exception = tokens[index];
-      if (
-        !exception ||
-        exception === ")" ||
-        exception === "AND" ||
-        exception === "OR" ||
-        exception === "WITH"
-      ) {
-        throw new Error("Malformed SPDX license exception expression.");
-      }
-      index += 1;
-      if (!allowedSpdxExceptions.has(exception)) {
-        unknownException = true;
-      }
-      compatible = compatible && allowedSpdxExceptions.has(exception);
-    }
-    return compatible;
-  }
-
+  let node;
   try {
-    const compatible = parseOr();
-    return index === tokens.length && !unknownException && compatible;
+    node = parseSpdxExpression(expression);
   } catch {
     return false;
   }
+
+  const { compatible, unknownException } = evaluateSpdxNode(node);
+  return compatible && !unknownException;
 }
 
 export function validateCompatibleLicenses(packages) {
