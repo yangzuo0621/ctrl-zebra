@@ -3,6 +3,7 @@ import fs from "node:fs";
 import { builtinModules } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { parse as parseTypeScriptSource } from "@babel/parser";
 
 const WORKSPACE_PREFIX = "@ctrl-zebra/";
 
@@ -216,79 +217,96 @@ function stripComments(source) {
   return result;
 }
 
-function readQuotedString(source, start) {
-  const quote = source[start];
-  if (quote !== '"' && quote !== "'") return null;
-  let value = "";
-  for (let index = start + 1; index < source.length; index += 1) {
-    const character = source[index];
-    if (character === "\\") {
-      if (index + 1 < source.length) value += source[++index];
-      continue;
-    }
-    if (character === quote) return { value, end: index + 1 };
-    value += character;
+/**
+ * One parse per source file, shared by every check below. Keyed by absolute path; safe across
+ * repeated `analyzeArchitecture()` calls in the same process because every caller (the CLI entry
+ * point, and each `withFixture()` test case) uses a distinct file path.
+ */
+const parsedModules = new Map();
+
+function parseModule(filePath) {
+  const cached = parsedModules.get(filePath);
+  if (cached !== undefined) return cached;
+
+  const parsed = { ast: null, error: null };
+  try {
+    const source = fs.readFileSync(filePath, "utf8");
+    parsed.ast = parseTypeScriptSource(source, {
+      sourceType: "module",
+      plugins: ["typescript", ...(/\.(?:tsx|jsx)$/.test(filePath) ? ["jsx"] : [])],
+    });
+  } catch (error) {
+    parsed.error = error instanceof Error ? error.message.split("\n")[0] : String(error);
   }
-  return null;
+  parsedModules.set(filePath, parsed);
+  return parsed;
+}
+
+function reportUnparseableFiles(sourceFiles, root, failures) {
+  for (const filePath of sourceFiles) {
+    const { error } = parseModule(filePath);
+    if (error !== null) {
+      failures.push(
+        `${relativeTo(root, filePath)}: unable to parse this source file for architecture analysis (${error})`,
+      );
+    }
+  }
+}
+
+function lineOf(node) {
+  return node.loc?.start.line ?? 1;
+}
+
+/**
+ * Finds `import(...)`/`require(...)` calls and inline `import("...")` type references anywhere
+ * in the file, not just at the top level (they may be nested inside function bodies). Static
+ * import/export-from declarations are always top-level in ES modules, so `importsFrom` walks
+ * `ast.program.body` directly for those instead of calling this.
+ */
+function walkForDynamicModuleSpecifiers(node, onSpecifier) {
+  if (node === null || typeof node !== "object") return;
+  if (Array.isArray(node)) {
+    for (const item of node) walkForDynamicModuleSpecifiers(item, onSpecifier);
+    return;
+  }
+  if (
+    (node.type === "ImportExpression" || node.type === "TSImportType") &&
+    node.source?.type === "StringLiteral"
+  ) {
+    onSpecifier(node.source.value, node);
+  } else if (
+    node.type === "CallExpression" &&
+    node.callee?.type === "Identifier" &&
+    node.callee.name === "require" &&
+    node.arguments?.[0]?.type === "StringLiteral"
+  ) {
+    onSpecifier(node.arguments[0].value, node);
+  }
+  for (const key of Object.keys(node)) {
+    if (key === "loc" || key === "start" || key === "end" || key === "range") continue;
+    const value = node[key];
+    if (value && typeof value === "object") walkForDynamicModuleSpecifiers(value, onSpecifier);
+  }
 }
 
 function importsFrom(filePath) {
-  const source = stripComments(fs.readFileSync(filePath, "utf8"));
+  const { ast } = parseModule(filePath);
+  if (ast === null) return [];
+
   const imports = [];
-  const isIdentifierCharacter = (character) => /[A-Za-z0-9_$]/.test(character ?? "");
-  const add = (specifier, index) => {
-    imports.push({ specifier, line: source.slice(0, index).split("\n").length });
-  };
-  for (let index = 0; index < source.length; ) {
-    const character = source[index];
-    if (character === '"' || character === "'" || character === "`") {
-      const quoted = character === "`" ? null : readQuotedString(source, index);
-      if (quoted !== null) {
-        index = quoted.end;
-      } else {
-        index += 1;
-        while (index < source.length && source[index] !== "`") {
-          if (source[index] === "\\") index += 1;
-          index += 1;
-        }
-        index += 1;
-      }
-      continue;
-    }
-    if (!/[A-Za-z_$]/.test(character)) {
-      index += 1;
-      continue;
-    }
-    const start = index;
-    index += 1;
-    while (isIdentifierCharacter(source[index])) index += 1;
-    const word = source.slice(start, index);
-    let cursor = index;
-    while (/\s/.test(source[cursor] ?? "")) cursor += 1;
-    if (word === "import" && source[cursor] === "(") {
-      cursor += 1;
-      while (/\s/.test(source[cursor] ?? "")) cursor += 1;
-      const quoted = readQuotedString(source, cursor);
-      if (quoted !== null) add(quoted.value, start);
-      continue;
-    }
-    if (word === "import" && (source[cursor] === '"' || source[cursor] === "'")) {
-      const quoted = readQuotedString(source, cursor);
-      if (quoted !== null) add(quoted.value, start);
-      continue;
-    }
-    if (word === "require" && source[cursor] === "(") {
-      cursor += 1;
-      while (/\s/.test(source[cursor] ?? "")) cursor += 1;
-      const quoted = readQuotedString(source, cursor);
-      if (quoted !== null) add(quoted.value, start);
-      continue;
-    }
-    if (word === "from" && (source[cursor] === '"' || source[cursor] === "'")) {
-      const quoted = readQuotedString(source, cursor);
-      if (quoted !== null) add(quoted.value, start);
+  for (const statement of ast.program.body) {
+    if (
+      (statement.type === "ImportDeclaration" ||
+        statement.type === "ExportNamedDeclaration" ||
+        statement.type === "ExportAllDeclaration") &&
+      statement.source
+    ) {
+      imports.push({ specifier: statement.source.value, line: lineOf(statement) });
     }
   }
+  walkForDynamicModuleSpecifiers(ast.program, (specifier, node) => {
+    imports.push({ specifier, line: lineOf(node) });
+  });
   return imports;
 }
 
@@ -340,23 +358,43 @@ function sdkForSpecifier(specifier) {
   });
 }
 
-function escapedRegExp(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
+/**
+ * Traces SDK specifiers that leak transitively through a public package entry's re-exports.
+ * Two ways a re-export can leak an SDK specifier:
+ *  1. Directly: `export ... from "<sdk-or-local-specifier>"`. A local specifier is followed
+ *     recursively; an SDK specifier is leaked outright (coarse-grained: any named re-export from
+ *     an SDK source marks that whole specifier as leaked, regardless of which name).
+ *  2. Indirectly: the file imports a binding from an SDK in one statement, then re-exports that
+ *     same local name (via `export { X }`, `export default X`, `export const/type Y = X`) in a
+ *     separate statement. `sdkImportedBindings` maps each such locally-bound name to its
+ *     originating SDK specifier so the second statement can be matched back to the first.
+ */
 function sdkSpecifiersFromReexports(filePath, visited = new Set()) {
   if (visited.has(filePath)) return new Set();
   visited.add(filePath);
-  const source = stripComments(fs.readFileSync(filePath, "utf8"));
+  const { ast } = parseModule(filePath);
   const specifiers = new Set();
-  const exportFromPattern =
-    /\bexport\s+(?:type\s+)?(?:\*\s+as\s+[A-Za-z_$][\w$]*|\*|\{[^}]*\})\s+from\s+["']([^"']+)["']/g;
-  for (const match of source.matchAll(exportFromPattern)) {
-    const specifier = match[1];
+  if (ast === null) return specifiers;
+
+  const sdkImportedBindings = new Map();
+  for (const statement of ast.program.body) {
+    if (statement.type !== "ImportDeclaration") continue;
+    if (sdkForSpecifier(statement.source.value) === undefined) continue;
+    for (const specifier of statement.specifiers) {
+      sdkImportedBindings.set(specifier.local.name, statement.source.value);
+    }
+  }
+
+  function markIfSdkBound(name) {
+    const specifier = sdkImportedBindings.get(name);
+    if (specifier !== undefined) specifiers.add(specifier);
+  }
+
+  function markReexportSource(specifier) {
     const sdk = sdkForSpecifier(specifier);
     if (sdk !== undefined) {
       specifiers.add(specifier);
-      continue;
+      return;
     }
     const localModule = resolveLocalModule(filePath, specifier);
     if (localModule !== null) {
@@ -366,48 +404,41 @@ function sdkSpecifiersFromReexports(filePath, visited = new Set()) {
     }
   }
 
-  const sdkImportedBindings = new Map();
-  const sdkImportPattern = /\bimport\s+(?:type\s+)?\{([^}]*)\}\s+from\s+["']([^"']+)["']/g;
-  for (const match of source.matchAll(sdkImportPattern)) {
-    const sdk = sdkForSpecifier(match[2]);
-    if (sdk === undefined) continue;
-    for (const binding of match[1].split(",")) {
-      const localName = binding
-        .trim()
-        .split(/\s+as\s+/)
-        .at(-1);
-      if (localName !== undefined && localName !== "") {
-        sdkImportedBindings.set(localName, match[2]);
-      }
+  for (const statement of ast.program.body) {
+    if (statement.type === "ExportAllDeclaration") {
+      markReexportSource(statement.source.value);
+      continue;
     }
-  }
-  const defaultImportPattern =
-    /\bimport\s+(?:type\s+)?([A-Za-z_$][\w$]*)\s*(?:,\s*(?:\{[^}]*\}|\*\s+as\s+[A-Za-z_$][\w$]*))?\s+from\s+["']([^"']+)["']/g;
-  for (const match of source.matchAll(defaultImportPattern)) {
-    if (sdkForSpecifier(match[2]) !== undefined) sdkImportedBindings.set(match[1], match[2]);
-  }
-  const namespaceImportPattern =
-    /\bimport\s+(?:type\s+)?\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+["']([^"']+)["']/g;
-  for (const match of source.matchAll(namespaceImportPattern)) {
-    if (sdkForSpecifier(match[2]) !== undefined) sdkImportedBindings.set(match[1], match[2]);
-  }
-  const localExportPattern = /\bexport\s+(?:type\s+)?\{([^}]*)\}(?!\s+from)/g;
-  for (const match of source.matchAll(localExportPattern)) {
-    for (const binding of match[1].split(",")) {
-      const exportedName = binding.trim().split(/\s+as\s+/)[0];
-      if (sdkImportedBindings.has(exportedName)) {
-        specifiers.add(sdkImportedBindings.get(exportedName));
+    if (statement.type !== "ExportNamedDeclaration") {
+      if (
+        statement.type === "ExportDefaultDeclaration" &&
+        statement.declaration.type === "Identifier"
+      ) {
+        markIfSdkBound(statement.declaration.name);
       }
+      continue;
     }
-  }
-  for (const [localName, specifier] of sdkImportedBindings) {
-    const escaped = escapedRegExp(localName);
-    const exportPatterns = [
-      new RegExp(`\\bexport\\s+default\\s+${escaped}\\b`),
-      new RegExp(`\\bexport\\s+type\\s+[A-Za-z_$][\\w$]*\\s*=\\s*${escaped}\\b`),
-      new RegExp(`\\bexport\\s+(?:const|let|var)\\s+[A-Za-z_$][\\w$]*\\s*=\\s*${escaped}\\b`),
-    ];
-    if (exportPatterns.some((pattern) => pattern.test(source))) specifiers.add(specifier);
+    if (statement.source) {
+      markReexportSource(statement.source.value);
+      continue;
+    }
+    if (statement.declaration?.type === "VariableDeclaration") {
+      for (const declarator of statement.declaration.declarations) {
+        if (declarator.init?.type === "Identifier") markIfSdkBound(declarator.init.name);
+      }
+      continue;
+    }
+    if (
+      statement.declaration?.type === "TSTypeAliasDeclaration" &&
+      statement.declaration.typeAnnotation?.type === "TSTypeReference" &&
+      statement.declaration.typeAnnotation.typeName?.type === "Identifier"
+    ) {
+      markIfSdkBound(statement.declaration.typeAnnotation.typeName.name);
+      continue;
+    }
+    for (const specifier of statement.specifiers) {
+      if (specifier.local?.type === "Identifier") markIfSdkBound(specifier.local.name);
+    }
   }
   return specifiers;
 }
@@ -785,6 +816,7 @@ export function analyzeArchitecture(root = process.cwd()) {
   const failures = [];
   const workspace = loadWorkspace(root, failures);
   const sourceFiles = sourceFilesFor(workspace);
+  reportUnparseableFiles(sourceFiles, root, failures);
   const { edges, actualImports } = packageEdges(root, workspace, sourceFiles, failures);
   for (const cycle of findCycles(edges)) {
     failures.push(
