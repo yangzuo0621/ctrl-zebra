@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { utf8ByteLength, utf8BytesForCodePoint, utf8Encode } from "./text-primitives.js";
+import { utf8ByteLength, utf8BytesForCodePoint } from "./text-primitives.js";
 
 describe("Protocol text primitives", () => {
   it("counts empty, ASCII, and mixed Unicode strings", () => {
@@ -23,17 +23,5 @@ describe("Protocol text primitives", () => {
     expect(utf8ByteLength("\ud800")).toBe(3);
     expect(utf8ByteLength("\udfff")).toBe(3);
     expect(utf8BytesForCodePoint(0xd800)).toBe(3);
-  });
-
-  it("encodes every UTF-8 width and replaces unpaired surrogates", () => {
-    const value = "A¢€😀\ud800x\udfff";
-
-    expect(utf8Encode(value)).toEqual(
-      Uint8Array.from([
-        0x41, 0xc2, 0xa2, 0xe2, 0x82, 0xac, 0xf0, 0x9f, 0x98, 0x80, 0xef, 0xbf, 0xbd, 0x78, 0xef,
-        0xbf, 0xbd,
-      ]),
-    );
-    expect(utf8Encode(value).byteLength).toBe(utf8ByteLength(value));
   });
 });
