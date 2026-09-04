@@ -123,12 +123,23 @@ export type ModelGatewayErrorCode =
   | "unknown";
 
 export class ModelGatewayError extends Error {
+  /**
+   * The Provider's requested wait, in milliseconds, before this request should be retried
+   * (typically derived from an HTTP `Retry-After` response header). `undefined` when the
+   * Provider gave no such guidance; callers fall back to their own backoff in that case.
+   * Never negative, `NaN`, or infinite — an invalid value is treated as absent.
+   */
+  readonly retryAfterMilliseconds: number | undefined;
+
   constructor(
     readonly code: ModelGatewayErrorCode,
     options: ModelGatewayErrorOptions = {},
   ) {
     super(`Model provider failed with category: ${code}.`);
     this.name = "ModelGatewayError";
+    this.retryAfterMilliseconds = isValidRetryAfterMilliseconds(options.retryAfterMilliseconds)
+      ? options.retryAfterMilliseconds
+      : undefined;
     if (options.cause !== undefined) {
       Object.defineProperty(this, "cause", {
         configurable: true,
@@ -140,8 +151,13 @@ export class ModelGatewayError extends Error {
   }
 }
 
+function isValidRetryAfterMilliseconds(value: number | undefined): value is number {
+  return value !== undefined && Number.isFinite(value) && value >= 0;
+}
+
 export interface ModelGatewayErrorOptions {
   readonly cause?: unknown;
+  readonly retryAfterMilliseconds?: number;
 }
 
 export interface ModelGateway {

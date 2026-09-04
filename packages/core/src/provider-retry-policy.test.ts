@@ -2,12 +2,15 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   defaultProviderRetryDelay,
+  defaultProviderRetryJitter,
   initialProviderRetryDelayMilliseconds,
   type ModelEvent,
   type ModelGateway,
   ModelGatewayError,
   type ModelRequest,
+  maxProviderRetryDelayMilliseconds,
   type ProviderRetryDelay,
+  type ProviderRetryJitter,
   RetryingModelGateway,
 } from "./index.js";
 
@@ -22,7 +25,9 @@ describe("RetryingModelGateway", () => {
     const delay = recordingDelay();
 
     await expect(
-      collect(new RetryingModelGateway(gateway.gateway, delay).stream(request, signal())),
+      collect(
+        new RetryingModelGateway(gateway.gateway, delay, noJitter()).stream(request, signal()),
+      ),
     ).resolves.toEqual([{ type: "finish", reason: "stop" }]);
     expect(gateway.attempts()).toBe(2);
     expect(delay.wait).toHaveBeenCalledWith(
@@ -40,7 +45,9 @@ describe("RetryingModelGateway", () => {
     const delay = recordingDelay();
 
     await expect(
-      collect(new RetryingModelGateway(gateway.gateway, delay).stream(request, signal())),
+      collect(
+        new RetryingModelGateway(gateway.gateway, delay, noJitter()).stream(request, signal()),
+      ),
     ).resolves.toEqual([{ type: "text.delta", text: "ok" }]);
     expect(gateway.attempts()).toBe(3);
     expect(delay.wait.mock.calls.map(([milliseconds]) => milliseconds)).toEqual([250, 500]);
@@ -71,10 +78,90 @@ describe("RetryingModelGateway", () => {
     const delay = recordingDelay();
 
     await expect(
-      collect(new RetryingModelGateway(gateway.gateway, delay).stream(request, signal())),
+      collect(
+        new RetryingModelGateway(gateway.gateway, delay, noJitter()).stream(request, signal()),
+      ),
     ).rejects.toBe(finalFailure);
     expect(gateway.attempts()).toBe(3);
     expect(delay.wait.mock.calls.map(([milliseconds]) => milliseconds)).toEqual([250, 500]);
+  });
+
+  it("respects a Provider-requested retryAfterMilliseconds instead of jittered backoff", async () => {
+    const gateway = scriptedGateway([
+      new ModelGatewayError("rate-limit", { retryAfterMilliseconds: 5_000 }),
+      [{ type: "finish", reason: "stop" }],
+    ]);
+    const delay = recordingDelay();
+    const jitter: ProviderRetryJitter = { next: vi.fn() };
+
+    await expect(
+      collect(new RetryingModelGateway(gateway.gateway, delay, jitter).stream(request, signal())),
+    ).resolves.toEqual([{ type: "finish", reason: "stop" }]);
+    expect(delay.wait).toHaveBeenCalledWith(5_000, expect.any(AbortSignal));
+    // A Provider-specified wait is honored exactly, not jittered.
+    expect(jitter.next).not.toHaveBeenCalled();
+  });
+
+  it("clamps a Provider-requested retryAfterMilliseconds to the ceiling", async () => {
+    const gateway = scriptedGateway([
+      new ModelGatewayError("unavailable", { retryAfterMilliseconds: 120_000 }),
+      [{ type: "finish", reason: "stop" }],
+    ]);
+    const delay = recordingDelay();
+
+    await expect(
+      collect(
+        new RetryingModelGateway(gateway.gateway, delay, noJitter()).stream(request, signal()),
+      ),
+    ).resolves.toEqual([{ type: "finish", reason: "stop" }]);
+    expect(delay.wait).toHaveBeenCalledWith(
+      maxProviderRetryDelayMilliseconds,
+      expect.any(AbortSignal),
+    );
+  });
+
+  it("applies full jitter to the exponential-backoff fallback, bounded by the ceiling", async () => {
+    const gateway = scriptedGateway([
+      new ModelGatewayError("unavailable"),
+      new ModelGatewayError("unavailable"),
+      [{ type: "finish", reason: "stop" }],
+    ]);
+    const delay = recordingDelay();
+    // A stub, not a no-op: it must be called with the un-jittered exponential baseline for each
+    // attempt (250, then 500), and whatever it returns must reach delay.wait() unchanged.
+    const jitter: ProviderRetryJitter = { next: vi.fn((maximum: number) => maximum / 4) };
+
+    await expect(
+      collect(new RetryingModelGateway(gateway.gateway, delay, jitter).stream(request, signal())),
+    ).resolves.toEqual([{ type: "finish", reason: "stop" }]);
+    expect(jitter.next).toHaveBeenNthCalledWith(1, initialProviderRetryDelayMilliseconds);
+    expect(jitter.next).toHaveBeenNthCalledWith(2, initialProviderRetryDelayMilliseconds * 2);
+    expect(delay.wait.mock.calls.map(([milliseconds]) => milliseconds)).toEqual([62.5, 125]);
+  });
+
+  it("clamps jittered exponential backoff to the ceiling", async () => {
+    const gateway = scriptedGateway([
+      new ModelGatewayError("unavailable"),
+      [{ type: "finish", reason: "stop" }],
+    ]);
+    const delay = recordingDelay();
+    const jitter: ProviderRetryJitter = { next: () => 1_000_000 };
+
+    await expect(
+      collect(new RetryingModelGateway(gateway.gateway, delay, jitter).stream(request, signal())),
+    ).resolves.toEqual([{ type: "finish", reason: "stop" }]);
+    expect(delay.wait).toHaveBeenCalledWith(
+      maxProviderRetryDelayMilliseconds,
+      expect.any(AbortSignal),
+    );
+  });
+
+  it("defaultProviderRetryJitter returns a value in [0, maximum)", () => {
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const value = defaultProviderRetryJitter.next(1_000);
+      expect(value).toBeGreaterThanOrEqual(0);
+      expect(value).toBeLessThan(1_000);
+    }
   });
 
   it("does not retry after any stream event has been emitted", async () => {
@@ -200,6 +287,11 @@ function recordingDelay() {
 
 function signal(): AbortSignal {
   return new AbortController().signal;
+}
+
+/** A jitter stub that returns the un-jittered maximum, for tests asserting exact backoff values. */
+function noJitter(): ProviderRetryJitter {
+  return { next: (maximum) => maximum };
 }
 
 async function collect(events: AsyncIterable<ModelEvent>): Promise<readonly ModelEvent[]> {

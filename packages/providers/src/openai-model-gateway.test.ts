@@ -360,6 +360,69 @@ describe("OpenAI ModelGateway", () => {
     });
   });
 
+  it("carries a delay-seconds Retry-After header as retryAfterMilliseconds", async () => {
+    sdkMocks.streamText.mockImplementation(() => {
+      throw new APICallError({
+        isRetryable: true,
+        message: "rate limited",
+        requestBodyValues: {},
+        responseHeaders: { "retry-after": "30" },
+        statusCode: 429,
+        url: "https://example.invalid",
+      });
+    });
+    const gateway = createOpenAIModelGateway({ apiKey: "test-key", modelId: "gpt-test" });
+
+    await expect(
+      collectEvents(gateway.stream(request, new AbortController().signal)),
+    ).rejects.toMatchObject({ code: "rate-limit", retryAfterMilliseconds: 30_000 });
+  });
+
+  it("carries an HTTP-date Retry-After header as retryAfterMilliseconds", async () => {
+    // Whole seconds: an HTTP-date has no sub-second precision, so round-tripping a sub-second
+    // "now" through toUTCString() and back would lose it and make this assertion flaky.
+    const now = Math.floor(Date.now() / 1000) * 1000;
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+    sdkMocks.streamText.mockImplementation(() => {
+      throw new APICallError({
+        isRetryable: true,
+        message: "rate limited",
+        requestBodyValues: {},
+        responseHeaders: { "retry-after": new Date(now + 45_000).toUTCString() },
+        statusCode: 429,
+        url: "https://example.invalid",
+      });
+    });
+    const gateway = createOpenAIModelGateway({ apiKey: "test-key", modelId: "gpt-test" });
+
+    await expect(
+      collectEvents(gateway.stream(request, new AbortController().signal)),
+    ).rejects.toMatchObject({ code: "rate-limit", retryAfterMilliseconds: 45_000 });
+    vi.useRealTimers();
+  });
+
+  it.each([undefined, "not-a-valid-header-value", "-5"])(
+    "leaves retryAfterMilliseconds undefined for a missing or unparseable Retry-After (%s)",
+    async (retryAfter) => {
+      sdkMocks.streamText.mockImplementation(() => {
+        throw new APICallError({
+          isRetryable: true,
+          message: "rate limited",
+          requestBodyValues: {},
+          responseHeaders: retryAfter === undefined ? undefined : { "retry-after": retryAfter },
+          statusCode: 429,
+          url: "https://example.invalid",
+        });
+      });
+      const gateway = createOpenAIModelGateway({ apiKey: "test-key", modelId: "gpt-test" });
+
+      await expect(
+        collectEvents(gateway.stream(request, new AbortController().signal)),
+      ).rejects.toMatchObject({ code: "rate-limit", retryAfterMilliseconds: undefined });
+    },
+  );
+
   it("classifies a structured context overflow without inspecting provider text", async () => {
     sdkMocks.streamText.mockImplementation(() => {
       throw new APICallError({
