@@ -6,6 +6,7 @@ import {
   createDependencyInventoryFile,
   createSpdxDocument,
   isCompatibleLicenseExpression,
+  POLICY_COMPATIBLE_SPDX_EXCEPTION_IDS,
   resolveBuildSource,
   SPDX_EXCEPTION_CATALOG_SHA256,
   SPDX_EXCEPTION_SOURCE,
@@ -157,6 +158,41 @@ describe("release policy", () => {
         { name: "bad-exception", version: "1.0.0", license: "MIT WITH UnknownException" },
       ]),
     ).toThrow(/Incompatible license/);
+  });
+
+  it("parses full SPDX license expression grammar via spdx-expression-parse", () => {
+    // A "+" grants "this version or later"; it does not narrow compatibility.
+    expect(isCompatibleLicenseExpression("Apache-2.0+")).toBe(true);
+    expect(isCompatibleLicenseExpression("GPL-3.0-only+")).toBe(false);
+    // Operator keywords are matched case-insensitively per the SPDX expression grammar,
+    // while license identifiers themselves remain case-sensitive.
+    expect(isCompatibleLicenseExpression("MIT or Apache-2.0")).toBe(true);
+    expect(isCompatibleLicenseExpression("mit")).toBe(false);
+    expect(isCompatibleLicenseExpression("(MIT AND Apache-2.0) OR GPL-3.0-only")).toBe(true);
+    expect(isCompatibleLicenseExpression("MIT AND GPL-3.0-only")).toBe(false);
+    // A canonical-but-not-policy-approved exception poisons the whole expression, even inside
+    // an OR branch whose own compatibility does not end up deciding the outer result. Uses a
+    // real SPDX exception id (not a made-up string) so this actually exercises
+    // `evaluateSpdxNode`'s `unknownException` propagation rather than an upstream parse failure.
+    expect(isCompatibleLicenseExpression("(MIT WITH GCC-exception-3.1) OR Apache-2.0")).toBe(false);
+    // Still rejected: unknown license identifiers, LicenseRef, and malformed expressions.
+    expect(isCompatibleLicenseExpression("NOT-A-REAL-LICENSE")).toBe(false);
+    expect(isCompatibleLicenseExpression("LicenseRef-custom")).toBe(false);
+    expect(isCompatibleLicenseExpression("MIT AND")).toBe(false);
+    expect(isCompatibleLicenseExpression("(MIT OR Apache-2.0")).toBe(false);
+    expect(isCompatibleLicenseExpression("")).toBe(false);
+  });
+
+  it("fails closed for an exception canonical in the pinned catalog but unknown to the installed spdx-expression-parse dependency", () => {
+    // `PCRE2-exception` is in release/spdx-exceptions.json's pinned SPDX List 3.28.0 catalog,
+    // but the version of `spdx-exceptions` that `spdx-expression-parse` currently bundles
+    // predates it and cannot tokenize it as an EXCEPTION at all. Extending
+    // POLICY_COMPATIBLE_SPDX_EXCEPTION_IDS with such an id would need this test updated (and
+    // the parser dependency's transitive `spdx-exceptions` version checked) before it could
+    // ever be accepted; today it must still be rejected.
+    expect(ALLOWED_SPDX_EXCEPTION_IDS).toContain("PCRE2-exception");
+    expect(POLICY_COMPATIBLE_SPDX_EXCEPTION_IDS).not.toContain("PCRE2-exception");
+    expect(isCompatibleLicenseExpression("MIT WITH PCRE2-exception")).toBe(false);
   });
 
   it("preserves distinct versions of a transitive dependency in the SBOM", () => {
