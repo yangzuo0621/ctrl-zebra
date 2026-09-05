@@ -1,6 +1,6 @@
 import { isApprovedExternalLink } from "@ctrl-zebra/protocol";
 import MarkdownIt from "markdown-it";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type CSSProperties, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
 import styles from "./markdown-message.module.css";
 import { strings } from "./strings.js";
@@ -55,7 +55,8 @@ type BlockNode =
   | { readonly kind: "inline"; readonly tokens: readonly MarkdownToken[] }
   | { readonly kind: "code"; readonly language: string; readonly text: string }
   | { readonly kind: "text"; readonly text: string }
-  | { readonly kind: "break" };
+  | { readonly kind: "break" }
+  | { readonly kind: "hr" };
 
 interface InlineContainer {
   readonly kind: "root" | "element";
@@ -126,13 +127,15 @@ export function MarkdownMessage({ content, onOpenLink }: MarkdownMessageProps) {
     );
   };
 
-  const bounded = takeMarkdownPrefix(content);
-  const tree = buildBlockTree(markdown.parse(bounded.text, {}));
+  const { tree, truncated } = useMemo(() => {
+    const bounded = takeMarkdownPrefix(content);
+    return { tree: buildBlockTree(markdown.parse(bounded.text, {})), truncated: bounded.truncated };
+  }, [content]);
 
   return (
     <div className={styles.container}>
       {renderBlockNodes(tree, "block", onOpenLink, handleCopy, copiedKey, copyFailedKey)}
-      {bounded.truncated ? <p className={styles.truncated}>{strings.markdown.truncated}</p> : null}
+      {truncated ? <p className={styles.truncated}>{strings.markdown.truncated}</p> : null}
     </div>
   );
 }
@@ -163,6 +166,9 @@ function renderBlockNode(
   }
   if (node.kind === "break") {
     return <br key={key} />;
+  }
+  if (node.kind === "hr") {
+    return <hr key={key} className={styles.hr} />;
   }
   if (node.kind === "code") {
     return (
@@ -265,9 +271,17 @@ function renderBlockNode(
     case "tr":
       return <tr key={key}>{children}</tr>;
     case "th":
-      return <th key={key}>{children}</th>;
+      return (
+        <th key={key} style={tableCellStyle(node.token)}>
+          {children}
+        </th>
+      );
     case "td":
-      return <td key={key}>{children}</td>;
+      return (
+        <td key={key} style={tableCellStyle(node.token)}>
+          {children}
+        </td>
+      );
     default:
       return <span key={key}>{children}</span>;
   }
@@ -324,6 +338,21 @@ function blockTag(
     default:
       return undefined;
   }
+}
+
+/**
+ * markdown-it only ever emits exactly `text-align:left|right|center` for a `th`/`td`'s column
+ * alignment (there is no raw-HTML/attribute injection path here — `html: false` is set above).
+ * Still, the value is matched against a fixed allowlist rather than passed through as arbitrary
+ * CSS text.
+ */
+function tableCellStyle(token: MarkdownToken): CSSProperties | undefined {
+  const style = token.attrGet("style");
+  const alignment =
+    typeof style === "string" ? /^text-align:(left|right|center)$/u.exec(style)?.[1] : undefined;
+  return alignment === undefined
+    ? undefined
+    : { textAlign: alignment as CSSProperties["textAlign"] };
 }
 
 function renderInlineNodes(
@@ -423,6 +452,10 @@ function buildBlockTree(tokens: readonly MarkdownToken[]): readonly BlockNode[] 
     }
     if (token.type === "softbreak" || token.type === "hardbreak") {
       append({ kind: "break" });
+      continue;
+    }
+    if (token.type === "hr") {
+      append({ kind: "hr" });
       continue;
     }
     if (token.content.length > 0) {

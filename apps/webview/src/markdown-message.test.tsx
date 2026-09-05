@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import MarkdownIt from "markdown-it";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MarkdownMessage, maxMarkdownCodePoints } from "./markdown-message.js";
@@ -153,5 +154,49 @@ describe("MarkdownMessage", () => {
 
     expect(screen.getByText(strings.markdown.truncated)).toBeVisible();
     expect(screen.getByRole("button", { name: strings.markdown.copy })).toBeVisible();
+  });
+
+  it("renders a thematic break as an hr element instead of dropping it", () => {
+    const { container } = render(
+      <MarkdownMessage content={["before", "", "---", "", "after"].join("\n")} />,
+    );
+
+    expect(screen.getByText("before")).toBeVisible();
+    expect(screen.getByText("after")).toBeVisible();
+    expect(container.querySelectorAll("hr")).toHaveLength(1);
+  });
+
+  it("applies column alignment to table header and data cells", () => {
+    render(
+      <MarkdownMessage
+        content={["| A | B | C |", "|:---|---:|:---:|", "| 1 | 2 | 3 |"].join("\n")}
+      />,
+    );
+
+    const [headerLeft, headerRight, headerCenter] = screen.getAllByRole("columnheader");
+    expect(headerLeft).toHaveStyle({ textAlign: "left" });
+    expect(headerRight).toHaveStyle({ textAlign: "right" });
+    expect(headerCenter).toHaveStyle({ textAlign: "center" });
+
+    const [cellLeft, cellRight, cellCenter] = screen.getAllByRole("cell");
+    expect(cellLeft).toHaveStyle({ textAlign: "left" });
+    expect(cellRight).toHaveStyle({ textAlign: "right" });
+    expect(cellCenter).toHaveStyle({ textAlign: "center" });
+  });
+
+  it("does not re-parse Markdown on a re-render with unchanged content", () => {
+    const parse = vi.spyOn(MarkdownIt.prototype, "parse");
+    const content = "**stable**";
+    const { rerender } = render(<MarkdownMessage content={content} onOpenLink={() => {}} />);
+    const callsAfterFirstRender = parse.mock.calls.length;
+    expect(callsAfterFirstRender).toBeGreaterThan(0);
+
+    rerender(<MarkdownMessage content={content} onOpenLink={() => {}} />);
+    expect(parse.mock.calls.length).toBe(callsAfterFirstRender);
+
+    rerender(<MarkdownMessage content="**changed**" onOpenLink={() => {}} />);
+    expect(parse.mock.calls.length).toBeGreaterThan(callsAfterFirstRender);
+
+    parse.mockRestore();
   });
 });

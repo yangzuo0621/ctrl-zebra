@@ -121,6 +121,12 @@
   font-weight: 600;
 }
 
+.hr {
+  margin: var(--cz-space-3) 0;
+  border: none;
+  border-top: 1px solid var(--cz-color-border);
+}
+
 .truncated {
   margin: var(--cz-space-2) 0 0;
   color: var(--cz-color-muted);
