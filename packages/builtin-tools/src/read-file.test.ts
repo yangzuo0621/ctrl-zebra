@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { ZodError } from "zod";
 
 import {
   BinaryFileError,
@@ -8,6 +9,7 @@ import {
   type ReadFileBytes,
   ReadFileRangeError,
   type ReadFileWorkspace,
+  readFileInputSchema,
   readFileUtf8LookaheadBytes,
 } from "./index.js";
 
@@ -128,8 +130,37 @@ describe("read_file", () => {
     { path: "file.txt", extra: true },
   ])("rejects invalid input %#", (value) => {
     expect(() => createReadFileTool(createWorkspace(bytes(""))).parseInput(value)).toThrow(
-      TypeError,
+      ZodError,
     );
+  });
+
+  it("advertises the exact model-facing schema this tool has always advertised", () => {
+    expect(readFileInputSchema).toEqual({
+      type: "object",
+      properties: {
+        path: {
+          type: "string",
+          description: "Workspace-relative file path using forward slashes.",
+          minLength: 1,
+          maxLength: 4_096,
+          pattern: "^(?!\\/)(?!.*\\\\)(?!.*(?:^|\\/)\\.{1,2}(?:\\/|$)).+$",
+        },
+        startLine: {
+          type: "integer",
+          description: "One-based first line to read. Defaults to 1.",
+          minimum: 1,
+          maximum: Number.MAX_SAFE_INTEGER,
+        },
+        endLine: {
+          type: "integer",
+          description: "Optional one-based inclusive last line.",
+          minimum: 1,
+          maximum: Number.MAX_SAFE_INTEGER,
+        },
+      },
+      required: ["path"],
+      additionalProperties: false,
+    });
   });
 
   it("rejects a start line outside the available text", async () => {

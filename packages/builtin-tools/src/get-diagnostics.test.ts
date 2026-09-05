@@ -1,9 +1,11 @@
 import { ToolExecutionError } from "@ctrl-zebra/core";
 import { describe, expect, it, vi } from "vitest";
+import { ZodError } from "zod";
 
 import {
   createGetDiagnosticsTool,
   DiagnosticsUnavailableError,
+  getDiagnosticsInputSchema,
   getDiagnosticsToolName,
   type IdeDiagnosticsPort,
   InvalidDiagnosticsOutputError,
@@ -55,7 +57,30 @@ describe(getDiagnosticsToolName, () => {
     { scope: "unknown" },
     { scope: "workspace", extra: true },
   ])("rejects malformed scope/path input %#", (value) => {
-    expect(() => parseGetDiagnosticsInput(value)).toThrow(TypeError);
+    expect(() => parseGetDiagnosticsInput(value)).toThrow(ZodError);
+  });
+
+  it("advertises the exact model-facing schema this tool has always advertised", () => {
+    expect(getDiagnosticsInputSchema).toEqual({
+      type: "object",
+      properties: {
+        scope: {
+          type: "string",
+          enum: ["active-file", "workspace"],
+          description:
+            "Read diagnostics for the active file, one workspace path, or the workspace.",
+        },
+        path: {
+          type: "string",
+          description: "Optional workspace-relative path when scope is workspace.",
+          minLength: 1,
+          maxLength: 4_096,
+          pattern: "^(?!\\/)(?!.*\\\\)(?!.*(?:^|\\/)\\.{1,2}(?:\\/|$)).+$",
+        },
+      },
+      required: ["scope"],
+      additionalProperties: false,
+    });
   });
 
   it("projects a strict read-only diagnostic result and preserves truncation", async () => {
