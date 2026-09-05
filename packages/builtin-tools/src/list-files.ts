@@ -1,38 +1,42 @@
 import type { AgentTool, ToolExecutionOutput } from "@ctrl-zebra/core";
+import { z } from "zod";
 
-import {
-  hasOnlyKeys,
-  isRecord,
-  isSafeForwardSlashPath,
-  parseWorkspaceFilePaths,
-} from "./boundary-validation.js";
+import { isRecord, parseWorkspaceFilePaths } from "./boundary-validation.js";
+import { toToolInputSchema } from "./zod-tool-schema.js";
 
 export const listFilesToolName = "list_files" as const;
 export const listFilesToolDescription =
   "List files in the selected workspace that match a glob pattern.";
-export const listFilesInputSchema = {
-  type: "object",
-  properties: {
-    glob: {
-      type: "string",
-      description: "Workspace-relative glob pattern. Defaults to **/*.",
-      minLength: 1,
-      maxLength: 256,
-      pattern: "^(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$",
-    },
-    maxResults: {
-      type: "integer",
-      description: "Maximum number of files to return. Defaults to 100.",
-      minimum: 1,
-      maximum: 200,
-    },
-  },
-  required: [],
-  additionalProperties: false,
-} as const;
+
 export const defaultListFilesLimit = 100;
 export const maxListFilesLimit = 200;
 export const listFilesExcludeGlob = "**/{.git,node_modules,dist,build,coverage,.next,out}/**";
+
+/**
+ * Allows a leading slash and "." segments (glob syntax uses both), unlike
+ * workspace-path-schema.ts's stricter workspace-relative-path pattern -- only a ".." segment or a
+ * backslash is rejected. Also used verbatim by search-files.ts; kept local here rather than
+ * extracted into a shared module until that tool's own tranche touches it.
+ */
+const listFilesGlobPattern = /^(?!.*(?:^|\/)\.\.(?:\/|$))(?!.*\\).+$/u;
+
+const listFilesInputZodSchema = z.strictObject({
+  glob: z
+    .string()
+    .min(1)
+    .max(256)
+    .regex(listFilesGlobPattern)
+    .describe("Workspace-relative glob pattern. Defaults to **/*.")
+    .optional(),
+  maxResults: z
+    .number()
+    .int()
+    .min(1)
+    .max(maxListFilesLimit)
+    .describe("Maximum number of files to return. Defaults to 100.")
+    .optional(),
+});
+export const listFilesInputSchema = toToolInputSchema(listFilesInputZodSchema);
 
 export interface ListFilesInput {
   readonly glob: string;
@@ -92,36 +96,19 @@ export function createListFilesTool(
 }
 
 function parseListFilesInput(value: unknown): ListFilesInput {
-  if (!isRecord(value)) {
-    throw new TypeError("Expected list_files input to be an object.");
-  }
-
-  if (!hasOnlyKeys(value, new Set(["glob", "maxResults"]))) {
-    throw new TypeError("Unexpected list_files input field.");
-  }
-
-  const glob = value.glob ?? "**/*";
-  const maxResults = value.maxResults ?? defaultListFilesLimit;
-  if (
-    !isSafeForwardSlashPath(glob, {
-      maxLength: 256,
-      allowLeadingSlash: true,
-      rejectCurrentSegments: false,
-    })
-  ) {
-    throw new TypeError("Invalid list_files glob.");
-  }
-
-  if (
-    typeof maxResults !== "number" ||
-    !Number.isSafeInteger(maxResults) ||
-    maxResults < 1 ||
-    maxResults > maxListFilesLimit
-  ) {
-    throw new TypeError("Invalid list_files maxResults.");
-  }
-
-  return { glob, maxResults };
+  // The hand-written parser this replaces treated an explicit `null` the same as an absent field
+  // (`value.glob ?? "**/*"`), which zod's `.optional()` alone does not: it accepts a missing key
+  // but rejects `null`. Normalize `null` to `undefined` for these two fields before validating, so
+  // a caller that serializes an omitted optional argument as JSON `null` still gets the default
+  // instead of a rejected call.
+  const normalized = isRecord(value)
+    ? { ...value, glob: value.glob ?? undefined, maxResults: value.maxResults ?? undefined }
+    : value;
+  const parsed = listFilesInputZodSchema.parse(normalized);
+  return {
+    glob: parsed.glob ?? "**/*",
+    maxResults: parsed.maxResults ?? defaultListFilesLimit,
+  };
 }
 
 function parseWorkspaceFileList(value: unknown): readonly string[] {
