@@ -45,6 +45,10 @@ export {
   toolResultSchema,
   toolRiskSchema,
   toolSuccessResultSchema,
+  // Re-exported (not just re-used) so that @ctrl-zebra/mcp-client and @ctrl-zebra/providers,
+  // which scripts/check-architecture.mjs's allowedWorkspaceDependencies permits to depend only
+  // on @ctrl-zebra/core (not @ctrl-zebra/protocol directly), can still reach these primitives.
+  // Core itself always imports them straight from @ctrl-zebra/protocol.
   utf8ByteLength,
   utf8BytesForCodePoint,
 } from "@ctrl-zebra/protocol";
