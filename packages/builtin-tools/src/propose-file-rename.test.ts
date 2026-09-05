@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
+import { ZodError } from "zod";
 
 import {
   createProposeFileRenameTool,
   type ProposeFileRenameWorkspace,
+  proposeFileRenameInputSchema,
   StaleFileRenameTargetError,
 } from "./propose-file-rename.js";
 
@@ -16,6 +18,30 @@ const snapshot = {
 } as const;
 
 describe("propose_file_rename", () => {
+  it("advertises the exact model-facing schema this tool has always advertised", () => {
+    expect(proposeFileRenameInputSchema).toEqual({
+      type: "object",
+      properties: {
+        sourcePath: {
+          type: "string",
+          description: "Workspace-relative existing file path using forward slashes.",
+          minLength: 1,
+          maxLength: 4_096,
+          pattern: "^(?!\\/)(?!.*\\\\)(?!.*(?:^|\\/)\\.{1,2}(?:\\/|$)).+$",
+        },
+        targetPath: {
+          type: "string",
+          description: "Workspace-relative absent destination path using forward slashes.",
+          minLength: 1,
+          maxLength: 4_096,
+          pattern: "^(?!\\/)(?!.*\\\\)(?!.*(?:^|\\/)\\.{1,2}(?:\\/|$)).+$",
+        },
+      },
+      required: ["sourcePath", "targetPath"],
+      additionalProperties: false,
+    });
+  });
+
   it("prepares a source/target pair without writing or overwriting", async () => {
     const workspace = createWorkspace();
     const tool = createProposeFileRenameTool(workspace.values);
@@ -40,7 +66,7 @@ describe("propose_file_rename", () => {
     { sourcePath: "old\\txt", targetPath: "new.txt" },
   ])("rejects an unsafe or colliding path pair %#", (value) => {
     const tool = createProposeFileRenameTool(createWorkspace().values);
-    expect(() => tool.parseInput(value)).toThrow(TypeError);
+    expect(() => tool.parseInput(value)).toThrow(ZodError);
   });
 
   it("rejects a source or target that changed during preparation", async () => {

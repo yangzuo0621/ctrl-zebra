@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
+import { ZodError } from "zod";
 
 import {
   createProposeFileDeleteTool,
   type ProposeFileDeleteWorkspace,
+  proposeFileDeleteInputSchema,
   StaleFileDeleteTargetError,
 } from "./propose-file-delete.js";
 
@@ -15,6 +17,23 @@ const snapshot = {
 } as const;
 
 describe("propose_file_delete", () => {
+  it("advertises the exact model-facing schema this tool has always advertised", () => {
+    expect(proposeFileDeleteInputSchema).toEqual({
+      type: "object",
+      properties: {
+        path: {
+          type: "string",
+          description: "Workspace-relative file path using forward slashes.",
+          minLength: 1,
+          maxLength: 4_096,
+          pattern: "^(?!\\/)(?!.*\\\\)(?!.*(?:^|\\/)\\.{1,2}(?:\\/|$)).+$",
+        },
+      },
+      required: ["path"],
+      additionalProperties: false,
+    });
+  });
+
   it("prepares a bounded existing text target without writing", async () => {
     const workspace = createWorkspace();
     const tool = createProposeFileDeleteTool(workspace.values);
@@ -36,7 +55,7 @@ describe("propose_file_delete", () => {
     "rejects an unsafe path %s",
     (path) => {
       const tool = createProposeFileDeleteTool(createWorkspace().values);
-      expect(() => tool.parseInput({ path })).toThrow(TypeError);
+      expect(() => tool.parseInput({ path })).toThrow(ZodError);
     },
   );
 

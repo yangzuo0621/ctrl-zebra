@@ -9,9 +9,15 @@ import {
   parseFileCreatePlan,
   type ToolExecutionOutput,
 } from "@ctrl-zebra/core";
-import { checkpointHashSchema, utf8ByteLength } from "@ctrl-zebra/protocol";
-
-import { hasOnlyKeys, isRecord, isSafeForwardSlashPath } from "./boundary-validation.js";
+import { checkpointHashSchema } from "@ctrl-zebra/protocol";
+import { z } from "zod";
+import { hasOnlyKeys, isRecord } from "./boundary-validation.js";
+import { boundedWorkspaceTextSchema } from "./bounded-text-schema.js";
+import {
+  isSafeWorkspaceRelativePath,
+  workspaceRelativePathSchema,
+} from "./workspace-path-schema.js";
+import { toToolInputSchema } from "./zod-tool-schema.js";
 
 export const proposeFileCreateToolName = "propose_file_create" as const;
 export const proposeFileCreateToolDescription =
@@ -22,24 +28,39 @@ export const maxProposedFileCreateLines = maxFileCreateContentLines;
 export const maxProposedFileCreateBytes = maxFileCreateContentBytes;
 export const maxProposedFileCreatePathBytes = maxFileCreatePathBytes;
 
+const proposeFileCreateContentBounds = {
+  maxCharacters: maxProposedFileCreateCharacters,
+  maxLines: maxProposedFileCreateLines,
+  maxBytes: maxProposedFileCreateBytes,
+};
+
+const proposeFileCreateZodSchema = z.strictObject({
+  path: workspaceRelativePathSchema(
+    "Workspace-relative file path using forward slashes.",
+    4_096,
+    maxProposedFileCreatePathBytes,
+  ),
+  content: boundedWorkspaceTextSchema(
+    "Complete UTF-8 text content for the new file.",
+    proposeFileCreateContentBounds,
+  ),
+});
+
+// `boundedWorkspaceTextSchema`'s bound is enforced through `.refine()`, not `.max()` (see its
+// docs), so `toToolInputSchema()` cannot derive a `maxLength` for `content` on its own; splice the
+// same `maxLength` this tool has always advertised back in, to keep the model-facing schema byte-
+// for-byte the schema it replaces.
+const generatedProposeFileCreateInputSchema = toToolInputSchema(proposeFileCreateZodSchema);
 export const proposeFileCreateInputSchema = {
-  type: "object",
+  ...generatedProposeFileCreateInputSchema,
   properties: {
-    path: {
-      type: "string",
-      description: "Workspace-relative file path using forward slashes.",
-      minLength: 1,
-      maxLength: 4_096,
-      pattern: "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*\\\\).+$",
-    },
+    ...generatedProposeFileCreateInputSchema.properties,
     content: {
       type: "string",
       description: "Complete UTF-8 text content for the new file.",
       maxLength: maxProposedFileCreateCharacters,
     },
   },
-  required: ["path", "content"],
-  additionalProperties: false,
 } as const;
 
 export interface ProposeFileCreateInput {
@@ -137,37 +158,14 @@ function prepareFileCreateApproval(workspace: ProposeFileCreateWorkspace) {
 }
 
 function parseProposeFileCreateInput(value: unknown): ProposeFileCreateInput {
-  if (
-    !isRecord(value) ||
-    !hasOnlyKeys(value, new Set(["path", "content"])) ||
-    !isSafeForwardSlashPath(value.path, {
-      maxLength: 4_096,
-      allowLeadingSlash: false,
-      rejectCurrentSegments: true,
-    }) ||
-    !isSafePathSize(value.path) ||
-    typeof value.content !== "string"
-  ) {
-    throw new TypeError("Invalid propose_file_create input.");
-  }
-
-  if (!isBoundedText(value.content)) {
-    throw new TypeError("propose_file_create content is too large or not UTF-8 text.");
-  }
-
-  return { path: value.path, content: value.content };
+  return proposeFileCreateZodSchema.parse(value);
 }
 
 function parseFileCreateTargetSnapshot(value: unknown): FileCreateTargetSnapshot {
   if (
     !isRecord(value) ||
     !hasOnlyKeys(value, new Set(["path", "uri", "afterHash"])) ||
-    !isSafeForwardSlashPath(value.path, {
-      maxLength: 4_096,
-      allowLeadingSlash: false,
-      rejectCurrentSegments: true,
-    }) ||
-    !isSafePathSize(value.path) ||
+    !isSafeWorkspaceRelativePath(value.path, maxProposedFileCreatePathBytes) ||
     typeof value.uri !== "string" ||
     value.uri.length === 0 ||
     value.uri.length > maxApprovalUriCharacters ||
@@ -181,22 +179,4 @@ function parseFileCreateTargetSnapshot(value: unknown): FileCreateTargetSnapshot
     uri: value.uri as string,
     afterHash: value.afterHash as string,
   };
-}
-
-function isSafePathSize(path: string): boolean {
-  return [...path].length <= 4_096 && utf8ByteLength(path) <= maxProposedFileCreatePathBytes;
-}
-
-function isBoundedText(text: string): boolean {
-  return (
-    !text.includes("\0") &&
-    text.isWellFormed() &&
-    [...text].length <= maxProposedFileCreateCharacters &&
-    countLogicalLines(text) <= maxProposedFileCreateLines &&
-    utf8ByteLength(text) <= maxProposedFileCreateBytes
-  );
-}
-
-function countLogicalLines(text: string): number {
-  return text.length === 0 ? 0 : text.split(/\r\n|\r|\n/u).length;
 }

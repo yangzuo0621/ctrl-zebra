@@ -9,9 +9,15 @@ import {
   parseFileDeletePlan,
   type ToolExecutionOutput,
 } from "@ctrl-zebra/core";
-import { checkpointHashSchema, utf8ByteLength } from "@ctrl-zebra/protocol";
-
-import { hasOnlyKeys, isRecord, isSafeForwardSlashPath } from "./boundary-validation.js";
+import { checkpointHashSchema } from "@ctrl-zebra/protocol";
+import { z } from "zod";
+import { hasOnlyKeys, isRecord } from "./boundary-validation.js";
+import { isBoundedWorkspaceText } from "./bounded-text-schema.js";
+import {
+  isSafeWorkspaceRelativePath,
+  workspaceRelativePathSchema,
+} from "./workspace-path-schema.js";
+import { toToolInputSchema } from "./zod-tool-schema.js";
 
 export const proposeFileDeleteToolName = "propose_file_delete" as const;
 export const proposeFileDeleteToolDescription =
@@ -22,20 +28,14 @@ export const maxProposedFileDeleteLines = maxFileDeleteContentLines;
 export const maxProposedFileDeleteBytes = maxFileDeleteContentBytes;
 export const maxProposedFileDeletePathBytes = maxFileDeletePathBytes;
 
-export const proposeFileDeleteInputSchema = {
-  type: "object",
-  properties: {
-    path: {
-      type: "string",
-      description: "Workspace-relative file path using forward slashes.",
-      minLength: 1,
-      maxLength: 4_096,
-      pattern: "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*\\\\).+$",
-    },
-  },
-  required: ["path"],
-  additionalProperties: false,
-} as const;
+const proposeFileDeleteZodSchema = z.strictObject({
+  path: workspaceRelativePathSchema(
+    "Workspace-relative file path using forward slashes.",
+    4_096,
+    maxProposedFileDeletePathBytes,
+  ),
+});
+export const proposeFileDeleteInputSchema = toToolInputSchema(proposeFileDeleteZodSchema);
 
 export interface ProposeFileDeleteInput {
   readonly path: string;
@@ -129,37 +129,23 @@ function prepareFileDeleteApproval(workspace: ProposeFileDeleteWorkspace) {
 }
 
 function parseProposeFileDeleteInput(value: unknown): ProposeFileDeleteInput {
-  if (
-    !isRecord(value) ||
-    !hasOnlyKeys(value, new Set(["path"])) ||
-    !isSafeForwardSlashPath(value.path, {
-      maxLength: 4_096,
-      allowLeadingSlash: false,
-      rejectCurrentSegments: true,
-    }) ||
-    utf8ByteLength(value.path) > maxProposedFileDeletePathBytes
-  ) {
-    throw new TypeError("Invalid propose_file_delete input.");
-  }
-
-  return { path: value.path };
+  return proposeFileDeleteZodSchema.parse(value);
 }
 
 function parseFileDeleteTargetSnapshot(value: unknown): FileDeleteTargetSnapshot {
   if (
     !isRecord(value) ||
     !hasOnlyKeys(value, new Set(["path", "uri", "beforeContent", "beforeHash"])) ||
-    !isSafeForwardSlashPath(value.path, {
-      maxLength: 4_096,
-      allowLeadingSlash: false,
-      rejectCurrentSegments: true,
-    }) ||
-    utf8ByteLength(value.path) > maxProposedFileDeletePathBytes ||
+    !isSafeWorkspaceRelativePath(value.path, maxProposedFileDeletePathBytes) ||
     typeof value.uri !== "string" ||
     value.uri.length === 0 ||
     value.uri.length > maxApprovalUriCharacters ||
     typeof value.beforeContent !== "string" ||
-    !isBoundedText(value.beforeContent) ||
+    !isBoundedWorkspaceText(value.beforeContent, {
+      maxCharacters: maxProposedFileDeleteCharacters,
+      maxLines: maxProposedFileDeleteLines,
+      maxBytes: maxProposedFileDeleteBytes,
+    }) ||
     !checkpointHashSchema.safeParse(value.beforeHash).success
   ) {
     throw new InvalidWorkspaceFileDeleteTargetError();
@@ -171,18 +157,4 @@ function parseFileDeleteTargetSnapshot(value: unknown): FileDeleteTargetSnapshot
     beforeContent: value.beforeContent as string,
     beforeHash: value.beforeHash as string,
   };
-}
-
-function isBoundedText(text: string): boolean {
-  return (
-    text.isWellFormed() &&
-    !text.includes("\0") &&
-    [...text].length <= maxProposedFileDeleteCharacters &&
-    countLogicalLines(text) <= maxProposedFileDeleteLines &&
-    utf8ByteLength(text) <= maxProposedFileDeleteBytes
-  );
-}
-
-function countLogicalLines(text: string): number {
-  return text.length === 0 ? 0 : text.split(/\r\n|\r|\n/u).length;
 }
