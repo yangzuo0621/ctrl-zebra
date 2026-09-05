@@ -8,6 +8,7 @@ import {
 } from "./file-create.js";
 import { hasExactKeys, isRecord } from "./record-validation.js";
 import { utf8ByteLength } from "./text-primitives.js";
+import { isSafeWorkspacePath } from "./workspace-path.js";
 
 export const maxFileDeletePathCharacters = maxFileCreatePathCharacters;
 export const maxFileDeletePathBytes = maxFileCreatePathBytes;
@@ -155,19 +156,10 @@ function assertHash(
 }
 
 function isSafeMutationPath(path: string): boolean {
-  if (
-    path.length === 0 ||
-    path.startsWith("/") ||
-    path.includes("\\") ||
-    [...path].length > maxFileRenamePathCharacters ||
-    utf8ByteLength(path) > maxFileRenamePathBytes
-  ) {
-    return false;
-  }
-
-  return path
-    .split("/")
-    .every((segment) => segment.length > 0 && segment !== "." && segment !== "..");
+  return isSafeWorkspacePath(path, {
+    maxCharacters: maxFileRenamePathCharacters,
+    maxBytes: maxFileRenamePathBytes,
+  });
 }
 
 function isSafeUri(uri: string): boolean {
