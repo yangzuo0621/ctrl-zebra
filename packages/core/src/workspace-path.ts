@@ -80,6 +80,7 @@ function isSafeWorkspacePathSegment(segment: string): boolean {
     return false;
   }
 
-  const deviceName = segment.split(".")[0] ?? segment;
+  // split(".") always returns at least one element, even for a string with no "." at all.
+  const deviceName = segment.split(".")[0];
   return !windowsReservedDeviceNames.has(deviceName.toLowerCase());
 }
