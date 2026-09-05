@@ -1,13 +1,17 @@
 import { z } from "zod";
 
+const encoder = new TextEncoder();
+
+/**
+ * Uses the native encoder rather than summing `utf8BytesForCodePoint` per character: on large
+ * inputs (e.g. a bounded file's full content, or a serialized MCP catalog/diagnostics envelope
+ * checked against a byte ceiling) this measurably outperforms a JS-level loop, with identical
+ * output -- including for a lone/unpaired surrogate, which `TextEncoder` substitutes with the
+ * same 3-byte-wide U+FFFD replacement that `utf8BytesForCodePoint` already reports for the raw
+ * surrogate code point.
+ */
 export function utf8ByteLength(value: string): number {
-  let bytes = 0;
-
-  for (const character of value) {
-    bytes += utf8BytesForCodePoint(character.codePointAt(0) ?? 0);
-  }
-
-  return bytes;
+  return encoder.encode(value).byteLength;
 }
 
 export function utf8BytesForCodePoint(codePoint: number): number {

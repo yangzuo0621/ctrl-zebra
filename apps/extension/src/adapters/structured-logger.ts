@@ -1,4 +1,4 @@
-import { utf8ByteLength } from "./text-primitives.js";
+import { utf8ByteLength } from "@ctrl-zebra/protocol";
 
 const maxFieldLength = 128;
 const maxSerializedEntryBytes = 4_096;

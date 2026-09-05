@@ -1,4 +1,8 @@
-import { checkpointHashSchema, maxApprovalUriCharacters } from "@ctrl-zebra/protocol";
+import {
+  checkpointHashSchema,
+  maxApprovalUriCharacters,
+  utf8ByteLength,
+} from "@ctrl-zebra/protocol";
 import {
   maxFileCreateContentBytes,
   maxFileCreateContentCharacters,
@@ -7,7 +11,6 @@ import {
   maxFileCreatePathCharacters,
 } from "./file-create.js";
 import { hasExactKeys, isRecord } from "./record-validation.js";
-import { utf8ByteLength } from "./text-primitives.js";
 import { isSafeWorkspacePath } from "./workspace-path.js";
 
 export const maxFileDeletePathCharacters = maxFileCreatePathCharacters;

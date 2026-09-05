@@ -1,4 +1,8 @@
-import { type Checkpoint, getCheckpointPersistencePaths } from "@ctrl-zebra/protocol";
+import {
+  type Checkpoint,
+  getCheckpointPersistencePaths,
+  utf8ByteLength,
+} from "@ctrl-zebra/protocol";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -9,7 +13,6 @@ import {
   maxCheckpointRecordBytes,
   type PersistencePath,
 } from "./index.js";
-import { utf8ByteLength } from "./text-primitives.js";
 
 const beforeHash = "a".repeat(64);
 const checkpoint = {

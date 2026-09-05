@@ -1,4 +1,4 @@
-import { maxCommandDisplayOutputBytes } from "@ctrl-zebra/protocol";
+import { maxCommandDisplayOutputBytes, utf8BytesForCodePoint } from "@ctrl-zebra/protocol";
 
 import type {
   CommandExit,
@@ -6,7 +6,6 @@ import type {
   CommandOutputSink,
   SpawnCommandRequest,
 } from "../adapters/spawn-command-runner.js";
-import { utf8BytesForCodePoint } from "../adapters/text-primitives.js";
 
 export { maxCommandDisplayOutputBytes };
 export const maxCommandContextOutputBytes = 32_768;

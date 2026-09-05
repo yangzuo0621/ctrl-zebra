@@ -25,6 +25,7 @@ export {
   maxApprovalResources,
   maxApprovalUriCharacters,
 } from "./approval.js";
+export { CircularJsonValueError, canonicalizeJson } from "./canonical-json.js";
 export type {
   AssistantMessage,
   ChatMessage,
@@ -569,6 +570,7 @@ export {
   sessionStatusSchema,
   sessionSummarySchema,
 } from "./session.js";
+export { utf8ByteLength, utf8BytesForCodePoint } from "./text-primitives.js";
 export type {
   JsonValue,
   ToolCall,

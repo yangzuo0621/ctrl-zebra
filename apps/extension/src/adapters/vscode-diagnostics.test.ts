@@ -5,12 +5,12 @@ import {
   maxIdeDiagnosticEntries,
   maxIdeDiagnosticMessageCodePoints,
   maxIdeLanguageIdBytes,
+  utf8ByteLength,
 } from "@ctrl-zebra/protocol";
 import { describe, expect, it, vi } from "vitest";
 import type { Diagnostic, TextDocument, TextEditor, Uri } from "vscode";
 
 import { createTestUri as uri } from "../test/support/test-uri.js";
-import { utf8ByteLength } from "./text-primitives.js";
 import { VsCodeDiagnostics } from "./vscode-diagnostics.js";
 import { WorkspaceScope } from "./workspace-scope.js";
 

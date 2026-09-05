@@ -15,6 +15,7 @@ import {
   type ToolInputPropertySchema,
   type ToolResult,
   toolCallSchema,
+  utf8BytesForCodePoint,
 } from "@ctrl-zebra/core";
 import {
   APICallError,
@@ -33,8 +34,6 @@ import {
   type ToolSet,
   TypeValidationError,
 } from "ai";
-
-import { utf8BytesForCodePoint } from "./text-primitives.js";
 
 export const noRedirectFetch: typeof fetch = (input, init) =>
   fetch(input, { ...init, redirect: "error" });

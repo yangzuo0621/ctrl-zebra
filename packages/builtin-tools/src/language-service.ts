@@ -10,10 +10,10 @@ import {
   maxIdePositionLine,
   maxIdeUriPathBytes,
   maxIdeUriPathCodePoints,
+  utf8ByteLength,
 } from "@ctrl-zebra/protocol";
 
 import { hasOnlyKeys, isRecord, isSafeForwardSlashPath } from "./boundary-validation.js";
-import { utf8ByteLength } from "./text-primitives.js";
 
 export interface LanguageServiceInput {
   readonly path: string;

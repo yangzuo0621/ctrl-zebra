@@ -1,16 +1,14 @@
 import { isRecord } from "@ctrl-zebra/core";
 import {
+  utf8ByteLength as genericUtf8ByteLength,
   type IdePositionDto,
   type IdeRangeDto,
   type IdeTruncationReason,
   ideTruncationReasons,
   maxIdePositionCharacter,
   maxIdePositionLine,
-} from "@ctrl-zebra/protocol";
-import {
-  utf8ByteLength as genericUtf8ByteLength,
   utf8BytesForCodePoint,
-} from "./text-primitives.js";
+} from "@ctrl-zebra/protocol";
 import { sameIdentityPart, sameUri } from "./uri-comparison.js";
 
 export interface IdeSourceUriLike {

@@ -1,6 +1,4 @@
-import type { ToolCall, ToolName } from "@ctrl-zebra/protocol";
-
-import { canonicalizeJson } from "./canonical-json.js";
+import { canonicalizeJson, type ToolCall, type ToolName } from "@ctrl-zebra/protocol";
 
 export const defaultToolRepetitionThreshold = 3;
 export const maxToolRepetitionThreshold = 10;

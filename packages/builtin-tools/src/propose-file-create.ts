@@ -9,10 +9,9 @@ import {
   parseFileCreatePlan,
   type ToolExecutionOutput,
 } from "@ctrl-zebra/core";
-import { checkpointHashSchema } from "@ctrl-zebra/protocol";
+import { checkpointHashSchema, utf8ByteLength } from "@ctrl-zebra/protocol";
 
 import { hasOnlyKeys, isRecord, isSafeForwardSlashPath } from "./boundary-validation.js";
-import { utf8ByteLength } from "./text-primitives.js";
 
 export const proposeFileCreateToolName = "propose_file_create" as const;
 export const proposeFileCreateToolDescription =

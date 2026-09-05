@@ -1,4 +1,4 @@
-import { hasOnlyKeys, isPlainRecord } from "@ctrl-zebra/core";
+import { hasOnlyKeys, isPlainRecord, utf8ByteLength } from "@ctrl-zebra/core";
 import { UriTemplate } from "@modelcontextprotocol/client";
 
 import {
@@ -14,7 +14,6 @@ import {
   maxMcpResourceUriCodePoints,
 } from "./contracts.js";
 import { createMcpClientError } from "./errors.js";
-import { utf8ByteLength } from "./text-primitives.js";
 
 const resourceKeys = new Set([
   "_meta",

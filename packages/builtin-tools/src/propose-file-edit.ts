@@ -10,9 +10,9 @@ import {
   type TextEditPlan,
   type ToolExecutionOutput,
 } from "@ctrl-zebra/core";
+import { utf8ByteLength } from "@ctrl-zebra/protocol";
 
 import { hasOnlyKeys, isRecord, isSafeForwardSlashPath } from "./boundary-validation.js";
-import { utf8ByteLength } from "./text-primitives.js";
 
 export const proposeFileEditToolName = "propose_file_edit" as const;
 export const proposeFileEditToolDescription =

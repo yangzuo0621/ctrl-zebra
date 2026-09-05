@@ -6,6 +6,7 @@ import {
   jsonValueSchema,
   ToolExecutionError,
   toolNameSchema,
+  utf8ByteLength,
 } from "@ctrl-zebra/core";
 
 import {
@@ -18,7 +19,6 @@ import {
   maxMcpToolTextItems,
 } from "./contracts.js";
 import type { CompiledExternalJsonSchema } from "./mcp-tool-schema.js";
-import { utf8ByteLength } from "./text-primitives.js";
 
 export interface McpToolApprovalPreparation {
   readonly kind: "mcp-tool-call";

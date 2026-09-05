@@ -9,10 +9,9 @@ import {
   parseFileRenamePlan,
   type ToolExecutionOutput,
 } from "@ctrl-zebra/core";
-import { checkpointHashSchema } from "@ctrl-zebra/protocol";
+import { checkpointHashSchema, utf8ByteLength } from "@ctrl-zebra/protocol";
 
 import { hasOnlyKeys, isRecord, isSafeForwardSlashPath } from "./boundary-validation.js";
-import { utf8ByteLength } from "./text-primitives.js";
 
 export const proposeFileRenameToolName = "propose_file_rename" as const;
 export const proposeFileRenameToolDescription =
