@@ -11,8 +11,12 @@ import {
   type ToolExecutionOutput,
 } from "@ctrl-zebra/core";
 import { utf8ByteLength } from "@ctrl-zebra/protocol";
+import { z } from "zod";
 
-import { hasOnlyKeys, isRecord, isSafeForwardSlashPath } from "./boundary-validation.js";
+import { hasOnlyKeys, isRecord } from "./boundary-validation.js";
+import { textRangeSchema } from "./text-edit-schema.js";
+import { workspaceRelativePathSchema } from "./workspace-path-schema.js";
+import { toToolInputSchema } from "./zod-tool-schema.js";
 
 export const proposeFileEditToolName = "propose_file_edit" as const;
 export const proposeFileEditToolDescription =
@@ -21,68 +25,22 @@ export const maxProposedFileEdits = maxTextEdits;
 export const maxProposedReplacementCharacters = 262_144;
 export const maxTotalProposedReplacementBytes = 786_432;
 
-const positionInputSchema = {
-  type: "object",
-  description: "A zero-based text position.",
-  properties: {
-    line: {
-      type: "integer",
-      description: "Zero-based line number.",
-      minimum: 0,
-    },
-    character: {
-      type: "integer",
-      description: "Zero-based UTF-16 character offset.",
-      minimum: 0,
-    },
-  },
-  required: ["line", "character"],
-  additionalProperties: false,
-} as const;
-
-export const proposeFileEditInputSchema = {
-  type: "object",
-  properties: {
-    path: {
-      type: "string",
-      description: "Workspace-relative file path using forward slashes.",
-      minLength: 1,
-      maxLength: 4_096,
-      pattern: "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*\\\\).+$",
-    },
-    edits: {
-      type: "array",
-      description: "Non-overlapping text edits for the file.",
-      minItems: 1,
-      maxItems: maxProposedFileEdits,
-      items: {
-        type: "object",
-        description: "One replacement over a half-open text range.",
-        properties: {
-          range: {
-            type: "object",
-            description: "A zero-based half-open text range.",
-            properties: {
-              start: positionInputSchema,
-              end: positionInputSchema,
-            },
-            required: ["start", "end"],
-            additionalProperties: false,
-          },
-          newText: {
-            type: "string",
-            description: "Replacement text.",
-            maxLength: maxProposedReplacementCharacters,
-          },
-        },
-        required: ["range", "newText"],
-        additionalProperties: false,
-      },
-    },
-  },
-  required: ["path", "edits"],
-  additionalProperties: false,
-} as const;
+const proposeFileEditZodSchema = z.strictObject({
+  path: workspaceRelativePathSchema("Workspace-relative file path using forward slashes."),
+  edits: z
+    .array(
+      z
+        .strictObject({
+          range: textRangeSchema,
+          newText: z.string().max(maxProposedReplacementCharacters).describe("Replacement text."),
+        })
+        .describe("One replacement over a half-open text range."),
+    )
+    .min(1)
+    .max(maxProposedFileEdits)
+    .describe("Non-overlapping text edits for the file."),
+});
+export const proposeFileEditInputSchema = toToolInputSchema(proposeFileEditZodSchema);
 
 export interface ProposeFileEditInput {
   readonly path: string;
@@ -165,39 +123,24 @@ function prepareFileEditApproval(workspace: ProposeFileEditWorkspace) {
 }
 
 function parseProposeFileEditInput(value: unknown): ProposeFileEditInput {
-  if (
-    !isRecord(value) ||
-    !hasOnlyKeys(value, new Set(["path", "edits"])) ||
-    !isSafeForwardSlashPath(value.path, {
-      maxLength: 4_096,
-      allowLeadingSlash: false,
-      rejectCurrentSegments: true,
-    }) ||
-    !Array.isArray(value.edits) ||
-    value.edits.length > maxProposedFileEdits
-  ) {
-    throw new TypeError("Invalid propose_file_edit input.");
-  }
+  const parsed = proposeFileEditZodSchema.parse(value);
 
   let edits: readonly TextEdit[];
   try {
-    edits = parseTextEdits(value.edits);
+    edits = parseTextEdits(parsed.edits);
   } catch {
     throw new TypeError("Invalid propose_file_edit edits.");
   }
+
   let replacementBytes = 0;
   for (const edit of edits) {
-    if (edit.newText.length > maxProposedReplacementCharacters) {
-      throw new TypeError("propose_file_edit replacement is too large.");
-    }
-
     replacementBytes += utf8ByteLength(edit.newText);
     if (replacementBytes > maxTotalProposedReplacementBytes) {
       throw new TypeError("propose_file_edit replacements are too large.");
     }
   }
 
-  return { path: value.path, edits };
+  return { path: parsed.path, edits };
 }
 
 export function parseFileEditRevisionSnapshot(value: unknown): FileEditRevisionSnapshot {

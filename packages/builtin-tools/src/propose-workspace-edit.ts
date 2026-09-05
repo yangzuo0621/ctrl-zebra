@@ -13,16 +13,22 @@ import {
   parseWorkspaceEditPlan,
   type TextEdit,
   type ToolExecutionOutput,
+  type ToolInputArraySchema,
+  type ToolInputObjectSchema,
+  type ToolInputSchema,
+  type ToolInputStringSchema,
   type WorkspaceEditPlan,
 } from "@ctrl-zebra/core";
 import { utf8ByteLength } from "@ctrl-zebra/protocol";
-
-import { hasOnlyKeys, isRecord, isSafeForwardSlashPath } from "./boundary-validation.js";
+import { z } from "zod";
 import {
   InvalidWorkspaceFileRevisionError,
   type ProposeFileEditWorkspace,
   parseFileEditRevisionSnapshot,
 } from "./propose-file-edit.js";
+import { textRangeSchema } from "./text-edit-schema.js";
+import { workspaceRelativePathSchema } from "./workspace-path-schema.js";
+import { toToolInputSchema } from "./zod-tool-schema.js";
 
 export const proposeWorkspaceEditToolName = "propose_workspace_edit" as const;
 export const proposeWorkspaceEditToolDescription =
@@ -37,73 +43,84 @@ export const maxTotalProposedWorkspaceEditReplacementBytes =
   maxWorkspaceEditAggregateReplacementBytes;
 export const maxProposedWorkspaceEditPathBytes = maxWorkspaceEditPathBytes;
 
-const positionInputSchema = {
-  type: "object",
-  description: "A zero-based text position.",
-  properties: {
-    line: { type: "integer", description: "Zero-based line number.", minimum: 0 },
-    character: { type: "integer", description: "Zero-based UTF-16 character offset.", minimum: 0 },
-  },
-  required: ["line", "character"],
-  additionalProperties: false,
-} as const;
+const proposeWorkspaceEditZodSchema = z
+  .strictObject({
+    files: z
+      .array(
+        z
+          .strictObject({
+            path: workspaceRelativePathSchema(
+              "Workspace-relative file path using forward slashes.",
+              4_096,
+              maxProposedWorkspaceEditPathBytes,
+            ),
+            edits: z
+              .array(
+                z
+                  .strictObject({
+                    range: textRangeSchema,
+                    // isBoundedWorkspaceEditText (core) counts this bound by Unicode code point,
+                    // not UTF-16 code unit -- not what zod's `.max()` would count -- so it stays
+                    // unenforced here and is checked in the parser instead; toToolInputSchema()'s
+                    // splice below restores the maxLength this tool has always advertised.
+                    newText: z.string().describe("Replacement text."),
+                  })
+                  .describe("One replacement over a half-open text range."),
+              )
+              .min(1)
+              .max(maxProposedWorkspaceEditEdits)
+              .describe("Non-overlapping text edits for this file."),
+          })
+          .describe("One existing workspace file and its non-overlapping edits."),
+      )
+      .min(minProposedWorkspaceEditFiles)
+      .max(maxProposedWorkspaceEditFiles)
+      .describe("At least two existing files with non-overlapping edits."),
+  })
+  .refine((value) => new Set(value.files.map((file) => file.path)).size === value.files.length, {
+    message: "propose_workspace_edit targets must be distinct.",
+    path: ["files"],
+  });
 
-const editInputSchema = {
-  type: "object",
-  description: "One replacement over a half-open text range.",
-  properties: {
-    range: {
-      type: "object",
-      description: "A zero-based half-open text range.",
-      properties: { start: positionInputSchema, end: positionInputSchema },
-      required: ["start", "end"],
-      additionalProperties: false,
-    },
-    newText: {
-      type: "string",
-      description: "Replacement text.",
-      maxLength: maxProposedWorkspaceEditReplacementCharacters,
-    },
-  },
-  required: ["range", "newText"],
-  additionalProperties: false,
-} as const;
+const generatedProposeWorkspaceEditInputSchema = toToolInputSchema(proposeWorkspaceEditZodSchema);
+export const proposeWorkspaceEditInputSchema = spliceEditNewTextMaxLength(
+  generatedProposeWorkspaceEditInputSchema,
+  maxProposedWorkspaceEditReplacementCharacters,
+);
 
-export const proposeWorkspaceEditInputSchema = {
-  type: "object",
-  properties: {
-    files: {
-      type: "array",
-      description: "At least two existing files with non-overlapping edits.",
-      minItems: minProposedWorkspaceEditFiles,
-      maxItems: maxProposedWorkspaceEditFiles,
-      items: {
-        type: "object",
-        description: "One existing workspace file and its non-overlapping edits.",
-        properties: {
-          path: {
-            type: "string",
-            description: "Workspace-relative file path using forward slashes.",
-            minLength: 1,
-            maxLength: 4_096,
-            pattern: "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*\\\\).+$",
-          },
-          edits: {
-            type: "array",
-            description: "Non-overlapping text edits for this file.",
-            minItems: 1,
-            maxItems: maxProposedWorkspaceEditEdits,
-            items: editInputSchema,
+function spliceEditNewTextMaxLength(schema: ToolInputSchema, maxLength: number): ToolInputSchema {
+  const filesSchema = schema.properties.files as ToolInputArraySchema;
+  const fileItemSchema = filesSchema.items as ToolInputObjectSchema;
+  const editsSchema = fileItemSchema.properties.edits as ToolInputArraySchema;
+  const editItemSchema = editsSchema.items as ToolInputObjectSchema;
+  const newTextSchema = editItemSchema.properties.newText as ToolInputStringSchema;
+
+  return {
+    ...schema,
+    properties: {
+      ...schema.properties,
+      files: {
+        ...filesSchema,
+        items: {
+          ...fileItemSchema,
+          properties: {
+            ...fileItemSchema.properties,
+            edits: {
+              ...editsSchema,
+              items: {
+                ...editItemSchema,
+                properties: {
+                  ...editItemSchema.properties,
+                  newText: { ...newTextSchema, maxLength },
+                },
+              },
+            },
           },
         },
-        required: ["path", "edits"],
-        additionalProperties: false,
       },
     },
-  },
-  required: ["files"],
-  additionalProperties: false,
-} as const;
+  };
+}
 
 export interface ProposeWorkspaceEditFileInput {
   readonly path: string;
@@ -181,40 +198,10 @@ function prepareWorkspaceEditApproval(workspace: ProposeWorkspaceEditWorkspace) 
 }
 
 function parseProposeWorkspaceEditInput(value: unknown): ProposeWorkspaceEditInput {
-  if (
-    !isRecord(value) ||
-    !hasOnlyKeys(value, new Set(["files"])) ||
-    !Array.isArray(value.files) ||
-    value.files.length < minProposedWorkspaceEditFiles ||
-    value.files.length > maxProposedWorkspaceEditFiles
-  ) {
-    throw new TypeError("Invalid propose_workspace_edit input.");
-  }
+  const parsed = proposeWorkspaceEditZodSchema.parse(value);
 
-  const paths = new Set<string>();
   let aggregateReplacementBytes = 0;
-  const files = value.files.map((candidate) => {
-    if (
-      !isRecord(candidate) ||
-      !hasOnlyKeys(candidate, new Set(["path", "edits"])) ||
-      !isSafeForwardSlashPath(candidate.path, {
-        maxLength: 4_096,
-        allowLeadingSlash: false,
-        rejectCurrentSegments: true,
-      }) ||
-      utf8ByteLength(candidate.path) > maxProposedWorkspaceEditPathBytes ||
-      !Array.isArray(candidate.edits) ||
-      candidate.edits.length === 0
-    ) {
-      throw new TypeError("Invalid propose_workspace_edit file input.");
-    }
-
-    const path = candidate.path;
-    if (paths.has(path)) {
-      throw new TypeError("propose_workspace_edit targets must be distinct.");
-    }
-    paths.add(path);
-
+  const files = parsed.files.map((candidate) => {
     let edits: readonly TextEdit[];
     try {
       edits = parseTextEdits(candidate.edits);
@@ -231,7 +218,7 @@ function parseProposeWorkspaceEditInput(value: unknown): ProposeWorkspaceEditInp
       }
     }
 
-    return { path, edits };
+    return { path: candidate.path, edits };
   });
 
   return { files };
