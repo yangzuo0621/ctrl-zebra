@@ -1,18 +1,57 @@
 import type { ToolExecutionError } from "@ctrl-zebra/core";
 import { describe, expect, it, vi } from "vitest";
+import { ZodError } from "zod";
 
 import {
   createSearchFilesTool,
+  defaultSearchFilesLimit,
   listFilesExcludeGlob,
   maxSearchFileBytes,
   maxSearchFileScalars,
+  maxSearchFilesLimit,
   maxSearchFilesScanned,
+  maxSearchQueryScalars,
   type SearchFilesWorkspace,
+  searchFilesInputSchema,
 } from "./index.js";
 
 const encoder = new TextEncoder();
 
 describe("search_files", () => {
+  it("advertises the exact model-facing schema this tool has always advertised", () => {
+    expect(searchFilesInputSchema).toEqual({
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "Text or RE2-compatible pattern to search for.",
+          minLength: 1,
+          maxLength: maxSearchQueryScalars,
+        },
+        mode: {
+          type: "string",
+          description: "Search mode. Defaults to literal.",
+          enum: ["literal", "regex"],
+        },
+        glob: {
+          type: "string",
+          description: "Workspace-relative glob pattern. Defaults to **/*.",
+          minLength: 1,
+          maxLength: 256,
+          pattern: "^(?!.*(?:^|\\/)\\.\\.(?:\\/|$))(?!.*\\\\).+$",
+        },
+        maxResults: {
+          type: "integer",
+          description: "Maximum number of matches to return. Defaults to 100.",
+          minimum: 1,
+          maximum: maxSearchFilesLimit,
+        },
+      },
+      required: ["query"],
+      additionalProperties: false,
+    });
+  });
+
   it("publishes its stable model declaration", () => {
     const tool = createSearchFilesTool(createWorkspace({}));
 
@@ -296,8 +335,8 @@ describe("search_files", () => {
   it("enforces scalar, UTF-8, and well-formed query bounds", () => {
     const tool = createSearchFilesTool(createWorkspace({}));
 
-    expect(() => tool.parseInput({ query: "😀".repeat(257) })).toThrow(TypeError);
-    expect(() => tool.parseInput({ query: "\ud800" })).toThrow(TypeError);
+    expect(() => tool.parseInput({ query: "😀".repeat(257) })).toThrow(ZodError);
+    expect(() => tool.parseInput({ query: "\ud800" })).toThrow(ZodError);
     expect(() => tool.parseInput({ query: "😀".repeat(256) })).not.toThrow();
   });
 
@@ -308,7 +347,19 @@ describe("search_files", () => {
     { query: "text", maxResults: 0 },
     { query: "text", extra: true },
   ])("rejects invalid input %#", (value) => {
-    expect(() => createSearchFilesTool(createWorkspace({})).parseInput(value)).toThrow(TypeError);
+    expect(() => createSearchFilesTool(createWorkspace({})).parseInput(value)).toThrow(ZodError);
+  });
+
+  it("treats an explicit null glob/maxResults the same as an absent field, but not mode", () => {
+    const tool = createSearchFilesTool(createWorkspace({}));
+
+    expect(tool.parseInput({ query: "text", glob: null, maxResults: null })).toEqual({
+      query: "text",
+      glob: "**/*",
+      maxResults: defaultSearchFilesLimit,
+      mode: "literal",
+    });
+    expect(() => tool.parseInput({ query: "text", mode: null })).toThrow(ZodError);
   });
 });
 
