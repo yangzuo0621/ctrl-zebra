@@ -1,7 +1,8 @@
 import type { AgentTool, ToolExecutionOutput } from "@ctrl-zebra/core";
 import { type RunCommandOutput, runCommandOutputSchema } from "@ctrl-zebra/protocol";
+import { z } from "zod";
 
-import { hasOnlyKeys, isRecord, isSafeForwardSlashPath } from "./boundary-validation.js";
+import { toToolInputSchema } from "./zod-tool-schema.js";
 
 export const runCommandToolName = "run_command" as const;
 export const runCommandToolDescription =
@@ -17,47 +18,68 @@ const noControlCharactersPattern = "^(?!\\s)(?!.*\\s$)[^\\u0000-\\u001f\\u007f]+
 const safeCommandCwdPattern =
   "^(?:\\.|(?!/)(?!.*:)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*\\\\)(?!.*//)(?!.*[/:]$).+)$";
 
-export const runCommandInputSchema = {
-  type: "object",
-  properties: {
-    command: {
-      type: "string",
-      description:
-        "Executable name or path passed directly to spawn; shell syntax is not interpreted.",
-      minLength: 1,
-      maxLength: maxRunCommandCharacters,
-      pattern: noControlCharactersPattern,
-    },
-    args: {
-      type: "array",
-      description: "Ordered arguments passed directly to the executable.",
-      minItems: 0,
-      maxItems: maxRunCommandArguments,
-      items: {
-        type: "string",
-        description: "One argument passed verbatim to the executable.",
-        maxLength: maxRunCommandArgumentCharacters,
-        pattern: "^[^\\u0000-\\u001f\\u007f]*$",
-      },
-    },
-    cwd: {
-      type: "string",
-      description:
-        'Workspace-relative directory using forward slashes; "." selects the workspace root.',
-      minLength: 1,
-      maxLength: maxRunCommandCwdCharacters,
-      pattern: safeCommandCwdPattern,
-    },
-    timeoutMs: {
-      type: "integer",
-      description: "Hard timeout in milliseconds.",
-      minimum: minRunCommandTimeoutMs,
-      maximum: maxRunCommandTimeoutMs,
-    },
-  },
-  required: ["command", "args", "cwd", "timeoutMs"],
-  additionalProperties: false,
-} as const;
+// Composed from the same literal escape-text form noControlCharactersPattern above already
+// uses (built via String.fromCharCode(0x5c) for the backslash, purely to keep this source
+// file free of a directly-typed escape sequence -- the resulting pattern text is
+// byte-for-byte what a hand-written string literal escape would read as, not a raw control
+// byte). argumentPattern excludes the same ASCII control-character range
+// noControlCharactersPattern does, but allows an empty string and carries no
+// leading/trailing-whitespace lookaheads, matching what isBoundedDisplayText(argument, ...,
+// true) (allowEmpty: true) enforced for each argument versus (allowEmpty: false) for command.
+const backslash = String.fromCharCode(0x5c);
+const controlCharacterEscapeText = `${backslash}u0000-${backslash}u001f${backslash}u007f`;
+const argumentPattern = new RegExp(`^[^${controlCharacterEscapeText}]*$`, "u");
+
+// `s` (dotAll) so the trailing `.+` also matches a cwd containing a line-terminator code point --
+// see workspace-path-schema.ts's workspaceRelativePathPattern for the same fix and rationale.
+const safeCommandCwdRegex = new RegExp(safeCommandCwdPattern, "su");
+const noControlCharactersRegex = new RegExp(noControlCharactersPattern, "u");
+
+const runCommandInputZodSchema = z.strictObject({
+  command: z
+    .string()
+    .min(1)
+    .max(maxRunCommandCharacters)
+    .regex(noControlCharactersRegex)
+    .describe("Executable name or path passed directly to spawn; shell syntax is not interpreted."),
+  // `.min(0)` is explicit (rather than omitted) so the generated schema keeps advertising
+  // `minItems: 0`, exactly as the hand-written literal this replaces always did -- z.array()
+  // without any `.min()` call omits `minItems` entirely instead of defaulting it to 0.
+  args: z
+    .array(
+      z
+        .string()
+        .max(maxRunCommandArgumentCharacters)
+        .regex(argumentPattern)
+        .describe("One argument passed verbatim to the executable."),
+    )
+    .min(0)
+    .max(maxRunCommandArguments)
+    .describe("Ordered arguments passed directly to the executable."),
+  cwd: z
+    .string()
+    .min(1)
+    .max(maxRunCommandCwdCharacters)
+    .regex(safeCommandCwdRegex)
+    // safeCommandCwdRegex's trailing `.+` (needed for the `s`/dotAll fix above) matches an ASCII
+    // control character just as readily as any other one; isSafeCommandCwd's own
+    // `!hasControlCharacters(value)` check excluded them separately, invisibly to the JSON Schema
+    // `pattern` hint (the hand-written literal never advertised this exclusion either) -- restored
+    // here via argumentPattern, which already excludes the identical control-character range.
+    .refine((value) => argumentPattern.test(value), {
+      message: "cwd must not contain an ASCII control character.",
+    })
+    .describe(
+      'Workspace-relative directory using forward slashes; "." selects the workspace root.',
+    ),
+  timeoutMs: z
+    .number()
+    .int()
+    .min(minRunCommandTimeoutMs)
+    .max(maxRunCommandTimeoutMs)
+    .describe("Hard timeout in milliseconds."),
+});
+export const runCommandInputSchema = toToolInputSchema(runCommandInputZodSchema);
 
 export interface RunCommandInput {
   readonly command: string;
@@ -96,70 +118,15 @@ export function createRunCommandTool(
 }
 
 export function parseRunCommandInput(value: unknown): RunCommandInput {
-  if (
-    !isRecord(value) ||
-    !hasOnlyKeys(value, new Set(["command", "args", "cwd", "timeoutMs"])) ||
-    !isBoundedDisplayText(value.command, maxRunCommandCharacters, false) ||
-    value.command.trim() !== value.command ||
-    !Array.isArray(value.args) ||
-    value.args.length > maxRunCommandArguments ||
-    !value.args.every((argument) =>
-      isBoundedDisplayText(argument, maxRunCommandArgumentCharacters, true),
-    ) ||
-    !isSafeCommandCwd(value.cwd) ||
-    typeof value.timeoutMs !== "number" ||
-    !Number.isSafeInteger(value.timeoutMs) ||
-    value.timeoutMs < minRunCommandTimeoutMs ||
-    value.timeoutMs > maxRunCommandTimeoutMs
-  ) {
+  const parsed = runCommandInputZodSchema.parse(value);
+
+  // Redundant with noControlCharactersPattern's own leading/trailing-whitespace lookaheads --
+  // kept as a second, independent guard exactly as the hand-written parser did, rather than
+  // relying solely on the regex to prove it covers every JS `trim()`-recognized whitespace code
+  // point.
+  if (parsed.command.trim() !== parsed.command) {
     throw new TypeError("Invalid run_command input.");
   }
 
-  return {
-    command: value.command,
-    args: [...value.args],
-    cwd: value.cwd,
-    timeoutMs: value.timeoutMs,
-  };
-}
-
-function isBoundedDisplayText(
-  value: unknown,
-  maxLength: number,
-  allowEmpty: boolean,
-): value is string {
-  return (
-    typeof value === "string" &&
-    (allowEmpty || value.length > 0) &&
-    value.length <= maxLength &&
-    !hasControlCharacters(value)
-  );
-}
-
-function isSafeCommandCwd(value: unknown): value is string {
-  if (value === ".") {
-    return true;
-  }
-
-  return (
-    isSafeForwardSlashPath(value, {
-      maxLength: maxRunCommandCwdCharacters,
-      allowLeadingSlash: false,
-      rejectCurrentSegments: true,
-    }) &&
-    !value.includes(":") &&
-    !value.includes("//") &&
-    !value.endsWith("/") &&
-    !hasControlCharacters(value)
-  );
-}
-
-function hasControlCharacters(value: string): boolean {
-  for (const character of value) {
-    const codePoint = character.codePointAt(0);
-    if (codePoint !== undefined && (codePoint <= 0x1f || codePoint === 0x7f)) {
-      return true;
-    }
-  }
-  return false;
+  return { ...parsed, args: [...parsed.args] };
 }
