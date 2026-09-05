@@ -1,7 +1,10 @@
-import { checkpointHashSchema, maxApprovalUriCharacters } from "@ctrl-zebra/protocol";
+import {
+  checkpointHashSchema,
+  maxApprovalUriCharacters,
+  utf8ByteLength,
+} from "@ctrl-zebra/protocol";
 
 import { hasExactKeys, isRecord } from "./record-validation.js";
-import { utf8ByteLength } from "./text-primitives.js";
 import {
   isSafeWorkspacePath,
   maxWorkspacePathBytes,

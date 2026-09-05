@@ -1,7 +1,6 @@
 import { ToolRegistry } from "@ctrl-zebra/core";
-import { protocolVersion } from "@ctrl-zebra/protocol";
+import { protocolVersion, utf8ByteLength } from "@ctrl-zebra/protocol";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { utf8ByteLength } from "../adapters/text-primitives.js";
 import type { McpConnectionSnapshot } from "./mcp-connection-controller.js";
 import { McpWebviewActions, nextMcpCatalogSequence } from "./mcp-webview-actions.js";
 

@@ -1,8 +1,7 @@
-import type { JsonValue } from "@ctrl-zebra/protocol";
+import { type JsonValue, utf8BytesForCodePoint } from "@ctrl-zebra/protocol";
 
 import type { ModelMessageTokenCounter } from "./history-pruner.js";
 import type { ModelMessage } from "./model-gateway.js";
-import { utf8BytesForCodePoint } from "./text-primitives.js";
 import { maxModelContextWindowTokens } from "./token-budget.js";
 
 /** The conservative byte-to-token ratio used when no vendor tokenizer is injected. */

@@ -1,8 +1,8 @@
 import { fileURLToPath } from "node:url";
+import { utf8ByteLength } from "@ctrl-zebra/protocol";
 import { describe, expect, it, vi } from "vitest";
 
 import { type SpawnCommandRequest, SpawnCommandRunner } from "../adapters/spawn-command-runner.js";
-import { utf8ByteLength } from "../adapters/text-primitives.js";
 import {
   CommandOutputCollector,
   CommandOutputLogError,

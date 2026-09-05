@@ -1,7 +1,10 @@
-import type { ExtensionToWebviewMessage, IdeTextContextDto } from "@ctrl-zebra/protocol";
+import {
+  canonicalizeJson,
+  type ExtensionToWebviewMessage,
+  type IdeTextContextDto,
+} from "@ctrl-zebra/protocol";
 import { createStore, type StoreApi } from "zustand/vanilla";
 
-import { canonicalJson } from "./canonical-json.js";
 import { strings } from "./strings.js";
 import type { WebviewHost } from "./vscode-api.js";
 
@@ -318,7 +321,7 @@ export function createEditorContextStore({
       deliveryClosed = false;
       closedCardGeneration = undefined;
     }
-    const canonical = canonicalJson(message);
+    const canonical = canonicalizeJson(message);
     const previous = canonicalEvents.get(message.eventSequence);
     if (previous !== undefined) return false;
     if (message.eventSequence < latestEventSequence) return false;

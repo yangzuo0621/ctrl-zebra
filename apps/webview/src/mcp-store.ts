@@ -1,22 +1,22 @@
-import type {
-  ExtensionToWebviewMessage,
-  McpConnectionProjectionDto,
-  McpDiagnosticsMessage,
-  McpDiagnosticsProjectionDto,
-  McpPromptArgumentsDto,
-  McpPromptCatalogDto,
-  McpPromptConfirmation,
-  McpPromptPreviewDto,
-  McpResourceAttachment,
-  McpResourceCatalogDto,
-  McpResourceSelectionDto,
-  McpResourceSnapshotDto,
-  McpToolCatalogMessage,
-  McpToolCatalogProjectionDto,
+import {
+  canonicalizeJson,
+  type ExtensionToWebviewMessage,
+  type McpConnectionProjectionDto,
+  type McpDiagnosticsMessage,
+  type McpDiagnosticsProjectionDto,
+  type McpPromptArgumentsDto,
+  type McpPromptCatalogDto,
+  type McpPromptConfirmation,
+  type McpPromptPreviewDto,
+  type McpResourceAttachment,
+  type McpResourceCatalogDto,
+  type McpResourceSelectionDto,
+  type McpResourceSnapshotDto,
+  type McpToolCatalogMessage,
+  type McpToolCatalogProjectionDto,
 } from "@ctrl-zebra/protocol";
 import { createStore, type StoreApi } from "zustand/vanilla";
 
-import { canonicalJson } from "./canonical-json.js";
 import { strings } from "./strings.js";
 import type { WebviewHost } from "./vscode-api.js";
 
@@ -624,7 +624,7 @@ function sameDiagnosticPublication(left: DiagnosticRecord, right: DiagnosticReco
     left.serverId === right.serverId &&
     left.generation === right.generation &&
     left.diagnosticSequence === right.diagnosticSequence &&
-    canonicalJson(left.diagnostic) === canonicalJson(right.diagnostic)
+    canonicalizeJson(left.diagnostic) === canonicalizeJson(right.diagnostic)
   );
 }
 
@@ -634,7 +634,7 @@ function sameToolCatalogPublication(left: ToolCatalogRecord, right: ToolCatalogR
     left.generation === right.generation &&
     left.catalogSequence === right.catalogSequence &&
     left.requestId === right.requestId &&
-    canonicalJson(left.catalog) === canonicalJson(right.catalog)
+    canonicalizeJson(left.catalog) === canonicalizeJson(right.catalog)
   );
 }
 

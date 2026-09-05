@@ -2,6 +2,7 @@ import {
   type ApprovalResourceRevision,
   approvalResourceRevisionSchema,
   maxApprovalUriCharacters,
+  utf8ByteLength,
 } from "@ctrl-zebra/protocol";
 
 import { hasExactKeys, isRecord } from "./record-validation.js";
@@ -11,7 +12,6 @@ import {
   parseTextEdits,
   type TextEdit,
 } from "./text-edit.js";
-import { utf8ByteLength } from "./text-primitives.js";
 import {
   isSafeWorkspacePath,
   maxWorkspacePathBytes,

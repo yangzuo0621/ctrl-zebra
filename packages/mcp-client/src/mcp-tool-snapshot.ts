@@ -9,6 +9,7 @@ import {
   type ToolName,
   ToolRegistry,
   ToolUnavailableError,
+  utf8ByteLength,
 } from "@ctrl-zebra/core";
 
 import {
@@ -34,7 +35,6 @@ import {
   McpToolSchemaError,
   validateMcpToolSchema,
 } from "./mcp-tool-schema.js";
-import { utf8ByteLength } from "./text-primitives.js";
 
 const descriptorKeys = new Set([
   "_meta",

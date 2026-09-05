@@ -1,4 +1,4 @@
-import { isPlainRecord, type JsonValue } from "@ctrl-zebra/core";
+import { isPlainRecord, type JsonValue, utf8ByteLength } from "@ctrl-zebra/core";
 import type { JsonSchemaType } from "@modelcontextprotocol/client";
 import { AjvJsonSchemaValidator } from "@modelcontextprotocol/client/validators/ajv";
 
@@ -9,7 +9,6 @@ import {
   maxMcpToolSchemaNodes,
   maxMcpToolSchemaProperties,
 } from "./contracts.js";
-import { utf8ByteLength } from "./text-primitives.js";
 
 const draft202012 = "https://json-schema.org/draft/2020-12/schema";
 const schemaMapKeywords = new Set(["$defs", "properties"]);

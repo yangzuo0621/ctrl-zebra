@@ -15,6 +15,7 @@ import {
   type ToolExecutionOutput,
   type WorkspaceEditPlan,
 } from "@ctrl-zebra/core";
+import { utf8ByteLength } from "@ctrl-zebra/protocol";
 
 import { hasOnlyKeys, isRecord, isSafeForwardSlashPath } from "./boundary-validation.js";
 import {
@@ -22,7 +23,6 @@ import {
   type ProposeFileEditWorkspace,
   parseFileEditRevisionSnapshot,
 } from "./propose-file-edit.js";
-import { utf8ByteLength } from "./text-primitives.js";
 
 export const proposeWorkspaceEditToolName = "propose_workspace_edit" as const;
 export const proposeWorkspaceEditToolDescription =

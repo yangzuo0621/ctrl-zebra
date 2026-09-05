@@ -1,10 +1,9 @@
-import { isApprovedExternalLink } from "@ctrl-zebra/protocol";
+import { isApprovedExternalLink, utf8BytesForCodePoint as utf8Width } from "@ctrl-zebra/protocol";
 import MarkdownIt from "markdown-it";
 import { type CSSProperties, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
 import styles from "./markdown-message.module.css";
 import { strings } from "./strings.js";
-import { utf8BytesForCodePoint as utf8Width } from "./text-primitives.js";
 
 export const maxMarkdownCodePoints = 262_144;
 export const maxMarkdownUtf8Bytes = 1_048_576;

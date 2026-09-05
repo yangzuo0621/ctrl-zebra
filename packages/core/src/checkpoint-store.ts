@@ -4,10 +4,10 @@ import {
   InvalidCheckpointIntegrityError,
   parseCheckpoint,
   sessionIdSchema,
+  utf8ByteLength,
 } from "@ctrl-zebra/protocol";
 
 import type { PersistencePath } from "./manifest-store.js";
-import { utf8ByteLength } from "./text-primitives.js";
 
 export const maxCheckpointRecordBytes = 4_194_304;
 export const maxCheckpointRecords = 10_000;

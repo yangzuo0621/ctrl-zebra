@@ -1,4 +1,4 @@
-import { utf8ByteLength } from "./text-primitives.js";
+import { utf8ByteLength } from "@ctrl-zebra/protocol";
 
 /**
  * The shared bounds and safety check for a workspace-relative, forward-slash path proposed by a

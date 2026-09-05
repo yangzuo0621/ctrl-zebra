@@ -2,10 +2,10 @@ import {
   getSessionPersistencePaths,
   type PersistedEventRecord,
   persistedEventRecordSchema,
+  utf8ByteLength,
 } from "@ctrl-zebra/protocol";
 
 import type { PersistencePath } from "./manifest-store.js";
-import { utf8ByteLength } from "./text-primitives.js";
 
 export const maxEventRecordBytes = 1_048_576;
 export const maxEventLogBytes = 16_777_216;

@@ -1,3 +1,4 @@
+import { utf8ByteLength } from "@ctrl-zebra/protocol";
 import { describe, expect, it } from "vitest";
 import {
   HeuristicModelMessageTokenCounter,
@@ -6,7 +7,6 @@ import {
   maxHeuristicSerializedBytes,
 } from "./heuristic-token-counter.js";
 import type { ModelMessage } from "./model-gateway.js";
-import { utf8ByteLength } from "./text-primitives.js";
 import { maxModelContextWindowTokens } from "./token-budget.js";
 
 const counter = new HeuristicModelMessageTokenCounter();

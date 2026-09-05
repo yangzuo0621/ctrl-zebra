@@ -1,6 +1,5 @@
 import { hasExactKeys } from "@ctrl-zebra/core";
-
-import { utf8ByteLength } from "./text-primitives.js";
+import { utf8ByteLength } from "@ctrl-zebra/protocol";
 
 export const mcpServerSettingSection = "ctrlZebra.mcp";
 export const mcpServerSettingName = "server";

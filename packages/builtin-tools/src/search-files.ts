@@ -1,4 +1,5 @@
 import { type AgentTool, ToolExecutionError, type ToolExecutionOutput } from "@ctrl-zebra/core";
+import { utf8ByteLength } from "@ctrl-zebra/protocol";
 
 import { RE2JS } from "re2js";
 
@@ -16,7 +17,6 @@ import {
   listFilesExcludeGlob,
 } from "./list-files.js";
 import type { ReadFileBytes, ReadFileRequest, ReadFileWorkspace } from "./read-file.js";
-import { utf8ByteLength } from "./text-primitives.js";
 
 export const searchFilesToolName = "search_files" as const;
 export const searchFilesToolDescription =

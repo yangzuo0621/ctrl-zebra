@@ -45,6 +45,8 @@ export {
   toolResultSchema,
   toolRiskSchema,
   toolSuccessResultSchema,
+  utf8ByteLength,
+  utf8BytesForCodePoint,
 } from "@ctrl-zebra/protocol";
 export type {
   AgentReasoningDeltaEvent,
