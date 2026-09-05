@@ -10,8 +10,11 @@ import {
   type ToolExecutionOutput,
 } from "@ctrl-zebra/core";
 import { checkpointHashSchema, utf8ByteLength } from "@ctrl-zebra/protocol";
-
+import { z } from "zod";
 import { hasOnlyKeys, isRecord, isSafeForwardSlashPath } from "./boundary-validation.js";
+import { boundedWorkspaceTextSchema } from "./bounded-text-schema.js";
+import { workspaceRelativePathSchema } from "./workspace-path-schema.js";
+import { toToolInputSchema } from "./zod-tool-schema.js";
 
 export const proposeFileCreateToolName = "propose_file_create" as const;
 export const proposeFileCreateToolDescription =
@@ -22,24 +25,39 @@ export const maxProposedFileCreateLines = maxFileCreateContentLines;
 export const maxProposedFileCreateBytes = maxFileCreateContentBytes;
 export const maxProposedFileCreatePathBytes = maxFileCreatePathBytes;
 
+const proposeFileCreateContentBounds = {
+  maxCharacters: maxProposedFileCreateCharacters,
+  maxLines: maxProposedFileCreateLines,
+  maxBytes: maxProposedFileCreateBytes,
+};
+
+const proposeFileCreateZodSchema = z.strictObject({
+  path: workspaceRelativePathSchema(
+    "Workspace-relative file path using forward slashes.",
+    4_096,
+    maxProposedFileCreatePathBytes,
+  ),
+  content: boundedWorkspaceTextSchema(
+    "Complete UTF-8 text content for the new file.",
+    proposeFileCreateContentBounds,
+  ),
+});
+
+// `boundedWorkspaceTextSchema`'s bound is enforced through `.refine()`, not `.max()` (see its
+// docs), so `toToolInputSchema()` cannot derive a `maxLength` for `content` on its own; splice the
+// same `maxLength` this tool has always advertised back in, to keep the model-facing schema byte-
+// for-byte the schema it replaces.
+const generatedProposeFileCreateInputSchema = toToolInputSchema(proposeFileCreateZodSchema);
 export const proposeFileCreateInputSchema = {
-  type: "object",
+  ...generatedProposeFileCreateInputSchema,
   properties: {
-    path: {
-      type: "string",
-      description: "Workspace-relative file path using forward slashes.",
-      minLength: 1,
-      maxLength: 4_096,
-      pattern: "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*\\\\).+$",
-    },
+    ...generatedProposeFileCreateInputSchema.properties,
     content: {
       type: "string",
       description: "Complete UTF-8 text content for the new file.",
       maxLength: maxProposedFileCreateCharacters,
     },
   },
-  required: ["path", "content"],
-  additionalProperties: false,
 } as const;
 
 export interface ProposeFileCreateInput {
@@ -137,37 +155,14 @@ function prepareFileCreateApproval(workspace: ProposeFileCreateWorkspace) {
 }
 
 function parseProposeFileCreateInput(value: unknown): ProposeFileCreateInput {
-  if (
-    !isRecord(value) ||
-    !hasOnlyKeys(value, new Set(["path", "content"])) ||
-    !isSafeForwardSlashPath(value.path, {
-      maxLength: 4_096,
-      allowLeadingSlash: false,
-      rejectCurrentSegments: true,
-    }) ||
-    !isSafePathSize(value.path) ||
-    typeof value.content !== "string"
-  ) {
-    throw new TypeError("Invalid propose_file_create input.");
-  }
-
-  if (!isBoundedText(value.content)) {
-    throw new TypeError("propose_file_create content is too large or not UTF-8 text.");
-  }
-
-  return { path: value.path, content: value.content };
+  return proposeFileCreateZodSchema.parse(value);
 }
 
 function parseFileCreateTargetSnapshot(value: unknown): FileCreateTargetSnapshot {
   if (
     !isRecord(value) ||
     !hasOnlyKeys(value, new Set(["path", "uri", "afterHash"])) ||
-    !isSafeForwardSlashPath(value.path, {
-      maxLength: 4_096,
-      allowLeadingSlash: false,
-      rejectCurrentSegments: true,
-    }) ||
-    !isSafePathSize(value.path) ||
+    !isSafePath(value.path) ||
     typeof value.uri !== "string" ||
     value.uri.length === 0 ||
     value.uri.length > maxApprovalUriCharacters ||
@@ -183,20 +178,17 @@ function parseFileCreateTargetSnapshot(value: unknown): FileCreateTargetSnapshot
   };
 }
 
-function isSafePathSize(path: string): boolean {
-  return [...path].length <= 4_096 && utf8ByteLength(path) <= maxProposedFileCreatePathBytes;
-}
-
-function isBoundedText(text: string): boolean {
+// Host-snapshot validation, not model input, so it stays a plain predicate rather than a zod
+// schema -- see bounded-text-schema.ts's docs. Only checks path safety plus the UTF-8 byte bound:
+// the original's extra `[...path].length <= 4_096` code-point check was always implied by
+// `isSafeForwardSlashPath`'s own `value.length <= 4_096` (UTF-16 code units) check, since a
+// string's code-point count never exceeds its UTF-16 code-unit count.
+function isSafePath(value: unknown): value is string {
   return (
-    !text.includes("\0") &&
-    text.isWellFormed() &&
-    [...text].length <= maxProposedFileCreateCharacters &&
-    countLogicalLines(text) <= maxProposedFileCreateLines &&
-    utf8ByteLength(text) <= maxProposedFileCreateBytes
+    isSafeForwardSlashPath(value, {
+      maxLength: 4_096,
+      allowLeadingSlash: false,
+      rejectCurrentSegments: true,
+    }) && utf8ByteLength(value) <= maxProposedFileCreatePathBytes
   );
-}
-
-function countLogicalLines(text: string): number {
-  return text.length === 0 ? 0 : text.split(/\r\n|\r|\n/u).length;
 }

@@ -10,8 +10,11 @@ import {
   type ToolExecutionOutput,
 } from "@ctrl-zebra/core";
 import { checkpointHashSchema, utf8ByteLength } from "@ctrl-zebra/protocol";
-
+import { z } from "zod";
 import { hasOnlyKeys, isRecord, isSafeForwardSlashPath } from "./boundary-validation.js";
+import { isBoundedWorkspaceText } from "./bounded-text-schema.js";
+import { workspaceRelativePathSchema } from "./workspace-path-schema.js";
+import { toToolInputSchema } from "./zod-tool-schema.js";
 
 export const proposeFileRenameToolName = "propose_file_rename" as const;
 export const proposeFileRenameToolDescription =
@@ -22,27 +25,24 @@ export const maxProposedFileRenameLines = maxFileRenameContentLines;
 export const maxProposedFileRenameBytes = maxFileRenameContentBytes;
 export const maxProposedFileRenamePathBytes = maxFileRenamePathBytes;
 
-export const proposeFileRenameInputSchema = {
-  type: "object",
-  properties: {
-    sourcePath: {
-      type: "string",
-      description: "Workspace-relative existing file path using forward slashes.",
-      minLength: 1,
-      maxLength: 4_096,
-      pattern: "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*\\\\).+$",
-    },
-    targetPath: {
-      type: "string",
-      description: "Workspace-relative absent destination path using forward slashes.",
-      minLength: 1,
-      maxLength: 4_096,
-      pattern: "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*\\\\).+$",
-    },
-  },
-  required: ["sourcePath", "targetPath"],
-  additionalProperties: false,
-} as const;
+const proposeFileRenameZodSchema = z
+  .strictObject({
+    sourcePath: workspaceRelativePathSchema(
+      "Workspace-relative existing file path using forward slashes.",
+      4_096,
+      maxProposedFileRenamePathBytes,
+    ),
+    targetPath: workspaceRelativePathSchema(
+      "Workspace-relative absent destination path using forward slashes.",
+      4_096,
+      maxProposedFileRenamePathBytes,
+    ),
+  })
+  .refine((value) => value.sourcePath !== value.targetPath, {
+    message: "propose_file_rename sourcePath and targetPath must differ.",
+    path: ["targetPath"],
+  });
+export const proposeFileRenameInputSchema = toToolInputSchema(proposeFileRenameZodSchema);
 
 export interface ProposeFileRenameInput {
   readonly sourcePath: string;
@@ -148,17 +148,7 @@ function prepareFileRenameApproval(workspace: ProposeFileRenameWorkspace) {
 }
 
 function parseProposeFileRenameInput(value: unknown): ProposeFileRenameInput {
-  if (
-    !isRecord(value) ||
-    !hasOnlyKeys(value, new Set(["sourcePath", "targetPath"])) ||
-    !isSafePath(value.sourcePath) ||
-    !isSafePath(value.targetPath) ||
-    value.sourcePath === value.targetPath
-  ) {
-    throw new TypeError("Invalid propose_file_rename input.");
-  }
-
-  return { sourcePath: value.sourcePath, targetPath: value.targetPath };
+  return proposeFileRenameZodSchema.parse(value);
 }
 
 function parseFileRenameTargetSnapshot(value: unknown): FileRenameTargetSnapshot {
@@ -186,7 +176,11 @@ function parseFileRenameTargetSnapshot(value: unknown): FileRenameTargetSnapshot
     value.targetUri.length > maxApprovalUriCharacters ||
     value.sourceUri === value.targetUri ||
     typeof value.beforeContent !== "string" ||
-    !isBoundedText(value.beforeContent) ||
+    !isBoundedWorkspaceText(value.beforeContent, {
+      maxCharacters: maxProposedFileRenameCharacters,
+      maxLines: maxProposedFileRenameLines,
+      maxBytes: maxProposedFileRenameBytes,
+    }) ||
     !checkpointHashSchema.safeParse(value.beforeHash).success
   ) {
     throw new InvalidWorkspaceFileRenameTargetError();
@@ -202,6 +196,8 @@ function parseFileRenameTargetSnapshot(value: unknown): FileRenameTargetSnapshot
   };
 }
 
+// Host-snapshot validation, not model input, so it stays a plain predicate rather than a zod
+// schema -- see bounded-text-schema.ts's docs.
 function isSafePath(value: unknown): value is string {
   return (
     isSafeForwardSlashPath(value, {
@@ -210,18 +206,4 @@ function isSafePath(value: unknown): value is string {
       rejectCurrentSegments: true,
     }) && utf8ByteLength(value) <= maxProposedFileRenamePathBytes
   );
-}
-
-function isBoundedText(text: string): boolean {
-  return (
-    text.isWellFormed() &&
-    !text.includes("\0") &&
-    [...text].length <= maxProposedFileRenameCharacters &&
-    countLogicalLines(text) <= maxProposedFileRenameLines &&
-    utf8ByteLength(text) <= maxProposedFileRenameBytes
-  );
-}
-
-function countLogicalLines(text: string): number {
-  return text.length === 0 ? 0 : text.split(/\r\n|\r|\n/u).length;
 }

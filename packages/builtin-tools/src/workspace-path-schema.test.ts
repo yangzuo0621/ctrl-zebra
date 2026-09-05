@@ -63,4 +63,14 @@ describe("workspaceRelativePathSchema", () => {
     expect(schema.safeParse("a".repeat(10)).success).toBe(true);
     expect(schema.safeParse("a".repeat(11)).success).toBe(false);
   });
+
+  it("applies an optional UTF-8 byte bound on top of the character bound", () => {
+    const schema = workspaceRelativePathSchema("A path.", 4_096, 8);
+    expect(schema.safeParse("ascii.ts").success).toBe(true);
+    expect(schema.safeParse("😀😀.ts").success).toBe(false);
+  });
+
+  it("skips the byte bound entirely when it is not given", () => {
+    expect(workspaceRelativePathSchema("A path.").safeParse("😀😀😀😀😀.ts").success).toBe(true);
+  });
 });
