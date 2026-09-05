@@ -91,6 +91,15 @@ describe("list_files", () => {
     );
   });
 
+  it("treats an explicit null glob/maxResults the same as an absent field", () => {
+    const tool = createListFilesTool(createWorkspace([]));
+
+    expect(tool.parseInput({ glob: null, maxResults: null })).toEqual({
+      glob: "**/*",
+      maxResults: defaultListFilesLimit,
+    });
+  });
+
   it("uses only the explicitly bound workspace in a multi-root window", async () => {
     const selectedWorkspace = createWorkspace(["selected/file.ts"]);
     const unselectedWorkspace = createWorkspace(["other/secret.ts"]);

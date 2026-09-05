@@ -1,7 +1,7 @@
 import type { AgentTool, ToolExecutionOutput } from "@ctrl-zebra/core";
 import { z } from "zod";
 
-import { parseWorkspaceFilePaths } from "./boundary-validation.js";
+import { isRecord, parseWorkspaceFilePaths } from "./boundary-validation.js";
 import { toToolInputSchema } from "./zod-tool-schema.js";
 
 export const listFilesToolName = "list_files" as const;
@@ -96,7 +96,15 @@ export function createListFilesTool(
 }
 
 function parseListFilesInput(value: unknown): ListFilesInput {
-  const parsed = listFilesInputZodSchema.parse(value);
+  // The hand-written parser this replaces treated an explicit `null` the same as an absent field
+  // (`value.glob ?? "**/*"`), which zod's `.optional()` alone does not: it accepts a missing key
+  // but rejects `null`. Normalize `null` to `undefined` for these two fields before validating, so
+  // a caller that serializes an omitted optional argument as JSON `null` still gets the default
+  // instead of a rejected call.
+  const normalized = isRecord(value)
+    ? { ...value, glob: value.glob ?? undefined, maxResults: value.maxResults ?? undefined }
+    : value;
+  const parsed = listFilesInputZodSchema.parse(normalized);
   return {
     glob: parsed.glob ?? "**/*",
     maxResults: parsed.maxResults ?? defaultListFilesLimit,
