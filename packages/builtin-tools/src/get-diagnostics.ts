@@ -1,31 +1,34 @@
 import type { AgentTool, ToolExecutionOutput } from "@ctrl-zebra/core";
 import { ToolExecutionError } from "@ctrl-zebra/core";
 import { type IdeDiagnosticsResultDto, ideDiagnosticsResultSchema } from "@ctrl-zebra/protocol";
+import { z } from "zod";
 
-import { hasOnlyKeys, isRecord, isSafeForwardSlashPath } from "./boundary-validation.js";
+import { workspaceRelativePathSchema } from "./workspace-path-schema.js";
+import { toToolInputSchema } from "./zod-tool-schema.js";
 
 export const getDiagnosticsToolName = "get_diagnostics" as const;
 export const getDiagnosticsToolDescription =
   "Read bounded diagnostics for the active file or selected workspace.";
-export const getDiagnosticsInputSchema = {
-  type: "object",
-  properties: {
-    scope: {
-      type: "string",
-      enum: ["active-file", "workspace"],
-      description: "Read diagnostics for the active file, one workspace path, or the workspace.",
-    },
-    path: {
-      type: "string",
-      description: "Optional workspace-relative path when scope is workspace.",
-      minLength: 1,
-      maxLength: 4_096,
-      pattern: "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+$",
-    },
-  },
-  required: ["scope"],
-  additionalProperties: false,
-} as const;
+
+const getDiagnosticsZodSchema = z
+  .strictObject({
+    scope: z
+      .enum(["active-file", "workspace"])
+      .describe("Read diagnostics for the active file, one workspace path, or the workspace."),
+    path: workspaceRelativePathSchema(
+      "Optional workspace-relative path when scope is workspace.",
+    ).optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.scope === "active-file" && value.path !== undefined) {
+      ctx.addIssue({
+        code: "custom",
+        message: "get_diagnostics active-file does not accept a path.",
+        path: ["path"],
+      });
+    }
+  });
+export const getDiagnosticsInputSchema = toToolInputSchema(getDiagnosticsZodSchema);
 
 export type GetDiagnosticsScope = "active-file" | "workspace";
 
@@ -91,35 +94,8 @@ export function createGetDiagnosticsTool(
 }
 
 export function parseGetDiagnosticsInput(value: unknown): GetDiagnosticsInput {
-  if (!isRecord(value)) {
-    throw new TypeError("Expected get_diagnostics input to be an object.");
-  }
-  if (!hasOnlyKeys(value, new Set(["scope", "path"]))) {
-    throw new TypeError("Unexpected get_diagnostics input field.");
-  }
-
-  if (value.scope !== "active-file" && value.scope !== "workspace") {
-    throw new TypeError("Invalid get_diagnostics scope.");
-  }
-
-  if (value.scope === "active-file") {
-    if (Object.hasOwn(value, "path")) {
-      throw new TypeError("get_diagnostics active-file does not accept a path.");
-    }
-    return { scope: "active-file" };
-  }
-
-  if (!Object.hasOwn(value, "path")) {
-    return { scope: "workspace" };
-  }
-  if (
-    !isSafeForwardSlashPath(value.path, {
-      maxLength: 4_096,
-      allowLeadingSlash: false,
-      rejectCurrentSegments: true,
-    })
-  ) {
-    throw new TypeError("Invalid get_diagnostics workspace path.");
-  }
-  return { scope: "workspace", path: value.path };
+  const parsed = getDiagnosticsZodSchema.parse(value);
+  return parsed.path === undefined
+    ? { scope: parsed.scope }
+    : { scope: parsed.scope, path: parsed.path };
 }

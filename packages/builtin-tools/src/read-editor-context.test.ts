@@ -1,11 +1,13 @@
 import { ToolExecutionError } from "@ctrl-zebra/core";
 import { maxIdeTextLines } from "@ctrl-zebra/protocol";
 import { describe, expect, it, vi } from "vitest";
+import { ZodError } from "zod";
 
 import {
   createReadEditorContextTool,
   EditorContextUnavailableError,
   type IdeContextPort,
+  readEditorContextInputSchema,
   readEditorContextToolName,
 } from "./index.js";
 
@@ -21,6 +23,21 @@ const context = {
 } as const;
 
 describe(readEditorContextToolName, () => {
+  it("advertises the exact model-facing schema this tool has always advertised", () => {
+    expect(readEditorContextInputSchema).toEqual({
+      type: "object",
+      properties: {
+        scope: {
+          type: "string",
+          enum: ["active-editor", "selection"],
+          description: "Read the active document or its exact current selection.",
+        },
+      },
+      required: ["scope"],
+      additionalProperties: false,
+    });
+  });
+
   it("publishes a strict read-only declaration and projects the editor result", async () => {
     const port = createPort(context);
     const tool = createReadEditorContextTool(port);
@@ -67,7 +84,7 @@ describe(readEditorContextToolName, () => {
     "rejects malformed input %#",
     (value) => {
       expect(() => createReadEditorContextTool(createPort(context)).parseInput(value)).toThrow(
-        TypeError,
+        ZodError,
       );
     },
   );

@@ -1,40 +1,30 @@
 import type { AgentTool, ToolExecutionOutput } from "@ctrl-zebra/core";
+import { z } from "zod";
 
-import {
-  decodeBoundedUtf8Prefix,
-  hasOnlyKeys,
-  isRecord,
-  isSafeForwardSlashPath,
-  parseBoundedBytes,
-} from "./boundary-validation.js";
+import { decodeBoundedUtf8Prefix, parseBoundedBytes } from "./boundary-validation.js";
+import { workspaceRelativePathSchema } from "./workspace-path-schema.js";
+import { toToolInputSchema } from "./zod-tool-schema.js";
 
 export const readFileToolName = "read_file" as const;
 export const readFileToolDescription =
   "Read a bounded UTF-8 text range from a file in the selected workspace.";
-export const readFileInputSchema = {
-  type: "object",
-  properties: {
-    path: {
-      type: "string",
-      description: "Workspace-relative file path using forward slashes.",
-      minLength: 1,
-      maxLength: 4_096,
-      pattern: "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*\\\\).+$",
-    },
-    startLine: {
-      type: "integer",
-      description: "One-based first line to read. Defaults to 1.",
-      minimum: 1,
-    },
-    endLine: {
-      type: "integer",
-      description: "Optional one-based inclusive last line.",
-      minimum: 1,
-    },
-  },
-  required: ["path"],
-  additionalProperties: false,
-} as const;
+
+const readFileZodSchema = z
+  .strictObject({
+    path: workspaceRelativePathSchema("Workspace-relative file path using forward slashes."),
+    startLine: z
+      .number()
+      .int()
+      .min(1)
+      .describe("One-based first line to read. Defaults to 1.")
+      .optional(),
+    endLine: z.number().int().min(1).describe("Optional one-based inclusive last line.").optional(),
+  })
+  .refine((value) => value.endLine === undefined || value.endLine >= (value.startLine ?? 1), {
+    message: "endLine must not be before startLine.",
+    path: ["endLine"],
+  });
+export const readFileInputSchema = toToolInputSchema(readFileZodSchema);
 export const maxReadFileContentBytes = 65_536;
 export const readFileUtf8LookaheadBytes = 4;
 
@@ -125,36 +115,8 @@ export function createReadFileTool(
 }
 
 function parseReadFileInput(value: unknown): ReadFileInput {
-  if (!isRecord(value)) {
-    throw new TypeError("Expected read_file input to be an object.");
-  }
-
-  if (!hasOnlyKeys(value, new Set(["path", "startLine", "endLine"]))) {
-    throw new TypeError("Unexpected read_file input field.");
-  }
-
-  const path = value.path;
-  const startLine = value.startLine ?? 1;
-  const endLine = value.endLine;
-  if (
-    !isSafeForwardSlashPath(path, {
-      maxLength: 4_096,
-      allowLeadingSlash: false,
-      rejectCurrentSegments: true,
-    })
-  ) {
-    throw new TypeError("Invalid read_file path.");
-  }
-
-  if (!isPositiveLineNumber(startLine)) {
-    throw new TypeError("Invalid read_file startLine.");
-  }
-
-  if (endLine !== undefined && (!isPositiveLineNumber(endLine) || endLine < startLine)) {
-    throw new TypeError("Invalid read_file endLine.");
-  }
-
-  return { path, startLine, endLine };
+  const parsed = readFileZodSchema.parse(value);
+  return { path: parsed.path, startLine: parsed.startLine ?? 1, endLine: parsed.endLine };
 }
 
 function parseReadFileBytes(value: unknown): ReadFileBytes {
@@ -204,8 +166,4 @@ function selectLineRange(
     content: lines.slice(input.startLine - 1, endLine).join("\n"),
     availableLines: lines.length,
   };
-}
-
-function isPositiveLineNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 1;
 }

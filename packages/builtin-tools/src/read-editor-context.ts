@@ -1,24 +1,20 @@
 import type { AgentTool, ToolExecutionOutput } from "@ctrl-zebra/core";
 import { ToolExecutionError } from "@ctrl-zebra/core";
 import { type IdeTextContextDto, ideTextContextSchema } from "@ctrl-zebra/protocol";
+import { z } from "zod";
 
-import { hasOnlyKeys, isRecord } from "./boundary-validation.js";
+import { toToolInputSchema } from "./zod-tool-schema.js";
 
 export const readEditorContextToolName = "read_editor_context" as const;
 export const readEditorContextToolDescription =
   "Read the explicitly selected active editor or text selection in the selected workspace.";
-export const readEditorContextInputSchema = {
-  type: "object",
-  properties: {
-    scope: {
-      type: "string",
-      enum: ["active-editor", "selection"],
-      description: "Read the active document or its exact current selection.",
-    },
-  },
-  required: ["scope"],
-  additionalProperties: false,
-} as const;
+
+const readEditorContextZodSchema = z.strictObject({
+  scope: z
+    .enum(["active-editor", "selection"])
+    .describe("Read the active document or its exact current selection."),
+});
+export const readEditorContextInputSchema = toToolInputSchema(readEditorContextZodSchema);
 
 export type ReadEditorContextScope = "active-editor" | "selection";
 
@@ -85,14 +81,5 @@ export function createReadEditorContextTool(
 }
 
 function parseReadEditorContextInput(value: unknown): ReadEditorContextInput {
-  if (!isRecord(value)) {
-    throw new TypeError("Expected read_editor_context input to be an object.");
-  }
-  if (!hasOnlyKeys(value, new Set(["scope"]))) {
-    throw new TypeError("Unexpected read_editor_context input field.");
-  }
-  if (value.scope !== "active-editor" && value.scope !== "selection") {
-    throw new TypeError("Invalid read_editor_context scope.");
-  }
-  return { scope: value.scope };
+  return readEditorContextZodSchema.parse(value);
 }
