@@ -10,8 +10,13 @@ import { z } from "zod";
  * output) the remaining shape matches `ToolInputSchema` field-for-field. Verified per tool by a
  * dedicated test comparing the generated schema against the hand-written literal it replaces,
  * before that literal is deleted.
+ *
+ * `ToolInputSchema.required` is mandatory, but `z.toJSONSchema()` omits the `required` key
+ * entirely for an object schema with zero required properties -- defaulted to `[]` here so every
+ * caller (e.g. providers/src/ai-sdk-model-gateway.ts's `[...schema.required]`) can keep treating
+ * it as always present, instead of every future consumer needing its own `?? []` guard.
  */
 export function toToolInputSchema(schema: z.ZodType): ToolInputSchema {
-  const { $schema: _schema, ...jsonSchema } = z.toJSONSchema(schema);
-  return jsonSchema as ToolInputSchema;
+  const { $schema: _schema, required = [], ...jsonSchema } = z.toJSONSchema(schema);
+  return { ...jsonSchema, required } as ToolInputSchema;
 }
