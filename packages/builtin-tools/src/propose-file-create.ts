@@ -9,11 +9,14 @@ import {
   parseFileCreatePlan,
   type ToolExecutionOutput,
 } from "@ctrl-zebra/core";
-import { checkpointHashSchema, utf8ByteLength } from "@ctrl-zebra/protocol";
+import { checkpointHashSchema } from "@ctrl-zebra/protocol";
 import { z } from "zod";
-import { hasOnlyKeys, isRecord, isSafeForwardSlashPath } from "./boundary-validation.js";
+import { hasOnlyKeys, isRecord } from "./boundary-validation.js";
 import { boundedWorkspaceTextSchema } from "./bounded-text-schema.js";
-import { workspaceRelativePathSchema } from "./workspace-path-schema.js";
+import {
+  isSafeWorkspaceRelativePath,
+  workspaceRelativePathSchema,
+} from "./workspace-path-schema.js";
 import { toToolInputSchema } from "./zod-tool-schema.js";
 
 export const proposeFileCreateToolName = "propose_file_create" as const;
@@ -162,7 +165,7 @@ function parseFileCreateTargetSnapshot(value: unknown): FileCreateTargetSnapshot
   if (
     !isRecord(value) ||
     !hasOnlyKeys(value, new Set(["path", "uri", "afterHash"])) ||
-    !isSafePath(value.path) ||
+    !isSafeWorkspaceRelativePath(value.path, maxProposedFileCreatePathBytes) ||
     typeof value.uri !== "string" ||
     value.uri.length === 0 ||
     value.uri.length > maxApprovalUriCharacters ||
@@ -176,19 +179,4 @@ function parseFileCreateTargetSnapshot(value: unknown): FileCreateTargetSnapshot
     uri: value.uri as string,
     afterHash: value.afterHash as string,
   };
-}
-
-// Host-snapshot validation, not model input, so it stays a plain predicate rather than a zod
-// schema -- see bounded-text-schema.ts's docs. Only checks path safety plus the UTF-8 byte bound:
-// the original's extra `[...path].length <= 4_096` code-point check was always implied by
-// `isSafeForwardSlashPath`'s own `value.length <= 4_096` (UTF-16 code units) check, since a
-// string's code-point count never exceeds its UTF-16 code-unit count.
-function isSafePath(value: unknown): value is string {
-  return (
-    isSafeForwardSlashPath(value, {
-      maxLength: 4_096,
-      allowLeadingSlash: false,
-      rejectCurrentSegments: true,
-    }) && utf8ByteLength(value) <= maxProposedFileCreatePathBytes
-  );
 }

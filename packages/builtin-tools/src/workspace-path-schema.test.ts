@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { isSafeForwardSlashPath } from "./boundary-validation.js";
 import {
+  isSafeWorkspaceRelativePath,
   maxWorkspaceRelativePathCharacters,
   workspaceRelativePathPattern,
   workspaceRelativePathSchema,
@@ -72,5 +73,17 @@ describe("workspaceRelativePathSchema", () => {
 
   it("skips the byte bound entirely when it is not given", () => {
     expect(workspaceRelativePathSchema("A path.").safeParse("😀😀😀😀😀.ts").success).toBe(true);
+  });
+});
+
+describe("isSafeWorkspaceRelativePath", () => {
+  it("is the plain-predicate counterpart of workspaceRelativePathSchema", () => {
+    expect(isSafeWorkspaceRelativePath("src/new.txt", 4_096)).toBe(true);
+    expect(isSafeWorkspaceRelativePath("../outside.txt", 4_096)).toBe(false);
+  });
+
+  it("applies the same UTF-8 byte bound workspaceRelativePathSchema's maxBytes applies", () => {
+    expect(isSafeWorkspaceRelativePath("ascii.ts", 8)).toBe(true);
+    expect(isSafeWorkspaceRelativePath("😀😀.ts", 8)).toBe(false);
   });
 });

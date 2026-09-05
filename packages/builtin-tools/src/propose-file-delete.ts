@@ -9,11 +9,14 @@ import {
   parseFileDeletePlan,
   type ToolExecutionOutput,
 } from "@ctrl-zebra/core";
-import { checkpointHashSchema, utf8ByteLength } from "@ctrl-zebra/protocol";
+import { checkpointHashSchema } from "@ctrl-zebra/protocol";
 import { z } from "zod";
-import { hasOnlyKeys, isRecord, isSafeForwardSlashPath } from "./boundary-validation.js";
+import { hasOnlyKeys, isRecord } from "./boundary-validation.js";
 import { isBoundedWorkspaceText } from "./bounded-text-schema.js";
-import { workspaceRelativePathSchema } from "./workspace-path-schema.js";
+import {
+  isSafeWorkspaceRelativePath,
+  workspaceRelativePathSchema,
+} from "./workspace-path-schema.js";
 import { toToolInputSchema } from "./zod-tool-schema.js";
 
 export const proposeFileDeleteToolName = "propose_file_delete" as const;
@@ -133,7 +136,7 @@ function parseFileDeleteTargetSnapshot(value: unknown): FileDeleteTargetSnapshot
   if (
     !isRecord(value) ||
     !hasOnlyKeys(value, new Set(["path", "uri", "beforeContent", "beforeHash"])) ||
-    !isSafePath(value.path) ||
+    !isSafeWorkspaceRelativePath(value.path, maxProposedFileDeletePathBytes) ||
     typeof value.uri !== "string" ||
     value.uri.length === 0 ||
     value.uri.length > maxApprovalUriCharacters ||
@@ -154,16 +157,4 @@ function parseFileDeleteTargetSnapshot(value: unknown): FileDeleteTargetSnapshot
     beforeContent: value.beforeContent as string,
     beforeHash: value.beforeHash as string,
   };
-}
-
-// Host-snapshot validation, not model input, so it stays a plain predicate rather than a zod
-// schema -- see bounded-text-schema.ts's docs.
-function isSafePath(value: unknown): value is string {
-  return (
-    isSafeForwardSlashPath(value, {
-      maxLength: 4_096,
-      allowLeadingSlash: false,
-      rejectCurrentSegments: true,
-    }) && utf8ByteLength(value) <= maxProposedFileDeletePathBytes
-  );
 }

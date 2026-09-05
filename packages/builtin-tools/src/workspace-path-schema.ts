@@ -1,6 +1,8 @@
 import { utf8ByteLength } from "@ctrl-zebra/protocol";
 import { z } from "zod";
 
+import { isSafeForwardSlashPath } from "./boundary-validation.js";
+
 export const maxWorkspaceRelativePathCharacters = 4_096;
 
 /**
@@ -38,4 +40,21 @@ export function workspaceRelativePathSchema(
     : schema.refine((path) => utf8ByteLength(path) <= maxBytes, {
         message: "Path exceeds the maximum UTF-8 byte length.",
       });
+}
+
+/**
+ * The plain-predicate counterpart to `workspaceRelativePathSchema` above, for host-snapshot
+ * validators that are not model input and so stay hand-written rather than becoming zod schemas
+ * (see bounded-text-schema.ts's docs for the same distinction applied to bounded text). Was
+ * triplicated verbatim across propose-file-create.ts, propose-file-delete.ts and
+ * propose-file-rename.ts before being extracted here.
+ */
+export function isSafeWorkspaceRelativePath(value: unknown, maxBytes: number): value is string {
+  return (
+    isSafeForwardSlashPath(value, {
+      maxLength: maxWorkspaceRelativePathCharacters,
+      allowLeadingSlash: false,
+      rejectCurrentSegments: true,
+    }) && utf8ByteLength(value) <= maxBytes
+  );
 }

@@ -9,11 +9,14 @@ import {
   parseFileRenamePlan,
   type ToolExecutionOutput,
 } from "@ctrl-zebra/core";
-import { checkpointHashSchema, utf8ByteLength } from "@ctrl-zebra/protocol";
+import { checkpointHashSchema } from "@ctrl-zebra/protocol";
 import { z } from "zod";
-import { hasOnlyKeys, isRecord, isSafeForwardSlashPath } from "./boundary-validation.js";
+import { hasOnlyKeys, isRecord } from "./boundary-validation.js";
 import { isBoundedWorkspaceText } from "./bounded-text-schema.js";
-import { workspaceRelativePathSchema } from "./workspace-path-schema.js";
+import {
+  isSafeWorkspaceRelativePath,
+  workspaceRelativePathSchema,
+} from "./workspace-path-schema.js";
 import { toToolInputSchema } from "./zod-tool-schema.js";
 
 export const proposeFileRenameToolName = "propose_file_rename" as const;
@@ -165,8 +168,8 @@ function parseFileRenameTargetSnapshot(value: unknown): FileRenameTargetSnapshot
         "beforeHash",
       ]),
     ) ||
-    !isSafePath(value.sourcePath) ||
-    !isSafePath(value.targetPath) ||
+    !isSafeWorkspaceRelativePath(value.sourcePath, maxProposedFileRenamePathBytes) ||
+    !isSafeWorkspaceRelativePath(value.targetPath, maxProposedFileRenamePathBytes) ||
     value.sourcePath === value.targetPath ||
     typeof value.sourceUri !== "string" ||
     value.sourceUri.length === 0 ||
@@ -194,16 +197,4 @@ function parseFileRenameTargetSnapshot(value: unknown): FileRenameTargetSnapshot
     beforeContent: value.beforeContent as string,
     beforeHash: value.beforeHash as string,
   };
-}
-
-// Host-snapshot validation, not model input, so it stays a plain predicate rather than a zod
-// schema -- see bounded-text-schema.ts's docs.
-function isSafePath(value: unknown): value is string {
-  return (
-    isSafeForwardSlashPath(value, {
-      maxLength: 4_096,
-      allowLeadingSlash: false,
-      rejectCurrentSegments: true,
-    }) && utf8ByteLength(value) <= maxProposedFileRenamePathBytes
-  );
 }
