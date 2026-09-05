@@ -2,6 +2,7 @@ import type { AgentTool, ToolExecutionOutput } from "@ctrl-zebra/core";
 import { z } from "zod";
 
 import { isRecord, parseWorkspaceFilePaths } from "./boundary-validation.js";
+import { workspaceGlobSchema } from "./workspace-glob-schema.js";
 import { toToolInputSchema } from "./zod-tool-schema.js";
 
 export const listFilesToolName = "list_files" as const;
@@ -12,22 +13,8 @@ export const defaultListFilesLimit = 100;
 export const maxListFilesLimit = 200;
 export const listFilesExcludeGlob = "**/{.git,node_modules,dist,build,coverage,.next,out}/**";
 
-/**
- * Allows a leading slash and "." segments (glob syntax uses both), unlike
- * workspace-path-schema.ts's stricter workspace-relative-path pattern -- only a ".." segment or a
- * backslash is rejected. Also used verbatim by search-files.ts; kept local here rather than
- * extracted into a shared module until that tool's own tranche touches it.
- */
-const listFilesGlobPattern = /^(?!.*(?:^|\/)\.\.(?:\/|$))(?!.*\\).+$/u;
-
 const listFilesInputZodSchema = z.strictObject({
-  glob: z
-    .string()
-    .min(1)
-    .max(256)
-    .regex(listFilesGlobPattern)
-    .describe("Workspace-relative glob pattern. Defaults to **/*.")
-    .optional(),
+  glob: workspaceGlobSchema("Workspace-relative glob pattern. Defaults to **/*.").optional(),
   maxResults: z
     .number()
     .int()

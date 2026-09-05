@@ -2,12 +2,11 @@ import { type AgentTool, ToolExecutionError, type ToolExecutionOutput } from "@c
 import { utf8ByteLength } from "@ctrl-zebra/protocol";
 
 import { RE2JS } from "re2js";
+import { z } from "zod";
 
 import {
   decodeBoundedUtf8Prefix,
-  hasOnlyKeys,
   isRecord,
-  isSafeForwardSlashPath,
   parseBoundedBytes,
   parseWorkspaceFilePaths,
 } from "./boundary-validation.js";
@@ -17,43 +16,14 @@ import {
   listFilesExcludeGlob,
 } from "./list-files.js";
 import type { ReadFileBytes, ReadFileRequest, ReadFileWorkspace } from "./read-file.js";
+import { workspaceGlobSchema } from "./workspace-glob-schema.js";
+import { toToolInputSchema } from "./zod-tool-schema.js";
 
 export const searchFilesToolName = "search_files" as const;
 export const searchFilesToolDescription =
   "Search bounded UTF-8 workspace text literally or with a controlled RE2-compatible pattern and return matching file locations.";
 export const searchFilesModes = ["literal", "regex"] as const;
 export type SearchFilesMode = (typeof searchFilesModes)[number];
-export const searchFilesInputSchema = {
-  type: "object",
-  properties: {
-    query: {
-      type: "string",
-      description: "Text or RE2-compatible pattern to search for.",
-      minLength: 1,
-      maxLength: 256,
-    },
-    mode: {
-      type: "string",
-      description: "Search mode. Defaults to literal.",
-      enum: searchFilesModes,
-    },
-    glob: {
-      type: "string",
-      description: "Workspace-relative glob pattern. Defaults to **/*.",
-      minLength: 1,
-      maxLength: 256,
-      pattern: "^(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$",
-    },
-    maxResults: {
-      type: "integer",
-      description: "Maximum number of matches to return. Defaults to 100.",
-      minimum: 1,
-      maximum: 200,
-    },
-  },
-  required: ["query"],
-  additionalProperties: false,
-} as const;
 export const defaultSearchFilesLimit = 100;
 export const maxSearchFilesLimit = 200;
 export const maxSearchFilesScanned = 1_000;
@@ -71,6 +41,53 @@ export interface SearchFilesInput {
   readonly glob: string;
   readonly maxResults: number;
   readonly mode?: SearchFilesMode;
+}
+
+// isValidSearchQuery's bound counts by Unicode code point ([...value].length), not UTF-16 code
+// unit -- not what zod's `.max()` would count, and confirmed load-bearing by this tool's own test
+// ("😀".repeat(256) must be accepted, which a UTF-16-based .max(256) would wrongly reject) -- so
+// it stays a `.refine()` rather than `.max()`; the `maxLength: 256` this tool has always
+// advertised is spliced back into the generated schema below instead.
+const searchFilesZodSchema = z.strictObject({
+  query: z
+    .string()
+    .min(1)
+    .describe("Text or RE2-compatible pattern to search for.")
+    .refine((value) => isValidSearchQuery(value), {
+      message: "Invalid search_files query.",
+    }),
+  mode: z.enum(searchFilesModes).describe("Search mode. Defaults to literal.").optional(),
+  glob: workspaceGlobSchema("Workspace-relative glob pattern. Defaults to **/*.").optional(),
+  maxResults: z
+    .number()
+    .int()
+    .min(1)
+    .max(maxSearchFilesLimit)
+    .describe("Maximum number of matches to return. Defaults to 100.")
+    .optional(),
+});
+
+const generatedSearchFilesInputSchema = toToolInputSchema(searchFilesZodSchema);
+export const searchFilesInputSchema = {
+  ...generatedSearchFilesInputSchema,
+  properties: {
+    ...generatedSearchFilesInputSchema.properties,
+    query: {
+      type: "string",
+      description: "Text or RE2-compatible pattern to search for.",
+      minLength: 1,
+      maxLength: maxSearchQueryScalars,
+    },
+  },
+} as const;
+
+function isValidSearchQuery(value: string): boolean {
+  return (
+    isWellFormedUnicode(value) &&
+    [...value].length <= maxSearchQueryScalars &&
+    utf8ByteLength(value) <= maxSearchQueryBytes &&
+    !value.includes("\0")
+  );
 }
 
 export interface SearchFileMatch {
@@ -174,58 +191,26 @@ export function createSearchFilesTool(
 }
 
 function parseSearchFilesInput(value: unknown): SearchFilesInput {
-  if (!isRecord(value)) {
-    throw new TypeError("Expected search_files input to be an object.");
-  }
-
-  if (!hasOnlyKeys(value, new Set(["query", "glob", "maxResults", "mode"]))) {
-    throw new TypeError("Unexpected search_files input field.");
-  }
-
-  const query = value.query;
-  const glob = value.glob ?? "**/*";
-  const maxResults = value.maxResults ?? defaultSearchFilesLimit;
-  const modeValue = value.mode;
-  const mode = modeValue === undefined ? "literal" : modeValue;
-  if (
-    typeof query !== "string" ||
-    query.length === 0 ||
-    !isWellFormedUnicode(query) ||
-    [...query].length > maxSearchQueryScalars ||
-    utf8ByteLength(query) > maxSearchQueryBytes ||
-    query.includes("\0")
-  ) {
-    throw new TypeError("Invalid search_files query.");
-  }
-
-  if (mode !== "literal" && mode !== "regex") {
-    throw new TypeError("Invalid search_files mode.");
-  }
-
-  if (
-    !isSafeForwardSlashPath(glob, {
-      maxLength: 256,
-      allowLeadingSlash: true,
-      rejectCurrentSegments: false,
-    })
-  ) {
-    throw new TypeError("Invalid search_files glob.");
-  }
-
-  if (
-    typeof maxResults !== "number" ||
-    !Number.isSafeInteger(maxResults) ||
-    maxResults < 1 ||
-    maxResults > maxSearchFilesLimit
-  ) {
-    throw new TypeError("Invalid search_files maxResults.");
-  }
-
-  const parsed = { query, glob, maxResults, mode } satisfies SearchFilesInput;
+  // The hand-written parser this replaces treated an explicit `null` glob/maxResults the same as
+  // an absent field (`value.glob ?? "**/*"`), which zod's `.optional()` alone does not (see
+  // list-files.ts's identical fix). `mode` is deliberately excluded: the original parser used
+  // `=== undefined` for it specifically, so an explicit `null` mode was always rejected, not
+  // defaulted -- that asymmetry is preserved by leaving it unnormalized here.
+  const normalized = isRecord(value)
+    ? { ...value, glob: value.glob ?? undefined, maxResults: value.maxResults ?? undefined }
+    : value;
+  const parsed = searchFilesZodSchema.parse(normalized);
+  const mode = parsed.mode ?? "literal";
+  const result = {
+    query: parsed.query,
+    glob: parsed.glob ?? "**/*",
+    maxResults: parsed.maxResults ?? defaultSearchFilesLimit,
+    mode,
+  } satisfies SearchFilesInput;
   if (mode === "regex") {
-    parsedRegexByInput.set(parsed, compileControlledRegex(query));
+    parsedRegexByInput.set(result, compileControlledRegex(parsed.query));
   }
-  return parsed;
+  return result;
 }
 
 function createListRequest(input: SearchFilesInput): ListFilesRequest {
