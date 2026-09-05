@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { ZodError } from "zod";
 
 import {
   createListFilesTool,
@@ -6,6 +7,7 @@ import {
   InvalidWorkspaceFileListError,
   type ListFilesWorkspace,
   listFilesExcludeGlob,
+  listFilesInputSchema,
   maxListFilesLimit,
 } from "./index.js";
 
@@ -25,6 +27,29 @@ describe("list_files", () => {
         required: [],
         additionalProperties: false,
       }),
+    });
+  });
+
+  it("advertises the exact model-facing schema this tool has always advertised", () => {
+    expect(listFilesInputSchema).toEqual({
+      type: "object",
+      properties: {
+        glob: {
+          type: "string",
+          description: "Workspace-relative glob pattern. Defaults to **/*.",
+          minLength: 1,
+          maxLength: 256,
+          pattern: "^(?!.*(?:^|\\/)\\.\\.(?:\\/|$))(?!.*\\\\).+$",
+        },
+        maxResults: {
+          type: "integer",
+          description: "Maximum number of files to return. Defaults to 100.",
+          minimum: 1,
+          maximum: 200,
+        },
+      },
+      required: [],
+      additionalProperties: false,
     });
   });
 
@@ -91,7 +116,7 @@ describe("list_files", () => {
   ])("rejects invalid input %#", (value) => {
     const tool = createListFilesTool(createWorkspace([]));
 
-    expect(() => tool.parseInput(value)).toThrow(TypeError);
+    expect(() => tool.parseInput(value)).toThrow(ZodError);
   });
 
   it.each([null, ["/absolute/file.ts"], ["../outside.ts"], ["src\\file.ts"], [42]])(

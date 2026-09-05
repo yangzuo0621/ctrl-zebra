@@ -12,8 +12,10 @@ import {
   maxIdeUriPathCodePoints,
   utf8ByteLength,
 } from "@ctrl-zebra/protocol";
+import { z } from "zod";
 
-import { hasOnlyKeys, isRecord, isSafeForwardSlashPath } from "./boundary-validation.js";
+import { workspaceRelativePathSchema } from "./workspace-path-schema.js";
+import { toToolInputSchema } from "./zod-tool-schema.js";
 
 export interface LanguageServiceInput {
   readonly path: string;
@@ -128,93 +130,45 @@ export function createListSymbolsTool(
   };
 }
 
-export const languageLocationInputSchema = {
-  type: "object",
-  properties: {
-    path: {
-      type: "string",
-      description: "Workspace-relative text document path.",
-      minLength: 1,
-      maxLength: 4_096,
-      pattern: "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+$",
-    },
-    position: {
-      type: "object",
-      description: "Zero-based VS Code UTF-16 document position.",
-      properties: {
-        line: {
-          type: "integer",
-          description: "Zero-based document line.",
-          minimum: 0,
-          maximum: maxIdePositionLine,
-        },
-        character: {
-          type: "integer",
-          description: "Zero-based UTF-16 code-unit offset.",
-          minimum: 0,
-          maximum: maxIdePositionCharacter,
-        },
-      },
-      required: ["line", "character"],
-      additionalProperties: false,
-    },
-  },
-  required: ["path", "position"],
-  additionalProperties: false,
-} as const;
+// Reuses workspaceRelativePathSchema (allowLeadingSlash: false, rejectCurrentSegments: true --
+// its defaults) for the pattern hint and character bound, then layers isCanonicalPath's stricter,
+// IDE-specific checks (no empty segments, no query/fragment/percent-encoded traversal characters,
+// its own code-point/byte bounds) on top via `.refine()`.
+function languageServicePathSchema(description: string) {
+  return workspaceRelativePathSchema(description).refine(isCanonicalPath, {
+    message: "Invalid language service workspace path.",
+  });
+}
 
-export const listSymbolsInputSchema = {
-  type: "object",
-  properties: {
-    path: {
-      type: "string",
-      description: "Workspace-relative text document path.",
-      minLength: 1,
-      maxLength: 4_096,
-      pattern: "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+$",
-    },
-  },
-  required: ["path"],
-  additionalProperties: false,
-} as const;
+const positionSchema = z
+  .strictObject({
+    line: z.number().int().min(0).max(maxIdePositionLine).describe("Zero-based document line."),
+    character: z
+      .number()
+      .int()
+      .min(0)
+      .max(maxIdePositionCharacter)
+      .describe("Zero-based UTF-16 code-unit offset."),
+  })
+  .describe("Zero-based VS Code UTF-16 document position.");
+
+const languageServiceInputZodSchema = z.strictObject({
+  path: languageServicePathSchema("Workspace-relative text document path."),
+  position: positionSchema,
+});
+export const languageLocationInputSchema = toToolInputSchema(languageServiceInputZodSchema);
+
+const listSymbolsInputZodSchema = z.strictObject({
+  path: languageServicePathSchema("Workspace-relative text document path."),
+});
+export const listSymbolsInputSchema = toToolInputSchema(listSymbolsInputZodSchema);
 
 export function parseLanguageServiceInput(value: unknown): LanguageServiceInput {
-  if (!isRecord(value)) {
-    throw new TypeError("Expected language service input to be an object.");
-  }
-  if (!hasOnlyKeys(value, new Set(["path", "position"]))) {
-    throw new TypeError("Unexpected language service input field.");
-  }
-  const path = parsePath(value.path);
-  if (!isRecord(value.position) || !hasOnlyKeys(value.position, new Set(["line", "character"]))) {
-    throw new TypeError("Invalid language service position.");
-  }
-  const position = parsePosition(value.position);
-  return { path, position };
+  return languageServiceInputZodSchema.parse(value);
 }
 
 export function parseListSymbolsInput(value: unknown): ListSymbolsInput {
-  if (!isRecord(value)) {
-    throw new TypeError("Expected list_symbols input to be an object.");
-  }
-  if (!hasOnlyKeys(value, new Set(["path"]))) {
-    throw new TypeError("Unexpected list_symbols input field.");
-  }
-  return { path: parsePath(value.path) };
-}
-
-function parsePath(value: unknown): string {
-  if (
-    !isSafeForwardSlashPath(value, {
-      maxLength: 4_096,
-      allowLeadingSlash: false,
-      rejectCurrentSegments: true,
-    }) ||
-    !isCanonicalPath(value)
-  ) {
-    throw new TypeError("Invalid language service workspace path.");
-  }
-  return value;
+  return listSymbolsInputZodSchema.parse(value);
 }
 
 function isCanonicalPath(value: string): boolean {
@@ -225,20 +179,4 @@ function isCanonicalPath(value: string): boolean {
   }
   if ([...value].length > maxIdeUriPathCodePoints) return false;
   return utf8ByteLength(value) <= maxIdeUriPathBytes;
-}
-
-function parsePosition(value: Record<string, unknown>): IdePositionDto {
-  if (
-    typeof value.line !== "number" ||
-    !Number.isSafeInteger(value.line) ||
-    value.line < 0 ||
-    value.line > maxIdePositionLine ||
-    typeof value.character !== "number" ||
-    !Number.isSafeInteger(value.character) ||
-    value.character < 0 ||
-    value.character > maxIdePositionCharacter
-  ) {
-    throw new TypeError("Invalid language service position.");
-  }
-  return { line: value.line, character: value.character };
 }

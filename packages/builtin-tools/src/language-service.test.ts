@@ -1,4 +1,5 @@
 import { ToolExecutionError } from "@ctrl-zebra/core";
+import { maxIdePositionCharacter, maxIdePositionLine } from "@ctrl-zebra/protocol";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -8,9 +9,19 @@ import {
   type IdeLanguageServicePort,
   InvalidLanguageServiceOutputError,
   LanguageServiceUnavailableError,
+  languageLocationInputSchema,
+  listSymbolsInputSchema,
   parseLanguageServiceInput,
   parseListSymbolsInput,
 } from "./index.js";
+
+const workspacePathSchema = {
+  type: "string",
+  description: "Workspace-relative text document path.",
+  minLength: 1,
+  maxLength: 4_096,
+  pattern: "^(?!\\/)(?!.*\\\\)(?!.*(?:^|\\/)\\.{1,2}(?:\\/|$)).+$",
+} as const;
 
 const resultSource = {
   uri: { scheme: "file", authority: "", path: "src/index.ts" },
@@ -23,6 +34,46 @@ const range = {
 } as const;
 
 describe("language service built-in tools", () => {
+  it("advertises the exact model-facing schema find_definition/find_references have always advertised", () => {
+    expect(languageLocationInputSchema).toEqual({
+      type: "object",
+      properties: {
+        path: workspacePathSchema,
+        position: {
+          type: "object",
+          description: "Zero-based VS Code UTF-16 document position.",
+          properties: {
+            line: {
+              type: "integer",
+              description: "Zero-based document line.",
+              minimum: 0,
+              maximum: maxIdePositionLine,
+            },
+            character: {
+              type: "integer",
+              description: "Zero-based UTF-16 code-unit offset.",
+              minimum: 0,
+              maximum: maxIdePositionCharacter,
+            },
+          },
+          required: ["line", "character"],
+          additionalProperties: false,
+        },
+      },
+      required: ["path", "position"],
+      additionalProperties: false,
+    });
+  });
+
+  it("advertises the exact model-facing schema list_symbols has always advertised", () => {
+    expect(listSymbolsInputSchema).toEqual({
+      type: "object",
+      properties: { path: workspacePathSchema },
+      required: ["path"],
+      additionalProperties: false,
+    });
+  });
+
   it("parses bounded path and UTF-16 position inputs strictly", () => {
     expect(
       parseLanguageServiceInput({ path: "src/index.ts", position: { line: 1, character: 2 } }),
