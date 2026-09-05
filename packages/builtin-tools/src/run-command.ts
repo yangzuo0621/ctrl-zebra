@@ -61,6 +61,14 @@ const runCommandInputZodSchema = z.strictObject({
     .min(1)
     .max(maxRunCommandCwdCharacters)
     .regex(safeCommandCwdRegex)
+    // safeCommandCwdRegex's trailing `.+` (needed for the `s`/dotAll fix above) matches an ASCII
+    // control character just as readily as any other one; isSafeCommandCwd's own
+    // `!hasControlCharacters(value)` check excluded them separately, invisibly to the JSON Schema
+    // `pattern` hint (the hand-written literal never advertised this exclusion either) -- restored
+    // here via argumentPattern, which already excludes the identical control-character range.
+    .refine((value) => argumentPattern.test(value), {
+      message: "cwd must not contain an ASCII control character.",
+    })
     .describe(
       'Workspace-relative directory using forward slashes; "." selects the workspace root.',
     ),

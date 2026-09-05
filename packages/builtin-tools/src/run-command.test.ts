@@ -147,13 +147,29 @@ describe("run_command input", () => {
     expect(() => parseRunCommandInput(validInput({ cwd }))).toThrow(ZodError);
   });
 
-  it("accepts a cwd containing a line-terminator code point, matching the predicate this pattern replaces", () => {
+  it("accepts a cwd containing a non-ASCII line-terminator code point, matching the predicate this pattern replaces", () => {
     // Regression guard for the same class of bug tranche 4 found in workspace-path-schema.ts: a
     // trailing `.+` needs the `s` (dotAll) flag, or it silently stops matching a cwd containing a
-    // line terminator that the original hand-written isSafeCommandCwd predicate always accepted.
-    expect(parseRunCommandInput(validInput({ cwd: "packages/a\ncore" }))).toMatchObject({
-      cwd: "packages/a\ncore",
-    });
+    // line terminator. U+2028 (line separator) specifically: it's a line terminator dotAll must
+    // cover, but -- unlike "\n"/"\r" -- not an ASCII control character isSafeCommandCwd's
+    // hasControlCharacters check (codePoint <= 0x1f || === 0x7f) ever excluded, so the original
+    // hand-written parser always accepted it.
+    const lineSeparator = String.fromCharCode(0x2028);
+    const cwd = `packages/a${lineSeparator}core`;
+    expect(parseRunCommandInput(validInput({ cwd }))).toMatchObject({ cwd });
+  });
+
+  it("rejects a cwd containing an ASCII control character, including a line terminator like newline", () => {
+    // isSafeCommandCwd's !hasControlCharacters(value) check excluded these separately from its
+    // regex-shaped checks; the dotAll fix above (needed so a non-ASCII line terminator still
+    // matches, per the case above) must not also let an ASCII control character -- newline
+    // included -- slip through unnoticed.
+    for (const codePoint of [0x1b, 0x0a, 0x0d]) {
+      const character = String.fromCharCode(codePoint);
+      expect(() => parseRunCommandInput(validInput({ cwd: `packages/a${character}core` }))).toThrow(
+        ZodError,
+      );
+    }
   });
 
   it.each([
