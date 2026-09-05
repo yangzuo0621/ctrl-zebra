@@ -13,10 +13,6 @@ import {
   parseWorkspaceEditPlan,
   type TextEdit,
   type ToolExecutionOutput,
-  type ToolInputArraySchema,
-  type ToolInputObjectSchema,
-  type ToolInputSchema,
-  type ToolInputStringSchema,
   type WorkspaceEditPlan,
 } from "@ctrl-zebra/core";
 import { utf8ByteLength } from "@ctrl-zebra/protocol";
@@ -60,10 +56,14 @@ const proposeWorkspaceEditZodSchema = z
                   .strictObject({
                     range: textRangeSchema,
                     // isBoundedWorkspaceEditText (core) counts this bound by Unicode code point,
-                    // not UTF-16 code unit -- not what zod's `.max()` would count -- so it stays
-                    // unenforced here and is checked in the parser instead; toToolInputSchema()'s
-                    // splice below restores the maxLength this tool has always advertised.
-                    newText: z.string().describe("Replacement text."),
+                    // not UTF-16 code unit -- not what zod's `.max()` would count -- so the bound
+                    // itself stays unenforced here and is checked in the parser instead. `.meta()`
+                    // only annotates the JSON Schema `toToolInputSchema()` derives; it adds no
+                    // runtime check, so it can restore this maxLength without also mismeasuring it.
+                    newText: z
+                      .string()
+                      .describe("Replacement text.")
+                      .meta({ maxLength: maxProposedWorkspaceEditReplacementCharacters }),
                   })
                   .describe("One replacement over a half-open text range."),
               )
@@ -82,45 +82,7 @@ const proposeWorkspaceEditZodSchema = z
     path: ["files"],
   });
 
-const generatedProposeWorkspaceEditInputSchema = toToolInputSchema(proposeWorkspaceEditZodSchema);
-export const proposeWorkspaceEditInputSchema = spliceEditNewTextMaxLength(
-  generatedProposeWorkspaceEditInputSchema,
-  maxProposedWorkspaceEditReplacementCharacters,
-);
-
-function spliceEditNewTextMaxLength(schema: ToolInputSchema, maxLength: number): ToolInputSchema {
-  const filesSchema = schema.properties.files as ToolInputArraySchema;
-  const fileItemSchema = filesSchema.items as ToolInputObjectSchema;
-  const editsSchema = fileItemSchema.properties.edits as ToolInputArraySchema;
-  const editItemSchema = editsSchema.items as ToolInputObjectSchema;
-  const newTextSchema = editItemSchema.properties.newText as ToolInputStringSchema;
-
-  return {
-    ...schema,
-    properties: {
-      ...schema.properties,
-      files: {
-        ...filesSchema,
-        items: {
-          ...fileItemSchema,
-          properties: {
-            ...fileItemSchema.properties,
-            edits: {
-              ...editsSchema,
-              items: {
-                ...editItemSchema,
-                properties: {
-                  ...editItemSchema.properties,
-                  newText: { ...newTextSchema, maxLength },
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-  };
-}
+export const proposeWorkspaceEditInputSchema = toToolInputSchema(proposeWorkspaceEditZodSchema);
 
 export interface ProposeWorkspaceEditFileInput {
   readonly path: string;

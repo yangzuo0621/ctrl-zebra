@@ -13,8 +13,13 @@ export const maxWorkspaceRelativePathCharacters = 4_096;
  * Expressed as a single regex, rather than calling that predicate from a zod `.refine()`, so this
  * constraint appears as a `pattern` hint in the JSON Schema advertised to the model, the same way
  * every one of these tools' hand-written schemas already did before this shared constant existed.
+ *
+ * Uses the `s` (dotAll) flag so the trailing `.+` also matches a path containing a line-terminator
+ * code point (`\n`, `\r`, U+2028, U+2029) -- `isSafeForwardSlashPath` never rejected those, and
+ * without `s` this regex silently would (a plain `.` never matches a line terminator), which
+ * `workspace-path-schema.test.ts`'s original equivalence battery didn't happen to exercise.
  */
-export const workspaceRelativePathPattern = /^(?!\/)(?!.*\\)(?!.*(?:^|\/)\.{1,2}(?:\/|$)).+$/u;
+export const workspaceRelativePathPattern = /^(?!\/)(?!.*\\)(?!.*(?:^|\/)\.{1,2}(?:\/|$)).+$/su;
 
 /**
  * `maxBytes`, when given, adds an extra UTF-8 byte-length ceiling on top of the code-unit

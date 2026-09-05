@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ZodError } from "zod";
+import { ZodError, z } from "zod";
 
 import {
   createProposeFileEditTool,
@@ -10,27 +10,12 @@ import {
   proposeFileEditInputSchema,
   StaleFileRevisionError,
 } from "./propose-file-edit.js";
+import { textPositionSchema } from "./text-edit-schema.js";
 
-const positionSchema = {
-  type: "object",
-  description: "A zero-based text position.",
-  properties: {
-    line: {
-      type: "integer",
-      description: "Zero-based line number.",
-      minimum: 0,
-      maximum: Number.MAX_SAFE_INTEGER,
-    },
-    character: {
-      type: "integer",
-      description: "Zero-based UTF-16 character offset.",
-      minimum: 0,
-      maximum: Number.MAX_SAFE_INTEGER,
-    },
-  },
-  required: ["line", "character"],
-  additionalProperties: false,
-} as const;
+// Derived from the real schema, rather than a hand-duplicated literal (also used by
+// propose-workspace-edit.test.ts), so the two can never independently drift from it or from
+// each other. `$schema` only belongs at a true document root, not this nested position.
+const { $schema: _schema, ...positionSchema } = z.toJSONSchema(textPositionSchema);
 
 const input = {
   path: "src/example.ts",
