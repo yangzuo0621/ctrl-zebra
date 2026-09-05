@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { ZodError } from "zod";
 
 import {
   createRunCommandTool,
+  maxRunCommandArgumentCharacters,
+  maxRunCommandArguments,
+  maxRunCommandCharacters,
+  maxRunCommandCwdCharacters,
   maxRunCommandTimeoutMs,
   minRunCommandTimeoutMs,
   parseRunCommandInput,
@@ -9,7 +14,59 @@ import {
   runCommandToolName,
 } from "./run-command.js";
 
+// Matches run-command.ts's own controlCharacterEscapeText: literal escape TEXT (the six
+// characters backslash, "u", "0", "0", "0", "0", not an actual NUL character), composed via
+// String.fromCharCode(0x5c) for the backslash rather than an inline escape sequence, purely to
+// keep this source file free of a directly-typed one.
+const backslash = String.fromCharCode(0x5c);
+const controlCharacterEscapeText = `${backslash}u0000-${backslash}u001f${backslash}u007f`;
+
 describe("run_command input", () => {
+  it("advertises the exact model-facing schema this tool has always advertised", () => {
+    expect(runCommandInputSchema).toEqual({
+      type: "object",
+      properties: {
+        command: {
+          type: "string",
+          description:
+            "Executable name or path passed directly to spawn; shell syntax is not interpreted.",
+          minLength: 1,
+          maxLength: maxRunCommandCharacters,
+          pattern: `^(?!\\s)(?!.*\\s$)[^${controlCharacterEscapeText}]+$`,
+        },
+        args: {
+          type: "array",
+          description: "Ordered arguments passed directly to the executable.",
+          minItems: 0,
+          maxItems: maxRunCommandArguments,
+          items: {
+            type: "string",
+            description: "One argument passed verbatim to the executable.",
+            maxLength: maxRunCommandArgumentCharacters,
+            pattern: `^[^${controlCharacterEscapeText}]*$`,
+          },
+        },
+        cwd: {
+          type: "string",
+          description:
+            'Workspace-relative directory using forward slashes; "." selects the workspace root.',
+          minLength: 1,
+          maxLength: maxRunCommandCwdCharacters,
+          pattern:
+            "^(?:\\.|(?!\\/)(?!.*:)(?!.*(?:^|\\/)\\.{1,2}(?:\\/|$))(?!.*\\\\)(?!.*\\/\\/)(?!.*[/:]$).+)$",
+        },
+        timeoutMs: {
+          type: "integer",
+          description: "Hard timeout in milliseconds.",
+          minimum: minRunCommandTimeoutMs,
+          maximum: maxRunCommandTimeoutMs,
+        },
+      },
+      required: ["command", "args", "cwd", "timeoutMs"],
+      additionalProperties: false,
+    });
+  });
+
   it("prepares the exact input and delegates approved execution", async () => {
     const input = validInput() as unknown as {
       command: string;
@@ -72,7 +129,7 @@ describe("run_command input", () => {
   it.each(["", "   ", " node", "node ", "node\n--eval"])(
     "rejects invalid command %j",
     (command) => {
-      expect(() => parseRunCommandInput(validInput({ command }))).toThrow(TypeError);
+      expect(() => parseRunCommandInput(validInput({ command }))).toThrow(ZodError);
     },
   );
 
@@ -87,7 +144,16 @@ describe("run_command input", () => {
     "packages//core",
     "packages/core/",
   ])("rejects cwd outside the normalized workspace-relative form: %s", (cwd) => {
-    expect(() => parseRunCommandInput(validInput({ cwd }))).toThrow(TypeError);
+    expect(() => parseRunCommandInput(validInput({ cwd }))).toThrow(ZodError);
+  });
+
+  it("accepts a cwd containing a line-terminator code point, matching the predicate this pattern replaces", () => {
+    // Regression guard for the same class of bug tranche 4 found in workspace-path-schema.ts: a
+    // trailing `.+` needs the `s` (dotAll) flag, or it silently stops matching a cwd containing a
+    // line terminator that the original hand-written isSafeCommandCwd predicate always accepted.
+    expect(parseRunCommandInput(validInput({ cwd: "packages/a\ncore" }))).toMatchObject({
+      cwd: "packages/a\ncore",
+    });
   });
 
   it.each([
@@ -98,18 +164,18 @@ describe("run_command input", () => {
     Number.NaN,
     Number.POSITIVE_INFINITY,
   ])("rejects invalid timeout %s", (timeoutMs) => {
-    expect(() => parseRunCommandInput(validInput({ timeoutMs }))).toThrow(TypeError);
+    expect(() => parseRunCommandInput(validInput({ timeoutMs }))).toThrow(ZodError);
   });
 
   it("rejects dangerous extra fields and invalid arguments", () => {
-    expect(() => parseRunCommandInput({ ...validInput(), shell: true })).toThrow(TypeError);
+    expect(() => parseRunCommandInput({ ...validInput(), shell: true })).toThrow(ZodError);
     expect(() => parseRunCommandInput({ ...validInput(), env: { TOKEN: "secret" } })).toThrow(
-      TypeError,
+      ZodError,
     );
     expect(() => parseRunCommandInput(validInput({ args: ["ok", "bad\nargument"] }))).toThrow(
-      TypeError,
+      ZodError,
     );
-    expect(() => parseRunCommandInput(null)).toThrow(TypeError);
+    expect(() => parseRunCommandInput(null)).toThrow(ZodError);
   });
 });
 
