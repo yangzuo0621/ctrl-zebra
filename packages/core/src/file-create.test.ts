@@ -53,6 +53,7 @@ describe("File Create Plan", () => {
     { name: "parent segment", patch: { path: "src/../outside.txt" } },
     { name: "current segment", patch: { path: "src/./new.txt" } },
     { name: "backslash", patch: { path: "src\\new.txt" } },
+    { name: "Windows drive letter", patch: { path: "C:/Users/victim/.ssh/id_rsa" } },
     {
       name: "path scalar limit",
       patch: { path: "x".repeat(maxFileCreatePathCharacters + 1) },

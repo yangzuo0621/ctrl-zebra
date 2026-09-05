@@ -48,6 +48,10 @@ describe("parseWorkspaceEditPlan", () => {
     { operation: "edit", files: [target("a.ts"), target("a.ts")] },
     { operation: "edit", files: [target("a.ts"), { ...target("b.ts"), uri: target("a.ts").uri }] },
     { operation: "edit", files: [target("../outside.ts"), target("b.ts")] },
+    {
+      operation: "edit",
+      files: [target("C:/Users/victim/.ssh/id_rsa"), target("b.ts")],
+    },
     { operation: "other", files: [target("a.ts"), target("b.ts")] },
     { operation: "edit", files: [target("a.ts"), { ...target("b.ts"), unexpected: true }] },
   ])("rejects invalid plan %#", (candidate) => {

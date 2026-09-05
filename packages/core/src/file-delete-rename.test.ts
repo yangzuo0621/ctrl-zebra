@@ -43,6 +43,7 @@ describe("file lifecycle plans", () => {
     { path: "/outside.txt" },
     { path: "src\\old.txt" },
     { path: "src/./old.txt" },
+    { path: "C:/Users/victim/.ssh/id_rsa" },
     { beforeHash: "short" },
     { beforeContent: "\0binary" },
   ])("rejects an invalid delete plan %#", (patch) => {
@@ -54,6 +55,7 @@ describe("file lifecycle plans", () => {
   it.each([
     { sourcePath: "../outside.txt" },
     { targetPath: "src/./new.txt" },
+    { targetPath: "C:/Users/victim/.ssh/id_rsa" },
     { sourcePath: renamePlan.targetPath, targetPath: renamePlan.targetPath },
     { sourceUri: renamePlan.targetUri, targetUri: renamePlan.targetUri },
     { beforeHash: "short" },

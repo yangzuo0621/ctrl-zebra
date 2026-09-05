@@ -12,11 +12,16 @@ import {
   type TextEdit,
 } from "./text-edit.js";
 import { utf8ByteLength } from "./text-primitives.js";
+import {
+  isSafeWorkspacePath,
+  maxWorkspacePathBytes,
+  maxWorkspacePathCharacters,
+} from "./workspace-path.js";
 
 export const minWorkspaceEditFiles = 2;
 export const maxWorkspaceEditFiles = 128;
-export const maxWorkspaceEditPathCharacters = 4_096;
-export const maxWorkspaceEditPathBytes = 16_384;
+export const maxWorkspaceEditPathCharacters = maxWorkspacePathCharacters;
+export const maxWorkspaceEditPathBytes = maxWorkspacePathBytes;
 export const maxWorkspaceEditTextCharacters = 65_536;
 export const maxWorkspaceEditTextLines = 2_000;
 export const maxWorkspaceEditTextBytes = 262_144;
@@ -131,19 +136,10 @@ function parseWorkspaceEditFile(value: unknown): WorkspaceEditFilePlan {
 }
 
 function isSafeWorkspaceEditPath(path: string): boolean {
-  if (
-    path.length === 0 ||
-    path.startsWith("/") ||
-    path.includes("\\") ||
-    [...path].length > maxWorkspaceEditPathCharacters ||
-    utf8ByteLength(path) > maxWorkspaceEditPathBytes
-  ) {
-    return false;
-  }
-
-  return path
-    .split("/")
-    .every((segment) => segment.length > 0 && segment !== "." && segment !== "..");
+  return isSafeWorkspacePath(path, {
+    maxCharacters: maxWorkspaceEditPathCharacters,
+    maxBytes: maxWorkspaceEditPathBytes,
+  });
 }
 
 export function isBoundedWorkspaceEditText(text: string): boolean {

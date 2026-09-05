@@ -2,9 +2,14 @@ import { checkpointHashSchema, maxApprovalUriCharacters } from "@ctrl-zebra/prot
 
 import { hasExactKeys, isRecord } from "./record-validation.js";
 import { utf8ByteLength } from "./text-primitives.js";
+import {
+  isSafeWorkspacePath,
+  maxWorkspacePathBytes,
+  maxWorkspacePathCharacters,
+} from "./workspace-path.js";
 
-export const maxFileCreatePathCharacters = 4_096;
-export const maxFileCreatePathBytes = 16_384;
+export const maxFileCreatePathCharacters = maxWorkspacePathCharacters;
+export const maxFileCreatePathBytes = maxWorkspacePathBytes;
 export const maxFileCreateContentCharacters = 65_536;
 export const maxFileCreateContentLines = 2_000;
 export const maxFileCreateContentBytes = 262_144;
@@ -71,19 +76,10 @@ export function parseFileCreatePlan(
 }
 
 function isSafeFileCreatePath(path: string): boolean {
-  if (
-    path.length === 0 ||
-    path.startsWith("/") ||
-    path.includes("\\") ||
-    [...path].length > maxFileCreatePathCharacters ||
-    utf8ByteLength(path) > maxFileCreatePathBytes
-  ) {
-    return false;
-  }
-
-  return path
-    .split("/")
-    .every((segment) => segment.length > 0 && segment !== "." && segment !== "..");
+  return isSafeWorkspacePath(path, {
+    maxCharacters: maxFileCreatePathCharacters,
+    maxBytes: maxFileCreatePathBytes,
+  });
 }
 
 function isBoundedFileCreateContent(content: string): boolean {
