@@ -36,6 +36,13 @@ const inputs = [
   "src/file...ts",
   "😀/文件.ts",
   "a".repeat(maxWorkspaceRelativePathCharacters),
+  // Line-terminator code points: `isSafeForwardSlashPath` never rejected these, but a plain `.`
+  // never matches them either -- this regex needs its `s` (dotAll) flag to agree here.
+  "src/a\nfile.ts",
+  "src/a\rfile.ts",
+  "src/a file.ts",
+  "src/a file.ts",
+  "src/a\nfile.ts\\",
 ];
 
 describe("workspaceRelativePathPattern", () => {
@@ -73,6 +80,10 @@ describe("workspaceRelativePathSchema", () => {
 
   it("skips the byte bound entirely when it is not given", () => {
     expect(workspaceRelativePathSchema("A path.").safeParse("😀😀😀😀😀.ts").success).toBe(true);
+  });
+
+  it("accepts a path containing a line-terminator code point, matching isSafeForwardSlashPath", () => {
+    expect(workspaceRelativePathSchema("A path.").safeParse("src/a\nfile.ts").success).toBe(true);
   });
 });
 

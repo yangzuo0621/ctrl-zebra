@@ -1,14 +1,23 @@
 import { describe, expect, it, vi } from "vitest";
+import { ZodError, z } from "zod";
 
 import {
   createProposeWorkspaceEditTool,
   maxProposedWorkspaceEditEdits,
   maxProposedWorkspaceEditFiles,
+  maxProposedWorkspaceEditReplacementCharacters,
   maxTotalProposedWorkspaceEditReplacementBytes,
   minProposedWorkspaceEditFiles,
   type ProposeWorkspaceEditWorkspace,
+  proposeWorkspaceEditInputSchema,
   StaleWorkspaceEditTargetError,
 } from "./propose-workspace-edit.js";
+import { textPositionSchema } from "./text-edit-schema.js";
+
+// Derived from the real schema, rather than a hand-duplicated literal (also used by
+// propose-file-edit.test.ts), so the two can never independently drift from it or from each
+// other. `$schema` only belongs at a true document root, not this nested position.
+const { $schema: _schema, ...positionSchema } = z.toJSONSchema(textPositionSchema);
 
 const input = {
   files: [
@@ -45,6 +54,63 @@ const snapshots = new Map([
 ]);
 
 describe("propose_workspace_edit", () => {
+  it("advertises the exact model-facing schema this tool has always advertised", () => {
+    expect(proposeWorkspaceEditInputSchema).toEqual({
+      type: "object",
+      properties: {
+        files: {
+          type: "array",
+          description: "At least two existing files with non-overlapping edits.",
+          minItems: minProposedWorkspaceEditFiles,
+          maxItems: maxProposedWorkspaceEditFiles,
+          items: {
+            type: "object",
+            description: "One existing workspace file and its non-overlapping edits.",
+            properties: {
+              path: {
+                type: "string",
+                description: "Workspace-relative file path using forward slashes.",
+                minLength: 1,
+                maxLength: 4_096,
+                pattern: "^(?!\\/)(?!.*\\\\)(?!.*(?:^|\\/)\\.{1,2}(?:\\/|$)).+$",
+              },
+              edits: {
+                type: "array",
+                description: "Non-overlapping text edits for this file.",
+                minItems: 1,
+                maxItems: maxProposedWorkspaceEditEdits,
+                items: {
+                  type: "object",
+                  description: "One replacement over a half-open text range.",
+                  properties: {
+                    range: {
+                      type: "object",
+                      description: "A zero-based half-open text range.",
+                      properties: { start: positionSchema, end: positionSchema },
+                      required: ["start", "end"],
+                      additionalProperties: false,
+                    },
+                    newText: {
+                      type: "string",
+                      description: "Replacement text.",
+                      maxLength: maxProposedWorkspaceEditReplacementCharacters,
+                    },
+                  },
+                  required: ["range", "newText"],
+                  additionalProperties: false,
+                },
+              },
+            },
+            required: ["path", "edits"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ["files"],
+      additionalProperties: false,
+    });
+  });
+
   it("declares a write-risk multi-file preparation tool", () => {
     const tool = createProposeWorkspaceEditTool(createWorkspace().values);
     expect({ name: tool.name, risk: tool.risk, inputSchema: tool.inputSchema }).toEqual({
@@ -115,7 +181,7 @@ describe("propose_workspace_edit", () => {
     { files: [input.files[0], input.files[0]] },
   ])("rejects invalid input %#", (candidate) => {
     const tool = createProposeWorkspaceEditTool(createWorkspace().values);
-    expect(() => tool.parseInput(candidate)).toThrow(TypeError);
+    expect(() => tool.parseInput(candidate)).toThrow(ZodError);
   });
 
   it("rejects a stale target without checking later targets", async () => {
@@ -129,6 +195,9 @@ describe("propose_workspace_edit", () => {
   });
 
   it("rejects aggregate replacement overflow before host capture", () => {
+    // Not rejected by the schema (newText carries no zod-level length bound -- see the schema's
+    // own docs for why), so this reaches the parser's isBoundedWorkspaceEditText check and still
+    // throws the tool's own TypeError, exactly as the hand-written parser did.
     const tool = createProposeWorkspaceEditTool(createWorkspace().values);
     const oversized = {
       files: [
@@ -164,7 +233,7 @@ describe("propose_workspace_edit", () => {
         input.files[1],
       ],
     };
-    expect(() => tool.parseInput(oversized)).toThrow(TypeError);
+    expect(() => tool.parseInput(oversized)).toThrow(ZodError);
   });
 
   it("forwards cancellation and does not capture another target", async () => {

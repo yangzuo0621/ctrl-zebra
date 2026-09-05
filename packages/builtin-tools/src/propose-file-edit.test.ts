@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { ZodError, z } from "zod";
 
 import {
   createProposeFileEditTool,
@@ -6,8 +7,15 @@ import {
   maxProposedFileEdits,
   maxProposedReplacementCharacters,
   type ProposeFileEditWorkspace,
+  proposeFileEditInputSchema,
   StaleFileRevisionError,
 } from "./propose-file-edit.js";
+import { textPositionSchema } from "./text-edit-schema.js";
+
+// Derived from the real schema, rather than a hand-duplicated literal (also used by
+// propose-workspace-edit.test.ts), so the two can never independently drift from it or from
+// each other. `$schema` only belongs at a true document root, not this nested position.
+const { $schema: _schema, ...positionSchema } = z.toJSONSchema(textPositionSchema);
 
 const input = {
   path: "src/example.ts",
@@ -28,6 +36,49 @@ const snapshot = {
 } as const;
 
 describe("propose_file_edit", () => {
+  it("advertises the exact model-facing schema this tool has always advertised", () => {
+    expect(proposeFileEditInputSchema).toEqual({
+      type: "object",
+      properties: {
+        path: {
+          type: "string",
+          description: "Workspace-relative file path using forward slashes.",
+          minLength: 1,
+          maxLength: 4_096,
+          pattern: "^(?!\\/)(?!.*\\\\)(?!.*(?:^|\\/)\\.{1,2}(?:\\/|$)).+$",
+        },
+        edits: {
+          type: "array",
+          description: "Non-overlapping text edits for the file.",
+          minItems: 1,
+          maxItems: maxProposedFileEdits,
+          items: {
+            type: "object",
+            description: "One replacement over a half-open text range.",
+            properties: {
+              range: {
+                type: "object",
+                description: "A zero-based half-open text range.",
+                properties: { start: positionSchema, end: positionSchema },
+                required: ["start", "end"],
+                additionalProperties: false,
+              },
+              newText: {
+                type: "string",
+                description: "Replacement text.",
+                maxLength: maxProposedReplacementCharacters,
+              },
+            },
+            required: ["range", "newText"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ["path", "edits"],
+      additionalProperties: false,
+    });
+  });
+
   it("publishes its stable nested declaration as a write-risk proposal tool", () => {
     const tool = createProposeFileEditTool(createWorkspace().values);
 
@@ -75,7 +126,7 @@ describe("propose_file_edit", () => {
     (path) => {
       const tool = createProposeFileEditTool(createWorkspace().values);
 
-      expect(() => tool.parseInput({ ...input, path })).toThrow(TypeError);
+      expect(() => tool.parseInput({ ...input, path })).toThrow(ZodError);
     },
   );
 
@@ -114,19 +165,22 @@ describe("propose_file_edit", () => {
     const tool = createProposeFileEditTool(createWorkspace().values);
     const edit = input.edits[0];
 
-    expect(() => tool.parseInput({ ...input, edits: [] })).toThrow(TypeError);
+    expect(() => tool.parseInput({ ...input, edits: [] })).toThrow(ZodError);
     expect(() =>
       tool.parseInput({
         ...input,
         edits: Array.from({ length: maxProposedFileEdits + 1 }, () => edit),
       }),
-    ).toThrow(TypeError);
+    ).toThrow(ZodError);
     expect(() =>
       tool.parseInput({
         ...input,
         edits: [{ ...edit, newText: "x".repeat(maxProposedReplacementCharacters + 1) }],
       }),
-    ).toThrow(TypeError);
+    ).toThrow(ZodError);
+    // Below the per-edit maxLength and the array-length limit, so this reaches the parser's own
+    // aggregate-byte-budget check (not expressible in the schema, since it spans array items) and
+    // still throws the tool's own TypeError, exactly as the hand-written parser did.
     expect(() =>
       tool.parseInput({
         ...input,
