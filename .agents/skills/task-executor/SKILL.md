@@ -1,70 +1,51 @@
+---
+name: task-executor
+description: Implement and verify one assigned work item. Default to MANUAL; handle independent-review handoff only when explicitly requested or dispatched by an active AUTO workflow.
+---
+
 # Task-Executor
 
-## Purpose
+Own implementation and verification for one authorized Issue/PR or standalone maintenance change.
+Use [AGENTS.md](../../../AGENTS.md) and the affected owner documents. MANUAL is the default;
+[AUTO profiles](../auto-workflow/SKILL.md#authorization-profiles) require explicit task-scoped
+selection and authorization. This skill does not itself grant Git/PR permissions.
 
-Execute exactly one assigned Issue/PR or standalone maintenance change and own its implementation branch/PR through
-implementation and verification. In an active `AUTO_DRAFT` / `AUTO_FULL` run, also handle
-Reviewer-directed fixes and, after approval, return the exact revision to Root for transactional
-closure. In `MANUAL`, stop and report after implementation and verification unless the user separately
-requests an independent review.
+## Implementation
 
-## Inputs
+1. Establish scope, acceptance criteria, exclusions, affected contracts, base revision, and verification
+   from the request or handoff. Check for conflicting active work without disturbing unrelated changes.
+   Create or use a dedicated feature branch when applicable and authorized.
+2. Record a compact work-item contract in the conversation/handoff, or in an authorized PR. Keep the
+   planned-file boundary current: amend it before editing another file. A routine file-list amendment
+   within the authorized scope does not require renewed approval; scope or contract expansion follows
+   AGENTS.md change control.
+3. Continue when implementation is already authorized. A planning-only request does not authorize
+   implementation. Ask only for a missing decision or grant that blocks the next action, after completing
+   independent authorized preparation.
+4. Apply [Reuse Before Build](../../../docs/development.md#reuse-before-build) and
+   [Build vs Buy](../../../docs/development.md#build-vs-buy) when their triggers apply. TARGETED is the
+   default reuse tier; FULL needs a documented trigger, and ESCALATED FULL belongs to Reviewer.
+5. Implement within scope and verify the affected surface. Create or update the same PR early only
+   when authorized, using the repository PR template for durable context. In MANUAL, report changes,
+   verification, unrun checks, and remaining blockers; do not automatically dispatch Reviewer.
 
-- `AGENTS.md`, affected current-state owner documents, the Issue/PR or maintenance scope, acceptance
-  criteria, and base revision
-- mode: `MANUAL` (default), `AUTO_DRAFT`, or `AUTO_FULL`
-- explicit task-scoped Git/PR authorization when an AUTO profile is used
+## Independent review and handoff
 
-## Workflow
+An active AUTO run or a separate explicit user request for independent review requires a compact
+Review Handoff: task/PR/exact revision, acceptance criteria, changed areas and contracts, verification
+and unrun checks, and applicable reuse or Build-vs-Buy evidence. Keep transient revision and execution
+evidence in the handoff; omit raw transcripts and routine audit counts from it and the PR.
 
-1. Verify the work item is authorized and has no conflicting active work. Create or use its dedicated
-   feature branch when applicable.
-2. Before implementation edits, publish a compact work-item contract in the handoff or PR. Include
-   scope, acceptance criteria, planned files, exclusions, public-contract impact, and verification;
-   keep the PR version limited to durable context, and keep exact revision and transient execution
-   evidence in the handoff. The planned-file list is a hard boundary and requires an amendment
-   before leaving it.
-3. In `MANUAL`, stop for explicit implementation approval. In AUTO, continue only when scope,
-   acceptance, contract, architecture/security rules, and exact profile authorization are unambiguous.
-4. Follow [`Reuse Before Build`](../../../docs/development.md#reuse-before-build): use `TARGETED` by
-   default and `FULL` only for an existing Executor trigger; never claim Reviewer-only `ESCALATED FULL`.
-   Apply [`Build vs Buy`](../../../docs/development.md#build-vs-buy) when triggered.
-5. Implement only the contract, verify from narrow to broad, and create or update the same PR early
-   when authorized. In MANUAL request each ungranted Git/PR operation; in AUTO remain inside the
-   immutable profile envelope. In MANUAL, implementation completion followed by verification is the
-   default stop/report point and does not dispatch a Reviewer.
-6. In `AUTO_DRAFT` / `AUTO_FULL`, after implementation and verification return the exact current
-   revision, PR diff, acceptance criteria, and compact Review Handoff to Root for Reviewer dispatch;
-   do not self-dispatch. The first review must return all identifiable blocking findings as one
-   consolidated set. For correction #1 and #2, address the returned blockers in scope and request the
-   delta-focused review of the new exact revision. In MANUAL, only a separate explicit user request for
-   independent review permits this Reviewer handoff.
-7. In an active AUTO run, any implementation change after `APPROVED` invalidates approval. After
-   approval of the current revision, stop implementation and return the same PR and revision to Root
-   for transactional closure. If MANUAL includes an explicitly requested independent review, the
-   exact-revision invalidation rule still applies; return that review result to the caller without Root
-   closure. Route checks/conflict mechanics through Executor and require re-review whenever their fix
-   changes the implementation revision.
+In AUTO, return the handoff to Root for dispatch; never self-dispatch Reviewer. Address returned
+blockers in scope under the [review loop](../auto-workflow/SKILL.md#review-loop-and-stop-conditions).
+After approval, stop editing and return the same PR and exact revision to Root for closure. For an
+explicit independent review outside AUTO, return the result to the caller without AUTO closure.
+Any implementation revision change invalidates approval and needs re-review, including changes made
+to fix CI or conflicts.
 
-## Review Handoff output
+## Boundaries and blockers
 
-Required for an active AUTO run or an explicitly requested independent review; ordinary MANUAL
-completion stops after verification and does not require a Reviewer handoff.
-
-Use the non-empty fields in the task handoff. Do not copy the full handoff into the PR body: the PR
-should retain only durable summary, scope/impact, verification, and material notes. The handoff must
-identify the task/PR/exact revision, acceptance criteria, changed areas, touched contracts,
-verification and unrun checks, and any reuse or Build-vs-Buy evidence that applies. Do not include
-whole source documents, raw searches, tool transcripts, document counts, or other routine telemetry.
-
-## Stop/block conditions
-
-Return `BLOCKED` for missing or ambiguous authorization, scope ambiguity or contract expansion,
-architecture/security conflict, required change control, persistent review failure, an in-scope
-mechanical blocker that cannot be resolved safely, or unverifiable repository/PR state. If blockers
-remain after correction #2, stop without starting a fourth Reviewer pass.
-
-## Role boundary
-
-Do not act as Reviewer, Root closure, or Planner; self-approve; close the work item; merge or close
-the PR; or invent test, CI, Git, review, PR, merge, or cleanup state.
+Do not act as Reviewer, Planner, or Root closure; self-approve; merge or close the PR or work item.
+Follow AGENTS.md stop conditions for missing authorization, scope/contract expansion, security or
+architecture conflict, and unverifiable state. Correct in-scope mechanical failures when safe;
+report BLOCKED when they cannot be resolved or the review-loop limit is reached.

@@ -1,89 +1,45 @@
+---
+name: task-reviewer
+description: Independently review one work item at an exact PR revision when explicitly requested or dispatched by an active auto-workflow. Ordinary implementation completion does not trigger review.
+---
+
 # Task-Reviewer
 
-## Purpose
+Remain read-only. Run only for an explicit independent-review request or an active AUTO dispatch.
+Within AUTO, Reviewer is the sole implementation-quality gate; Root owns mechanical closure.
 
-When explicitly invoked, independently review one approved work item at an exact current PR revision.
-Remain read-only and return the sole implementation-quality decision for that review.
+## Context and review
 
-## Invocation boundary
+Start with the compact Review Handoff, exact current PR diff/revision, and acceptance criteria.
+Verify that the handoff identifies the work item/PR/revision, changed areas/contracts, checks, and
+applicable reuse or Build-vs-Buy evidence. Treat these as claims, not proof. Use the dispatched revision,
+not a potentially stale revision in the PR description.
 
-Do not self-trigger. Use Task-Reviewer only when an active `auto-workflow` dispatches it or when the
-user explicitly requests Task-Reviewer / an independent review. Ordinary implementation completion,
-including `MANUAL` completion, does not constitute a Reviewer trigger.
+Apply [the review checklist](../../../docs/review-checklist.md). Open further documents only for a
+touched contract, material claim, concrete concern, or documented similarity escalation. Do not
+reconstruct the Executor's full context. Use the tier-specific verification in
+[Reuse Before Build](../../../docs/development.md#reuse-before-build); FULL does not automatically
+require reproducing the repository-wide inventory.
 
-## Inputs and context
+Follow the [review loop](../auto-workflow/SKILL.md#review-loop-and-stop-conditions) for both AUTO and
+explicit independent review: inspect the complete first revision, consolidate blocking findings,
+and focus corrections on the delta. Approval covers only the exact reviewed revision.
 
-The base context is exactly:
+## Output
 
-- compact Review Handoff;
-- current PR diff at the handoff's exact revision; and
-- work-item acceptance criteria.
+Report:
 
-The Review Handoff and exact revision are transient review context, not required PR-body fields. The
-dispatch context supplies the current revision; do not rely on a stale revision recorded in the PR
-description.
+- Decision: APPROVED, REJECTED, or BLOCKED.
+- Exact reviewed revision and pass (initial, correction #1, or correction #2).
+- All blocking findings with evidence and required fixes, or none.
+- Non-blocking suggestions and additional documents read, when applicable.
+- Similarity tier, trigger, and bounded verification result only for FULL or ESCALATED FULL.
 
-Require the handoff to identify the work item/PR/revision, acceptance and changed areas/contracts,
-verification, and any applicable reuse or Build-vs-Buy evidence. Treat handoff fields as claims. Open
-extra documents only for a touched contract, material handoff claim, concrete concern, or documented
-similarity escalation; do not reconstruct the Executor's full context.
-
-## Review workflow
-
-Apply [`docs/review-checklist.md`](../../../docs/review-checklist.md) and verify acceptance,
-correctness/edge cases/regressions, touched architecture/security boundaries, scope, tests, material
-code smells, reuse-tier justification, and Build-vs-Buy evidence when triggered.
-
-The first pass must review the complete current revision and acceptance criteria before deciding. Report
-all identifiable blocking findings together as one consolidated set; do not stop after the first
-blocker merely to create another review cycle.
-
-For correction #1 and #2, use a delta-focused correction review. Verify the previous blocking findings,
-the current revision delta, fix-induced regressions, and directly affected contracts. Do not repeat a
-complete first-pass review unless scope, architecture, security, or implementation strategy changed
-substantially, or another concrete escalation trigger requires it.
-
-Similarity handling remains owned by
-[`Reuse Before Build`](../../../docs/development.md#reuse-before-build):
-
-- `TARGETED`: check the Executor's evidence and spot-check likely owners or suspicious similarity.
-- `FULL`: independently verify material inventory/reuse claims with targeted searches; do not repeat
-  the repository-wide inventory automatically.
-- `ESCALATED FULL`: repeat the full audit only for an existing Reviewer escalation trigger, recording
-  the trigger and material differences.
-
-Consolidate findings as `BLOCKING` (`REJECTED`) or `NON-BLOCKING`. Approval is valid only for the exact
-reviewed revision; any implementation change invalidates it and requires review of that new revision.
-No self-approval. Normal workflow ends after correction #2; if blockers remain, return `BLOCKED` rather
-than starting a fourth pass.
-
-## Output contract
-
-```md
-### Review Decision: APPROVED | REJECTED | BLOCKED
-### Reviewed Revision
-- Exact revision:
-- Pass: initial | correction #1 | correction #2
-### Blocking Findings
-- issue, evidence, required fix; or none
-### Non-Blocking Suggestions
-- optional improvement; or none
-### Context Used
-- Base: Review Handoff + current PR diff + task acceptance criteria
-- Additional docs actually read: <list only when applicable>
-### Similarity Verification (only when FULL or ESCALATED FULL applies)
-- Tier / trigger / bounded verification result
-```
-
-Omit empty optional sections and routine document-count, repeated-audit, or search-count telemetry.
-Do not include raw search output, transcripts, or unbounded context.
-
-## Stop/block conditions
-
-Reject when a blocking finding exists. Stop without guessing if the revision/diff is stale or
-unverifiable, required base context is missing, or review exposes a change-control conflict.
+Omit empty optional sections, raw transcripts, and routine counts. Reject when a blocking finding
+exists; return BLOCKED for stale/unverifiable revision or missing required context, change-control
+conflict, or blockers remaining after correction #2. Do not start a fourth pass.
 
 ## Role boundary
 
-Do not edit implementation, plans, PR state, or work-item status; impersonate Executor, Root closure, or
-Planner; merge, close, or perform closure; or reinterpret the quality decision after returning it.
+Do not edit code, plans, PR state, or work-item status; act as Executor, Planner, or Root closure;
+self-approve; merge or close; or reinterpret a quality decision after returning it.

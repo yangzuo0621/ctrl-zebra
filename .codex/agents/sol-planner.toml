@@ -6,9 +6,5 @@ model_reasoning_effort = "medium"
 sandbox_mode = "workspace-write"
 
 developer_instructions = """
-You are Sol-Planner.
-Use the repo's sol-planner skill.
-Operate at project level and resolve planning escalations from the Root coordinator.
-Do not participate in routine per-task closure.
-Do not implement feature code, approve code, or merge PRs.
+Read and follow .agents/skills/sol-planner/SKILL.md for this role's invocation, responsibilities, and authorization boundaries.
 """

@@ -3,8 +3,8 @@
 This is a compact review gate. Durable PR context and verification belong in the PR; transient
 review/workflow evidence belongs in the handoff or conversation. Detailed semantics remain authoritative in
 [Reuse Before Build](development.md#reuse-before-build) and
-[Build vs Buy](development.md#build-vs-buy); repository ownership and security rules remain in
-[AGENTS.md](../AGENTS.md), not in the current-state documents under `docs/`.
+[Build vs Buy](development.md#build-vs-buy); repository constraints remain in
+[AGENTS.md](../AGENTS.md), and product security semantics remain in [security.md](security.md).
 
 ## 1. Scope
 
@@ -41,9 +41,11 @@ review/workflow evidence belongs in the handoff or conversation. Detailed semant
 
 ## 4. Tests & Verification
 
-- [ ] Verification covers the normal path, an important boundary, and an expected failure; defects
-      include a regression test where practical.
-- [ ] Affected package checks, required repository checks, and smoke tests are run and reported.
+- [ ] Behavior changes cover the normal path, an important boundary, and an expected failure; defects
+      include a regression test where practical. Documentation-only changes validate documents and
+      references rather than requiring unrelated runtime tests.
+- [ ] Checks required for the affected surface are run and reported; broader checks or smoke tests
+      are included when an applicable owner or unresolved risk requires them.
 - [ ] Unrun checks, environment limitations, and remaining caveats are explicit; no check is inferred.
 - [ ] `git diff --check` and final scope/status checks are clean.
 
@@ -79,16 +81,6 @@ review/workflow evidence belongs in the handoff or conversation. Detailed semant
 
 ## 8. Decision
 
-### Review Decision: APPROVED | REJECTED | BLOCKED
-
-`APPROVED` applies only to the exact reviewed revision. Any implementation change invalidates the
-approval and requires re-review. `REJECTED` must consolidate all blocking findings. `BLOCKED` is
-terminal only when blockers remain after correction #2; do not start a fourth Reviewer pass.
-
-### Blocking Findings
-
-- issue, evidence, and required fix; use `none` for an approval.
-
-### Non-Blocking Suggestions
-
-- optional improvement; use `none` when empty.
+Use [Task-Reviewer](../.agents/skills/task-reviewer/SKILL.md#output) for the review result and
+[the review loop](../.agents/skills/auto-workflow/SKILL.md#review-loop-and-stop-conditions) for pass
+limits and approval freshness. This checklist does not trigger independent review or AUTO closure.

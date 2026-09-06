@@ -1,3 +1,8 @@
+---
+name: auto-workflow
+description: Coordinate one explicitly authorized AUTO_DRAFT or AUTO_FULL work item through Executor, independent Reviewer, and Root closure. Ordinary implementation and maintenance do not enable this workflow.
+---
+
 # Auto-Workflow
 
 ## Purpose
@@ -12,7 +17,7 @@ Root does not take over implementation or implementation review.
 requests `auto-workflow` or explicitly authorizes `AUTO_DRAFT` / `AUTO_FULL` for one exact task.
 Ordinary implementation, roadmap-task, PR, verification, or maintenance requests must not be inferred
 to enable `auto-workflow`. Once an active auto-workflow is established, Task-Reviewer remains mandatory
-and the v3 review-loop and closure rules below continue unchanged.
+and the review-loop and closure rules below apply.
 
 ## Inputs
 
@@ -57,11 +62,7 @@ work item. The envelope is immutable; changing it requires a profile change and 
 4. Dispatch the read-only Reviewer with exactly the Review Handoff, exact current PR diff/revision,
    and task acceptance criteria as base context. Within this active auto-workflow run, Reviewer is the
    only implementation-quality gate.
-5. Require the first Reviewer pass to inspect the complete current revision and return one
-   consolidated set of all identifiable blocking findings. Route that set to Executor. For correction
-   #1 and #2, Reviewer uses a delta-focused review of the previous blockers, current revision delta,
-   fix-induced regressions, and directly affected contracts. A substantive scope, architecture,
-   security, or implementation-strategy change is the only reason to broaden that review.
+5. Route consolidated findings to Executor under the review loop below.
 6. After `APPROVED`, Root performs transactional closure for that exact revision. Root checks only:
    revision and approval freshness, required CI/checks, PR mergeability/conflicts, the permitted
    task-state transition, and exact authorization. Root does not reopen review, reinterpret the
@@ -92,6 +93,13 @@ side effect.
 
 ## Review-loop and stop conditions
 
+Reviewer inspects the complete initial revision and acceptance criteria, returning all identifiable
+blocking findings together. Corrections focus on previous blockers, the revision delta, fix-induced
+regressions, and directly affected contracts. Broaden only for substantive scope, architecture,
+security, or implementation-strategy changes, or a documented similarity escalation. These review
+rules also apply to explicitly requested independent review outside AUTO, without granting AUTO
+closure or Git/PR permissions.
+
 The normal loop has at most two correction cycles: initial review, correction #1, and correction #2
 (at most three Reviewer passes). If blockers remain after correction #2, return `BLOCKED` and do not
 start a fourth pass. Any implementation revision change after approval invalidates that approval and
@@ -112,14 +120,10 @@ unresolved merge conflict, or required checks that cannot be corrected in scope.
 
 ## Reuse and evidence
 
-`TARGETED` is the default Executor reuse path. Select `FULL` only for an existing trigger in
-[`Reuse Before Build`](../../../docs/development.md#reuse-before-build); ordinary uncertainty does not
-justify a repository-wide audit. Reviewer uses evidence/spot checks for `TARGETED`, independently
-verifies material `FULL` claims, and repeats a full audit only for an existing `ESCALATED FULL` trigger.
-
-Keep the Review Handoff and PR diff as the shared evidence surface. Do not emit routine document
-counts, additional-document counts, repeated-audit counts, or similar telemetry. Add bounded `FULL`
-or `ESCALATED FULL` trigger/evidence only when that tier was actually used.
+Use [Reuse Before Build](../../../docs/development.md#reuse-before-build) for tier selection and
+role-specific evidence requirements. Keep the compact Review Handoff and exact PR diff as the shared
+evidence surface; include tier/trigger evidence only when applicable, not raw transcripts or routine
+counts. Role skills own implementation and review details.
 
 ## Output contract
 
