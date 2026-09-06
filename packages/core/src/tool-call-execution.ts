@@ -394,14 +394,19 @@ function validateToolApproval(
     scope.sessionId !== sessionId ||
     scope.runId !== runId ||
     scope.risk !== risk ||
-    !toolCallsMatch(scope.call, toolCall)
+    !toolCallsEqual(scope.call, toolCall)
   ) {
     throw new InvalidToolApprovalError();
   }
   return parsed.data;
 }
 
-function toolCallsMatch(left: ToolCall, right: ToolCall): boolean {
+/**
+ * Structural identity for a proposed Tool call. Approval re-validation here and persisted history
+ * reconciliation in the extension must agree on when two calls are the same call, so the predicate
+ * is owned once rather than restated per consumer.
+ */
+export function toolCallsEqual(left: ToolCall, right: ToolCall): boolean {
   return (
     left.id === right.id && left.name === right.name && jsonValuesEqual(left.input, right.input)
   );

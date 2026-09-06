@@ -5,6 +5,7 @@ import {
   type SessionRecord,
   type ToolCall,
   type ToolResult,
+  toolCallsEqual,
 } from "@ctrl-zebra/core";
 import {
   type PersistedEventRecord,
@@ -15,7 +16,6 @@ import {
   type UserMessage,
   userMessageSchema,
 } from "@ctrl-zebra/protocol";
-import { jsonValuesEqual } from "./json-values.js";
 import {
   canonicalAssistantProjectionId,
   EditRelationCorruptError,
@@ -723,10 +723,4 @@ function requireExactRecord(
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return isPlainRecord(value) ? value : undefined;
-}
-
-function toolCallsEqual(left: ToolCall, right: ToolCall): boolean {
-  return (
-    left.id === right.id && left.name === right.name && jsonValuesEqual(left.input, right.input)
-  );
 }

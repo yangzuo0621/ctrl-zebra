@@ -204,6 +204,7 @@ export {
   InvalidModelMessageTokenCountError,
   pruneModelHistory,
 } from "./history-pruner.js";
+export { jsonValuesEqual } from "./json-values.js";
 export type {
   InvalidSessionManifestReason,
   ManifestStorage,
@@ -322,6 +323,7 @@ export type {
   ToolApprovalOperation,
   ToolApprovalWorkflow,
 } from "./tool-approval.js";
+export { toolCallsEqual } from "./tool-call-execution.js";
 export { InvalidToolInputError, parseToolInput } from "./tool-input-validation.js";
 export type { LimitedToolOutput } from "./tool-output-limiter.js";
 export {

@@ -1,4 +1,5 @@
 import {
+  jsonValuesEqual,
   maxApprovalPresentationSummaryCharacters,
   type PreparedToolApproval,
   type ToolApprovalOperation,
@@ -17,7 +18,6 @@ import {
   buildApprovalRequest,
   defaultToolApprovalLifetimeMilliseconds,
 } from "./approval-lifecycle.js";
-import { jsonValuesEqual } from "./json-values.js";
 import type { WorkspaceTrustPolicy } from "./workspace-trust-policy.js";
 
 export const defaultMcpToolApprovalLifetimeMilliseconds = defaultToolApprovalLifetimeMilliseconds;

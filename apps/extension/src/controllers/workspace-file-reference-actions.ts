@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import {
+  decodeBoundedUtf8Prefix,
   listFilesExcludeGlob,
   maxReadFileContentBytes,
   type ReadFileBytes,
@@ -558,26 +559,17 @@ export class WorkspaceFileReferenceError extends Error {
   }
 }
 
+/**
+ * References deliberately over-read past `maxIdeTextBytes` so one buffer can serve both this
+ * projection and `read_file`. A NUL anywhere in that buffer marks the file binary, so the scan
+ * covers every byte read rather than only the bytes this projection keeps -- a stricter rule than
+ * `decodeBoundedUtf8Prefix` applies to the prefix it returns.
+ */
 function decodeText(
   source: ReadFileBytes,
 ): { readonly text: string; readonly truncated: boolean } | undefined {
   if (source.bytes.includes(0)) return undefined;
-  const candidate = source.bytes.subarray(0, maxIdeTextBytes);
-  const truncated = source.truncated || source.bytes.byteLength > maxIdeTextBytes;
-  const maxTrim = truncated ? Math.min(3, candidate.byteLength) : 0;
-  for (let trim = 0; trim <= maxTrim; trim += 1) {
-    try {
-      return {
-        text: new TextDecoder("utf-8", { fatal: true }).decode(
-          candidate.subarray(0, candidate.byteLength - trim),
-        ),
-        truncated: truncated || trim > 0,
-      };
-    } catch {
-      // A truncated prefix may end in an incomplete UTF-8 scalar; remove only that suffix.
-    }
-  }
-  return undefined;
+  return decodeBoundedUtf8Prefix(source, maxIdeTextBytes);
 }
 
 function mergeTruncationReasons(

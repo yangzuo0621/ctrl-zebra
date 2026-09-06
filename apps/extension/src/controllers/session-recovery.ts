@@ -765,7 +765,12 @@ function isRecoverableStatus(status: SessionSummary["status"]): boolean {
   );
 }
 
-function toSessionRecoveryError(error: unknown): SessionRecoveryError {
+/**
+ * Maps a persistence-layer failure onto the recovery error surface. Session continuation in
+ * `chat-runner` classifies the same failures against the same surface, so the ladder is owned here
+ * with `SessionRecoveryError` rather than restated per caller.
+ */
+export function toSessionRecoveryError(error: unknown): SessionRecoveryError {
   if (error instanceof SessionRecoveryError) {
     return error;
   }
