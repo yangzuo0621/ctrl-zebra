@@ -49,7 +49,7 @@
     "README.md"
   ],
   "engines": {
-    "vscode": "^1.125.0"
+    "vscode": "^1.136.0"
   },
   "extensionKind": [
     "workspace"
