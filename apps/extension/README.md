@@ -9,7 +9,7 @@ before using it on important work.
 
 ## Requirements
 
-- Desktop Visual Studio Code 1.125.0 or later.
+- Desktop Visual Studio Code 1.136.0 or later.
 - Exactly one open workspace folder.
 - A supported model and exact model ID.
 - Workspace Trust for file changes, commands, and MCP process startup. Untrusted workspaces expose
