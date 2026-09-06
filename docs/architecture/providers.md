@@ -35,8 +35,9 @@
   cannot reopen or append to an earlier step.
 - Provider adapters preserve well-formed whitespace because it can carry formatting, but discard
   zero-length deltas. They split an oversized source delta at Unicode code-point boundaries into
-  ordered normalized deltas. Each normalized delta is at most 8,192 Unicode code points and 32,768
-  UTF-8 bytes. Ill-formed Unicode, a delta for an unopened or ended block, a duplicate start or end,
+  ordered normalized deltas within the
+  [Protocol delta ceilings](../protocol/session-and-runtime.md#reasoning-summary-limits).
+  Ill-formed Unicode, a delta for an unopened or ended block, a duplicate start or end,
   a nested start, or Finish with an open block is a `malformed-response` Provider failure.
 - The Agent Runtime republishes the accepted lifecycle as
   `agent.reasoning-start`, `agent.reasoning-delta`, and `agent.reasoning-end` with a run-scoped

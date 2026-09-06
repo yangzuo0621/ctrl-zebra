@@ -85,10 +85,9 @@ or Session content.
 
 ## Restricted Markdown and external-link intent (T1702)
 
-Answer text is a bounded, untrusted display projection. The Webview parser uses the approved
-`markdown-it` 14.3.0 configuration (`html: false`, `linkify: false`, `breaks: true`, no images or
-unreviewed plugins) and maps tokens to fixed React elements. Parser HTML is never placed on the wire
-or passed to an HTML sink. Raw HTML, unsupported constructs, and dangerous destinations remain text.
+Answer text is a bounded, untrusted display projection. Parser configuration and rendering restrictions
+are owned by [Security](../security.md#untrusted-content-and-markdown); the pinned parser version is
+owned by the [Webview manifest](../../apps/webview/package.json). Parser HTML never enters the wire.
 
 - `webview/open-external-link` is a strict Webview-to-Extension intent with the shape `{ protocolVersion,
   type: "webview/open-external-link", requestId, href }`. `href` is at most 2,048 characters,

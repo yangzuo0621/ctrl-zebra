@@ -5,9 +5,9 @@ This document defines the shared constraints for CtrlZebra automated tests. Test
 ## Test Layers
 
 - **Unit tests** verify one host-independent module or a small group of collaborators. They are the default test layer for `packages/*`. Core, Protocol, and policy tests must not start VS Code.
-- **Component tests** verify Webview components through user-visible behavior. After React test infrastructure is introduced, use Testing Library and avoid assertions against component internals.
+- **Component tests** verify Webview components through user-visible behavior. Use Testing Library and avoid assertions against component internals.
 - **Adapter integration tests** verify translations between Provider, storage, or VS Code API adapters and internal contracts. Provider tests use recorded or hand-written SDK responses and never access a real model.
-- **Extension integration tests** cover only VS Code API adapters, registrations, and lifecycle behavior. They run only after the corresponding work item introduces the Extension Development Host.
+- **Extension integration tests** cover only VS Code API adapters, registrations, and lifecycle behavior. They run in the isolated Extension Development Host configured by the extension test runner.
 
 Do not move to a more expensive test layer when a lower-level test can fully prove the behavior. Manual smoke tests do not replace applicable automated tests.
 
@@ -18,7 +18,10 @@ Do not move to a more expensive test layer when a lower-level test can fully pro
   repository documents, or root scripts may use `scripts/*.test.mjs` with Node's built-in test
   runner; they must remain deterministic, isolated, and clean up every temporary resource.
 - Describe observable behavior and conditions in test names instead of restating implementation details.
-- The shared Vitest configuration discovers `packages/*/src/**/*.test.ts`. Later tasks that introduce application test infrastructure own the corresponding application test configuration.
+- [The shared Vitest configuration](../vitest.config.ts) owns discovery, environments, and coverage:
+  its Node project runs package and Extension adapter/controller tests; its jsdom project runs Webview
+  tests. Extension Development Host integration tests use the separate
+  [extension test runner](../apps/extension/package.json).
 - Do not permanently skip tests or commit a temporary skip without an owner, task or issue ID, reason, and removal condition.
 
 ## Fake and Mock Boundaries

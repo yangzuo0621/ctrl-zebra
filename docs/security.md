@@ -37,7 +37,8 @@ owns the security constraints that those contracts must preserve.
 - Webview messages, model output, workspace text, persisted values, MCP content, and URL-derived
   values are untrusted. Render them with DOM text APIs or React interpolation; never use
   `innerHTML`, `outerHTML`, `insertAdjacentHTML`, `document.write`, or equivalent sinks.
-- The answer renderer uses the pinned `markdown-it` 14.3.0 configuration: `html: false`,
+- The answer renderer uses `markdown-it`, pinned in the
+  [Webview manifest](../apps/webview/package.json), with the security configuration: `html: false`,
   `linkify: false`, `breaks: true`, and `typographer: false`. Images and resource-producing plugins
   are disabled. It renders parser tokens into a fixed React element tree rather than parser HTML.
 - The supported presentation set is headings, ordered and unordered lists, fenced or indented code,
@@ -60,9 +61,8 @@ owns the security constraints that those contracts must preserve.
   hidden chain of thought, or evidence of a model decision. Only documented reasoning-stream text is
   eligible; answer text, System output, Tool activity, metadata, signatures, opaque payloads, and
   raw request/response bodies are rejected.
-- Producers bound each delta to 8,192 code points and 32,768 bytes, each block to 32,768 code
-  points and 131,072 bytes, and each Run to 32 blocks, 65,536 code points, and 262,144 bytes.
-  Limits are enforced while collecting, at code-point boundaries, before retaining an unbounded
+- Producers enforce the [Protocol reasoning limits](protocol/session-and-runtime.md#reasoning-summary-limits)
+  for each delta, block, and Run while collecting, at code-point boundaries, before retaining an unbounded
   value. Omitted content cannot be recovered from logs or another model call.
 - Events are accepted only for the exact active request, Session, Run, and open block. Duplicate,
   malformed, mismatched, late, or terminal-following events have no side effect; cancellation

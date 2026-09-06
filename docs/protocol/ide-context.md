@@ -1,8 +1,8 @@
 
 ## IDE context and read-only Tool DTOs (T1901)
 
-T1901 reserves a strict, additive DTO family for the IDE surface. It does not add runtime schemas or
-message handlers; T1902–T1904 may implement the DTOs only after this contract is merged. Every value
+The IDE surface uses the strict DTOs and runtime Schemas exported by
+[Protocol](../../packages/protocol/src/index.ts). Every value
 enters the Protocol boundary as `unknown`, is validated with a strict Schema, and is rejected when an
 unknown property, invalid Unicode value, unsupported URI, or bound is encountered. The DTOs use the
 same closed/discriminated-union model as the existing Tool contracts: a variant is selected by its
@@ -158,7 +158,7 @@ state.
   that the user deliberately included in an ordinary user message or a non-IDE completed Tool Result
   according to the existing persistence contract, but it never stores the live editor selection, Host
   URI, document version, stale state, provider object, or an unsubmitted attachment as a separate
-  record. T1901 IDE Tool Results remain transient as defined by Persistence.
+  record. IDE Tool Results remain transient as defined by Persistence.
 
 ### Workspace file references (T2103)
 
