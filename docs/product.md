@@ -126,160 +126,31 @@ Adding or moving a Workspace module requires updating this section and the depen
 
 ## 4. Module boundaries
 
-### 4.1 `packages/protocol`
+This ownership map summarizes the approved modules. Domain documents own detailed behavior; public
+package entries own exact interfaces. The map does not authorize new dependencies or capabilities.
 
-Owns all cross-boundary data structures:
+| Module | Responsibility and boundary | Detailed owner |
+|---|---|---|
+| `packages/protocol` | JSON-serializable commands/events, Session/Message/Tool DTOs, reasoning/recovery projections, strict Schemas and inferred types, and persistence version identifiers. Host validates Webview input; no React, VS Code, or model SDK dependency. | [Protocol](protocol.md), [Persistence](persistence.md) |
+| `packages/core` | Host-independent Agent Loop, Session state machine, Tool Registry/Executor, approval policy, context/pruning/summary interfaces, Checkpoint model, events/errors, and ordered reasoning lifecycle. External capabilities enter through injected interfaces; no direct files, terminals, Webviews, or SecretStorage. | [Context and Session](architecture/context-and-session.md), [Tools](architecture/tools-and-files.md), [Providers](architecture/providers.md) |
+| `packages/providers` | Implements `ModelGateway`, translating SDK text, reasoning, Tool, Finish, Usage, and error events into Core values. Concrete SDK types remain private. | [Providers](architecture/providers.md#model-provider-boundary) |
+| `packages/builtin-tools` | Tool definitions and host-independent validation through injected workspace, IDE, and language-service ports. The Host owns URI resolution, Trust, files, Checkpoints, and atomic writes. | [Tool and file contracts](protocol/tools-and-file-lifecycle.md), [IDE boundary](architecture/ide-context.md#ide-context-and-read-only-tool-boundary-t1901) |
+| `apps/extension` | VS Code registration, composition, validated dispatch to lifecycle controllers, editor/file/Diff/storage/logging/credential adapters, canonical revisions, Trust, Checkpoints, atomic WorkspaceEdit, cancellation and disposal. Host objects and mutation plans do not cross into the Webview. | [Lifecycle](architecture/lifecycle.md), [Tools and Files](architecture/tools-and-files.md), [IDE Context](architecture/ide-context.md), [Security](security.md) |
+| `apps/webview` | Message/reasoning/Tool/approval/Session presentation, settings controls, IDE context cards and Composer intents. Host snapshots remain authoritative; no direct keys, models, files, or VS Code commands. | [Webview responsibility](architecture.md#webview-responsibility), [UX](ux.md) |
+| `packages/testkit` | Deterministic Fakes for shared Core contracts, including Model Gateways, Summarizers, and event collectors. Single-package Fakes stay local; scope follows public exports. | [Testing](testing.md#fake-and-mock-boundaries) |
+| `packages/mcp-client` | Controlled SDK negotiation, correlation, cancellation, pagination/refresh, limits, and normalization through injected stdio/process ports; external Tool adaptation uses Core contracts. SDK types stay private; the Host owns processes and configuration. | [MCP ownership](mcp.md#process-ownership), [approved scope](#12-explicit-exclusions) |
 
-- Webview-to-Extension commands and Extension-to-Webview events.
-- Serializable Session, Message, and Tool Call DTOs.
-- Reasoning blocks, stream events, truncation state, and recovery projections.
-- Zod Schemas and the TypeScript types derived from them.
-- Persistence format version identifiers.
-
-Protocol must not depend on React, VS Code, or model SDKs. Every value must be JSON serializable, and
-Webview input must be runtime-validated in the Extension Host.
-
-### 4.2 `packages/core`
-
-Owns host-independent business logic:
-
-- Agent state machine and loop.
-- Session lifecycle.
-- Tool Registry and Tool Executor.
-- Approval Policy.
-- Context construction, pruning, and summary interfaces.
-- Checkpoint data model.
-- Domain events and error classification.
-- Provider-neutral reasoning-summary lifecycle and source ordering relative to answer, Tool, and terminal events.
-
-Core must not import `vscode` or access filesystems, terminals, Webviews, or SecretStorage directly.
-External capabilities are injected through constructor interfaces.
-
-### 4.3 `packages/providers`
-
-Converts third-party model SDK events into the internal contract:
-
-- Text deltas.
-- Provider-authored user-visible reasoning-summary deltas.
-- Tool Calls.
-- Finish Reasons.
-- Token Usage.
-- Provider Errors.
-
-Providers expose `ModelGateway`; Agent Core never depends directly on Vercel AI SDK types.
-
-### 4.4 `packages/builtin-tools`
-
-Owns built-in Tool definitions and host-independent argument validation:
-
-- `list_files`
-- `read_file`
-- `search_files`
-- `propose_file_edit`
-- `run_command`
-
-The file-lifecycle contract preserves the single-file meaning of `propose_file_edit` and adds
-`propose_file_create`, `propose_file_delete`, `propose_file_rename`, and edit-only
-`propose_workspace_edit`. Names, closed inputs, limits, failure, and recovery semantics belong to the
-[Protocol file-lifecycle contract](protocol/tools-and-file-lifecycle.md#file-lifecycle-and-atomic-mutation-contracts-t2001).
-The Extension alone parses VS Code URIs, checks Trust, creates Checkpoints, and submits atomic
-`WorkspaceEdit` operations. Regular-expression search is explicitly enabled by
-`search_files.mode: "regex"` using a controlled RE2-compatible dialect; literal search remains the
-default and engine integration belongs to its domain owner.
-
-Read-only IDE Tools use host-independent input, output, and boundary contracts. They depend only on
-injected `IdeContextPort` and language-service Ports, never import VS Code, read host URIs, or decide
-Workspace Trust.
-
-Actual file operations are performed by Extension adapters.
-
-### 4.5 `apps/extension`
-
-Owns VS Code integration:
-
-- Command and `WebviewViewProvider` registration.
-- Dependency composition.
-- Validation and dispatch of Webview commands to lifecycle-owning controllers.
-- File, editor, Diff, storage, logging, and credential adapters.
-- Canonical target/revision validation, temporary Diff, Checkpoint durability, and one Host-owned
-  atomic `WorkspaceEdit` for file lifecycle operations. Mutation plans do not cross into the Webview
-  as host values.
-- VS Code API access for active editor/selection, diagnostics, and language services; URI normalization,
-  Workspace Trust checks, cancellation, and disposal. Only bounded `Ide*Dto` values are published to
-  Core and Protocol; VS Code types do not cross the boundary.
-- Extension and Disposable lifecycle.
-
-`extension.ts` is limited to registration and composition, not business workflows.
-
-### 4.6 `apps/webview`
-
-Owns presentation and user interaction:
-
-- Chat message lists and streaming text.
-- Independent, collapsible reasoning-summary presentation.
-- Tool Call status cards and approval UI.
-- Session selection and settings controls.
-- Removable IDE-context source, range, stale/truncation state, and read-only Tool results.
-
-Editor entry is captured by an Extension-owned controller and published as a strict
-`extension/editor-context` projection. The Webview owns only the pending card, draft, and
-`webview/editor-context-refresh|remove|use-stale` intents. Configuration, commands, VS Code lifecycle,
-Trust, URI normalization, and cancellation remain Extension responsibilities; Protocol owns the closed
-message set and `Ide*Dto` Schema.
-
-The Webview never holds API keys or calls models, filesystems, or VS Code commands directly. Extension-
-authoritative state is represented by Host snapshots/events and is not duplicated as a second authority.
-
-### 4.7 `packages/testkit`
-
-Provides reusable test doubles for stable Core contracts, such as deterministic Model Gateways,
-Summarizers, and event collectors. Public names and scope follow the package `exports`; a Fake used by
-one package remains in that package's tests. Tests never use real model APIs, user credentials, or
-machine state.
-
-### 4.8 `packages/mcp-client`
-
-Isolates the official MCP SDK and exposes a Host-independent controlled Client boundary:
-
-- Controlled stdio negotiation for modern `2026-07-28` and legacy `2025-11-25`, with the approved
-  common Server primitives.
-- Request correlation, cancellation, pagination, list refresh, limits, and stable error normalization.
-- Protocol lifecycle through an injected stdio/process Port; it does not create real processes directly.
-- MCP Tool adaptation to existing Core Tool contracts without owning Registry, approval, or Agent Loop.
-
-SDK, JSON-RPC, transport, capability, Schema, and error types remain private to the package. It does
-not depend on VS Code, Extension adapters, React, Webview, or persistence, and does not declare or
-handle Roots, Sampling, Elicitation, Tasks, `input_required` continuation, HTTP, OAuth, experimental,
-or multimodal capabilities. Real configuration, Workspace Trust, spawning, minimal environment, and
-process-tree cleanup remain owned by `apps/extension`.
+`extension.ts` remains registration and composition only. Built-in Tool names and inputs follow the
+[Tool contracts](protocol/tools-and-file-lifecycle.md); literal search remains the default, with
+explicit regex mode using the controlled RE2-compatible dialect. IDE and file operations preserve
+the cross-module ownership map below.
 
 ## 5. Dependency rules
 
-```text
-webview ───────────────→ protocol
-extension ─────────────→ protocol + core + providers + builtin-tools
-extension ─────────────→ mcp-client
-providers ─────────────→ core contracts
-builtin-tools ─────────→ core contracts + protocol DTOs
-mcp-client ────────────→ core contracts (external Tool adaptation only)
-core ──────────────────→ protocol
-testkit ───────────────→ core contracts + protocol
-```
-
-Forbidden directions include:
-
-```text
-core → vscode
-core → webview
-webview → core implementation
-providers → extension
-builtin-tools → vscode
-core → mcp-client
-mcp-client → vscode
-mcp-client → extension
-```
-
-Dependency rules should be protected by lint rules, path conventions, or dedicated architecture tests.
+[AGENTS.md architecture invariants](../AGENTS.md#2-architecture-invariants) own allowed package
+directions and host/vendor isolation. MCP depends on Core contracts only for external Tool adaptation;
+it has no dependency on concrete process implementations or persistence. The
+[architecture checker](../scripts/check-architecture.mjs) enforces the repository dependency gates.
 
 ## 6. Cross-module contract map
 

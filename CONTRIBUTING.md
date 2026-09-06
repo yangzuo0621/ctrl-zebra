@@ -16,7 +16,8 @@ and release rules documented in this repository.
 
 ## Local development
 
-Use Node.js 22 or later and pnpm 11. From the repository root:
+Use the Node.js version pinned in [validation CI](.github/workflows/ci.yml) and the pnpm version
+declared by the root [package.json](package.json). From the repository root:
 
 ```text
 pnpm install --frozen-lockfile
@@ -27,8 +28,10 @@ pnpm test:docs
 pnpm build
 ```
 
-The documentation check validates repository links, governance-template fields, the private
-security-reporting path, and the cross-document references used by this workflow. Keep checks
+The documentation check runs isolated regression fixtures and validates local links and heading
+anchors in every Git-tracked Markdown file, including staged new files under `docs/`, `.agents/`,
+and `.codex/`. It also checks governance-template fields and the private security-reporting path.
+Untracked files are not included; external URLs are not fetched. Keep checks
 deterministic and offline; do not use real provider credentials, network services, or user data.
 
 The [development guidelines](docs/development.md) define formatting, dependency, reuse, and

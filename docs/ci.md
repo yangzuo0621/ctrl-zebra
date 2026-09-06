@@ -9,9 +9,8 @@ owned by the [Release policy](release.md), and archive contents are owned by the
 
 - Validation CI runs on a GitHub-hosted matrix of `ubuntu-latest`, `macos-latest`, and
   `windows-latest`.
-- The Node.js runtime is pinned to `24.19.0` for every matrix leg.
-- The root `package.json` `packageManager` field is the single source of truth for the pnpm version,
-  currently `pnpm@11.11.0`.
+- The [validation workflow](../.github/workflows/ci.yml) pins the Node.js runtime for every matrix leg.
+- The root [package.json](../package.json) `packageManager` field owns the exact pnpm version.
 - Validation runs for pushes to `main` and pull requests targeting `main`.
 - A newer run cancels an unfinished older run for the same workflow and branch or pull request.
 - Matrix strategy uses `fail-fast: false` and does not use `continue-on-error`; every OS leg reports
@@ -20,19 +19,14 @@ owned by the [Release policy](release.md), and archive contents are owned by the
 
 ## Validation Matrix
 
-Every OS leg runs these repository-owned commands in order and stops on the first failure:
+The [validation workflow](../.github/workflows/ci.yml) owns the executable step list and order.
+Every OS leg validates frozen installation, dependency-update policy, architecture gates and fixtures,
+formatting/lint, types, unit tests, and the production build; it stops on failure.
 
-1. `pnpm install --frozen-lockfile`
-2. `pnpm check`
-3. `pnpm typecheck`
-4. `pnpm test:unit`
-5. `pnpm build`
-
-The Ubuntu leg additionally runs `xvfb-run -a pnpm test:integration` and
-`pnpm test:coverage`, because the Extension Development Host requires a display and the full
-coverage gate is intentionally limited to one matrix leg. macOS and Windows still run the complete
-unit suite and production build, including platform-sensitive path, line-ending, process, and
-cancellation tests.
+Ubuntu additionally runs Extension Development Host integration tests, coverage, and the
+[performance benchmark](performance.md). Host integration and benchmarking use Xvfb; coverage is
+intentionally limited to one matrix leg. macOS and Windows still run the complete unit suite and
+build, including platform-sensitive path, line-ending, process, and cancellation tests.
 
 ## Workflow Policy
 
@@ -62,19 +56,8 @@ cancellation tests.
 
 ## Validation Commands
 
-Use the project-pinned pnpm version for equivalent local validation on Windows, macOS, or Linux:
-
-```powershell
-corepack pnpm install --frozen-lockfile
-corepack pnpm check
-corepack pnpm typecheck
-corepack pnpm test:unit
-corepack pnpm build
-```
-
-On Ubuntu with an available Xvfb display, also run:
-
-```bash
-corepack pnpm test:integration
-corepack pnpm test:coverage
-```
+For local validation, use the runtime and package manager above and the commands in the
+[validation workflow](../.github/workflows/ci.yml); command definitions are in
+[package.json](../package.json). On Linux, Extension Development Host checks need an Xvfb display.
+Use `pnpm test:docs` for document changes; [CONTRIBUTING](../CONTRIBUTING.md#local-development)
+describes its tracked-file coverage. Local task-specific checks do not replace required CI gates.

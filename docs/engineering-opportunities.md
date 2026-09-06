@@ -30,16 +30,11 @@
 晋升一个机会时：
 
 1. 重新验证证据仍存在，确认没有被当前批准工作吸收。
-2. 按 `.github/pull_request_template.md` 和对应 workflow 的 handoff 字段完成 Reuse Audit、Build vs Buy
-   和 Similarity Audit 计划。
-3. 明确一个拥有语义的 module、最小 interface、调用方错误映射和删除目标。禁止把共享逻辑放入
-   仓库级 `utils`，也禁止在旧实现外增加无行为的转发层。
-4. 判断它是路线图能力、独立 maintenance，还是现有任务的验收内容。涉及任务顺序、技术基线、
-   公共契约或模块方向时，先执行变更控制。
-5. 只晋升一个可独立验证的 tranche。实施完成后，在本台账记录链接和处置结果。
-
-所有替换类机会共享一个完成门禁：新 interface 获得等价行为覆盖后，必须删除被取代的实现和
-只服务于旧实现的测试；不得保留新旧双路径、兼容性影子实现或纯转发包装。
+2. 按 [Reuse Before Build](development.md#reuse-before-build) 确定复用层级、模块归属和替换完成门禁；
+   触发 [Build vs Buy](development.md#build-vs-buy) 时补齐评估，并在 PR 或临时 handoff 保留证据。
+3. 判断它是路线图能力、独立 maintenance，还是现有任务的验收内容；涉及顺序、技术基线、公共契约
+   或模块方向时，执行 [AGENTS.md 变更控制](../AGENTS.md#6-change-control-and-stop-conditions)。
+4. 只晋升一个可独立验证的 tranche，获得明确授权后实施；完成后在本台账记录链接和处置结果。
 
 ## 3. 候选组合与建议窗口
 

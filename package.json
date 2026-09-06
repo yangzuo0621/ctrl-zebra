@@ -15,7 +15,7 @@
     "smoke:vsix": "node ./apps/extension/scripts/smoke-test-vsix.mjs",
     "benchmark:performance": "node ./scripts/performance-benchmark.mjs",
     "test:marketplace": "node ./scripts/check-marketplace.mjs",
-    "test:docs": "node ./scripts/check-governance-docs.mjs",
+    "test:docs": "node --test ./scripts/check-governance-docs.test.mjs && node ./scripts/check-governance-docs.mjs",
     "test:dependabot": "node ./scripts/check-dependabot-config.mjs",
     "test": "pnpm run test:architecture && pnpm run test:unit && pnpm run test:integration",
     "test:architecture": "node --test ./scripts/check-architecture.test.mjs",

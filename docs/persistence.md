@@ -165,8 +165,8 @@ is implied by editor context.
 Persistence stores only the bounded user-visible reasoning projection as additive v1 events:
 `session.reasoning-start { blockId }`, `session.reasoning-delta { blockId, text }`,
 `session.reasoning-end { blockId, truncated }`, and the strict limit marker defined by Protocol.
-Limits are applied before append: at most 32 blocks, 32,768 code points/131,072 bytes per block,
-65,536 code points/262,144 bytes per Run, and 8,192 code points/32,768 bytes per delta.
+Apply the [Protocol reasoning limits](protocol/session-and-runtime.md#reasoning-summary-limits)
+for deltas, blocks, and Runs before append; recovery enforces the same ceilings.
 
 Events retain source order with text, Tool, usage, and status events. A valid start/delta/end lifecycle
 recovers as complete; an open block at terminal status or tail damage recovers as bounded partial

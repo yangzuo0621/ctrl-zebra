@@ -1,9 +1,8 @@
 
 ## IDE context and read-only Tool boundary (T1901)
 
-T1901 establishes the boundary for editor, selection, diagnostic, and language-service data. It is a
-docs-only contract; T1902–T1905 add the individual adapters and user entry points only after this
-constraint is merged.
+This contract defines the implemented boundary for editor, selection, diagnostic, and language-service
+data, including Host adapters and user entry points.
 
 - `apps/extension` is the sole owner of `window.activeTextEditor`, selections, `TextDocument` reads,
   VS Code diagnostic and language-service commands, `vscode.Uri`, Workspace Trust, and the host

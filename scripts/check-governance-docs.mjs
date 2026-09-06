@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -175,15 +176,15 @@ for (const expected of ["## Summary", "## Scope & Impact", "## Verification", "#
   requireText(".github/pull_request_template.md", expected);
 }
 
-for (const relativePath of [
-  "CHANGELOG.md",
-  "CONTRIBUTING.md",
-  "SECURITY.md",
-  "README.md",
-  "PRIVACY.md",
-  "docs/product.md",
-  ".github/pull_request_template.md",
-]) {
+// The index includes new staged documents while excluding dependencies and build artifacts.
+// NUL separators preserve spaces and Unicode paths on every supported platform.
+const markdownFiles = execFileSync("git", ["ls-files", "-z", "--", "*.md"], {
+  cwd: root,
+  encoding: "utf8",
+})
+  .split("\0")
+  .filter(Boolean);
+for (const relativePath of markdownFiles) {
   checkMarkdownLinks(relativePath);
 }
 

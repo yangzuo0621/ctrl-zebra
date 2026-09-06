@@ -17,20 +17,10 @@ Marketplace publication.
 
 ## Quality gates
 
-Run the repository checks before packaging:
-
-```text
-pnpm install --frozen-lockfile
-pnpm check
-pnpm typecheck
-pnpm test:unit
-pnpm build
-```
-
-The validation CI Ubuntu leg also runs the Extension Development Host integration tests and
-coverage. The release packaging command runs the release-required checks, integration tests, and
-build; it does not duplicate the CI-only coverage report. The required checks and workflow-level
-policy are maintained in [CI Constraints](ci.md).
+[CI Constraints](ci.md#validation-matrix) owns validation policy. The
+[official packaging command](../apps/extension/scripts/package-vsix.mjs) runs the release-required
+formatting, type, unit/integration, and build checks; it does not duplicate CI-only coverage.
+Install dependencies with `pnpm install --frozen-lockfile` before running it.
 
 ## Version and changelog
 
@@ -41,35 +31,25 @@ version-specific changelog section with release notes. An unreleased branch must
 
 ## Reproducible packaging
 
-Run `pnpm package:vsix` to build and independently verify one VSIX. The command records the full
-source commit, version, lockfile and changelog digests, and validated source reference in build
-provenance, then rejects a non-deterministic repeat build. Run `pnpm release:verify -- --artifact
-<path>` to audit a retained artifact and generate the dependency inventory and deterministic SBOM.
-
-The packaging boundary, allowlist, source-map rules, size limits, traceability, and dependency audit
-are owned by the [VSIX Packaging Contract](packaging.md).
+Run `pnpm package:vsix` for the official artifact, then `pnpm release:verify -- --artifact <path>`
+when auditing a retained VSIX. Reproducibility, provenance, and verification rules are owned by
+[Packaging](packaging.md#release-provenance-and-dependency-audit).
 
 ## VSIX contents
 
-The archive must contain only the reviewed extension bundle, Webview assets, package metadata,
-README, license, icon, Marketplace screenshots, and generated build metadata declared by the
-allowlist. It must exclude source maps, tests, caches, lockfiles, development configuration,
-credentials, local state, nested dependencies, and undeclared executables.
+The artifact must satisfy the [package boundary](packaging.md#package-boundary),
+[forbidden-content policy](packaging.md#forbidden-content), and [size limits](packaging.md#size-limits).
 
 ## SBOM and license audit
 
-The release audit compares the production dependency graph with the declared third-party inventory,
-requires compatible SPDX licenses, and validates the deterministic SPDX-2.3 SBOM. The inventory,
-SBOM, and VSIX provenance are retained together with the artifact. A dependency or license change
-requires an intentional update through `pnpm release:update-audit` and review of the resulting
-declarations.
+Apply the [dependency and license audit](packaging.md#release-provenance-and-dependency-audit).
+Retain the inventory, SBOM, and VSIX provenance with the artifact. Dependency/license changes require
+an intentional `pnpm release:update-audit` and review of the resulting declarations.
 
 ## Smoke testing
 
-Run `pnpm smoke:vsix -- <artifact>` against the exact VSIX in isolated VS Code user-data and
-extension directories. The smoke path verifies activation, the Agent view, Provider configuration,
-MCP restrictions, lifecycle command registration, and structured logging. It must not upload user
-data, credentials, conversations, logs, or workspace content.
+Run the [packaged-artifact smoke command](packaging.md#repository-commands) against the exact VSIX
+in isolated profiles. It must not upload user data, credentials, conversations, logs, or workspace content.
 
 ## Marketplace candidate validation
 
