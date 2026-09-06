@@ -13,7 +13,8 @@ This file contains repository-wide invariants and routes agents to the authorita
 
 ### Progressive document loading
 
-Read only the documents required by the current work.
+Read only the documents required by the current work. A direct user request can supply the standalone
+maintenance scope; an Issue or PR is not required before authorized local work.
 
 | Work area | Read first |
 |---|---|
@@ -58,6 +59,11 @@ testkit ───────────────→ core contracts + protoc
 
 ## 3. Security and resource invariants
 
+These are product runtime requirements owned by `docs/security.md`. The single-use Tool approval
+and direct process-spawning rules constrain the extension, not the coding agent's development tools.
+Development actions follow the current session permissions and section 5 below. Secret protection
+and preservation of unrelated user work apply throughout.
+
 - Treat Webview input, model output, Tool arguments/results, persisted data, and summaries as untrusted.
 - Workspace operations must remain confined to the selected canonical workspace root.
 - Writes and commands require exact, expiring, single-use authorization for the immutable operation.
@@ -72,17 +78,31 @@ Read `docs/security.md` and the applicable domain document before modifying any 
 
 ## 4. Development and verification
 
-- Confirm task scope, acceptance criteria, prerequisites, exclusions, and affected contracts before editing.
+- Establish task scope, acceptance criteria, prerequisites, exclusions, and affected contracts from
+  the request and available evidence before editing. Resolve routine implementation choices within
+  that scope; ask only when missing information affects scope, correctness, or authorization.
 - Follow [`Reuse Before Build`](docs/development.md#reuse-before-build) before introducing a new implementation, wrapper, abstraction, helper, fake, error, constant, or mechanism.
 - Apply [`Build vs Buy`](docs/development.md#build-vs-buy) when its documented triggers apply.
 - Keep implementation task-scoped. Do not opportunistically add unrelated maintenance, refactors, dependencies, or later-roadmap work.
-- Validate from narrow to broad according to `docs/testing.md`: affected checks first, then required package/repository checks and smoke tests.
+- Select verification appropriate to the changed surface under `docs/testing.md` and applicable
+  owner documents. Complete required checks; broaden or repeat them only for new changes, failures,
+  or unresolved concerns. Documentation-only work needs document/skill validation and diff review,
+  not unrelated runtime tests, builds, or smoke tests unless a required gate calls for them.
 - Finish implementation work with `git diff --check`, `git status --short`, and a final diff review. Report required checks that were not run.
 - Use the pull-request template for durable PR context and verification. Use workflow handoff fields only when the selected workflow requires review or closure evidence; do not create a permanent task-spec or completion ledger in `docs/`.
 
 Detailed Executor, Reviewer, Planner, AUTO, reuse-tier, review-loop, handoff, and closure behavior belongs to the applicable `.agents/skills/*/SKILL.md`, not this root file.
 
 ## 5. Git and authorization
+
+Carry authorized work through implementation and verification. Existing task-scoped authorization
+continues across turns; do not ask for it again merely because a skill has a planning or approval
+step. Explicit user instructions take precedence over skill guidelines, subject to higher-priority
+instructions. Reading or auditing a workflow does not activate it or grant its permissions.
+
+When an action needs additional authorization, first complete independent authorized preparation.
+Identify the exact action and missing grant. If a skill causes a pause, link the file, quote the
+applicable rule, and distinguish that requirement from your interpretation.
 
 - `main` is protected. Changes reach it only through the repository's approved PR process.
 - Keep branches, commits, PRs, and status changes scoped to the assigned task.
