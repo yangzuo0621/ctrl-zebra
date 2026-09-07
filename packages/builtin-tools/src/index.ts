@@ -1,3 +1,4 @@
+export { decodeBoundedUtf8Prefix } from "./boundary-validation.js";
 export type { FindDefinitionInput } from "./find-definition.js";
 export {
   createFindDefinitionTool,

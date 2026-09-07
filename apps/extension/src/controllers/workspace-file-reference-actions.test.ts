@@ -1,4 +1,4 @@
-import type { ExtensionToWebviewMessage } from "@ctrl-zebra/protocol";
+import { type ExtensionToWebviewMessage, maxIdeTextBytes } from "@ctrl-zebra/protocol";
 import { describe, expect, it, vi } from "vitest";
 import type { Uri } from "vscode";
 import type { WorkspaceFindFiles } from "../adapters/workspace-file-lister.js";
@@ -99,6 +99,23 @@ describe("WorkspaceFileReferenceActions", () => {
     actions.read("read-binary", "binary.dat");
     await vi.waitFor(() => expect(posts).toHaveLength(3));
     expect(posts[2]).toMatchObject({ status: "error", code: "binary" });
+  });
+
+  it("rejects a file whose only NUL byte falls past the projected text prefix", async () => {
+    // References over-read past `maxIdeTextBytes` so one buffer also serves `read_file`. A NUL in
+    // that trailing region still marks the file binary, even though the projected prefix is clean.
+    const bytes = new Uint8Array(maxIdeTextBytes + 8).fill(0x61);
+    bytes[maxIdeTextBytes + 4] = 0;
+    const posts: ExtensionToWebviewMessage[] = [];
+    const actions = createActions({
+      root: uri("/workspace/root"),
+      readPrefix: async () => ({ bytes, truncated: false }),
+    });
+    actions.bind((message) => posts.push(message));
+
+    actions.read("read-trailing-nul", "src/a.ts");
+    await vi.waitFor(() => expect(posts).toHaveLength(1));
+    expect(posts[0]).toMatchObject({ status: "error", code: "binary" });
   });
 
   it("cancels a refresh when its reference is removed and ignores the late read", async () => {

@@ -5,17 +5,12 @@ import {
   type AgentRuntimeDiagnosticSink,
   type AgentRuntimeEvent,
   allocateTokenBudget,
-  CorruptEventLogError,
-  EventLogLimitExceededError,
-  InconsistentSessionRecordError,
-  InvalidSessionManifestError,
   type JsonValue,
   type ModelGateway,
   type ModelMessage,
   maxModelContextWindowTokens,
   projectExternalContext,
   ReadOnlySessionError,
-  SessionNotFoundError,
   type SessionRecord,
   type SessionRepository,
   type ToolApprovalWorkflow,
@@ -47,7 +42,7 @@ import {
   projectSessionModelHistory,
   SessionHistoryCorruptError,
 } from "./session-history.js";
-import { SessionRecoveryError } from "./session-recovery.js";
+import { SessionRecoveryError, toSessionRecoveryError } from "./session-recovery.js";
 
 type NonReasoningAgentRuntimeEvent = Exclude<
   AgentRuntimeEvent,
@@ -174,7 +169,7 @@ export function createChatRunner({
         if (signal.aborted) {
           signal.throwIfAborted();
         }
-        throw toContinuationError(error);
+        throw toSessionRecoveryError(error);
       }
       signal.throwIfAborted();
       if (existingRecord === undefined) {
@@ -570,24 +565,6 @@ function isActiveSessionStatus(status: SessionStatus): boolean {
     status === "awaiting_approval" ||
     status === "executing_tool"
   );
-}
-
-function toContinuationError(error: unknown): SessionRecoveryError {
-  if (error instanceof SessionRecoveryError) {
-    return error;
-  }
-  if (error instanceof SessionNotFoundError) {
-    return new SessionRecoveryError("not-found");
-  }
-  if (
-    error instanceof InvalidSessionManifestError ||
-    error instanceof CorruptEventLogError ||
-    error instanceof EventLogLimitExceededError ||
-    error instanceof InconsistentSessionRecordError
-  ) {
-    return new SessionRecoveryError("corrupt");
-  }
-  return new SessionRecoveryError("unavailable");
 }
 
 function projectPersistedEvents(
