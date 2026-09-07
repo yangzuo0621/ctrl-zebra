@@ -10,6 +10,6 @@
     "@ctrl-zebra/core": "workspace:*",
     "@ctrl-zebra/protocol": "workspace:*",
     "re2js": "2.8.6",
-    "zod": "4.4.3"
+    "zod": "4.5.4"
   }
 }
