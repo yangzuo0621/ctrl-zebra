@@ -6,7 +6,7 @@
   "publisher": "ctrl-zebra-tests",
   "private": true,
   "engines": {
-    "vscode": "^1.136.0"
+    "vscode": "^1.125.0"
   },
   "main": "./extension.cjs",
   "activationEvents": [

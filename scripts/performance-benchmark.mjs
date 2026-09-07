@@ -68,7 +68,7 @@ const report = {
     node: process.version,
     platform: process.platform,
     arch: process.arch,
-    vscode: "1.136.0",
+    vscode: "1.125.0",
     runs: options.runs,
     warmups: options.warmups,
     source: (await git(["rev-parse", "HEAD"])).trim(),
@@ -99,7 +99,7 @@ const report = {
       platform: "win32",
       arch: "x64",
       node: "v24.19.0",
-      vscode: "1.136.0",
+      vscode: "1.125.0",
     },
   },
 };
@@ -218,7 +218,7 @@ function checkThresholds(report) {
     report.environment.platform === "win32" &&
     report.environment.arch === "x64" &&
     report.environment.node === "v24.19.0" &&
-    report.environment.vscode === "1.136.0";
+    report.environment.vscode === "1.125.0";
   for (const [name, limit] of Object.entries(thresholds)) {
     if (platformSensitiveMetrics.has(name) && !environmentMatches) continue;
     const actual = sizeNames.has(name) ? report.sizes[name] : report.distributions[name]?.p95;

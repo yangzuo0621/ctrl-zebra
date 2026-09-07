@@ -38,6 +38,15 @@ function expectedUpdateLines(ecosystem, versioningStrategy) {
   if (versioningStrategy !== undefined) {
     lines.push([4, `versioning-strategy: ${versioningStrategy}`]);
   }
+  if (ecosystem === "npm") {
+    lines.push(
+      [4, "ignore:"],
+      [6, '- dependency-name: "@types/vscode"'],
+      [8, "update-types:"],
+      [10, "- version-update:semver-minor"],
+      [10, "- version-update:semver-major"],
+    );
+  }
   lines.push(
     [4, "open-pull-requests-limit: 5"],
     [4, "groups:"],

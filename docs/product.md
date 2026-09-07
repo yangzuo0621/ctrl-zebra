@@ -84,7 +84,7 @@ also require updates to the relevant domain document and ADR.
 | Area | Choice |
 |---|---|
 | Language | TypeScript 7.0.2 (exactly pinned), `strict` enabled; shared target and standard library `ES2025` |
-| Desktop host | VS Code `1.136.0` or newer; Extension Host baseline Node.js 24, verified with `24.15.0` |
+| Desktop host | VS Code `1.125.0` or newer; Extension Host baseline Node.js 24, verified with `24.15.0` |
 | Package management | pnpm workspace |
 | Extension build | esbuild, target `node24` |
 | Webview | React + Vite; TypeScript libraries `ES2025` + `DOM` + `DOM.Iterable`; Vite target `es2025` |

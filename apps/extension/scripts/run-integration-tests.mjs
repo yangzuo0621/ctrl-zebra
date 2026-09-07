@@ -41,7 +41,7 @@ try {
     extensionTestsPath,
     extensionTestsEnv,
     launchArgs,
-    version: "1.136.0",
+    version: "1.125.0",
   });
 } catch (error) {
   console.error("Extension integration tests failed.", error);

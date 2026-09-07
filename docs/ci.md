@@ -52,6 +52,15 @@ cancellation tests.
   repository contents. Retaining a verified artifact is allowed only in the explicitly documented
   packaging or release workflow.
 
+## VS Code type update policy
+
+Dependabot may propose patch updates to `@types/vscode` within the approved API line. Its minor and
+major version updates are ignored in [.github/dependabot.yml](../.github/dependabot.yml), because
+adopting a newer API line requires an explicit minimum-host compatibility decision. Other dependencies
+retain their existing update policy. An authorized host-baseline change must align the type package,
+`engines.vscode`, test/smoke hosts, and product requirements; historical performance evidence must not
+be relabeled as a measurement on the new host.
+
 ## Installation and Caching
 
 - Dependency installation must explicitly use `pnpm install --frozen-lockfile`.

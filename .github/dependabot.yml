@@ -12,6 +12,13 @@ updates:
       timezone: UTC
     target-branch: main
     versioning-strategy: increase
+    # VS Code API minor/major upgrades require an explicit host-baseline decision.
+    # Keep patch updates eligible within the approved API line.
+    ignore:
+      - dependency-name: "@types/vscode"
+        update-types:
+          - version-update:semver-minor
+          - version-update:semver-major
     open-pull-requests-limit: 5
     groups:
       minor-and-patch:

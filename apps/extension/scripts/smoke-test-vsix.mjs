@@ -12,7 +12,7 @@ import {
 } from "@vscode/test-electron";
 
 const execFileAsync = promisify(execFile);
-const vscodeVersion = "1.136.0";
+const vscodeVersion = "1.125.0";
 const scriptsDirectory = dirname(fileURLToPath(import.meta.url));
 const extensionRoot = resolve(scriptsDirectory, "..");
 const repositoryRoot = resolve(extensionRoot, "..", "..");
