@@ -1,162 +1,194 @@
-# CtrlZebra 工程机会台账
+# CtrlZebra Engineering Opportunity Ledger
 
-## 1. 目的与权限
+## 1. Purpose and Ownership
 
-本台账记录尚未获准实施的复用、模块深化、依赖引入和重复消除机会，使发现不会丢失，也不会
-借“清理”绕过任务范围。本文件只拥有机会状态、评估门禁和下一评估窗口；合并 PR 与 Git 历史
-保存已完成的决策、执行证据和验证结论；Issue、PR 或临时任务交接拥有具体工作项的顺序和状态。
-它不拥有产品语义、公共契约或技术基线。
+This ledger records reuse, module-deepening, dependency, and duplication-removal opportunities that
+are not yet authorized for implementation, so that discoveries are neither lost nor used to bypass
+task scope under the guise of cleanup. This document owns only opportunity status, evaluation gates,
+and the next evaluation window; merged PRs and Git history hold completed decisions, execution
+evidence, and verification conclusions; issues, PRs, and transient task handoffs own the order and
+status of concrete work items. It does not own product semantics, public contracts, or the technical
+baseline.
 
-- `EO-*` 是稳定的机会编号，不是工作项编号，也不代表已经授权。
-- 候选项只有在明确批准后，才进入一个 Issue/PR 或独立 maintenance 变更。
-- 需要跨会话跟踪、依赖评审、多 PR 或外部讨论的独立变更，在实施前创建 GitHub Issue，并从
-  本台账链接；可在一次已授权会话中完成的小型 maintenance 可以直接使用临时 handoff。
-- 晋升后的执行顺序和状态只记录在对应 Issue/PR；合并 PR 和 Git
-  历史是已完成决策与执行证据的来源，本台账只保留入口、状态和最终处置，避免形成第二套任务状态。
-- 发现不在当前范围内的机会时，只更新本台账，不顺带实现。
+- `EO-*` is a stable opportunity identifier, not a work-item identifier, and does not imply
+  authorization.
+- A candidate enters an issue, PR, or standalone maintenance change only after explicit approval.
+- A standalone change that needs cross-session tracking, dependency review, multiple PRs, or external
+  discussion gets a GitHub issue before implementation, linked from this ledger; small maintenance
+  that fits in one authorized session may use a transient handoff instead.
+- Once promoted, execution order and status live only in the corresponding issue or PR; merged PRs and
+  Git history are the source for completed decisions and execution evidence. This ledger keeps only
+  the entry point, status, and final disposition, so that no second task-status system forms.
+- When an out-of-scope opportunity is found, update this ledger only; do not implement it in passing.
 
-## 2. 状态与晋升流程
+## 2. Status and Promotion Flow
 
-| 状态 | 含义 |
+| Status | Meaning |
 |---|---|
-| `已发现` | 有初步重复或 Build vs Buy 证据，尚未完成方案评估 |
-| `评估中` | 已确定候选 seam、替代方案和主要风险，等待决策或验证 |
-| `待晋升` | 方案已足够具体，等待明确授权进入 Issue/PR 或 maintenance |
-| `已晋升` | 已有正式任务、Issue 或 PR；执行状态由该记录拥有 |
-| `已完成` | 晋升项已合入，旧实现和本台账要求的遗留均已处置 |
-| `暂缓` | 当前没有足够收益、证据或合适窗口；保留重新评估触发条件 |
-| `拒绝` | 已决定不实施，并记录原因 |
+| `Discovered` | Initial duplication or Build-vs-Buy evidence exists; no solution evaluation yet |
+| `Under evaluation` | Candidate seam, alternatives, and principal risks identified; awaiting decision or validation |
+| `Ready to promote` | Approach is specific enough; awaiting explicit authorization into an issue/PR or maintenance change |
+| `Promoted` | A formal task, issue, or PR exists; that record owns execution status |
+| `Completed` | The promoted item is merged, and the old implementation and any residue this ledger required are disposed of |
+| `Deferred` | Insufficient benefit, evidence, or window right now; re-evaluation trigger retained |
+| `Rejected` | Decided against, with the reason recorded |
 
-晋升一个机会时：
+When promoting an opportunity:
 
-1. 重新验证证据仍存在，确认没有被当前批准工作吸收。
-2. 按 [Reuse Before Build](development.md#reuse-before-build) 确定复用层级、模块归属和替换完成门禁；
-   触发 [Build vs Buy](development.md#build-vs-buy) 时补齐评估，并在 PR 或临时 handoff 保留证据。
-3. 判断它是路线图能力、独立 maintenance，还是现有任务的验收内容；涉及顺序、技术基线、公共契约
-   或模块方向时，执行 [AGENTS.md 变更控制](../AGENTS.md#6-change-control-and-stop-conditions)。
-4. 只晋升一个可独立验证的 tranche，获得明确授权后实施；完成后在本台账记录链接和处置结果。
+1. Re-verify that the evidence still holds and that the opportunity has not been absorbed by currently
+   approved work.
+2. Determine the reuse level, module ownership, and replacement-completion gate per
+   [Reuse Before Build](development.md#reuse-before-build); when
+   [Build vs Buy](development.md#build-vs-buy) is triggered, complete that evaluation and retain the
+   evidence in the PR or transient handoff.
+3. Decide whether it is a roadmap capability, standalone maintenance, or acceptance content of an
+   existing task; when it touches order, the technical baseline, public contracts, or module
+   direction, follow [AGENTS.md change control](../AGENTS.md#6-change-control-and-stop-conditions).
+4. Promote a single independently verifiable tranche, implement it only after explicit authorization,
+   and record the link and disposition here on completion.
 
-## 3. 候选组合与建议窗口
+## 3. Candidate Set and Suggested Windows
 
-下表只列仍未完全处置、需要后续评估或明确窗口的机会；已晋升/已完成项目移入第 4 节台账。窗口
-是规划建议，不改变当前执行点。
+The table lists only opportunities that are not fully disposed of and still need evaluation or an
+explicit window; promoted and completed items move to section 4. Windows are planning suggestions and
+do not change the current execution point.
 
-| 机会 | 类型 | 优先级 | 建议窗口或依赖 | 状态 |
+| Opportunity | Type | Priority | Suggested window or dependency | Status |
 |---|---|---:|---|---|
-| [EO-009 Markdown renderer](#eo-009-markdown-renderer) | Buy re-evaluation | P3 | 先证明净收益并通过基线变更控制 | `暂缓` |
-| [EO-010 Targeted Zod reuse](#eo-010-targeted-zod-reuse) | 已有依赖复用 | P2 | 随拥有 schema 的任务分 tranche | `已发现` |
-| [EO-011 Provider token counting](#eo-011-provider-token-counting) | Buy / 实验 | P3 | 先有准确度或预算缺陷数据 | `暂缓` |
-| [EO-012 MCP SDK-native negotiation](#eo-012-mcp-sdk-native-negotiation) | Buy / 已有依赖深化 | P0 | MCP 再次演进前优先评估；不阻塞后续路线图 | `评估中` |
-| [EO-013 Webview chat-store responsibility density](#eo-013-webview-chat-store-responsibility-density) | 模块深化 | P2 | 需要独立 Webview 行为分区证据后再评估；不属于当前批准工作 | `暂缓` |
+| [EO-009 Markdown renderer](#eo-009-markdown-renderer) | Buy re-evaluation | P3 | Prove net benefit and pass baseline change control first | `Deferred` |
+| [EO-010 Targeted Zod reuse](#eo-010-targeted-zod-reuse) | Existing-dependency reuse | P2 | In tranches, alongside the task that owns the schema | `Discovered` |
+| [EO-011 Provider token counting](#eo-011-provider-token-counting) | Buy / experiment | P3 | Requires accuracy or budget-defect data first | `Deferred` |
+| [EO-012 MCP SDK-native negotiation](#eo-012-mcp-sdk-native-negotiation) | Buy / existing-dependency deepening | P0 | Evaluate before MCP evolves again; does not block the roadmap | `Under evaluation` |
+| [EO-013 Webview chat-store responsibility density](#eo-013-webview-chat-store-responsibility-density) | Module deepening | P2 | Needs independent Webview behavior-partition evidence; not part of currently approved work | `Deferred` |
 
-仍影响未来执行的关系是：
+The one relationship that still affects future execution is:
 
 ```text
 EO-012 evidence ──→ independent maintenance decision
 ```
 
-EO-012 可独立评估；除非发现当前 negotiation 存在实际缺陷，否则不阻塞路线图推进。
-EO-009 和 EO-011 不应阻塞当前发布收尾。若验证 SDK-native negotiation 能保持现有安全语义，再晋升为
-独立 maintenance。
+EO-012 can be evaluated independently; unless an actual defect is found in the current negotiation, it
+does not block roadmap progress. EO-009 and EO-011 must not block the current release wrap-up. If
+SDK-native negotiation is verified to preserve the existing security semantics, promote it to
+standalone maintenance.
 
 ### EO-013 Webview chat-store responsibility density
 
-- **问题证据**：既有可维护性观察持续显示 `apps/webview/src/chat-store.ts` 约 1,444
-  行，集中投影消息、推理、Tool/approval、Run 状态、usage/budget、regeneration、recovery 和
-  batching。
-- **当前判断**：暂缓。当前只有职责密度证据，没有第二套等价 store lifecycle，也没有已批准的
-  Webview production split。文件大小和 change frequency 不能单独授权抽象。
-- **重新评估触发**：新增 Webview capability 需要跨越两个以上稳定行为区，或 focused behavior
-  tests 证明现有 store 已成为不可定位的回归边界。
-- **约束**：先按真实 Webview 行为边界建立 focused suites；保持 Protocol-only Webview import
-  direction、消息投影顺序和恢复/approval 可观察语义；不得引入跨包 `common`/manager wrapper。
+- **Evidence**: a single file, `apps/webview/src/chat-store.ts`, concentrates projection of messages,
+  reasoning, tool/approval, run state, usage/budget, regeneration, recovery, and batching. The size
+  trend of that file is owned by the hotspot baseline in `scripts/check-architecture.mjs`; this ledger
+  does not restate line counts.
+- **Current judgment**: deferred. Only responsibility-density evidence exists — there is no second
+  equivalent store lifecycle and no approved Webview production split. File size and change frequency
+  alone do not authorize an abstraction.
+- **Re-evaluation trigger**: a new Webview capability must span more than two stable behavior regions,
+  or focused behavior tests demonstrate that the current store has become an unlocatable regression
+  boundary.
+- **Constraints**: establish focused suites along real Webview behavior boundaries first; preserve the
+  Protocol-only Webview import direction, message-projection order, and observable recovery/approval
+  semantics; do not introduce a cross-package `common` or manager wrapper.
 
-## 4. 已关闭机会
+## 4. Closed Opportunities
 
-EO-001–EO-008 已完成。技术决策、执行证据和验证结论由合并 PR 与 Git 历史保留；本台账不再重复
-维护已关闭项目的执行记录。
+EO-001 through EO-008 are complete. Technical decisions, execution evidence, and verification
+conclusions are retained by the merged PRs and Git history; this ledger no longer duplicates execution
+records for closed items.
 
-## 5. Build vs Buy 机会
+## 5. Build vs Buy Opportunities
 
 ### EO-009 Markdown renderer
 
-- **当前判断**：暂缓。项目已经使用并固定 `markdown-it`，自维护的是受限 Markdown token 到
-  React tree 的映射和产品安全策略；这不是“没有买现成”的直接案例。
-- **候选机制**：只有在当前 mapping 成本继续增长时才重新评估 `react-markdown`。其当前 interface
-  支持 custom components、URL transform 和 remark plugins；raw HTML 需要显式 plugin，但这些
-  能力本身不足以证明替换现有依赖有净收益。
-- **初筛资料**：[`react-markdown` repository and documentation](https://github.com/remarkjs/react-markdown)。
-- **目标 seam**：Webview-private renderer adapter 继续拥有 bounded prefix、元素 allowlist、自定义
-  link、复制交互和错误降级；库只拥有 Markdown AST/渲染机制。
-- **必须补齐的证据**：与当前 renderer 的 corpus differential tests、GFM 范围、bundle/VSIX 影响、
-  React/Vite 兼容、依赖树、许可证、恶意 URL/HTML 行为，以及删除自有代码减去新增 adapter 与
-  依赖复杂度后的净维护收益。替换会改变当前技术基线，必须先执行变更控制。
-- **验收**：等价覆盖后删除手写 token-to-tree pipeline 和只服务于它的测试；保留行为级 corpus，
-  不保留双 renderer fallback。
+- **Current judgment**: deferred. The project already uses and pins `markdown-it`; what is
+  self-maintained is only the constrained Markdown-token-to-React-tree mapping and the product security
+  policy. This is not a straightforward case of "failing to buy off the shelf".
+- **Re-evaluation trigger**: the maintenance cost of the hand-written token-to-tree mapping keeps
+  growing, and a Webview-private renderer adapter can still retain the bounded prefix, element
+  allowlist, custom links, copy interaction, and error degradation.
+- **Initial screening material**: [`react-markdown` repository and documentation](https://github.com/remarkjs/react-markdown).
+- **To complete when evaluation starts**: corpus differential tests, GFM scope, bundle/VSIX impact,
+  React/Vite compatibility, dependency tree and license, malicious URL/HTML behavior, and net
+  maintenance benefit. A replacement changes the technical baseline and requires change control first.
 
 ### EO-010 Targeted Zod reuse
 
-- **问题证据**：仓库已使用 Zod，但部分 `unknown` 输入仍由重复的 record/field parser 验证。
-- **候选机制**：优先复用 Protocol 已拥有的 schema，或在实际拥有输入语义的 package 内定义 schema；
-  不进行全仓“一次性 Zod 化”。
-- **目标 seam**：schema 负责结构验证，调用 module 继续负责预算、授权、状态和稳定错误映射。
-- **验收**：每个 tranche 证明 schema 是单一事实源，删除被取代的 parser 和实现专用测试，保留
-  public/error compatibility tests；不得为方便而改变允许的输入或 package 依赖方向。
+- **Evidence**: the repository already uses Zod, but some `unknown` inputs are still validated by
+  duplicated record/field parsers.
+- **Candidate mechanism**: prefer reusing schemas already owned by Protocol, or define the schema in
+  the package that actually owns the input semantics; do not attempt a repository-wide one-shot
+  "Zod-ification".
+- **Target seam**: the schema is responsible for structural validation; the calling module remains
+  responsible for budgets, authorization, state, and stable error mapping.
+- **Acceptance**: each tranche proves the schema is the single source of truth, removes the superseded
+  parser and its implementation-specific tests, and keeps public/error compatibility tests; accepted
+  inputs and package dependency direction must not change for convenience.
 
 ### EO-011 Provider token counting
 
-- **当前判断**：暂缓。`gpt-tokenizer` 提供 OpenAI model/encoding 级计数，但不能准确代表 Gemini
-  或任意 OpenAI-compatible provider；全局采用会制造错误的产品语义。
-- **初筛资料**：[`gpt-tokenizer` repository and documentation](https://github.com/niieani/gpt-tokenizer)。
-- **重新评估触发**：真实数据证明当前估算导致显著 context 浪费、拒绝或溢出，且 provider adapter
-  能为已知模型选择可信 encoding。
-- **目标 seam**：Core 只依赖注入的 token-counting interface；Provider adapter 可选使用库，未知
-  模型保留明确的 bounded fallback 和可观测误差。
-- **必须补齐的证据**：模型覆盖、版本漂移策略、bundle/启动成本、离线行为、准确度 corpus 和
-  provider-specific failure mapping。未达到触发条件前不创建依赖 PR。
+- **Current judgment**: deferred. `gpt-tokenizer` provides OpenAI model/encoding-level counting but
+  cannot accurately represent Gemini or arbitrary OpenAI-compatible providers; adopting it globally
+  would manufacture incorrect product semantics.
+- **Initial screening material**: [`gpt-tokenizer` repository and documentation](https://github.com/niieani/gpt-tokenizer).
+- **Re-evaluation trigger**: real data shows the current estimate causes significant context waste,
+  rejections, or overflow, and the provider adapter can select a trustworthy encoding for known
+  models; Core still depends only on an injected token-counting interface, and unknown models retain a
+  bounded fallback.
+- **To complete when evaluation starts**: model coverage, version-drift policy, bundle/startup cost,
+  offline behavior, accuracy corpus, and provider-specific failure mapping. Do not open a dependency PR
+  before the trigger is met.
 
 ### EO-012 MCP SDK-native negotiation
 
-- **问题证据**：`packages/mcp-client/src/mcp-negotiation.ts` 当前自行实现 MCP modern-first 协商，
-  包括 `server/discover` probe、JSON-RPC request/reply 分类、超时、modern/legacy 判定、
-  UnsupportedProtocolVersion 处理、DiscoverResult 与 capability 结构校验，以及 probe transport
-  handler 的临时接管。当前 `ControlledMcpClient.connect()` 先调用 package-owned
-  `negotiateMcpEra()`，再通过 `Client.connect(..., { prior })` 把协商结果交给
-  `@modelcontextprotocol/client`。仓库已经固定使用 `@modelcontextprotocol/client@2.0.0`，且
-  `sdk-options.ts` 已配置 SDK 的 `versionNegotiation`，因此应重新评估自研协议协商层是否仍有必要。
-- **候选机制**：优先评估 `@modelcontextprotocol/client` v2 原生 version negotiation / probe
-  classification 能力，让 SDK 拥有 MCP wire-level 协议协商，CtrlZebra 仅保留产品级安全与生命周期
-  策略。不新增第二个 MCP library，不自行维护 SDK 已正式提供的协议状态机。
-- **目标 seam**：`ControlledMcpClient` 继续拥有 Host-owned process / stdio transport 生命周期、
-  startup approval 与 Workspace Trust、generation fencing、cancellation 与 stale completion 拒绝、
-  bounded stderr / cleanup、termination confirmation、CtrlZebra 稳定错误映射与连接状态投影。
-  MCP SDK 应尽可能拥有 `server/discover` wire protocol、protocol-version negotiation、
-  UnsupportedProtocolVersion 处理、modern negotiation DTO / protocol validation，以及 SDK 已正式定义的
-  negotiation failure taxonomy。SDK 原生类型、异常和 negotiation DTO 不得直接泄漏进入 Core、
-  Protocol 或 Webview 公共契约。
-- **Build vs Buy**：优先深化现有 `@modelcontextprotocol/client` 依赖，而不是继续维护
-  CtrlZebra-private protocol negotiation implementation。只有 differential validation 证明 SDK 无法
-  表达 CtrlZebra 已固定的 modern-only / dual downgrade 安全语义，或无法维持 bounded / deterministic
-  failure classification 时，才保留自研 negotiation seam。
-- **必须补齐的证据**：
-  1. 核实当前固定 SDK 版本的 public API，而不是依据 unreleased/internal API。
-  2. 建立现有 `negotiateMcpEra()` 与 SDK-native negotiation 的 differential corpus。
-  3. 覆盖 modern success、unsupported requested version、legacy server、timeout、malformed result、
-     unknown JSON-RPC error、server exit、abort 和 stale generation。
-  4. 明确 SDK 对 modern-only 与 dual compatibility mode 的真实行为。
-  5. 验证 `supportedVersions`、capabilities、DiscoverResult 等结构校验是否由 SDK 完整拥有；不能因减少
-     代码而放宽当前安全边界。
-  6. 核实 transport 是否仍可保持 CtrlZebra-owned process termination、stderr bounds 和 delivery gate。
-  7. 比较 bundle / VSIX、类型复杂度、测试量和最终删除的净代码量。
-- **预期删除目标**：若采用 SDK-native negotiation，应删除 `mcp-negotiation.ts` 中已由 SDK 等价拥有的
-  probe / classifier / protocol DTO validation、只服务于上述实现的 package-private helper、只验证被删除
-  内部算法而非产品行为的 implementation-specific tests，以及 `Client.connect(..., { prior })` 前为了绕过
-  SDK negotiation 而存在的 glue code。不得长期保留“SDK negotiation + 自研 negotiation”双路径或
-  fallback shadow implementation。
-- **验收**：公共 MCP connection / error / capability 契约不变，除非先完成正式变更控制；modern-only
-  不发生未授权 legacy downgrade；dual mode 的 downgrade 条件不比当前实现更宽松；malformed、timeout、
-  abort、stale-generation 和 transport failure 行为具有等价或更严格的测试覆盖；process cleanup 和
-  termination confirmation 仍由 CtrlZebra Host boundary 拥有；differential tests 全部通过后删除被取代
-  实现，不保留双路径；全量 MCP unit、Extension integration、VSIX smoke tests 通过。
-- **规模与风险**：中到大；协议和兼容性敏感，但净删除潜力较高。应先做独立 investigation / proof
-  tranche，再决定是否晋升为 maintenance。
+- **Evidence**: `packages/mcp-client/src/mcp-negotiation.ts` currently implements MCP modern-first
+  negotiation itself, including the `server/discover` probe, JSON-RPC request/reply classification,
+  timeouts, modern/legacy determination, UnsupportedProtocolVersion handling, DiscoverResult and
+  capability structure validation, and temporary takeover of the probe transport handler. Today
+  `ControlledMcpClient.connect()` first calls the package-owned `negotiateMcpEra()` and then hands the
+  negotiation result to `@modelcontextprotocol/client` via `Client.connect(..., { prior })`. The
+  repository already pins `@modelcontextprotocol/client@2.0.0`, and `sdk-options.ts` already configures
+  the SDK's `versionNegotiation`, so whether a self-built protocol negotiation layer is still necessary
+  should be re-evaluated.
+- **Candidate mechanism**: first evaluate the native version negotiation / probe classification
+  capabilities of `@modelcontextprotocol/client` v2, letting the SDK own MCP wire-level protocol
+  negotiation while CtrlZebra retains only product-level security and lifecycle policy. Do not add a
+  second MCP library, and do not maintain a protocol state machine the SDK already provides officially.
+- **Target seam**: `ControlledMcpClient` continues to own host-owned process / stdio transport
+  lifecycle, startup approval and Workspace Trust, generation fencing, cancellation and stale-completion
+  rejection, bounded stderr / cleanup, termination confirmation, CtrlZebra stable error mapping, and
+  connection-state projection. The MCP SDK should own as much as possible of the `server/discover` wire
+  protocol, protocol-version negotiation, UnsupportedProtocolVersion handling, modern negotiation DTO /
+  protocol validation, and the negotiation failure taxonomy the SDK formally defines. SDK-native types,
+  exceptions, and negotiation DTOs must not leak directly into Core, Protocol, or Webview public
+  contracts.
+- **Build vs Buy**: prefer deepening the existing `@modelcontextprotocol/client` dependency over
+  continuing to maintain a CtrlZebra-private protocol negotiation implementation. Retain the self-built
+  negotiation seam only if differential validation proves the SDK cannot express CtrlZebra's fixed
+  modern-only / dual downgrade security semantics, or cannot maintain bounded, deterministic failure
+  classification.
+- **Evidence to complete**:
+  1. Verify the public API of the currently pinned SDK version, rather than relying on unreleased or
+     internal API.
+  2. Build a differential corpus between the existing `negotiateMcpEra()` and SDK-native negotiation.
+  3. Cover modern success, unsupported requested version, legacy server, timeout, malformed result,
+     unknown JSON-RPC error, server exit, abort, and stale generation.
+  4. Establish the SDK's actual behavior for modern-only and dual compatibility mode.
+  5. Verify whether structural validation of `supportedVersions`, capabilities, and DiscoverResult is
+     fully owned by the SDK; the current security boundary must not be loosened merely to reduce code.
+  6. Verify that the transport can still preserve CtrlZebra-owned process termination, stderr bounds,
+     and the delivery gate.
+  7. Compare bundle/VSIX size, type complexity, test volume, and the net code finally deleted.
+- **Expected deletions**: if SDK-native negotiation is adopted, delete the probe / classifier /
+  protocol DTO validation in `mcp-negotiation.ts` that the SDK equivalently owns, package-private
+  helpers that serve only those implementations, implementation-specific tests that verify the deleted
+  internal algorithm rather than product behavior, and the glue code that exists before
+  `Client.connect(..., { prior })` solely to bypass SDK negotiation. Do not keep a long-lived
+  "SDK negotiation plus self-built negotiation" dual path or a fallback shadow implementation.
+- **Acceptance**: public MCP connection / error / capability contracts are unchanged unless formal
+  change control is completed first; modern-only performs no unauthorized legacy downgrade; dual mode's
+  downgrade conditions are no looser than the current implementation; malformed, timeout, abort,
+  stale-generation, and transport-failure behavior has equivalent or stricter test coverage; process
+  cleanup and termination confirmation remain owned by the CtrlZebra host boundary; the superseded
+  implementation is deleted once all differential tests pass, with no dual path retained; the full MCP
+  unit, extension integration, and VSIX smoke test suites pass.
+- **Size and risk**: medium to large; protocol- and compatibility-sensitive, but with high net-deletion
+  potential. Do a standalone investigation / proof tranche first, then decide whether to promote it to
+  maintenance.
