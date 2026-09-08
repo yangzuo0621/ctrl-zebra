@@ -113,8 +113,10 @@ owned by Biome, EditorConfig, and Git attributes.
   caller-local translation boundary instead of recreating one same-shaped wrapper per owned operation.
   A wrapper is retained only when it performs additional host integration, validation, composition,
   or policy that cannot be expressed by direct use or the shared translation boundary.
-- Record useful out-of-scope reuse or deepening discoveries in `docs/engineering-opportunities.md`;
-  ledger entry does not authorize implementation or change roadmap order.
+- Record useful out-of-scope reuse or deepening discoveries in `docs/engineering-opportunities.md`
+  with evidence, potential benefit, and a re-evaluation trigger. Read-only reviewers report candidates
+  to the caller. An inbox entry does not authorize implementation or change roadmap order; once
+  authorized, task plans and acceptance criteria belong in the Issue/PR or transient handoff.
 - Automated duplication reports are evidence, not an automatic abstraction decision. Exclude generated
   data and required compatibility fixtures, and review security, lifecycle, and test-support duplicates
   independently.
@@ -145,8 +147,9 @@ owned by Biome, EditorConfig, and Git attributes.
   validation, budgets, cancellation, security, or error normalization.
 - Keep the evidence synchronized when implementation findings change the selected mechanism or its
   impact. A recommendation does not authorize a dependency or work outside the confirmed scope.
-- Record out-of-scope dependency candidates in `docs/engineering-opportunities.md`; promote them into
-  an authorized roadmap task or maintenance change before adding a package.
+- Record out-of-scope dependency candidates in `docs/engineering-opportunities.md`; obtain authorization
+  for a roadmap task or maintenance change before adding a package. Keep execution status and evaluation
+  evidence in the task record rather than duplicating them in the inbox.
 
 ### Dependency Management
 

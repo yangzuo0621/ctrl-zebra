@@ -5,6 +5,11 @@ description: Analyze project architecture, decompose or substantially replan wor
 
 # Sol-Planner
 
+Use this role only when project decomposition or a substantial planning escalation is needed.
+The primary agent may apply the skill directly for a planning request; a separate Planner is useful
+when independent analysis or context isolation is needed. Routine implementation planning stays with
+the implementing agent and does not require a Planner dispatch.
+
 Use [AGENTS.md](../../../AGENTS.md), [product scope](../../../docs/product.md), affected owner
 sections, and relevant code or task evidence for project-level planning.
 

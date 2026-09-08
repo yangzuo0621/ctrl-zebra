@@ -10,6 +10,10 @@ Use [AGENTS.md](../../../AGENTS.md) and the affected owner documents. MANUAL is 
 [AUTO profiles](../auto-workflow/SKILL.md#authorization-profiles) require explicit task-scoped
 selection and authorization. This skill does not itself grant Git/PR permissions.
 
+In MANUAL, the primary agent normally applies this skill directly, including local implementation
+planning, implementation, and verification. A separate Executor is optional when context isolation
+helps; using this skill alone does not require a role handoff.
+
 ## Implementation
 
 1. Establish scope, acceptance criteria, exclusions, affected contracts, base revision, and verification
@@ -32,7 +36,8 @@ selection and authorization. This skill does not itself grant Git/PR permissions
 ## Independent review and handoff
 
 An active AUTO run or a separate explicit user request for independent review requires a compact
-Review Handoff: task/PR/exact revision, acceptance criteria, changed areas and contracts, verification
+Review Handoff: task, review target as defined by [Task-Reviewer](../task-reviewer/SKILL.md#review-target),
+acceptance criteria, changed areas and contracts, verification
 and unrun checks, and applicable reuse or Build-vs-Buy evidence. Keep transient revision and execution
 evidence in the handoff; omit raw transcripts and routine audit counts from it and the PR.
 
@@ -40,12 +45,16 @@ In AUTO, return the handoff to Root for dispatch; never self-dispatch Reviewer. 
 blockers in scope under the [review loop](../auto-workflow/SKILL.md#review-loop-and-stop-conditions).
 After approval, stop editing and return the same PR and exact revision to Root for closure. For an
 explicit independent review outside AUTO, return the result to the caller without AUTO closure.
-Any implementation revision change invalidates approval and needs re-review, including changes made
+Any change to the reviewed content invalidates approval and needs re-review, including changes made
 to fix CI or conflicts.
 
 ## Boundaries and blockers
 
-Do not act as Reviewer, Planner, or Root closure; self-approve; merge or close the PR or work item.
+Never self-approve an independent review. In AUTO, do not take over independent Reviewer, project
+Planner, or Root closure responsibilities, or merge or close the PR or work item. In MANUAL, local
+planning and explicitly authorized follow-up operations do not require another agent; substantial
+architecture or roadmap planning still follows AGENTS.md change control. A separately dispatched
+Executor returns to its caller for coordination and closure.
 Follow AGENTS.md stop conditions for missing authorization, scope/contract expansion, security or
 architecture conflict, and unverifiable state. Correct in-scope mechanical failures when safe;
 report BLOCKED when they cannot be resolved or the review-loop limit is reached.

@@ -11,10 +11,11 @@ review/workflow evidence belongs in the handoff or conversation. Detailed semant
 - [ ] The change is within the authorized work item or standalone maintenance scope.
 - [ ] Acceptance criteria, planned files, exclusions, public-contract impact, and changed areas match
       the actual diff; no opportunistic work or dependency was added.
-- [ ] When independent review is invoked, the compact Review Handoff names the work item, PR, exact
-      revision, contracts, consulted docs, verification, applicable reuse evidence, and caveats.
-- [ ] When independent review is invoked, base context was the Review Handoff, exact current PR
-      diff/revision, and acceptance criteria.
+- [ ] When independent review is invoked, the compact Review Handoff names the work item,
+      [review target](../.agents/skills/task-reviewer/SKILL.md#review-target), contracts, consulted docs,
+      verification, applicable reuse evidence, and caveats. A PR is required only for AUTO.
+- [ ] When independent review is invoked, base context was the Review Handoff, exact target diff,
+      and acceptance criteria.
       Extra documents were opened only for a touched contract, material handoff claim, concrete
       concern, or similarity escalation, and are listed in the review report.
 
@@ -76,8 +77,8 @@ review/workflow evidence belongs in the handoff or conversation. Detailed semant
       unnecessary abstraction, deep nesting, excessive coupling, SRP violation, or maintenance debt.
 - [ ] Errors, resources, timers, listeners, streams, processes, and promises have explicit ownership
       and cleanup where relevant.
-- [ ] Non-blocking discoveries are recorded for a future task; the read-only Reviewer does not edit
-      code, plans, PR state, or task status.
+- [ ] Non-blocking discoveries are reported to the caller for useful candidates to be recorded in
+      the opportunity inbox; the read-only Reviewer does not edit code, plans, PR state, or task status.
 
 ## 8. Decision
 
