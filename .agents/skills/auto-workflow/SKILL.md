@@ -66,7 +66,10 @@ work item. The envelope is immutable; changing it requires a profile change and 
 6. After `APPROVED`, Root performs transactional closure for that exact revision. Root checks only:
    revision and approval freshness, required CI/checks, PR mergeability/conflicts, the permitted
    task-state transition, and exact authorization. Root does not reopen review, reinterpret the
-   quality decision, or add implementation findings.
+   quality decision, or conduct a second implementation review. If credible new defect or security
+   evidence appears during closure, pause side effects and return the evidence to Reviewer for
+   reassessment. Root does not decide the finding's validity or fix it; Reviewer returns the decision
+   for the exact revision, and any required fix goes to Executor under the same review-loop limit.
 7. Route a stale approval to Reviewer and CI/conflict mechanics to Executor. Require review of the
    exact new revision whenever a fix changes implementation. Route authorization or unverifiable
    state blockers to Root/user; do not guess or route closure to another role.
@@ -78,6 +81,7 @@ Root reports one mechanical blocker route when a closure gate fails:
 | approved revision is stale or HEAD differs | `APPROVAL_STALE` | Reviewer | yes |
 | required CI/checks are missing or failing | `CHECKS_NOT_GREEN` | Executor | only if the revision changes |
 | PR has a merge conflict | `MERGE_CONFLICT` | Executor | if the resolution changes the revision |
+| credible new defect or security evidence appears | `NEW_EVIDENCE` | Reviewer | yes, before closure resumes |
 | operation is not authorized | `AUTHORIZATION_REQUIRED` | Root/user | no |
 | repository or PR state cannot be verified | `STATE_UNVERIFIABLE` | Root/user | no |
 
@@ -104,6 +108,9 @@ The normal loop has at most two correction cycles: initial review, correction #1
 (at most three Reviewer passes). If blockers remain after correction #2, return `BLOCKED` and do not
 start a fourth pass. Any implementation revision change after approval invalidates that approval and
 requires review of the new exact revision, subject to the same limit.
+
+Reassessment for new closure evidence also counts toward the three-pass limit. If no pass remains,
+return BLOCKED with the evidence; do not resume closure under the earlier approval.
 
 Stop for missing or ambiguous authorization, persistent review failure, stale/contradictory or
 unverifiable state, unexpected scope, architecture/security conflict, change-control need, an

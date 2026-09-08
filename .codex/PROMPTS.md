@@ -24,3 +24,10 @@ I explicitly authorize AUTO_FULL for <work-item> only.
 Use sol-planner to reconcile an approved work proposal with the current codebase and refine its
 decomposition, dependencies, and ordering. Do not implement code.
 ```
+
+## Independent local review
+```text
+Independently review <work-item> using Task-Reviewer. Use the stated base revision and a reproducible
+snapshot of the scoped local changes, including relevant untracked files. Do not stage, commit, or
+create a PR for the review. Report the exact reviewed target and findings.
+```

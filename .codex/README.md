@@ -3,6 +3,12 @@
 Ordinary implementation uses MANUAL: implement the authorized scope, verify, and report. It does not
 automatically start independent review or grant Git/PR permissions.
 
+The primary agent normally handles local planning, implementation, and verification directly using
+Task-Executor. Dispatch a separate Executor only when context isolation helps or AUTO is selected.
+Add an independent Reviewer when requested; outside AUTO, review may target a reproducible local
+snapshot without a PR. Use Planner only for project decomposition or substantial planning escalation,
+not as a mandatory step for ordinary changes.
+
 For an explicitly selected AUTO run, Root coordinates Task-Executor, Task-Reviewer, and mechanical
 closure. Read [auto-workflow](../.agents/skills/auto-workflow/SKILL.md) for the authoritative
 invocation boundary, AUTO_DRAFT/AUTO_FULL grants, review limit, closure gates, and final states.
