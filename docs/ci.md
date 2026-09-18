@@ -9,7 +9,8 @@ owned by the [Release policy](release.md), and archive contents are owned by the
 
 - Validation CI runs on a GitHub-hosted matrix of `ubuntu-latest`, `macos-latest`, and
   `windows-latest`.
-- The [validation workflow](../.github/workflows/ci.yml) pins the Node.js runtime for every matrix leg.
+- The [validation workflow](../.github/workflows/ci.yml) uses the pnpm-native setup action to pin the
+  Node.js runtime and package manager for every matrix leg.
 - The root [package.json](../package.json) `packageManager` field owns the exact pnpm version.
 - The workspace uses `pmOnFail: ignore` so pnpm does not add its own platform executables to the
   application dependency lockfile. CI installs the exact `packageManager` version before dependency
