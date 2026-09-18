@@ -11,6 +11,9 @@ owned by the [Release policy](release.md), and archive contents are owned by the
   `windows-latest`.
 - The [validation workflow](../.github/workflows/ci.yml) pins the Node.js runtime for every matrix leg.
 - The root [package.json](../package.json) `packageManager` field owns the exact pnpm version.
+- The workspace uses `pmOnFail: ignore` so pnpm does not add its own platform executables to the
+  application dependency lockfile. CI installs the exact `packageManager` version before dependency
+  installation; contributors must use that declared version locally.
 - Validation runs for pushes to `main` and pull requests targeting `main`.
 - A newer run cancels an unfinished older run for the same workflow and branch or pull request.
 - Matrix strategy uses `fail-fast: false` and does not use `continue-on-error`; every OS leg reports

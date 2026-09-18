@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 import yauzl from "yauzl";
+import { resolvePnpmCommand } from "../../../scripts/pnpm-command.mjs";
 import { resolveBuildSource, validateBuildProvenance } from "../../../scripts/release-policy.mjs";
 import {
   assertCleanStatus,
@@ -182,11 +183,11 @@ async function git(args) {
 }
 
 async function pnpm(args) {
-  const pnpmCli = process.env.npm_execpath;
-  if (!pnpmCli) {
+  if (!process.env.npm_execpath) {
     throw new Error("Run the official packaging command through pnpm.");
   }
-  return run(process.execPath, [pnpmCli, ...args], repositoryRoot);
+  const command = resolvePnpmCommand(args);
+  return run(command.executable, command.args, repositoryRoot);
 }
 
 async function vsce(args) {

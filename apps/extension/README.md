@@ -122,7 +122,7 @@ Marketplace publication remains a separate release action.
 
 ## Development
 
-This repository uses pnpm 11 and Node.js 22 or later.
+This repository uses pnpm 12 and Node.js 22 or later.
 
 ```text
 pnpm install --frozen-lockfile

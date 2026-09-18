@@ -14,6 +14,7 @@ import {
   validateReleaseDocuments,
   validateSelectedFiles,
 } from "../apps/extension/scripts/vsix-policy.mjs";
+import { resolvePnpmCommand } from "./pnpm-command.mjs";
 import {
   assertDependencyInventoryMatches,
   createDependencyInventoryFile,
@@ -361,10 +362,8 @@ async function run(executable, args, cwd) {
 }
 
 async function runPnpm(args) {
-  if (process.env.npm_execpath) {
-    return run(process.execPath, [process.env.npm_execpath, ...args], repositoryRoot);
-  }
-  return run(process.platform === "win32" ? "pnpm.cmd" : "pnpm", args, repositoryRoot);
+  const command = resolvePnpmCommand(args);
+  return run(command.executable, command.args, repositoryRoot);
 }
 
 async function readSmallEntry(zipFile, entry, limit) {

@@ -6,9 +6,10 @@ tags, or Marketplace publication.
 
 ## [Unreleased]
 
-### Pending
+### Changed
 
-- No changes yet.
+- Upgraded the repository package-manager baseline to pnpm 12 and made recursive development and
+  release scripts compatible with pnpm's native executable distribution.
 
 ## [0.3.1] - 2026-09-18
 

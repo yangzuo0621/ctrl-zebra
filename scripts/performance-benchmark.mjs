@@ -1,5 +1,4 @@
 import { execFile } from "node:child_process";
-import { existsSync } from "node:fs";
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -11,6 +10,7 @@ import {
   validateSelectedFiles,
 } from "../apps/extension/scripts/vsix-policy.mjs";
 import fixture from "./performance-fixtures.json" with { type: "json" };
+import { resolvePnpmCommand } from "./pnpm-command.mjs";
 
 const execFileAsync = promisify(execFile);
 const repositoryRoot = resolve(import.meta.dirname, "..");
@@ -268,42 +268,8 @@ function parseNonNegativeInteger(value, option) {
 }
 
 async function runPnpm(args, env) {
-  if (process.platform !== "win32") {
-    return run("pnpm", args, repositoryRoot, env);
-  }
-
-  const pnpmScript = await resolveWindowsPnpmScript();
-  if (pnpmScript !== undefined) {
-    return run(process.execPath, [pnpmScript, ...args], repositoryRoot, env);
-  }
-  return run(
-    "cmd.exe",
-    ["/d", "/s", "/c", `pnpm ${args.map(quoteWindowsArgument).join(" ")}`],
-    repositoryRoot,
-    env,
-  );
-}
-
-async function resolveWindowsPnpmScript() {
-  const candidates = [];
-  if (process.env.npm_execpath !== undefined) candidates.push(process.env.npm_execpath);
-  if (process.env.APPDATA !== undefined) {
-    candidates.push(join(process.env.APPDATA, "npm", "node_modules", "pnpm", "bin", "pnpm.mjs"));
-  }
-  try {
-    const located = await execFileAsync("where.exe", ["pnpm.cmd"], { encoding: "utf8" });
-    const command = located.stdout.split(/\r?\n/u).find(Boolean);
-    if (command !== undefined) {
-      candidates.push(join(dirname(command.trim()), "node_modules", "pnpm", "bin", "pnpm.mjs"));
-    }
-  } catch {
-    // The cmd.exe fallback below provides the actionable process error if pnpm is unavailable.
-  }
-  return candidates.find((candidate) => existsSync(candidate));
-}
-
-function quoteWindowsArgument(value) {
-  return `"${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
+  const command = resolvePnpmCommand(args);
+  return run(command.executable, command.args, repositoryRoot, env);
 }
 
 async function run(executable, args, cwd, env) {
