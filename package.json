@@ -4,7 +4,7 @@
   "private": true,
   "license": "MIT",
   "type": "module",
-  "packageManager": "pnpm@11.11.0",
+  "packageManager": "pnpm@12.4.2",
   "scripts": {
     "build": "pnpm --recursive --if-present run build",
     "check": "biome ci .",
@@ -18,7 +18,7 @@
     "test:docs": "node --test ./scripts/check-governance-docs.test.mjs && node ./scripts/check-governance-docs.mjs",
     "test:dependabot": "node ./scripts/check-dependabot-config.mjs",
     "test": "pnpm run test:architecture && pnpm run test:unit && pnpm run test:integration",
-    "test:architecture": "node --test ./scripts/check-architecture.test.mjs",
+    "test:architecture": "node --test ./scripts/check-architecture.test.mjs ./scripts/pnpm-command.test.mjs",
     "test:coverage": "vitest run --coverage",
     "test:integration": "pnpm --filter ./apps/extension run test:integration",
     "test:unit": "vitest run",
