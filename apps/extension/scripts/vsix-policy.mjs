@@ -1,8 +1,37 @@
+import semver from "semver";
 import { isRecord } from "./record-validation.mjs";
 
 export const MAX_VSIX_BYTES = 5 * 1024 * 1024;
 export const MAX_UNCOMPRESSED_BYTES = 10 * 1024 * 1024;
 export const MAX_ENTRY_BYTES = 5 * 1024 * 1024;
+
+export function isPreviewVersion(version) {
+  const parsed = semver.parse(version);
+  if (
+    !parsed ||
+    parsed.version !== version ||
+    parsed.prerelease.length > 0 ||
+    parsed.build.length > 0
+  ) {
+    throw new Error("Extension version must use the Marketplace major.minor.patch format.");
+  }
+  return parsed.minor % 2 === 1;
+}
+
+export function validateVsixReleaseChannel(manifest, expectedPreview) {
+  if (typeof manifest !== "string") {
+    throw new Error("VSIX manifest is missing or unreadable.");
+  }
+  const packagedAsPreview =
+    /<Property\s+Id="Microsoft\.VisualStudio\.Code\.PreRelease"\s+Value="true"\s*\/>/u.test(
+      manifest,
+    );
+  if (packagedAsPreview !== expectedPreview) {
+    throw new Error(
+      `VSIX release channel does not match the extension version; expected preview=${expectedPreview}.`,
+    );
+  }
+}
 
 export const expectedSelectedFiles = Object.freeze([
   "LICENSE",

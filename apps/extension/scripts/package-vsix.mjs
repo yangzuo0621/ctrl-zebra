@@ -9,11 +9,13 @@ import yauzl from "yauzl";
 import { resolveBuildSource, validateBuildProvenance } from "../../../scripts/release-policy.mjs";
 import {
   assertCleanStatus,
+  isPreviewVersion,
   validateArchiveEntries,
   validateBuildMetadata,
   validateGitHubActionsSource,
   validateReleaseDocuments,
   validateSelectedFiles,
+  validateVsixReleaseChannel,
 } from "./vsix-policy.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -21,6 +23,7 @@ const scriptsDirectory = dirname(fileURLToPath(import.meta.url));
 const extensionRoot = resolve(scriptsDirectory, "..");
 const repositoryRoot = resolve(extensionRoot, "..", "..");
 const manifest = JSON.parse(await readFile(join(extensionRoot, "package.json"), "utf8"));
+const preview = isPreviewVersion(manifest.version);
 const lockfile = await readFile(join(repositoryRoot, "pnpm-lock.yaml"));
 const changelog = await readFile(join(repositoryRoot, "CHANGELOG.md"));
 
@@ -91,14 +94,20 @@ const artifactPath = join(
   `${manifest.name}-${manifest.version}-${commit.slice(0, 12)}.vsix`,
 );
 await mkdir(artifactDirectory, { recursive: true });
-await vsce(["package", "--no-dependencies", "--out", artifactPath]);
+const packageArguments = [
+  "package",
+  ...(preview ? ["--pre-release"] : []),
+  "--no-dependencies",
+  "--out",
+];
+await vsce([...packageArguments, artifactPath]);
 
 const repeatArtifactPath = join(
   artifactDirectory,
   `${manifest.name}-${manifest.version}-${commit.slice(0, 12)}.repeat.vsix`,
 );
 try {
-  await vsce(["package", "--no-dependencies", "--out", repeatArtifactPath]);
+  await vsce([...packageArguments, repeatArtifactPath]);
   const firstDigest = await sha256File(artifactPath);
   const repeatDigest = await sha256File(repeatArtifactPath);
   if (firstDigest !== repeatDigest) {
@@ -132,18 +141,23 @@ async function inspectVsix(artifactPath, expectedMetadata) {
   });
   const entries = [];
   let packagedMetadata;
+  let packagedManifest;
 
   for await (const entry of zipFile.eachEntry()) {
     entries.push({ fileName: entry.fileName, uncompressedSize: entry.uncompressedSize });
     if (entry.fileName === "extension/dist/package/build-metadata.json") {
       packagedMetadata = JSON.parse(await readSmallEntry(zipFile, entry, 4096));
     }
+    if (entry.fileName === "extension.vsixmanifest") {
+      packagedManifest = await readSmallEntry(zipFile, entry, 64 * 1024);
+    }
   }
 
   const sizes = validateArchiveEntries(entries, archiveStat.size);
   validateBuildMetadata(packagedMetadata, expectedMetadata);
   validateBuildProvenance(packagedMetadata, expectedMetadata);
-  return sizes;
+  validateVsixReleaseChannel(packagedManifest, preview);
+  return { preview, ...sizes };
 }
 
 async function readSmallEntry(zipFile, entry, limit) {

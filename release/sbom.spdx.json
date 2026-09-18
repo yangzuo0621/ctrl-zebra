@@ -2,16 +2,32 @@
   "spdxVersion": "SPDX-2.3",
   "dataLicense": "CC0-1.0",
   "SPDXID": "SPDXRef-DOCUMENT",
-  "name": "ctrl-zebra-0.1.1",
-  "documentNamespace": "https://github.com/yangzuo0621/ctrl-zebra/sbom/ctrl-zebra/0.1.1",
+  "name": "ctrl-zebra-0.3.0",
+  "documentNamespace": "https://github.com/yangzuo0621/ctrl-zebra/sbom/ctrl-zebra/0.3.0",
   "creationInfo": {
     "created": "1970-01-01T00:00:00Z",
     "creators": ["Tool: ctrl-zebra-release-audit"]
   },
   "packages": [
     {
-      "SPDXID": "SPDXRef-a9992fd56e0b6877",
+      "SPDXID": "SPDXRef-cbed0afd9a6c54b6",
       "name": "@ai-sdk/gateway",
+      "versionInfo": "4.0.78",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseConcluded": "Apache-2.0",
+      "licenseDeclared": "Apache-2.0",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/@ai-sdk/gateway@4.0.78"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-d9b21d89f0af0ea2",
+      "name": "@ai-sdk/google",
       "versionInfo": "4.0.67",
       "downloadLocation": "NOASSERTION",
       "filesAnalyzed": false,
@@ -21,30 +37,14 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:npm/@ai-sdk/gateway@4.0.67"
+          "referenceLocator": "pkg:npm/@ai-sdk/google@4.0.67"
         }
       ]
     },
     {
-      "SPDXID": "SPDXRef-a25afabb955aaf67",
-      "name": "@ai-sdk/google",
-      "versionInfo": "4.0.54",
-      "downloadLocation": "NOASSERTION",
-      "filesAnalyzed": false,
-      "licenseConcluded": "Apache-2.0",
-      "licenseDeclared": "Apache-2.0",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/@ai-sdk/google@4.0.54"
-        }
-      ]
-    },
-    {
-      "SPDXID": "SPDXRef-2cb70052795e345b",
+      "SPDXID": "SPDXRef-e5af2e92a0fd21f7",
       "name": "@ai-sdk/openai-compatible",
-      "versionInfo": "3.0.39",
+      "versionInfo": "3.0.47",
       "downloadLocation": "NOASSERTION",
       "filesAnalyzed": false,
       "licenseConcluded": "Apache-2.0",
@@ -53,14 +53,14 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:npm/@ai-sdk/openai-compatible@3.0.39"
+          "referenceLocator": "pkg:npm/@ai-sdk/openai-compatible@3.0.47"
         }
       ]
     },
     {
-      "SPDXID": "SPDXRef-f7883a9e6f5521df",
+      "SPDXID": "SPDXRef-3f4bf93ea9d8dd00",
       "name": "@ai-sdk/openai",
-      "versionInfo": "4.0.50",
+      "versionInfo": "4.0.65",
       "downloadLocation": "NOASSERTION",
       "filesAnalyzed": false,
       "licenseConcluded": "Apache-2.0",
@@ -69,14 +69,14 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:npm/@ai-sdk/openai@4.0.50"
+          "referenceLocator": "pkg:npm/@ai-sdk/openai@4.0.65"
         }
       ]
     },
     {
-      "SPDXID": "SPDXRef-e30ebc529eb2a7cb",
+      "SPDXID": "SPDXRef-d9d0439d1db345c5",
       "name": "@ai-sdk/provider-utils",
-      "versionInfo": "5.0.32",
+      "versionInfo": "5.0.39",
       "downloadLocation": "NOASSERTION",
       "filesAnalyzed": false,
       "licenseConcluded": "Apache-2.0",
@@ -85,14 +85,14 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:npm/@ai-sdk/provider-utils@5.0.32"
+          "referenceLocator": "pkg:npm/@ai-sdk/provider-utils@5.0.39"
         }
       ]
     },
     {
-      "SPDXID": "SPDXRef-bb06e51116095f08",
+      "SPDXID": "SPDXRef-e5a4fd1ad977d718",
       "name": "@ai-sdk/provider",
-      "versionInfo": "4.0.8",
+      "versionInfo": "4.0.13",
       "downloadLocation": "NOASSERTION",
       "filesAnalyzed": false,
       "licenseConcluded": "Apache-2.0",
@@ -101,7 +101,7 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:npm/@ai-sdk/provider@4.0.8"
+          "referenceLocator": "pkg:npm/@ai-sdk/provider@4.0.13"
         }
       ]
     },
@@ -186,9 +186,9 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-7cce6f42ef4445ea",
+      "SPDXID": "SPDXRef-1a69a609bf0ba71a",
       "name": "ai",
-      "versionInfo": "7.0.83",
+      "versionInfo": "7.0.97",
       "downloadLocation": "NOASSERTION",
       "filesAnalyzed": false,
       "licenseConcluded": "Apache-2.0",
@@ -197,7 +197,7 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:npm/ai@7.0.83"
+          "referenceLocator": "pkg:npm/ai@7.0.97"
         }
       ]
     },
@@ -394,9 +394,9 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-9f3dc2d15b893a0f",
+      "SPDXID": "SPDXRef-962be31618d54a69",
       "name": "undici",
-      "versionInfo": "7.29.0",
+      "versionInfo": "7.29.1",
       "downloadLocation": "NOASSERTION",
       "filesAnalyzed": false,
       "licenseConcluded": "MIT",
@@ -405,7 +405,7 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:npm/undici@7.29.0"
+          "referenceLocator": "pkg:npm/undici@7.29.1"
         }
       ]
     },
@@ -426,9 +426,9 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-0479f5dfed7fff3d",
+      "SPDXID": "SPDXRef-b530f4540c634ed5",
       "name": "zod",
-      "versionInfo": "4.4.3",
+      "versionInfo": "4.6.1",
       "downloadLocation": "NOASSERTION",
       "filesAnalyzed": false,
       "licenseConcluded": "MIT",
@@ -437,7 +437,7 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:npm/zod@4.4.3"
+          "referenceLocator": "pkg:npm/zod@4.6.1"
         }
       ]
     }
@@ -446,32 +446,32 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-a9992fd56e0b6877"
+      "relatedSpdxElement": "SPDXRef-cbed0afd9a6c54b6"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-a25afabb955aaf67"
+      "relatedSpdxElement": "SPDXRef-d9b21d89f0af0ea2"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-2cb70052795e345b"
+      "relatedSpdxElement": "SPDXRef-e5af2e92a0fd21f7"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-f7883a9e6f5521df"
+      "relatedSpdxElement": "SPDXRef-3f4bf93ea9d8dd00"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-e30ebc529eb2a7cb"
+      "relatedSpdxElement": "SPDXRef-d9d0439d1db345c5"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-bb06e51116095f08"
+      "relatedSpdxElement": "SPDXRef-e5a4fd1ad977d718"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -501,7 +501,7 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-7cce6f42ef4445ea"
+      "relatedSpdxElement": "SPDXRef-1a69a609bf0ba71a"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -566,7 +566,7 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-9f3dc2d15b893a0f"
+      "relatedSpdxElement": "SPDXRef-962be31618d54a69"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -576,7 +576,7 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-0479f5dfed7fff3d"
+      "relatedSpdxElement": "SPDXRef-b530f4540c634ed5"
     }
   ]
 }

@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 const execFile = promisify(execFileCallback);
 
 describe("release verification integration", () => {
-  it("requires version-specific CHANGELOG notes for a detached matching tag", async () => {
+  it("rejects a detached tag that does not match the manifest version", async () => {
     const temporaryDirectory = await mkdtemp(join(tmpdir(), "ctrl-zebra-release-"));
     const repositoryRoot = resolve(".");
     const realGitPath = execFileSync(
@@ -39,7 +39,7 @@ describe("release verification integration", () => {
         bareRepository,
         "tag",
         "--force",
-        "v0.1.1",
+        "v999.0.0",
         currentCommit,
       ]);
       execFileSync(realGitPath, [
@@ -63,7 +63,7 @@ describe("release verification integration", () => {
         }),
       ).rejects.toMatchObject({
         code: 1,
-        stderr: expect.stringMatching(/CHANGELOG\.md is missing the ## \[0\.1\.1\] release notes/u),
+        stderr: expect.stringMatching(/tag ref must exactly match the extension version/u),
       });
     } finally {
       await rm(temporaryDirectory, { recursive: true, force: true });
