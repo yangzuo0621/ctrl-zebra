@@ -4,15 +4,33 @@ import {
   assertCleanStatus,
   expectedArchiveFiles,
   expectedSelectedFiles,
+  isPreviewVersion,
   MAX_ENTRY_BYTES,
   validateArchiveEntries,
   validateBuildMetadata,
   validateGitHubActionsSource,
   validateReleaseDocuments,
   validateSelectedFiles,
+  validateVsixReleaseChannel,
 } from "../../scripts/vsix-policy.mjs";
 
 describe("VSIX package policy", () => {
+  it("maps odd minor versions to Marketplace preview packages", () => {
+    expect(isPreviewVersion("0.3.0")).toBe(true);
+    expect(isPreviewVersion("0.4.0")).toBe(false);
+    expect(() => isPreviewVersion("0.3.0-preview.1")).toThrow(/major\.minor\.patch/);
+  });
+
+  it("requires the packaged VSIX channel to match the version line", () => {
+    const previewManifest = '<Property Id="Microsoft.VisualStudio.Code.PreRelease" Value="true" />';
+    expect(() => validateVsixReleaseChannel(previewManifest, true)).not.toThrow();
+    expect(() => validateVsixReleaseChannel("<PackageManifest />", false)).not.toThrow();
+    expect(() => validateVsixReleaseChannel(previewManifest, false)).toThrow(/release channel/);
+    expect(() => validateVsixReleaseChannel("<PackageManifest />", true)).toThrow(
+      /release channel/,
+    );
+  });
+
   it("owns the reviewed Marketplace screenshots in both exact allowlists", () => {
     expect(
       expectedSelectedFiles.filter((fileName) => fileName.startsWith("media/marketplace/")),

@@ -86,6 +86,12 @@ selected by `vsce`, create the VSIX at an explicit ignored path, and independent
 archive. The smoke test installs that exact artifact into an isolated VS Code extensions directory
 and user-data directory.
 
+The extension version determines the release channel: odd minor versions are preview releases and
+even minor versions are stable. Preview packaging passes `--pre-release` to both reproducibility
+builds, and the archive verifier requires the resulting
+`Microsoft.VisualStudio.Code.PreRelease=true` manifest property. Marketplace versions never use a
+SemVer prerelease suffix because the Marketplace accepts only `major.minor.patch`.
+
 VSIX artifacts and temporary profiles are never committed. Verification reports the artifact path,
 compressed and uncompressed sizes, file list, version, and embedded source commit so a retained
 artifact can be traced without relying on its filename.

@@ -25,6 +25,10 @@ Install dependencies with `pnpm install --frozen-lockfile` before running it.
 ## Version and changelog
 
 The extension manifest, lockfile importer, and changelog must describe the same release version.
+Marketplace versions use `major.minor.patch` only. Odd minor lines are previews and even minor lines
+are stable releases, following VS Code's recommended channel ordering; for example, `0.3.x` is the
+preview line before stable `0.4.x`. The packaging command derives the channel from this rule and
+marks preview archives with `vsce package --pre-release`.
 The matching tag, when used, is exactly `v<extension-version>`. A tagged release must contain a
 version-specific changelog section with release notes. An unreleased branch must contain the
 `Unreleased` section and must not be treated as publication authorization.
@@ -34,6 +38,9 @@ version-specific changelog section with release notes. An unreleased branch must
 Run `pnpm package:vsix` for the official artifact, then `pnpm release:verify -- --artifact <path>`
 when auditing a retained VSIX. Reproducibility, provenance, and verification rules are owned by
 [Packaging](packaging.md#release-provenance-and-dependency-audit).
+
+Publish the exact verified preview artifact with `vsce publish --pre-release --packagePath <path>`.
+The pre-release flag must match the channel marker already embedded during packaging.
 
 ## VSIX contents
 

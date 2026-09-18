@@ -2,7 +2,7 @@
   "name": "ctrl-zebra",
   "displayName": "CtrlZebra",
   "description": "A local-first workspace agent with reviewable file and command approvals for VS Code.",
-  "version": "0.1.1",
+  "version": "0.3.0",
   "publisher": "ctrl-zebra",
   "license": "MIT",
   "categories": [

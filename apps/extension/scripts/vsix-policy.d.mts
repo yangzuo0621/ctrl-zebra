@@ -35,6 +35,8 @@ export const MAX_ENTRY_BYTES: number;
 export const expectedSelectedFiles: readonly string[];
 export const expectedArchiveFiles: readonly string[];
 
+export function isPreviewVersion(version: string): boolean;
+export function validateVsixReleaseChannel(manifest: unknown, expectedPreview: boolean): void;
 export function assertCleanStatus(status: string): void;
 export function validateGitHubActionsSource(
   environment: GitHubActionsEnvironment,
