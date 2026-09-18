@@ -34,6 +34,17 @@ describe("release verification integration", () => {
       await execFile(realGitPath, ["clone", "--bare", "--quiet", repositoryRoot, bareRepository], {
         cwd: repositoryRoot,
       });
+      const inheritedTags = execFileSync(
+        realGitPath,
+        ["--git-dir", bareRepository, "tag", "--list"],
+        { encoding: "utf8" },
+      )
+        .split(/\r?\n/u)
+        .map((tag) => tag.trim())
+        .filter((tag) => tag.length > 0);
+      for (const inheritedTag of inheritedTags) {
+        execFileSync(realGitPath, ["--git-dir", bareRepository, "tag", "--delete", inheritedTag]);
+      }
       execFileSync(realGitPath, [
         "--git-dir",
         bareRepository,

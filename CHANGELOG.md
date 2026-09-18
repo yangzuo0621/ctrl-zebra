@@ -10,7 +10,7 @@ tags, or Marketplace publication.
 
 - No changes yet.
 
-## [0.3.0] - 2026-09-18
+## [0.3.1] - 2026-09-18
 
 This is a preview release. Install it through VS Code's **Switch to Pre-Release Version** action or
 from the attached VSIX to evaluate the current product before the next stable line.
@@ -50,5 +50,5 @@ from the attached VSIX to evaluate the current product before the next stable li
 - Added repository governance, dependency update policy, architecture fitness checks, performance
   baselines, and contributor/security reporting guidance.
 
-[Unreleased]: https://github.com/yangzuo0621/ctrl-zebra/compare/v0.3.0...HEAD
-[0.3.0]: https://github.com/yangzuo0621/ctrl-zebra/compare/v0.1.1...v0.3.0
+[Unreleased]: https://github.com/yangzuo0621/ctrl-zebra/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/yangzuo0621/ctrl-zebra/compare/v0.1.1...v0.3.1
