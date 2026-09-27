@@ -8,9 +8,9 @@
   },
   "dependencies": {
     "@ctrl-zebra/core": "workspace:*",
-    "@modelcontextprotocol/client": "2.0.0"
+    "@modelcontextprotocol/client": "2.1.0"
   },
   "devDependencies": {
-    "@types/node": "26.6.1"
+    "@types/node": "26.6.2"
   }
 }
