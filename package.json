@@ -26,7 +26,7 @@
   },
   "devDependencies": {
     "@babel/parser": "8.0.6",
-    "@biomejs/biome": "2.5.14",
+    "@biomejs/biome": "2.5.15",
     "@vitest/coverage-v8": "4.1.11",
     "@vscode/vsce": "4.0.0",
     "semver": "7.8.5",
