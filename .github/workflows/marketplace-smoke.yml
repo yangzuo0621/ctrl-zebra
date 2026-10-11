@@ -92,7 +92,7 @@ jobs:
           node -e "const fs=require('node:fs'); const path=require('node:path'); const value={schemaVersion:1,task:'T2207',sourceCommit:process.env.CTRL_ZEBRA_SOURCE_SHA,runnerOs:process.env.RUNNER_OS,marketplaceMetadata:'passed',deterministicProviderTools:'passed',deletionAndDiagnosticsContracts:'passed',installedVsixSmoke:'passed',containsPrivateState:false}; fs.writeFileSync(path.join('.artifacts','marketplace-smoke',process.env.RUNNER_OS+'.json'),JSON.stringify(value,null,2)+'\n');"
 
       - name: Upload smoke evidence
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: ctrl-zebra-marketplace-smoke-${{ runner.os }}-${{ env.CTRL_ZEBRA_SOURCE_SHA }}
           path: .artifacts/marketplace-smoke/*.json
