@@ -25,10 +25,10 @@
     "typecheck": "pnpm --recursive exec tsc --noEmit"
   },
   "devDependencies": {
-    "@babel/parser": "8.0.7",
-    "@biomejs/biome": "2.5.15",
+    "@babel/parser": "8.0.8",
+    "@biomejs/biome": "2.6.4",
     "@vitest/coverage-v8": "4.1.11",
-    "@vscode/vsce": "4.0.0",
+    "@vscode/vsce": "4.1.0",
     "semver": "7.8.5",
     "spdx-expression-parse": "5.0.0",
     "typescript": "7.0.2",
